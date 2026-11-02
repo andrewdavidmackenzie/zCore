@@ -368,6 +368,11 @@ struct VmObjectInner {
     /// Clean = 0, Dirty = 1, AwaitingClean = 2
     /// Only used when `trap_dirty` is true.
     dirty_pages: Vec<u8>,
+    /// AwaitingCleanLength for zero intervals: maps interval-start-page
+    /// to the number of pages authorized for cleaning by WritebackEnd.
+    /// Set by WritebackBegin using max() semantics. Only updated when
+    /// the begin range covers the interval start (Fuchsia rule).
+    awaiting_clean_len: alloc::collections::BTreeMap<usize, usize>,
     /// Whether the VMO has been modified since last stats query.
     modified: bool,
     /// Threads waiting for pager to supply/dirty pages. Each entry is a
@@ -663,27 +668,30 @@ impl VmObject {
     /// the AwaitingCleanLength (the new start sentinel is freshly dirty).
     /// Without this, WritebackEnd incorrectly cleans pages that should
     /// have been invalidated by the new dirty operation.
-    fn revert_adjacent_awaiting_clean(dirty_pages: &mut [u8], page_idx: usize) {
-        let dp_len = dirty_pages.len();
+    /// Also clears any ACL entries for reverted intervals.
+    fn revert_adjacent_awaiting_clean(inner: &mut VmObjectInner, page_idx: usize) {
+        let dp_len = inner.dirty_pages.len();
         // Check left neighbor
-        if page_idx > 0 && dirty_pages[page_idx - 1] == PAGE_AWAITING_CLEAN {
+        if page_idx > 0 && inner.dirty_pages[page_idx - 1] == PAGE_AWAITING_CLEAN {
             let mut p = page_idx - 1;
             loop {
-                dirty_pages[p] = PAGE_ZERO_DIRTY;
+                inner.dirty_pages[p] = PAGE_ZERO_DIRTY;
+                inner.awaiting_clean_len.remove(&p);
                 if p == 0 {
                     break;
                 }
                 p -= 1;
-                if dirty_pages[p] != PAGE_AWAITING_CLEAN {
+                if inner.dirty_pages[p] != PAGE_AWAITING_CLEAN {
                     break;
                 }
             }
         }
         // Check right neighbor
-        if page_idx + 1 < dp_len && dirty_pages[page_idx + 1] == PAGE_AWAITING_CLEAN {
+        if page_idx + 1 < dp_len && inner.dirty_pages[page_idx + 1] == PAGE_AWAITING_CLEAN {
             let mut p = page_idx + 1;
-            while p < dp_len && dirty_pages[p] == PAGE_AWAITING_CLEAN {
-                dirty_pages[p] = PAGE_ZERO_DIRTY;
+            while p < dp_len && inner.dirty_pages[p] == PAGE_AWAITING_CLEAN {
+                inner.dirty_pages[p] = PAGE_ZERO_DIRTY;
+                inner.awaiting_clean_len.remove(&p);
                 p += 1;
             }
         }
@@ -703,7 +711,7 @@ impl VmObject {
             } else {
                 inner.dirty_pages[page_idx] = PAGE_DIRTY;
             }
-            Self::revert_adjacent_awaiting_clean(&mut inner.dirty_pages, page_idx);
+            Self::revert_adjacent_awaiting_clean(&mut inner, page_idx);
         }
     }
 
@@ -824,7 +832,7 @@ impl VmObject {
                 // pages, matching Fuchsia where creating a dirty zero
                 // merges with adjacent AwaitingClean intervals.
                 // Regular dirty pages (writes) don't merge intervals.
-                Self::revert_adjacent_awaiting_clean(&mut inner.dirty_pages, page_idx);
+                Self::revert_adjacent_awaiting_clean(&mut inner, page_idx);
             } else {
                 inner.dirty_pages[page_idx] = PAGE_DIRTY;
             }
@@ -1236,6 +1244,11 @@ impl VmObject {
     /// If `data` is `ZX_VMO_DIRTY_RANGE_IS_ZERO` (1), only transition
     /// PAGE_ZERO_DIRTY pages (skipping committed dirty pages). This
     /// allows the pager to writeback only the zero portions of a range.
+    ///
+    /// For zero intervals, sets AwaitingCleanLength on the interval
+    /// start using max() semantics — but only when the begin range
+    /// covers the interval start. This implements writeback generation
+    /// tracking matching Fuchsia's WritebackBeginLocked.
     pub fn writeback_begin(&self, offset: usize, length: usize, data: u64) {
         const ZX_VMO_DIRTY_RANGE_IS_ZERO: u64 = 1;
         let zero_only = data == ZX_VMO_DIRTY_RANGE_IS_ZERO;
@@ -1256,7 +1269,8 @@ impl VmObject {
         self.trait_
             .range_change_remove_write(start_page, page_count);
         let mut inner = self.inner.lock();
-        for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
+        let dp_len = inner.dirty_pages.len();
+        for page_idx in start_page..end_page.min(dp_len) {
             let state = inner.dirty_pages[page_idx];
             // When zero_only, skip committed dirty pages (PAGE_DIRTY).
             if zero_only && state == PAGE_DIRTY {
@@ -1271,34 +1285,141 @@ impl VmObject {
                 inner.dirty_pages[page_idx] = PAGE_AWAITING_CLEAN;
             }
         }
+        // Update AwaitingCleanLength for zero intervals.
+        // Scan for contiguous zero-page intervals that overlap our
+        // range, find each interval's start, and set ACL if the
+        // begin range covers that start.
+        let mut p = start_page;
+        while p < end_page.min(dp_len) {
+            if !Self::is_zero_interval_page(&inner.dirty_pages, p, &*self.trait_) {
+                p += 1;
+                continue;
+            }
+            // Find interval start (may be before our range).
+            let interval_start = Self::find_zero_interval_start(
+                &inner.dirty_pages, p, &*self.trait_,
+            );
+            // Find interval end.
+            let interval_end = Self::find_zero_interval_end(
+                &inner.dirty_pages, p, &*self.trait_,
+            );
+            // Only set ACL when begin range covers interval start.
+            if start_page <= interval_start {
+                let coverage = end_page.min(interval_end) - interval_start;
+                let entry = inner.awaiting_clean_len.entry(interval_start).or_insert(0);
+                *entry = (*entry).max(coverage);
+            }
+            p = interval_end;
+        }
+    }
+
+    /// Check if a page is part of a zero interval (zero-dirty or
+    /// awaiting-clean with zero marker / no committed frame).
+    fn is_zero_interval_page(
+        dirty_pages: &[u8],
+        page_idx: usize,
+        trait_: &dyn VMObjectTrait,
+    ) -> bool {
+        let state = dirty_pages[page_idx];
+        (state == PAGE_AWAITING_CLEAN || state == PAGE_ZERO_DIRTY)
+            && (trait_.has_zero_marker(page_idx)
+                || trait_.committed_pages_in_range(page_idx, page_idx + 1) == 0)
+    }
+
+    /// Find the start of a zero interval containing `page_idx`.
+    fn find_zero_interval_start(
+        dirty_pages: &[u8],
+        page_idx: usize,
+        trait_: &dyn VMObjectTrait,
+    ) -> usize {
+        let mut start = page_idx;
+        while start > 0
+            && Self::is_zero_interval_page(dirty_pages, start - 1, trait_)
+        {
+            start -= 1;
+        }
+        start
+    }
+
+    /// Find the end (exclusive) of a zero interval containing `page_idx`.
+    fn find_zero_interval_end(
+        dirty_pages: &[u8],
+        page_idx: usize,
+        trait_: &dyn VMObjectTrait,
+    ) -> usize {
+        let mut end = page_idx + 1;
+        while end < dirty_pages.len()
+            && Self::is_zero_interval_page(dirty_pages, end, trait_)
+        {
+            end += 1;
+        }
+        end
     }
 
     /// End writeback: transition AwaitingClean pages in range to Clean.
     /// Pages that were re-dirtied during writeback stay dirty.
     ///
     /// Matching Fuchsia's `WritebackEndLocked`:
-    /// - Committed pages: dirty state transitions AwaitingClean → Clean.
-    ///   Frames stay in memory (not decommitted). Write permissions
-    ///   were already removed by `writeback_begin`.
-    /// - Zero-marker pages: dirty state transitions + zero marker
-    ///   removed. Pages become "empty" — subsequent writes need
-    ///   READ+DIRTY from the pager. Existing READ PTEs remain valid.
+    /// - Committed pages: AwaitingClean → Clean unconditionally.
+    /// - Zero pages: only cleaned up to the AwaitingCleanLength for
+    ///   their interval. A running high-water mark (`acl_end`) is
+    ///   carried across intervals matching Fuchsia's
+    ///   `interval_awaiting_clean_end`.
     pub fn writeback_end(&self, offset: usize, length: usize) {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
-        for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
-            if inner.dirty_pages[page_idx] == PAGE_AWAITING_CLEAN {
-                inner.dirty_pages[page_idx] = PAGE_CLEAN;
-                // Remove zero marker atomically with dirty state
-                // transition. Matches Fuchsia's WritebackEndLocked
-                // which removes dirty zero intervals in the same
-                // locked traversal. Pages become "empty" — subsequent
-                // writes need READ+DIRTY. Committed frames stay.
-                if self.trait_.has_zero_marker(page_idx) {
-                    self.trait_.remove_zero_marker(page_idx);
+        let dp_len = inner.dirty_pages.len();
+        // Running high-water mark for zero interval cleaning.
+        let mut acl_end: usize = 0;
+        let mut p = start_page;
+        while p < end_page.min(dp_len) {
+            if inner.dirty_pages[p] != PAGE_AWAITING_CLEAN {
+                p += 1;
+                continue;
+            }
+            let is_zero = self.trait_.has_zero_marker(p)
+                || self.trait_.committed_pages_in_range(p, p + 1) == 0;
+            if !is_zero {
+                // Committed AWAITING_CLEAN page — always clean.
+                inner.dirty_pages[p] = PAGE_CLEAN;
+                p += 1;
+                continue;
+            }
+            // Zero AWAITING_CLEAN page — find interval boundaries.
+            let interval_start = Self::find_zero_interval_start(
+                &inner.dirty_pages, p, &*self.trait_,
+            );
+            let interval_end = Self::find_zero_interval_end(
+                &inner.dirty_pages, p, &*self.trait_,
+            );
+            // Advance high-water mark with this interval's ACL.
+            let acl = inner.awaiting_clean_len.get(&interval_start).copied().unwrap_or(0);
+            acl_end = acl_end.max(interval_start + acl);
+            // Determine cleanable range within this interval.
+            let clean_from = start_page.max(interval_start);
+            let clean_to = end_page.min(interval_end).min(acl_end);
+            for idx in clean_from..clean_to {
+                if inner.dirty_pages[idx] == PAGE_AWAITING_CLEAN {
+                    inner.dirty_pages[idx] = PAGE_CLEAN;
+                    if self.trait_.has_zero_marker(idx) {
+                        self.trait_.remove_zero_marker(idx);
+                    }
                 }
             }
+            // Update ACL entry after partial/full clean.
+            if clean_to >= interval_end {
+                // Entire interval cleaned.
+                inner.awaiting_clean_len.remove(&interval_start);
+            } else if clean_to > interval_start {
+                // Partial clean — move ACL to new interval start.
+                inner.awaiting_clean_len.remove(&interval_start);
+                let consumed = clean_to - interval_start;
+                if acl > consumed {
+                    inner.awaiting_clean_len.insert(clean_to, acl - consumed);
+                }
+            }
+            p = interval_end;
         }
     }
 

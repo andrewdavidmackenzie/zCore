@@ -932,11 +932,19 @@ impl Syscall<'_> {
                                             break;
                                         }
                                         if let Some(err) = pager_vmo.get_failed_page(rpg) {
-                                            // Failed page marker found.
-                                            // Only retry if at least one
-                                            // prior page was committed
-                                            // (partial success). If ALL
-                                            // pages are failed, return error.
+                                            // OUT_OF_RANGE from resize:
+                                            // the page was truncated away.
+                                            // Break out and let the trim
+                                            // logic handle it (same as
+                                            // wait_for_page OUT_OF_RANGE).
+                                            if err == ZxError::OUT_OF_RANGE {
+                                                break;
+                                            }
+                                            // Other failures: only retry
+                                            // if at least one prior page
+                                            // was committed (partial
+                                            // success). If ALL pages
+                                            // failed, return error.
                                             if !any_page_committed || commit_retries >= 1 {
                                                 return Err(err);
                                             }
