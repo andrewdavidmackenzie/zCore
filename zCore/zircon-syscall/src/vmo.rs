@@ -804,13 +804,16 @@ impl Syscall<'_> {
             if zero_end > zero_start {
                 let _ = vmo.zero(zero_start, zero_end - zero_start);
             }
-            // For unbounded VMOs, update dirty tracking:
+            // For pager-backed VMOs with dirty tracking, update
+            // dirty state when stream_size changes:
             // - Increase: [old_pages, new_pages) transitions from
             //   UNTRACKED → ZERO_DIRTY (newly tracked dirty zeros).
             // - Decrease: [new_pages, old_pages) transitions to
             //   UNTRACKED (absorbed back). Committed pages in this
             //   range are decommitted.
-            if vmo.is_unbounded() {
+            // Matches Fuchsia where set_stream_size affects dirty
+            // tracking on any pager-backed VMO, not just unbounded.
+            if vmo.has_pager() || vmo.is_unbounded() {
                 vmo.update_stream_size_dirty_tracking(old_size, size);
             }
             // Setting stream size on a pager-backed VMO modifies it.
@@ -1099,6 +1102,16 @@ impl Syscall<'_> {
         let op = VmoOpType::try_from(op).or(Err(ZxError::INVALID_ARGS))?;
         let proc = self.thread.proc();
         let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle_value)?;
+        // ALWAYS_NEED/DONT_NEED: silently succeed for non-pager VMOs
+        // without checking range, matching Fuchsia's HintRange which
+        // returns ZX_OK immediately when can_root_source_evict() is
+        // false. Must be checked before the general range check below.
+        if matches!(op, VmoOpType::AlwaysNeed | VmoOpType::DontNeed)
+            && !vmo.is_pager_backed()
+            && !vmo.is_in_pager_tree()
+        {
+            return Ok(());
+        }
         // Check for offset+len overflow or beyond VMO size.
         if offset.checked_add(len).is_none() || offset + len > vmo.len() {
             return Err(ZxError::OUT_OF_RANGE);
