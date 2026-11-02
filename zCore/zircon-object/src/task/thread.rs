@@ -167,6 +167,12 @@ struct ThreadInner {
     /// The syscall return path checks this flag and uses the modified
     /// register value instead of the syscall's result.
     debugger_return_override: bool,
+    /// Set by suspend() when the thread was in a blocking syscall
+    /// (rax set to INTR_RETRY). Cleared by write_state after checking.
+    /// Guards debugger_return_override against false positives when
+    /// write_state is called on a suspended thread that was NOT in a
+    /// blocking syscall (e.g., during thread start).
+    suspended_from_blocked: bool,
     /// The user-space address of the futex this thread is currently
     /// blocked on, or 0 if not blocking on any futex. Matches Fuchsia's
     /// `blocking_futex_id_`. Set when entering `futex_wait`, cleared
@@ -648,19 +654,18 @@ impl Thread {
             && matches!(kind, ThreadStateKind::General)
         {
             // Check if the debugger modified the return value register
-            // from INTR_RETRY to a different value. The rax == -6
-            // check is sufficient to guard against false positives:
-            // - Thread start (no syscall): rax won't be -6
-            // - Pager wait: rax won't be -6 (not a blocking syscall)
-            // - RIP-only change: rax stays -6, flag not set
-            // This is independent of the killer channel state, so
-            // multiple write_state calls work correctly even if the
-            // first consumed the killer.
-            if let Some(ctx) = inner.context.as_mut() {
-                use hal_impl::context::UserContextField;
-                let rax = ctx.get_field(UserContextField::ReturnValue);
-                if rax != (-6i64 as usize) {
-                    inner.debugger_return_override = true;
+            // from INTR_RETRY to a different value. Only relevant when
+            // the thread was suspended from a blocking syscall (which
+            // set rax to INTR_RETRY). Without this guard, write_state
+            // during thread start (rax=0, not -6) would incorrectly
+            // set the override.
+            if inner.suspended_from_blocked {
+                if let Some(ctx) = inner.context.as_mut() {
+                    use hal_impl::context::UserContextField;
+                    let rax = ctx.get_field(UserContextField::ReturnValue);
+                    if rax != (-6i64 as usize) {
+                        inner.debugger_return_override = true;
+                    }
                 }
             }
             if let Some(killer) = inner.killer.take() {
@@ -944,6 +949,7 @@ impl Task for Thread {
                 use hal_impl::context::UserContextField;
                 ctx.set_field(UserContextField::ReturnValue, (-6i64) as usize);
             }
+            inner.suspended_from_blocked = true;
         }
         inner.change_state(state, &self.base);
         // Interrupt any suspendable blocking wait (e.g., pager wait).
@@ -956,6 +962,7 @@ impl Task for Thread {
         let mut inner = self.inner.lock();
         assert_ne!(inner.suspend_count, 0);
         inner.suspend_count -= 1;
+        inner.suspended_from_blocked = false;
         if inner.suspend_count == 0 {
             let state = inner.state;
             inner.change_state(state, &self.base);
