@@ -962,8 +962,8 @@ impl Task for Thread {
         let mut inner = self.inner.lock();
         assert_ne!(inner.suspend_count, 0);
         inner.suspend_count -= 1;
-        inner.suspended_from_blocked = false;
         if inner.suspend_count == 0 {
+            inner.suspended_from_blocked = false;
             let state = inner.state;
             inner.change_state(state, &self.base);
             if let Some(waker) = inner.waker.take() {
@@ -1150,6 +1150,11 @@ impl CurrentThread {
         };
         let mut inner = self.inner.lock();
         inner.killer = None;
+        // Clear suspended_from_blocked: the syscall that set it has
+        // now completed. Without this, a later write_state could
+        // incorrectly set debugger_return_override for a finished
+        // syscall.
+        inner.suspended_from_blocked = false;
         if inner.state() == ThreadState::Dying {
             return ret;
         }

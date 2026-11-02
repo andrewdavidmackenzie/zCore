@@ -348,32 +348,60 @@ impl DirtyTracker {
                             remove_zero_markers.push(pg);
                         }
 
-                        // Update the interval: split or shrink.
-                        let cleaned_count = clean_to - key;
-                        if cleaned_count >= *len {
-                            // Entire interval cleaned → mark as Clean.
+                        // Split the interval. If clean_from > key, the
+                        // prefix [key, clean_from) stays dirty. The
+                        // cleaned portion [clean_from, clean_to) becomes
+                        // clean. The suffix [clean_to, interval_end)
+                        // stays dirty with remaining AwaitingCleanLength.
+                        let prefix_len = clean_from - key;
+                        let cleaned_pages = clean_to - clean_from;
+                        let suffix_start = clean_to;
+                        let suffix_len = interval_end - clean_to;
+                        let remaining_acl = awaiting_clean_len.saturating_sub(clean_to - key);
+
+                        if prefix_len == 0 && suffix_len == 0 {
+                            // Entire interval cleaned.
                             *state = ZeroDirtyState::Clean;
                             *awaiting_clean_len = 0;
-                        } else {
-                            // Partial clean: carry over remaining
-                            // AwaitingCleanLength to the new start.
-                            let remaining_acl = awaiting_clean_len.saturating_sub(cleaned_count);
-                            let new_start = key + cleaned_count;
-                            let new_len = *len - cleaned_count;
-                            // Replace this entry with a clean prefix +
-                            // dirty remainder.
-                            *len = cleaned_count;
+                        } else if prefix_len == 0 {
+                            // No prefix — shrink interval from front.
+                            *len = cleaned_pages;
                             *state = ZeroDirtyState::Clean;
                             *awaiting_clean_len = 0;
-                            // Insert the dirty remainder.
+                            // Insert dirty suffix.
                             self.entries.insert(
-                                new_start,
+                                suffix_start,
                                 Entry::ZeroInterval {
-                                    len: new_len,
+                                    len: suffix_len,
                                     state: ZeroDirtyState::Dirty,
                                     awaiting_clean_len: remaining_acl,
                                 },
                             );
+                        } else {
+                            // Has dirty prefix — shrink to prefix only.
+                            *len = prefix_len;
+                            // prefix stays Dirty, no awaiting_clean
+                            *awaiting_clean_len = 0;
+                            // Insert clean middle.
+                            self.entries.insert(
+                                clean_from,
+                                Entry::ZeroInterval {
+                                    len: cleaned_pages,
+                                    state: ZeroDirtyState::Clean,
+                                    awaiting_clean_len: 0,
+                                },
+                            );
+                            // Insert dirty suffix if any.
+                            if suffix_len > 0 {
+                                self.entries.insert(
+                                    suffix_start,
+                                    Entry::ZeroInterval {
+                                        len: suffix_len,
+                                        state: ZeroDirtyState::Dirty,
+                                        awaiting_clean_len: remaining_acl,
+                                    },
+                                );
+                            }
                         }
                     }
                 }

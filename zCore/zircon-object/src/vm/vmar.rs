@@ -1018,11 +1018,16 @@ impl VmAddressRegion {
     /// may have HIGH priority independently.
     /// Deduplicates by VMO koid to avoid counting shared pages twice.
     pub fn reclaim_disabled_page_count(&self) -> usize {
-        let mut seen_vmos = alloc::collections::BTreeSet::new();
-        self.reclaim_disabled_inner(&mut seen_vmos)
+        // Dedup by (koid, vmo_offset, size) to handle multiple mappings
+        // of the same VMO at different offsets correctly.
+        let mut seen = alloc::collections::BTreeSet::new();
+        self.reclaim_disabled_inner(&mut seen)
     }
 
-    fn reclaim_disabled_inner(&self, seen: &mut alloc::collections::BTreeSet<KoID>) -> usize {
+    fn reclaim_disabled_inner(
+        &self,
+        seen: &mut alloc::collections::BTreeSet<(KoID, usize, usize)>,
+    ) -> usize {
         let guard = self.inner.lock();
         let inner = match guard.as_ref() {
             Some(inner) => inner,
@@ -1033,12 +1038,12 @@ impl VmAddressRegion {
         if self.is_high_memory_priority() {
             for mapping in &inner.mappings {
                 if mapping.vmo.is_pager_backed() || mapping.vmo.is_in_pager_tree() {
-                    let koid = mapping.vmo.id();
-                    if seen.insert(koid) {
-                        // First time seeing this VMO — count its pages.
-                        let mi = mapping.inner.lock();
-                        let start = mi.vmo_offset / PAGE_SIZE;
-                        let end = start + mi.size / PAGE_SIZE;
+                    let mi = mapping.inner.lock();
+                    let start = mi.vmo_offset / PAGE_SIZE;
+                    let end = start + mi.size / PAGE_SIZE;
+                    let key = (mapping.vmo.id(), start, end);
+                    drop(mi);
+                    if seen.insert(key) {
                         count += mapping.vmo.committed_pages_in_range(start, end);
                     }
                 }
