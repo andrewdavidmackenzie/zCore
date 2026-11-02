@@ -656,15 +656,46 @@ impl VmObject {
         self.trait_.remove_zero_marker(page_idx);
     }
 
+    /// When a page becomes dirty (DIRTY or ZERO_DIRTY) and is adjacent
+    /// to a page in AWAITING_CLEAN state, revert the AWAITING_CLEAN
+    /// pages to ZERO_DIRTY. This matches Fuchsia's interval model where
+    /// merging a new dirty zero with an AwaitingClean interval resets
+    /// the AwaitingCleanLength (the new start sentinel is freshly dirty).
+    /// Without this, WritebackEnd incorrectly cleans pages that should
+    /// have been invalidated by the new dirty operation.
+    fn revert_adjacent_awaiting_clean(dirty_pages: &mut [u8], page_idx: usize) {
+        let dp_len = dirty_pages.len();
+        // Check left neighbor
+        if page_idx > 0 && dirty_pages[page_idx - 1] == PAGE_AWAITING_CLEAN {
+            let mut p = page_idx - 1;
+            loop {
+                dirty_pages[p] = PAGE_ZERO_DIRTY;
+                if p == 0 {
+                    break;
+                }
+                p -= 1;
+                if dirty_pages[p] != PAGE_AWAITING_CLEAN {
+                    break;
+                }
+            }
+        }
+        // Check right neighbor
+        if page_idx + 1 < dp_len && dirty_pages[page_idx + 1] == PAGE_AWAITING_CLEAN {
+            let mut p = page_idx + 1;
+            while p < dp_len && dirty_pages[p] == PAGE_AWAITING_CLEAN {
+                dirty_pages[p] = PAGE_ZERO_DIRTY;
+                p += 1;
+            }
+        }
+    }
+
     /// Mark pages as dirty-zero (for OP_ZERO on TRAP_DIRTY VMOs).
     /// This doesn't generate a DIRTY request — it directly sets the
     /// dirty state since zeroing is allowed without pager ACK.
     pub fn mark_pages_zero_dirty(&self, start_page: usize, end_page: usize) {
         let mut inner = self.inner.lock();
-        for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
-            // Only mark as zero-dirty if the page has a zero marker
-            // (was actually zeroed). If the page has a committed frame,
-            // mark as regular dirty.
+        let dp_len = inner.dirty_pages.len();
+        for page_idx in start_page..end_page.min(dp_len) {
             if self.trait_.has_zero_marker(page_idx)
                 && self.trait_.committed_pages_in_range(page_idx, page_idx + 1) == 0
             {
@@ -672,6 +703,7 @@ impl VmObject {
             } else {
                 inner.dirty_pages[page_idx] = PAGE_DIRTY;
             }
+            Self::revert_adjacent_awaiting_clean(&mut inner.dirty_pages, page_idx);
         }
     }
 
@@ -780,7 +812,22 @@ impl VmObject {
     pub fn auto_mark_dirty(&self, page_idx: usize) {
         let mut inner = self.inner.lock();
         if !inner.trap_dirty && page_idx < inner.dirty_pages.len() {
-            inner.dirty_pages[page_idx] = PAGE_DIRTY;
+            // Use ZERO_DIRTY if the page has a zero marker (was zeroed),
+            // otherwise DIRTY (was written with data). This matters for
+            // WritebackBeginZeroPages which skips PAGE_DIRTY and only
+            // transitions PAGE_ZERO_DIRTY.
+            if self.trait_.has_zero_marker(page_idx)
+                && self.trait_.committed_pages_in_range(page_idx, page_idx + 1) == 0
+            {
+                inner.dirty_pages[page_idx] = PAGE_ZERO_DIRTY;
+                // Only revert adjacent AWAITING_CLEAN for zero-dirty
+                // pages, matching Fuchsia where creating a dirty zero
+                // merges with adjacent AwaitingClean intervals.
+                // Regular dirty pages (writes) don't merge intervals.
+                Self::revert_adjacent_awaiting_clean(&mut inner.dirty_pages, page_idx);
+            } else {
+                inner.dirty_pages[page_idx] = PAGE_DIRTY;
+            }
             inner.modified = true;
         }
     }
