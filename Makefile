@@ -506,8 +506,12 @@ core-tests: core-tests-build
 	F=$$(grep -c '\[  FAILED  \]' $(CORE_TESTS_LOG) || true); \
 	R=$$(grep -ao '\[==========\] [0-9]* tests from' $(CORE_TESTS_LOG) | awk '{print $$2}' | tail -1); \
 	if [ -z "$$R" ]; then R=$$(($$P + $$F)); PARTIAL=" (no summary — partial run)"; else PARTIAL=""; fi; \
-	echo "Passed: $$P  Failed: $$F  Ran: $$R/1776  Skipped: $$((1776 - $$R))$$PARTIAL"; \
-	tail -5 $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g'
+	S=$$(sed '/^[[:space:]]*\#/d; /^[[:space:]]*$$/d' $(CORE_TESTS_SKIP_FILE) 2>/dev/null | wc -l | tr -d ' '); \
+	T=$$(($$R + $$S)); \
+	echo "Passed: $$P  Failed: $$F  Ran: $$R/$$T  Skipped: $$S$$PARTIAL"; \
+	tail -5 $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g'; \
+	if [ "$$F" -gt 0 ] 2>/dev/null; then echo "FAIL: $$F test(s) failed"; exit 1; fi; \
+	if [ -z "$$R" ] || [ "$$R" -eq 0 ] 2>/dev/null; then echo "FAIL: no tests ran"; exit 1; fi
 
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
 test: boot-test libc-test

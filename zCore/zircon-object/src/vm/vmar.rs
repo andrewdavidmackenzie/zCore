@@ -88,6 +88,10 @@ pub struct VmAddressRegion {
     page_table: Arc<Mutex<dyn GenericPageTable>>,
     /// If inner is None, this region is destroyed, all operations are invalid.
     inner: Mutex<Option<VmarInner>>,
+    /// Memory priority for this VMAR. When HIGH, pager-backed pages
+    /// in this region are not eligible for reclamation.
+    /// Matches Fuchsia's `VmAddressRegionOrMapping::memory_priority_`.
+    memory_priority: core::sync::atomic::AtomicBool,
 }
 
 impl_kobject!(VmAddressRegion);
@@ -206,6 +210,7 @@ impl VmAddressRegion {
             parent: None,
             page_table: Arc::new(Mutex::new(PageTable::from_current().clone_kernel())), //hal PageTable
             inner: Mutex::new(Some(VmarInner::default())),
+            memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -223,6 +228,7 @@ impl VmAddressRegion {
             parent: None,
             page_table: Arc::new(Mutex::new(PageTable::from_current().clone_kernel())),
             inner: Mutex::new(Some(VmarInner::default())),
+            memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -239,6 +245,7 @@ impl VmAddressRegion {
             parent: None,
             page_table: Arc::new(Mutex::new(PageTable::from_current().clone_kernel())),
             inner: Mutex::new(Some(VmarInner::default())),
+            memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -256,6 +263,7 @@ impl VmAddressRegion {
             parent: None,
             page_table: Arc::new(Mutex::new(crate::hypervisor::VmmPageTable::new())),
             inner: Mutex::new(Some(VmarInner::default())),
+            memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -322,6 +330,7 @@ impl VmAddressRegion {
             parent: Some(self.clone()),
             page_table: self.page_table.clone(),
             inner: Mutex::new(Some(VmarInner::default())),
+            memory_priority: core::sync::atomic::AtomicBool::new(false),
         });
         inner.children.push(child.clone());
         Ok(child)
@@ -978,6 +987,74 @@ impl VmAddressRegion {
     /// Get start address of this VMAR.
     pub fn addr(&self) -> usize {
         self.addr
+    }
+
+    /// Set the memory priority for this VMAR and all existing children.
+    /// When `high` is true, pager-backed pages in this region are not
+    /// eligible for reclamation. Propagates to all existing sub-VMARs,
+    /// matching Fuchsia's SetMemoryPriority which applies to the
+    /// entire subtree (RFC-0209).
+    pub fn set_memory_priority(&self, high: bool) {
+        self.memory_priority
+            .store(high, core::sync::atomic::Ordering::Relaxed);
+        // Propagate to all existing child VMARs.
+        let guard = self.inner.lock();
+        if let Some(inner) = guard.as_ref() {
+            for child in &inner.children {
+                child.set_memory_priority(high);
+            }
+        }
+    }
+
+    /// Whether this VMAR has high memory priority.
+    pub fn is_high_memory_priority(&self) -> bool {
+        self.memory_priority
+            .load(core::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Count pager-backed committed pages in this VMAR tree that
+    /// have high memory priority (reclaim disabled). Traverses all
+    /// children regardless of the parent's priority, since a child
+    /// may have HIGH priority independently.
+    /// Deduplicates by VMO koid to avoid counting shared pages twice.
+    pub fn reclaim_disabled_page_count(&self) -> usize {
+        // Dedup by (koid, vmo_offset, size) to handle multiple mappings
+        // of the same VMO at different offsets correctly.
+        let mut seen = alloc::collections::BTreeSet::new();
+        self.reclaim_disabled_inner(&mut seen)
+    }
+
+    fn reclaim_disabled_inner(
+        &self,
+        seen: &mut alloc::collections::BTreeSet<(KoID, usize, usize)>,
+    ) -> usize {
+        let guard = self.inner.lock();
+        let inner = match guard.as_ref() {
+            Some(inner) => inner,
+            None => return 0,
+        };
+        let mut count = 0;
+        // Count pages from mappings in this VMAR if HIGH priority.
+        if self.is_high_memory_priority() {
+            for mapping in &inner.mappings {
+                if mapping.vmo.is_pager_backed() || mapping.vmo.is_in_pager_tree() {
+                    let mi = mapping.inner.lock();
+                    let start = mi.vmo_offset / PAGE_SIZE;
+                    let end = start + mi.size / PAGE_SIZE;
+                    let key = (mapping.vmo.id(), start, end);
+                    drop(mi);
+                    if seen.insert(key) {
+                        count += mapping.vmo.committed_pages_in_range(start, end);
+                    }
+                }
+            }
+        }
+        // Always recurse into children — a child may have HIGH
+        // priority even if this VMAR is DEFAULT.
+        for child in &inner.children {
+            count += child.reclaim_disabled_inner(seen);
+        }
+        count
     }
 
     /// Get this VMAR's creation flags (CAN_MAP_*, SPECIFIC, etc.)

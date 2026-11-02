@@ -235,6 +235,33 @@ jobs:
       - name: Zircon boot smoke test (x86_64)
         run: make zircon-boot-test ARCH=x86_64
 
+  zircon-core-tests-x86:
+    name: Zircon Core Tests (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-09-19
+          components: rust-src, llvm-tools-preview
+          targets: x86_64-unknown-none
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: core-tests-x86_64
+
+      - name: Install QEMU and OVMF
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf
+
+      - name: Build core-tests
+        run: make core-tests-build
+
+      - name: Run core-tests (with skip list)
+        run: make core-tests CORE_TESTS_TIMEOUT=900
+
   libc-test:
     name: Libc Test (aarch64, macOS)
     runs-on: macos-latest

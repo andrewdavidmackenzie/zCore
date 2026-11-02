@@ -16,6 +16,7 @@ use {
     lock::{Mutex, MutexGuard},
 };
 
+pub mod dirty_tracker;
 mod paged;
 mod physical;
 mod slice;
