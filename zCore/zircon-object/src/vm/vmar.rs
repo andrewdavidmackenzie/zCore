@@ -989,13 +989,21 @@ impl VmAddressRegion {
         self.addr
     }
 
-    /// Set the memory priority for this VMAR.
+    /// Set the memory priority for this VMAR and all existing children.
     /// When `high` is true, pager-backed pages in this region are not
-    /// eligible for reclamation. Matches Fuchsia's
-    /// `SetMemoryPriority(MemoryPriority::HIGH)`.
+    /// eligible for reclamation. Propagates to all existing sub-VMARs,
+    /// matching Fuchsia's SetMemoryPriority which applies to the
+    /// entire subtree (RFC-0209).
     pub fn set_memory_priority(&self, high: bool) {
         self.memory_priority
             .store(high, core::sync::atomic::Ordering::Relaxed);
+        // Propagate to all existing child VMARs.
+        let guard = self.inner.lock();
+        if let Some(inner) = guard.as_ref() {
+            for child in &inner.children {
+                child.set_memory_priority(high);
+            }
+        }
     }
 
     /// Whether this VMAR has high memory priority.
@@ -1005,27 +1013,41 @@ impl VmAddressRegion {
     }
 
     /// Count pager-backed committed pages in this VMAR tree that
-    /// have high memory priority (reclaim disabled).
+    /// have high memory priority (reclaim disabled). Traverses all
+    /// children regardless of the parent's priority, since a child
+    /// may have HIGH priority independently.
+    /// Deduplicates by VMO koid to avoid counting shared pages twice.
     pub fn reclaim_disabled_page_count(&self) -> usize {
-        if !self.is_high_memory_priority() {
-            return 0;
-        }
+        let mut seen_vmos = alloc::collections::BTreeSet::new();
+        self.reclaim_disabled_inner(&mut seen_vmos)
+    }
+
+    fn reclaim_disabled_inner(&self, seen: &mut alloc::collections::BTreeSet<KoID>) -> usize {
         let guard = self.inner.lock();
         let inner = match guard.as_ref() {
             Some(inner) => inner,
             None => return 0,
         };
         let mut count = 0;
-        for mapping in &inner.mappings {
-            if mapping.vmo.is_pager_backed() || mapping.vmo.is_in_pager_tree() {
-                let mi = mapping.inner.lock();
-                let start = mi.vmo_offset / PAGE_SIZE;
-                let end = start + mi.size / PAGE_SIZE;
-                count += mapping.vmo.committed_pages_in_range(start, end);
+        // Count pages from mappings in this VMAR if HIGH priority.
+        if self.is_high_memory_priority() {
+            for mapping in &inner.mappings {
+                if mapping.vmo.is_pager_backed() || mapping.vmo.is_in_pager_tree() {
+                    let koid = mapping.vmo.id();
+                    if seen.insert(koid) {
+                        // First time seeing this VMO — count its pages.
+                        let mi = mapping.inner.lock();
+                        let start = mi.vmo_offset / PAGE_SIZE;
+                        let end = start + mi.size / PAGE_SIZE;
+                        count += mapping.vmo.committed_pages_in_range(start, end);
+                    }
+                }
             }
         }
+        // Always recurse into children — a child may have HIGH
+        // priority even if this VMAR is DEFAULT.
         for child in &inner.children {
-            count += child.reclaim_disabled_page_count();
+            count += child.reclaim_disabled_inner(seen);
         }
         count
     }
