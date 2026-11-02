@@ -1056,11 +1056,18 @@ impl Syscall<'_> {
                             }
                         }
                     }
+                    // Re-check VMO size after the pager loop — the VMO
+                    // may have been resized while we were waiting for
+                    // pages. Trim the commit range to the current size,
+                    // matching Fuchsia's TrimRange in CommitRangeInternal.
                     let page_mask = PAGE_SIZE - 1;
                     let aligned_offset = offset & !page_mask;
+                    let current_len = vmo.len();
                     let aligned_end = (offset + len + page_mask) & !page_mask;
-                    let aligned_len = aligned_end - aligned_offset;
-                    vmo.commit(aligned_offset, aligned_len)?;
+                    let clamped_end = aligned_end.min(current_len);
+                    if clamped_end > aligned_offset {
+                        vmo.commit(aligned_offset, clamped_end - aligned_offset)?;
+                    }
                 }
                 return Ok(());
             }
