@@ -1266,7 +1266,13 @@ impl Syscall<'_> {
                 Ok(())
             }
             VmoOpType::AlwaysNeed | VmoOpType::DontNeed => {
-                // Hinting operations. Require READ rights and valid range.
+                // Hinting operations. Silently ignore for non-pager-backed
+                // VMOs, matching Fuchsia's HintRange which returns ZX_OK
+                // immediately when can_root_source_evict() is false. Hints
+                // are best-effort and the kernel is free to ignore them.
+                if !vmo.is_pager_backed() && !vmo.is_in_pager_tree() {
+                    return Ok(());
+                }
                 if !rights.contains(Rights::READ) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
@@ -1274,7 +1280,8 @@ impl Syscall<'_> {
                 if end > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
-                // No-op: we don't implement eviction hints.
+                // No-op: we don't implement eviction hints for pager VMOs
+                // either, but we validate the range.
                 Ok(())
             }
             VmoOpType::Prefetch => {
