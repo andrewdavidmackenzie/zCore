@@ -1888,7 +1888,9 @@ impl VMObjectPagedInner {
     ///
     /// The parent keeps all its pages and mappings (no RemoveWrite).
     /// This matches Fuchsia's unidirectional clone path in
-    /// `CreateCloneLocked` / `CloneChildLocked`.
+    /// `CreateCloneLocked` / `CloneChildLocked`, including the
+    /// `FindParentAndRangeForCloneLocked` walk-up that hangs the
+    /// new child as high as possible in the tree.
     fn create_child_unidirectional(
         &mut self,
         offset: usize,
@@ -1898,13 +1900,72 @@ impl VMObjectPagedInner {
         if self.cache_policy != CachePolicy::Cached || self.pin_count != 0 {
             return Err(ZxError::BAD_STATE);
         }
+        // Walk up the parent chain to find the best parent for the
+        // new child, matching Fuchsia's FindParentAndRangeForCloneLocked.
+        // The child is hung as high as possible — we only stop when an
+        // ancestor owns pages in the child's visible range.
+        //
+        // `cur_offset` = child's offset within current candidate parent.
+        // `vis_limit` = visible LENGTH (bytes) the child can see.
+        // Both match Fuchsia's `offset` and `parent_limit` variables.
+        let mut cur_offset = offset;
+        let mut vis_limit = if self.size > offset {
+            len.min(self.size - offset)
+        } else {
+            0
+        };
+        let mut target: Arc<VMObjectPaged> = self.self_ref.upgrade().unwrap();
+        loop {
+            let (has_owned, next_parent_arc, par_offset, par_limit) = {
+                let cur_inner = target.borrow_inner();
+                // Check owned pages in [cur_offset, cur_offset + vis_limit).
+                let start_pg = cur_offset / PAGE_SIZE;
+                let end_pg = (cur_offset + vis_limit).div_ceil(PAGE_SIZE);
+                let has_owned = if end_pg > start_pg {
+                    cur_inner
+                        .frames
+                        .keys()
+                        .any(|&k| k >= start_pg && k < end_pg)
+                        || cur_inner
+                            .zero_markers
+                            .iter()
+                            .any(|&k| k >= start_pg && k < end_pg)
+                } else {
+                    false
+                };
+                let next = cur_inner.parent.clone();
+                (has_owned, next, cur_inner.parent_offset, cur_inner.parent_limit)
+            };
+            if has_owned || vis_limit == 0 {
+                break;
+            }
+            let Some(next_parent) = next_parent_arc else {
+                break;
+            };
+            {
+                let next_inner = next_parent.borrow_inner();
+                if next_inner.type_.is_hidden() {
+                    break;
+                }
+            }
+            // Fuchsia: parent_limit = ClampedLimit(offset, parent_limit, cur.parent_limit_)
+            //        = min(parent_limit, cur.parent_limit_ - offset)
+            // Then:   offset += cur.parent_offset_
+            vis_limit = if par_limit > cur_offset {
+                vis_limit.min(par_limit - cur_offset)
+            } else {
+                0
+            };
+            cur_offset += par_offset;
+            target = next_parent;
+        }
         let child = VMObjectPaged::wrap(
             VMObjectPagedInner {
                 owner: new_owner_id(),
                 type_: VMOType::UnidirectionalChild,
                 parent: None, // set below
-                parent_offset: offset,
-                parent_limit: offset.saturating_add(len).min(self.size),
+                parent_offset: cur_offset,
+                parent_limit: cur_offset + vis_limit,
                 size: len,
                 frames: BTreeMap::new(),
                 zero_markers: BTreeSet::new(),
@@ -1920,10 +1981,7 @@ impl VMObjectPagedInner {
             },
             Some(lock_ref.clone()),
         );
-        // Set the child's parent directly to self (no hidden node).
-        // Use self_ref to get our Arc<VMObjectPaged>.
-        let self_arc = self.self_ref.upgrade().unwrap();
-        child.borrow_inner_mut().parent = Some(self_arc);
+        child.borrow_inner_mut().parent = Some(target);
         Ok(child)
     }
 
