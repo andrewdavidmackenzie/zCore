@@ -1429,6 +1429,16 @@ impl VmObject {
             if clean_to >= interval_end {
                 // Entire interval cleaned — remove ACL.
                 inner.awaiting_clean_len.remove(&interval_start);
+                // If the effective coverage (acl_end) extends beyond
+                // our writeback_end range, store remaining coverage
+                // at end_page for future writeback_end calls.
+                if acl_end > end_page {
+                    inner
+                        .awaiting_clean_len
+                        .entry(end_page)
+                        .and_modify(|v| *v = (*v).max(acl_end - end_page))
+                        .or_insert(acl_end - end_page);
+                }
             } else if clean_from <= interval_start && clean_to > interval_start {
                 // Clean started at or before interval start — move
                 // ACL to the new start with remaining coverage.

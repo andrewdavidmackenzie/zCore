@@ -14,6 +14,7 @@ PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
 Pager.SuspendReadTestVmar
 Pager.FailMultipleCommits
 Pager.EarlyWakeCloneRace
+Pager.FailEarlyWake
 
 # ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
 StreamTestCase.PartialVmoDirty
@@ -24,9 +25,9 @@ VmoClone2TestCase.DropChildrenInParallel
 # ── PortStressTest: multi-threaded channel_call stress ──
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
-# ── Threads: debug register exception delivery not implemented ──
-Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
-Threads.DebugRegistersDr6ResetOnDebugException
+# ── Threads: debug register hardware exception tests ──
+# (DR6 read/write state tests now pass; hardware breakpoint
+# exception delivery tests remain blocked on issue #799)
 
 # ── BTI: multi-thread pin/decommit race (std::thread spin-loop) ──
 Bti.DecommitRace
@@ -36,7 +37,6 @@ VmoTestCase.ParallelWriteAndDecommit
 
 # ── Resource / Scheduler: hangs ──
 Resource.Ioports
-Resource.PcInterruptVectorPoolLeak
 SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
 
 # ── Property: QEMU qemu64 CPU model does not fault on wrfsbase/wrgsbase

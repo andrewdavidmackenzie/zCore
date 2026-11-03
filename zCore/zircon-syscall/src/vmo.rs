@@ -871,6 +871,7 @@ impl Syscall<'_> {
                 if offset.checked_add(len).is_none() || offset + len > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
+
                 // For clones, route requests to the root pager VMO
                 // with proper offset translation.
                 let (pager_vmo, clone_to_root_off) = if vmo.is_pager_backed() {
@@ -900,6 +901,7 @@ impl Syscall<'_> {
                             break;
                         }
                         // Skip committed pages and zero-marker pages.
+                        let committed = pager_vmo.committed_pages_in_range(rp, rp + 1) > 0;
                         if pager_vmo.committed_pages_in_range(rp, rp + 1) > 0
                             || pager_vmo.has_zero_marker(rp)
                         {
