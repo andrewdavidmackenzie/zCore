@@ -1978,7 +1978,10 @@ impl VMObjectPagedInner {
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
                 pager_backed: false,
-                in_pager_tree: false,
+                in_pager_tree: {
+                    let ti = target.borrow_inner();
+                    ti.pager_backed || ti.in_pager_tree
+                },
                 content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),

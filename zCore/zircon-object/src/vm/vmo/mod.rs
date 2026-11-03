@@ -792,6 +792,15 @@ impl VmObject {
             for pg in new_pages..old_pages.min(inner.dirty_pages.len()) {
                 inner.dirty_pages[pg] = PAGE_UNTRACKED;
             }
+            // Remove stale ACL entries in the untracked range.
+            let stale: alloc::vec::Vec<usize> = inner
+                .awaiting_clean_len
+                .range(new_pages..)
+                .map(|(&k, _)| k)
+                .collect();
+            for k in stale {
+                inner.awaiting_clean_len.remove(&k);
+            }
             inner.modified = true;
             drop(inner);
         } else {
@@ -1418,16 +1427,20 @@ impl VmObject {
             }
             // Update ACL entry after partial/full clean.
             if clean_to >= interval_end {
-                // Entire interval cleaned.
+                // Entire interval cleaned — remove ACL.
                 inner.awaiting_clean_len.remove(&interval_start);
-            } else if clean_to > interval_start {
-                // Partial clean — move ACL to new interval start.
+            } else if clean_from <= interval_start && clean_to > interval_start {
+                // Clean started at or before interval start — move
+                // ACL to the new start with remaining coverage.
+                // `acl` is an absolute end page (from the range
+                // lookup), so remaining length = acl - clean_to.
                 inner.awaiting_clean_len.remove(&interval_start);
-                let consumed = clean_to - interval_start;
-                if acl > consumed {
-                    inner.awaiting_clean_len.insert(clean_to, acl - consumed);
+                if acl > clean_to {
+                    inner.awaiting_clean_len.insert(clean_to, acl - clean_to);
                 }
             }
+            // If clean_from > interval_start, don't touch the ACL —
+            // pages before clean_from still need it.
             p = interval_end;
         }
     }
@@ -2132,6 +2145,15 @@ impl VmObject {
             } else {
                 // Resize down: truncate the dirty_pages vector.
                 inner.dirty_pages.truncate(new_pages);
+                // Remove stale ACL entries beyond the new size.
+                let stale_keys: alloc::vec::Vec<usize> = inner
+                    .awaiting_clean_len
+                    .range(new_pages..)
+                    .map(|(&k, _)| k)
+                    .collect();
+                for k in stale_keys {
+                    inner.awaiting_clean_len.remove(&k);
+                }
                 inner.modified = true;
             }
         }
