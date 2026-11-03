@@ -899,12 +899,41 @@ impl Syscall<'_> {
                         if rp >= pager_vmo.len() / PAGE_SIZE {
                             break;
                         }
-                        // Skip committed pages, zero-marker pages, and
-                        // pages with pending waiters.
+                        // Skip committed pages and zero-marker pages.
                         if pager_vmo.committed_pages_in_range(rp, rp + 1) > 0
                             || pager_vmo.has_zero_marker(rp)
-                            || pager_vmo.has_page_waiter(rp)
                         {
+                            p += 1;
+                            continue;
+                        }
+                        // Pages with pending waiters (from overlapping
+                        // commits): join the outstanding request as an
+                        // overlap waiter and block until supplied.
+                        // Matches Fuchsia where overlapping commits
+                        // absorb into existing page requests.
+                        if pager_vmo.has_page_waiter(rp) {
+                            let future = pager_vmo.wait_for_page(rp * PAGE_SIZE);
+                            pin_mut!(future);
+                            self.thread.set_blocking_state(ThreadState::BlockedPager);
+                            match self
+                                .thread
+                                .blocking_run_suspendable(
+                                    future,
+                                    ThreadState::BlockedPager,
+                                    Duration::from_nanos(u64::MAX),
+                                )
+                                .await
+                            {
+                                Ok(()) => {
+                                    any_page_committed = true;
+                                }
+                                Err(ZxError::STOP) => return Err(ZxError::STOP),
+                                Err(ZxError::OUT_OF_RANGE) => {}
+                                Err(ZxError::BAD_STATE) => {
+                                    return Err(ZxError::BAD_STATE)
+                                }
+                                Err(_) => {}
+                            }
                             p += 1;
                             continue;
                         }
