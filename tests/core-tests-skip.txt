@@ -6,27 +6,15 @@ PagerWriteback.SuspendDirtyTestVmar
 PagerWriteback.WritebackResizedRangeAfterDetachNoTrapDirty
 PagerWriteback.OpZeroPinnedTrapDirty
 PagerWriteback.CommitExtendedTailTrapDirty
-PagerWriteback.CommitResizeRaceNoTrapDirty
-PagerWriteback.CommitResizeRaceTrapDirty
-PagerWriteback.OpZeroWritebackNoTrapDirty
-PagerWriteback.OpZeroWritebackTrapDirty
-PagerWriteback.ResizeWritebackRepeatedTrapDirty
-PagerWriteback.UntrackedAbsorbsIntervalSlots
 PagerWriteback.FailedPinAwaitingClean
 PagerWriteback.NotModifiedFailedPinWrite
 PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
 
 # ── Pager: hangs (multi-thread pager interactions) ──
-# Tests using WaitForBlocked polling (verified hangs):
-Pager.OverlapCommitSupplyTest
 Pager.DetachNonMappingAccess
 Pager.SuspendReadTestVmar
-Pager.FailEarlyWake
 Pager.FailMultipleCommits
-Pager.ResizeCommitTest
-# Tests that hang for other reasons (under investigation):
 Pager.EarlyWakeCloneRace
-Pager.EvictionHintsOpRange
 
 # ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
 StreamTestCase.PartialVmoDirty
@@ -41,10 +29,10 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.DebugRegistersDr6ResetOnDebugException
 
-# ── BTI: multi-thread pin/decommit race ──
+# ── BTI: multi-thread pin/decommit race (std::thread spin-loop) ──
 Bti.DecommitRace
 
-# ── VmoTestCase: multi-thread write + decommit race ──
+# ── VmoTestCase: multi-thread write + decommit race (std::thread spin-loop) ──
 VmoTestCase.ParallelWriteAndDecommit
 
 # ── Resource / Scheduler: hangs ──
@@ -52,26 +40,9 @@ Resource.Ioports
 Resource.PcInterruptVectorPoolLeak
 SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
 
-# ── Pager: COW fork through multi-level hidden nodes ──
-# When a pager-backed page is COW-forked through nested hidden nodes,
-# the root VMO allocates a zero frame instead of waiting for the pager
-# to supply the actual content. The descendant copies zeros instead of
-# the tagged pager data. Root cause: commit_page_internal on the pager
-# root with WRITE from a descendant doesn't return SHOULD_WAIT when
-# the page hasn't been supplied yet. Fixing this requires routing the
-# pager request to the root VMO from the clone's page fault handler.
-Pager.CloneMightSeeIntermediateForks
-
-# ── PagerWriteback: writeback generation tracking incomplete ──
-# ResizeWritebackRepeatedNoTrapDirty hangs with DirtyTracker integration.
-# The interval-based writeback generation tracking is correct in unit
-# tests but causes a hang in the full C++ test. Needs investigation.
-PagerWriteback.ResizeWritebackRepeatedNoTrapDirty
-
 # ── Property: QEMU qemu64 CPU model does not fault on wrfsbase/wrgsbase
 # with noncanonical addresses (Intel SDM requires #GP). These tests pass
 # with -cpu host -enable-kvm but the full suite hangs under KVM.
-# See issue #754 for CI KVM tracking.
+# See issue #799 for exception delivery, #754 for CI KVM.
 Property.RegisterFsNoncanonical
 Property.RegisterGsNoncanonical
-
