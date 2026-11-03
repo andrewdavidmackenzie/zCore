@@ -1394,8 +1394,25 @@ impl VmObject {
                 &inner.dirty_pages, p, &*self.trait_,
             );
             // Advance high-water mark with this interval's ACL.
-            let acl = inner.awaiting_clean_len.get(&interval_start).copied().unwrap_or(0);
-            acl_end = acl_end.max(interval_start + acl);
+            // Look up ACL at the interval start, or find the nearest
+            // ACL entry before it (handles the case where the original
+            // interval start was written/dirtied and the ACL entry is
+            // at a page that's no longer part of the zero interval).
+            let acl = inner
+                .awaiting_clean_len
+                .range(..=interval_start)
+                .next_back()
+                .map(|(&acl_start, &acl_len)| {
+                    // Only use this ACL if its coverage reaches into
+                    // (or past) our interval.
+                    if acl_start + acl_len > interval_start {
+                        acl_start + acl_len
+                    } else {
+                        0
+                    }
+                })
+                .unwrap_or(0);
+            acl_end = acl_end.max(acl);
             // Determine cleanable range within this interval.
             let clean_from = start_page.max(interval_start);
             let clean_to = end_page.min(interval_end).min(acl_end);
