@@ -1602,6 +1602,13 @@ impl VmObject {
             if offset >= self.len() {
                 return Err(ZxError::OUT_OF_RANGE);
             }
+            // If the pager has been detached, return BAD_STATE. After
+            // detach, no pages will ever be supplied. Without this check,
+            // a waiter that arrives after fail_pager_requests (which
+            // only drains existing waiters) would block forever.
+            if inner.pager_port.is_none() {
+                return Err(ZxError::BAD_STATE);
+            }
             // If the page was already supplied between request_pages()
             // and now (race window), return immediately. Check both
             // committed frames and zero markers (supply_pages creates
