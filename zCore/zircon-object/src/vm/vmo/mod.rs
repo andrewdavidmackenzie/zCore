@@ -663,28 +663,10 @@ impl VmObject {
     /// the AwaitingCleanLength (the new start sentinel is freshly dirty).
     /// Without this, WritebackEnd incorrectly cleans pages that should
     /// have been invalidated by the new dirty operation.
-    /// Check if a page is an uncommitted zero AWAITING_CLEAN page.
-    fn is_zero_awaiting_clean(
-        dirty_pages: &[u8],
-        p: usize,
-        trait_: &dyn VMObjectTrait,
-    ) -> bool {
-        dirty_pages[p] == PAGE_AWAITING_CLEAN
-            && (trait_.has_zero_marker(p)
-                || trait_.committed_pages_in_range(p, p + 1) == 0)
-    }
-
-    fn revert_adjacent_awaiting_clean(
-        dirty_pages: &mut [u8],
-        page_idx: usize,
-        trait_: &dyn VMObjectTrait,
-    ) {
+    fn revert_adjacent_awaiting_clean(dirty_pages: &mut [u8], page_idx: usize) {
         let dp_len = dirty_pages.len();
-        // Only revert uncommitted zero-marker pages. Committed data
-        // pages in AWAITING_CLEAN must not be reverted — they have
-        // real content that writeback_end should handle per-page.
         // Check left neighbor
-        if page_idx > 0 && Self::is_zero_awaiting_clean(dirty_pages, page_idx - 1, trait_) {
+        if page_idx > 0 && dirty_pages[page_idx - 1] == PAGE_AWAITING_CLEAN {
             let mut p = page_idx - 1;
             loop {
                 dirty_pages[p] = PAGE_ZERO_DIRTY;
@@ -692,17 +674,15 @@ impl VmObject {
                     break;
                 }
                 p -= 1;
-                if !Self::is_zero_awaiting_clean(dirty_pages, p, trait_) {
+                if dirty_pages[p] != PAGE_AWAITING_CLEAN {
                     break;
                 }
             }
         }
         // Check right neighbor
-        if page_idx + 1 < dp_len
-            && Self::is_zero_awaiting_clean(dirty_pages, page_idx + 1, trait_)
-        {
+        if page_idx + 1 < dp_len && dirty_pages[page_idx + 1] == PAGE_AWAITING_CLEAN {
             let mut p = page_idx + 1;
-            while p < dp_len && Self::is_zero_awaiting_clean(dirty_pages, p, trait_) {
+            while p < dp_len && dirty_pages[p] == PAGE_AWAITING_CLEAN {
                 dirty_pages[p] = PAGE_ZERO_DIRTY;
                 p += 1;
             }
@@ -720,16 +700,10 @@ impl VmObject {
                 && self.trait_.committed_pages_in_range(page_idx, page_idx + 1) == 0
             {
                 inner.dirty_pages[page_idx] = PAGE_ZERO_DIRTY;
-                // Only revert adjacent AWAITING_CLEAN for zero-dirty
-                // pages, matching Fuchsia where creating a dirty zero
-                // merges with adjacent AwaitingClean intervals.
-                // Committed dirty pages (PAGE_DIRTY) don't merge.
-                Self::revert_adjacent_awaiting_clean(
-                    &mut inner.dirty_pages, page_idx, &*self.trait_,
-                );
             } else {
                 inner.dirty_pages[page_idx] = PAGE_DIRTY;
             }
+            Self::revert_adjacent_awaiting_clean(&mut inner.dirty_pages, page_idx);
         }
     }
 
@@ -850,9 +824,7 @@ impl VmObject {
                 // pages, matching Fuchsia where creating a dirty zero
                 // merges with adjacent AwaitingClean intervals.
                 // Regular dirty pages (writes) don't merge intervals.
-                Self::revert_adjacent_awaiting_clean(
-                    &mut inner.dirty_pages, page_idx, &*self.trait_,
-                );
+                Self::revert_adjacent_awaiting_clean(&mut inner.dirty_pages, page_idx);
             } else {
                 inner.dirty_pages[page_idx] = PAGE_DIRTY;
             }
