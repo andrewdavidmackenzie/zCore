@@ -1934,7 +1934,12 @@ impl VMObjectPagedInner {
                     false
                 };
                 let next = cur_inner.parent.clone();
-                (has_owned, next, cur_inner.parent_offset, cur_inner.parent_limit)
+                (
+                    has_owned,
+                    next,
+                    cur_inner.parent_offset,
+                    cur_inner.parent_limit,
+                )
             };
             if has_owned || vis_limit == 0 {
                 break;

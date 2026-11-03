@@ -1270,6 +1270,7 @@ impl VmObject {
             .range_change_remove_write(start_page, page_count);
         let mut inner = self.inner.lock();
         let dp_len = inner.dirty_pages.len();
+        #[allow(clippy::needless_range_loop)]
         for page_idx in start_page..end_page.min(dp_len) {
             let state = inner.dirty_pages[page_idx];
             // When zero_only, skip committed dirty pages (PAGE_DIRTY).
@@ -1296,13 +1297,10 @@ impl VmObject {
                 continue;
             }
             // Find interval start (may be before our range).
-            let interval_start = Self::find_zero_interval_start(
-                &inner.dirty_pages, p, &*self.trait_,
-            );
+            let interval_start =
+                Self::find_zero_interval_start(&inner.dirty_pages, p, &*self.trait_);
             // Find interval end.
-            let interval_end = Self::find_zero_interval_end(
-                &inner.dirty_pages, p, &*self.trait_,
-            );
+            let interval_end = Self::find_zero_interval_end(&inner.dirty_pages, p, &*self.trait_);
             // Only set ACL when begin range covers interval start.
             if start_page <= interval_start {
                 let coverage = end_page.min(interval_end) - interval_start;
@@ -1333,9 +1331,7 @@ impl VmObject {
         trait_: &dyn VMObjectTrait,
     ) -> usize {
         let mut start = page_idx;
-        while start > 0
-            && Self::is_zero_interval_page(dirty_pages, start - 1, trait_)
-        {
+        while start > 0 && Self::is_zero_interval_page(dirty_pages, start - 1, trait_) {
             start -= 1;
         }
         start
@@ -1348,9 +1344,7 @@ impl VmObject {
         trait_: &dyn VMObjectTrait,
     ) -> usize {
         let mut end = page_idx + 1;
-        while end < dirty_pages.len()
-            && Self::is_zero_interval_page(dirty_pages, end, trait_)
-        {
+        while end < dirty_pages.len() && Self::is_zero_interval_page(dirty_pages, end, trait_) {
             end += 1;
         }
         end
@@ -1387,12 +1381,9 @@ impl VmObject {
                 continue;
             }
             // Zero AWAITING_CLEAN page — find interval boundaries.
-            let interval_start = Self::find_zero_interval_start(
-                &inner.dirty_pages, p, &*self.trait_,
-            );
-            let interval_end = Self::find_zero_interval_end(
-                &inner.dirty_pages, p, &*self.trait_,
-            );
+            let interval_start =
+                Self::find_zero_interval_start(&inner.dirty_pages, p, &*self.trait_);
+            let interval_end = Self::find_zero_interval_end(&inner.dirty_pages, p, &*self.trait_);
             // Advance high-water mark with this interval's ACL.
             // Look up ACL at the interval start, or find the nearest
             // ACL entry before it (handles the case where the original
@@ -1416,6 +1407,7 @@ impl VmObject {
             // Determine cleanable range within this interval.
             let clean_from = start_page.max(interval_start);
             let clean_to = end_page.min(interval_end).min(acl_end);
+            #[allow(clippy::needless_range_loop)]
             for idx in clean_from..clean_to {
                 if inner.dirty_pages[idx] == PAGE_AWAITING_CLEAN {
                     inner.dirty_pages[idx] = PAGE_CLEAN;

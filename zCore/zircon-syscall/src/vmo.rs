@@ -929,9 +929,7 @@ impl Syscall<'_> {
                                 }
                                 Err(ZxError::STOP) => return Err(ZxError::STOP),
                                 Err(ZxError::OUT_OF_RANGE) => {}
-                                Err(ZxError::BAD_STATE) => {
-                                    return Err(ZxError::BAD_STATE)
-                                }
+                                Err(ZxError::BAD_STATE) => return Err(ZxError::BAD_STATE),
                                 Err(_) => {}
                             }
                             p += 1;
