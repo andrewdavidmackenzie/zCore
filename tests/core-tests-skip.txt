@@ -11,7 +11,6 @@ PagerWriteback.NotModifiedFailedPinWrite
 PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
 
 # ── Pager: hangs (multi-thread pager interactions) ──
-Pager.DetachNonMappingAccess
 Pager.SuspendReadTestVmar
 Pager.FailMultipleCommits
 Pager.EarlyWakeCloneRace
