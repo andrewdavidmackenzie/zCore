@@ -1,6 +1,6 @@
 # ── PagerWriteback: hangs (multi-thread pager interactions) ──
 PagerWriteback.ResizeWritebackInterleavedWriteWithMappingTrapDirty
-PagerWriteback.ResizeWritebackWithMappingTrapDirty
+# ResizeWritebackWithMappingTrapDirty: fixed by dirty-before-commit
 PagerWriteback.LargeWriteBatched
 PagerWriteback.SuspendDirtyTestVmar
 PagerWriteback.WritebackResizedRangeAfterDetachNoTrapDirty
@@ -10,12 +10,12 @@ PagerWriteback.FailedPinAwaitingClean
 PagerWriteback.NotModifiedFailedPinWrite
 PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
 
-# ── Pager: hangs / flaky (multi-thread pager interactions) ──
-Pager.ResizeCommitTest
+# ── Pager: hangs (multi-thread pager interactions) ──
+# ResizeCommitTest: fixed by dirty-before-commit
+# FailEarlyWake: fixed by overlap waiter join
 Pager.SuspendReadTestVmar
 Pager.FailMultipleCommits
 Pager.EarlyWakeCloneRace
-Pager.FailEarlyWake
 
 # ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
 StreamTestCase.PartialVmoDirty
