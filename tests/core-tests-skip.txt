@@ -37,6 +37,7 @@ VmoTestCase.ParallelWriteAndDecommit
 
 # ── Resource / Scheduler: hangs ──
 Resource.Ioports
+Resource.PcInterruptVectorPoolLeak
 SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
 
 # ── Property: QEMU qemu64 CPU model does not fault on wrfsbase/wrgsbase

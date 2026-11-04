@@ -901,7 +901,6 @@ impl Syscall<'_> {
                             break;
                         }
                         // Skip committed pages and zero-marker pages.
-                        let committed = pager_vmo.committed_pages_in_range(rp, rp + 1) > 0;
                         if pager_vmo.committed_pages_in_range(rp, rp + 1) > 0
                             || pager_vmo.has_zero_marker(rp)
                         {
@@ -952,7 +951,7 @@ impl Syscall<'_> {
                         let req_off = (run_start + root_page_off) * PAGE_SIZE;
                         let req_len = (p - run_start) * PAGE_SIZE;
                         match pager_vmo.request_pages(req_off, req_len) {
-                            Err(ZxError::SHOULD_WAIT) => {
+                            Ok(()) | Err(ZxError::SHOULD_WAIT) => {
                                 for pg in run_start..p {
                                     let rpg = pg + root_page_off;
                                     if rpg >= pager_vmo.len() / PAGE_SIZE {
@@ -1043,7 +1042,6 @@ impl Syscall<'_> {
                                 }
                             }
                             Err(e) => return Err(e),
-                            Ok(()) => {}
                         }
                     }
                 }
@@ -1052,25 +1050,35 @@ impl Syscall<'_> {
                 // are in the root — they don't create private copies.
                 if op == 1 {
                     // For TRAP_DIRTY VMOs with zero-marker pages:
-                    // COMMIT does NOT generate DIRTY requests. Zero
-                    // markers are already "committed" (they represent
-                    // a zero page). Only writes need DIRTY approval.
-                    // Skip the dirty request loop entirely for COMMIT.
-                    if false && pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
+                    // COMMIT on zero intervals generates DIRTY requests.
+                    // Fuchsia's TargetZeroContentSupplyDirty returns true
+                    // for zero intervals on dirty-tracked VMOs — allocating
+                    // them (even for read) creates new dirty pages that
+                    // the pager must approve.
+                    if pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
                         // Translate to root-VMO coordinates for slices.
                         let slice_off = if vmo.is_slice_vmo() {
                             vmo.get_slice_offset() / PAGE_SIZE
                         } else {
                             0
                         };
-                        for pg in start_page..end_page {
+                        // Re-check VMO size — the VMO may have been
+                        // resized while waiting for pages above.
+                        let dirty_end = end_page.min(vmo.len() / PAGE_SIZE);
+                        for pg in start_page..dirty_end {
                             let root_pg = pg + slice_off;
-                            // Zero-marker pages being committed always
-                            // need a DIRTY request, even if their state
-                            // is PAGE_ZERO_DIRTY. Committing materializes
-                            // a real frame, and the pager must approve
-                            // this transition (e.g., allocate disk space).
-                            if pager_vmo.has_zero_marker(root_pg) {
+                            if root_pg >= pager_vmo.len() / PAGE_SIZE {
+                                break;
+                            }
+                            // Zero INTERVAL pages (from resize, state
+                            // ZERO_DIRTY) need a DIRTY request on commit.
+                            // Clean zero markers (from supply) do NOT.
+                            // Matches Fuchsia's TargetZeroContentSupplyDirty
+                            // which returns true for intervals but false
+                            // for markers.
+                            if pager_vmo.has_zero_marker(root_pg)
+                                && pager_vmo.is_page_zero_dirty(root_pg)
+                            {
                                 let pg_off = root_pg * PAGE_SIZE;
                                 match pager_vmo.request_dirty(pg_off, PAGE_SIZE) {
                                     Err(ZxError::SHOULD_WAIT) => {}
