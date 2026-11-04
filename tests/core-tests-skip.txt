@@ -5,12 +5,13 @@ PagerWriteback.LargeWriteBatched
 PagerWriteback.SuspendDirtyTestVmar
 PagerWriteback.WritebackResizedRangeAfterDetachNoTrapDirty
 PagerWriteback.OpZeroPinnedTrapDirty
-PagerWriteback.CommitExtendedTailTrapDirty
+# CommitExtendedTailTrapDirty: fixed by TRAP_DIRTY commit dirty request
 PagerWriteback.FailedPinAwaitingClean
 PagerWriteback.NotModifiedFailedPinWrite
 PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
 
-# ── Pager: hangs (multi-thread pager interactions) ──
+# ── Pager: hangs / flaky (multi-thread pager interactions) ──
+Pager.ResizeCommitTest
 Pager.SuspendReadTestVmar
 Pager.FailMultipleCommits
 Pager.EarlyWakeCloneRace

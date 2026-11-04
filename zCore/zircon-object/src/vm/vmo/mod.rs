@@ -671,6 +671,11 @@ impl VmObject {
     /// Also clears any ACL entries for reverted intervals.
     fn revert_adjacent_awaiting_clean(inner: &mut VmObjectInner, page_idx: usize) {
         let dp_len = inner.dirty_pages.len();
+        // Remove any stale carried ACL at the trigger page itself.
+        // This handles the case where writeback_end stored remaining
+        // coverage at this page index, which becomes invalid when
+        // the page is re-dirtied.
+        inner.awaiting_clean_len.remove(&page_idx);
         // Check left neighbor
         if page_idx > 0 && inner.dirty_pages[page_idx - 1] == PAGE_AWAITING_CLEAN {
             let mut p = page_idx - 1;

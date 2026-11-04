@@ -1056,17 +1056,14 @@ impl Syscall<'_> {
                     // them (even for read) creates new dirty pages that
                     // the pager must approve.
                     if pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
-                        // Translate to root-VMO coordinates for slices.
-                        let slice_off = if vmo.is_slice_vmo() {
-                            vmo.get_slice_offset() / PAGE_SIZE
-                        } else {
-                            0
-                        };
                         // Re-check VMO size — the VMO may have been
                         // resized while waiting for pages above.
                         let dirty_end = end_page.min(vmo.len() / PAGE_SIZE);
                         for pg in start_page..dirty_end {
-                            let root_pg = pg + slice_off;
+                            // Use root_page_off (already computed above)
+                            // which includes clone-to-root translation,
+                            // not just slice offset.
+                            let root_pg = pg + root_page_off;
                             if root_pg >= pager_vmo.len() / PAGE_SIZE {
                                 break;
                             }
