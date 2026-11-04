@@ -2556,25 +2556,29 @@ impl VmMapping {
                 return Err(ZxError::BAD_STATE);
             }
         }
-        // For TRAP_DIRTY VMOs: check dirty BEFORE committing.
-        // Zero-marker pages from resize (ZERO_DIRTY) need a DIRTY
-        // request — don't allocate a frame until the pager approves.
-        // This prevents the double-fault path from seeing a committed
-        // page and skipping the dirty request on the second call.
+        let paddr = self.vmo.commit_page(page_idx, access_flags)?;
+        // For TRAP_DIRTY VMOs: if a WRITE fault on a page that needs
+        // dirty approval, send a DIRTY request and return SHOULD_WAIT.
+        // Check AFTER commit so the page has a frame (prevents infinite
+        // page fault loops from the trap handler). The PTE is mapped
+        // READ-only (WRITE stripped above for clean/zero-dirty pages),
+        // so the user write retries with a protection fault, which
+        // handler_user_trap handles by waiting for dirty approval.
+        //
+        // needs_dirty: true for clean pages (!is_page_dirty) and for
+        // pages that are ZERO_DIRTY or AWAITING_CLEAN. These states
+        // mean the pager hasn't approved a write yet, even though
+        // the page may have a committed frame from commit_page.
         if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_trap_dirty() {
+            // needs_dirty: true unless the page is in the PAGE_DIRTY
+            // state (pager has approved a write). ZERO_DIRTY and
+            // AWAITING_CLEAN both need fresh approval.
             let needs_dirty =
                 !self.vmo.is_page_dirty(page_idx) || self.vmo.is_page_zero_dirty(page_idx);
             if needs_dirty {
-                // For TRAP_DIRTY VMOs, writes to clean pages (or
-                // zero-marker-only pages from resize) need pager
-                // approval. If the pager is still attached, send a
-                // DIRTY request (returns SHOULD_WAIT). If detached,
-                // request_dirty returns BAD_STATE — the write is
-                // rejected as a fatal page fault.
                 return self.vmo.request_dirty(vmo_offset, PAGE_SIZE);
             }
         }
-        let paddr = self.vmo.commit_page(page_idx, access_flags)?;
         // Slice of TRAP_DIRTY parent: request dirty on the parent.
         if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_slice_vmo() {
             if let Some(parent) = self.vmo.find_root_pager_vmo() {
