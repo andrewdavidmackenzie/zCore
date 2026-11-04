@@ -2516,6 +2516,7 @@ impl VmMapping {
         if self.vmo.was_pager_backed()
             && !self.vmo.has_pager()
             && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
+            && !self.vmo.has_zero_marker(page_idx)
         {
             return Err(ZxError::BAD_STATE);
         }
