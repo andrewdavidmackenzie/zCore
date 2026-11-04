@@ -164,10 +164,13 @@ impl Pager {
                     _reserved1: 0,
                 }),
             });
-            // Wake any threads blocked on pager faults before clearing
-            // the pager association — they'll get BAD_STATE.
-            vmo.fail_pager_requests(ZxError::BAD_STATE);
+            // Clear the pager association FIRST so that new waiters
+            // arriving in wait_for_page see pager_port=None and
+            // return BAD_STATE immediately. Then drain existing
+            // waiters. This closes the race window where a waiter
+            // could register between fail and clear.
             vmo.clear_pager();
+            vmo.fail_pager_requests(ZxError::BAD_STATE);
             // Decommit clean pages — matching Fuchsia behavior where
             // the kernel reclaims physical memory for pages that haven't
             // been modified. Dirty pages survive detach.

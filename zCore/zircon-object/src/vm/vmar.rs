@@ -2555,17 +2555,14 @@ impl VmMapping {
                 return Err(ZxError::BAD_STATE);
             }
         }
-        let paddr = self.vmo.commit_page(page_idx, access_flags)?;
-        // For TRAP_DIRTY VMOs: if a WRITE fault on a clean page (or
-        // a PAGE_ZERO_DIRTY page with only a zero marker), send a
-        // dirty request to the pager and return SHOULD_WAIT.
-        // The handler_user_trap catches SHOULD_WAIT, waits for the
-        // pager's OP_DIRTY acknowledgement, then the fault retries
-        // and grants WRITE permission.
+        // For TRAP_DIRTY VMOs: check dirty BEFORE committing.
+        // Zero-marker pages from resize (ZERO_DIRTY) need a DIRTY
+        // request — don't allocate a frame until the pager approves.
+        // This prevents the double-fault path from seeing a committed
+        // page and skipping the dirty request on the second call.
         if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_trap_dirty() {
-            let needs_dirty = !self.vmo.is_page_dirty(page_idx)
-                || (self.vmo.has_zero_marker(page_idx)
-                    && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0);
+            let needs_dirty =
+                !self.vmo.is_page_dirty(page_idx) || self.vmo.is_page_zero_dirty(page_idx);
             if needs_dirty {
                 // For TRAP_DIRTY VMOs, writes to clean pages (or
                 // zero-marker-only pages from resize) need pager
@@ -2576,6 +2573,7 @@ impl VmMapping {
                 return self.vmo.request_dirty(vmo_offset, PAGE_SIZE);
             }
         }
+        let paddr = self.vmo.commit_page(page_idx, access_flags)?;
         // Slice of TRAP_DIRTY parent: request dirty on the parent.
         if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_slice_vmo() {
             if let Some(parent) = self.vmo.find_root_pager_vmo() {

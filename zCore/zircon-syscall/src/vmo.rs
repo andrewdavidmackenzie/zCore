@@ -804,13 +804,16 @@ impl Syscall<'_> {
             if zero_end > zero_start {
                 let _ = vmo.zero(zero_start, zero_end - zero_start);
             }
-            // For unbounded VMOs, update dirty tracking:
+            // For pager-backed VMOs with dirty tracking, update
+            // dirty state when stream_size changes:
             // - Increase: [old_pages, new_pages) transitions from
             //   UNTRACKED → ZERO_DIRTY (newly tracked dirty zeros).
             // - Decrease: [new_pages, old_pages) transitions to
             //   UNTRACKED (absorbed back). Committed pages in this
             //   range are decommitted.
-            if vmo.is_unbounded() {
+            // Matches Fuchsia where set_stream_size affects dirty
+            // tracking on any pager-backed VMO, not just unbounded.
+            if vmo.has_pager() || vmo.is_unbounded() {
                 vmo.update_stream_size_dirty_tracking(old_size, size);
             }
             // Setting stream size on a pager-backed VMO modifies it.
@@ -868,6 +871,7 @@ impl Syscall<'_> {
                 if offset.checked_add(len).is_none() || offset + len > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
+
                 // For clones, route requests to the root pager VMO
                 // with proper offset translation.
                 let (pager_vmo, clone_to_root_off) = if vmo.is_pager_backed() {
@@ -896,12 +900,39 @@ impl Syscall<'_> {
                         if rp >= pager_vmo.len() / PAGE_SIZE {
                             break;
                         }
-                        // Skip committed pages, zero-marker pages, and
-                        // pages with pending waiters.
+                        // Skip committed pages and zero-marker pages.
                         if pager_vmo.committed_pages_in_range(rp, rp + 1) > 0
                             || pager_vmo.has_zero_marker(rp)
-                            || pager_vmo.has_page_waiter(rp)
                         {
+                            p += 1;
+                            continue;
+                        }
+                        // Pages with pending waiters (from overlapping
+                        // commits): join the outstanding request as an
+                        // overlap waiter and block until supplied.
+                        // Matches Fuchsia where overlapping commits
+                        // absorb into existing page requests.
+                        if pager_vmo.has_page_waiter(rp) {
+                            let future = pager_vmo.wait_for_page(rp * PAGE_SIZE);
+                            pin_mut!(future);
+                            self.thread.set_blocking_state(ThreadState::BlockedPager);
+                            match self
+                                .thread
+                                .blocking_run_suspendable(
+                                    future,
+                                    ThreadState::BlockedPager,
+                                    Duration::from_nanos(u64::MAX),
+                                )
+                                .await
+                            {
+                                Ok(()) => {
+                                    any_page_committed = true;
+                                }
+                                Err(ZxError::STOP) => return Err(ZxError::STOP),
+                                Err(ZxError::OUT_OF_RANGE) => {}
+                                Err(ZxError::BAD_STATE) => return Err(ZxError::BAD_STATE),
+                                Err(_) => {}
+                            }
                             p += 1;
                             continue;
                         }
@@ -920,7 +951,7 @@ impl Syscall<'_> {
                         let req_off = (run_start + root_page_off) * PAGE_SIZE;
                         let req_len = (p - run_start) * PAGE_SIZE;
                         match pager_vmo.request_pages(req_off, req_len) {
-                            Err(ZxError::SHOULD_WAIT) => {
+                            Ok(()) | Err(ZxError::SHOULD_WAIT) => {
                                 for pg in run_start..p {
                                     let rpg = pg + root_page_off;
                                     if rpg >= pager_vmo.len() / PAGE_SIZE {
@@ -932,11 +963,19 @@ impl Syscall<'_> {
                                             break;
                                         }
                                         if let Some(err) = pager_vmo.get_failed_page(rpg) {
-                                            // Failed page marker found.
-                                            // Only retry if at least one
-                                            // prior page was committed
-                                            // (partial success). If ALL
-                                            // pages are failed, return error.
+                                            // OUT_OF_RANGE from resize:
+                                            // the page was truncated away.
+                                            // Break out and let the trim
+                                            // logic handle it (same as
+                                            // wait_for_page OUT_OF_RANGE).
+                                            if err == ZxError::OUT_OF_RANGE {
+                                                break;
+                                            }
+                                            // Other failures: only retry
+                                            // if at least one prior page
+                                            // was committed (partial
+                                            // success). If ALL pages
+                                            // failed, return error.
                                             if !any_page_committed || commit_retries >= 1 {
                                                 return Err(err);
                                             }
@@ -1003,7 +1042,6 @@ impl Syscall<'_> {
                                 }
                             }
                             Err(e) => return Err(e),
-                            Ok(()) => {}
                         }
                     }
                 }
@@ -1012,25 +1050,32 @@ impl Syscall<'_> {
                 // are in the root — they don't create private copies.
                 if op == 1 {
                     // For TRAP_DIRTY VMOs with zero-marker pages:
-                    // COMMIT does NOT generate DIRTY requests. Zero
-                    // markers are already "committed" (they represent
-                    // a zero page). Only writes need DIRTY approval.
-                    // Skip the dirty request loop entirely for COMMIT.
-                    if false && pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
-                        // Translate to root-VMO coordinates for slices.
-                        let slice_off = if vmo.is_slice_vmo() {
-                            vmo.get_slice_offset() / PAGE_SIZE
-                        } else {
-                            0
-                        };
-                        for pg in start_page..end_page {
-                            let root_pg = pg + slice_off;
-                            // Zero-marker pages being committed always
-                            // need a DIRTY request, even if their state
-                            // is PAGE_ZERO_DIRTY. Committing materializes
-                            // a real frame, and the pager must approve
-                            // this transition (e.g., allocate disk space).
-                            if pager_vmo.has_zero_marker(root_pg) {
+                    // COMMIT on zero intervals generates DIRTY requests.
+                    // Fuchsia's TargetZeroContentSupplyDirty returns true
+                    // for zero intervals on dirty-tracked VMOs — allocating
+                    // them (even for read) creates new dirty pages that
+                    // the pager must approve.
+                    if pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
+                        // Re-check VMO size — the VMO may have been
+                        // resized while waiting for pages above.
+                        let dirty_end = end_page.min(vmo.len() / PAGE_SIZE);
+                        for pg in start_page..dirty_end {
+                            // Use root_page_off (already computed above)
+                            // which includes clone-to-root translation,
+                            // not just slice offset.
+                            let root_pg = pg + root_page_off;
+                            if root_pg >= pager_vmo.len() / PAGE_SIZE {
+                                break;
+                            }
+                            // Zero INTERVAL pages (from resize, state
+                            // ZERO_DIRTY) need a DIRTY request on commit.
+                            // Clean zero markers (from supply) do NOT.
+                            // Matches Fuchsia's TargetZeroContentSupplyDirty
+                            // which returns true for intervals but false
+                            // for markers.
+                            if pager_vmo.has_zero_marker(root_pg)
+                                && pager_vmo.is_page_zero_dirty(root_pg)
+                            {
                                 let pg_off = root_pg * PAGE_SIZE;
                                 match pager_vmo.request_dirty(pg_off, PAGE_SIZE) {
                                     Err(ZxError::SHOULD_WAIT) => {}
@@ -1091,6 +1136,16 @@ impl Syscall<'_> {
         let op = VmoOpType::try_from(op).or(Err(ZxError::INVALID_ARGS))?;
         let proc = self.thread.proc();
         let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle_value)?;
+        // ALWAYS_NEED/DONT_NEED: silently succeed for non-pager VMOs
+        // without checking range, matching Fuchsia's HintRange which
+        // returns ZX_OK immediately when can_root_source_evict() is
+        // false. Must be checked before the general range check below.
+        if matches!(op, VmoOpType::AlwaysNeed | VmoOpType::DontNeed)
+            && !vmo.is_pager_backed()
+            && !vmo.is_in_pager_tree()
+        {
+            return Ok(());
+        }
         // Check for offset+len overflow or beyond VMO size.
         if offset.checked_add(len).is_none() || offset + len > vmo.len() {
             return Err(ZxError::OUT_OF_RANGE);
