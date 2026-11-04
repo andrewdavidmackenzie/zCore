@@ -517,7 +517,12 @@ impl Syscall<'_> {
             let mut cursor = batch_start;
             while cursor < batch_end {
                 if !is_page_supplied(cursor) {
-                    // Unsupplied page: find run, request READ, wait.
+                    // Unsupplied page: find run, request READ, wait
+                    // for ALL pages in the run to be supplied.
+                    // Fuchsia's ReadWriteInternal processes pages
+                    // sequentially, blocking per-page. We send one
+                    // batched request, then wait per-page so the
+                    // pager can supply in pieces.
                     let run_start = cursor;
                     while cursor < batch_end && !is_page_supplied(cursor) {
                         cursor += 1;
@@ -525,19 +530,25 @@ impl Syscall<'_> {
                     let run_offset = run_start * PAGE_SIZE;
                     let run_len = (cursor - run_start) * PAGE_SIZE;
                     let _ = pager_vmo.request_pages(run_offset, run_len);
-                    let future = pager_vmo.wait_for_page(run_offset);
-                    pin_mut!(future);
-                    self.thread.set_blocking_state(ThreadState::BlockedPager);
-                    self.thread
-                        .blocking_run::<_, (), _>(
-                            future,
-                            ThreadState::BlockedPager,
-                            core::time::Duration::from_nanos(u64::MAX),
-                            None,
-                        )
-                        .await?;
-                    // After supply, re-scan from run_start: supplied
-                    // pages are now clean and may need DIRTY requests.
+                    // Wait for each page in the run individually.
+                    for pg in run_start..cursor {
+                        if is_page_supplied(pg) {
+                            continue;
+                        }
+                        let future = pager_vmo.wait_for_page(pg * PAGE_SIZE);
+                        pin_mut!(future);
+                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                        self.thread
+                            .blocking_run::<_, (), _>(
+                                future,
+                                ThreadState::BlockedPager,
+                                core::time::Duration::from_nanos(u64::MAX),
+                                None,
+                            )
+                            .await?;
+                    }
+                    // After all pages supplied, re-scan from
+                    // run_start for DIRTY requests.
                     cursor = run_start;
                     continue;
                 }

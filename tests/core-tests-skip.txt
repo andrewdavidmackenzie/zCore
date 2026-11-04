@@ -1,7 +1,7 @@
 # ── PagerWriteback: hangs (multi-thread pager interactions) ──
 PagerWriteback.ResizeWritebackInterleavedWriteWithMappingTrapDirty
 # ResizeWritebackWithMappingTrapDirty: fixed by dirty-before-commit
-PagerWriteback.LargeWriteBatched
+# LargeWriteBatched: fixed by per-page READ wait
 PagerWriteback.SuspendDirtyTestVmar
 PagerWriteback.WritebackResizedRangeAfterDetachNoTrapDirty
 PagerWriteback.OpZeroPinnedTrapDirty
