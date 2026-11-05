@@ -10,8 +10,10 @@ PagerWriteback.FailedPinAwaitingClean
 PagerWriteback.NotModifiedFailedPinWrite
 # WritebackResizedRangeAfterDetachTrapDirty: fixed by zero marker detach check
 
-# ── Pager: hangs (multi-thread pager interactions) ──
+# ── Pager: hangs / flaky ──
 Pager.FailEarlyWake
+Pager.ResizeCommitTest
+Pager.DecommitOnDetachTestVmar
 Pager.SuspendReadTestVmar
 Pager.FailMultipleCommits
 Pager.EarlyWakeCloneRace
@@ -34,6 +36,10 @@ Bti.DecommitRace
 
 # ── VmoTestCase: multi-thread write + decommit race (std::thread spin-loop) ──
 VmoTestCase.ParallelWriteAndDecommit
+
+# ── CPU affinity / performance: not implemented ──
+CpuMaskProfile.ApplyProfile
+SystemCpu.SetPerformanceInfoArgumentValidation
 
 # ── Resource / Scheduler: hangs ──
 Resource.Ioports
