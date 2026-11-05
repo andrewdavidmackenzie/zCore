@@ -11,10 +11,9 @@ hal_fn_impl! {
         }
 
         fn num_cpus() -> usize {
-            let available = std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(1);
-            available.min(crate::config::MAX_CORE_NUM)
+            // LibOS has a single logical kernel CPU (cpu_index always
+            // returns 0). Report 1 regardless of host parallelism.
+            1
         }
 
         fn reset() -> ! {

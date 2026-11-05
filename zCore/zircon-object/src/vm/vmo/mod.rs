@@ -578,30 +578,30 @@ impl VmObject {
     pub fn decommit_clean_pages(&self) {
         let inner = self.inner.lock();
         let total_pages = self.len() / PAGE_SIZE;
-        let mut decommitted_pages = alloc::vec::Vec::new();
-        for page_idx in 0..total_pages {
-            let state = inner
-                .dirty_pages
-                .get(page_idx)
-                .copied()
-                .unwrap_or(PAGE_CLEAN);
-            if state == PAGE_CLEAN {
-                // Clean page — decommit the frame. decommit_page
-                // inserts a zero marker, which we remove below so
+        let dp_len = inner.dirty_pages.len();
+        let mut any_decommitted = false;
+        // Only check pages that have dirty tracking entries.
+        // Most pages in a sparse VMO won't have entries.
+        #[allow(clippy::needless_range_loop)]
+        for page_idx in 0..total_pages.min(dp_len) {
+            if inner.dirty_pages[page_idx] == PAGE_CLEAN {
+                // Clean page — decommit and remove zero marker so
                 // the page is fully empty. The detach fault handler
-                // returns BAD_STATE for empty pages on detached VMOs.
+                // returns BAD_STATE for empty pages.
                 self.trait_.decommit_page(page_idx);
-                decommitted_pages.push(page_idx);
+                self.trait_.remove_zero_marker(page_idx);
+                any_decommitted = true;
             }
         }
-        // Remove zero markers left by decommit_page. Clean pages on
-        // a detached VMO should be fully empty — zero markers would
-        // make the page fault handler treat them as "present" and
-        // return zeros instead of BAD_STATE.
-        for page_idx in &decommitted_pages {
-            self.trait_.remove_zero_marker(*page_idx);
+        // Also decommit pages beyond dirty tracking that are
+        // committed (clean by default since no dirty entry).
+        for page_idx in dp_len..total_pages {
+            if self.trait_.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                self.trait_.decommit_page(page_idx);
+                self.trait_.remove_zero_marker(page_idx);
+                any_decommitted = true;
+            }
         }
-        let any_decommitted = !decommitted_pages.is_empty();
         // Invalidate all VMAR mappings for decommitted pages.
         // Without this, stale page table entries let threads read
         // zero data instead of faulting (which should deliver a
