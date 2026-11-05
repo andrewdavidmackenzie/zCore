@@ -115,6 +115,12 @@ unsafe impl Sync for ExecutorRuntime {}
 /// Uses a spin::Once<HashMap> populated during SMP boot.
 static CPU_RUNTIMES: spin::Once<hashbrown::HashMap<u8, Mutex<ExecutorRuntime>>> = spin::Once::new();
 
+/// Return the number of online CPUs (executor runtimes).
+/// Returns 1 if runtimes haven't been initialized yet (early boot).
+pub fn num_cpus() -> usize {
+    CPU_RUNTIMES.get().map(|m| m.len()).unwrap_or(1)
+}
+
 /// Initialize executor runtimes for a set of CPU IDs.
 /// Called once by the BSP during boot, before any AP starts using the executor.
 pub fn init_runtimes(cpu_ids: &[u8]) {

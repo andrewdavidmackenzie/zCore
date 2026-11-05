@@ -124,6 +124,10 @@ hal_fn_impl! {
             executor::change_task_priority(cpu_id, task_key, new_priority);
         }
 
+        fn num_cpus() -> usize {
+            executor::num_cpus()
+        }
+
         fn set_current_thread(thread: Option<Arc<dyn Any + Send + Sync>>) {
             let idx = super::cpu::cpu_index();
             *CURRENT_THREAD[idx].get_mut() = thread;

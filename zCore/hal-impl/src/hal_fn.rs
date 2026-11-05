@@ -170,6 +170,9 @@ hal_fn_def! {
         /// `spawn_with_priority`. No-op in libos mode.
         pub fn change_task_priority(_cpu_id: u8, _task_key: usize, _new_priority: usize) {}
 
+        /// Return the number of online CPUs.
+        pub fn num_cpus() -> usize { 1 }
+
         /// Set tid and pid of current task.
         pub fn set_current_thread(thread: Option<Arc<dyn Any + Send + Sync>>) {}
 

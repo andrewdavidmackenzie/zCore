@@ -1009,18 +1009,24 @@ impl Syscall<'_> {
                         1,
                     )?;
                 }
-                // Return one CPU stats record (single-CPU system).
+                // Return per-CPU stats records for all online CPUs.
+                let num_cpus = hal_impl::thread::num_cpus();
                 let entry = CpuStatsInfo {
                     flags: 1, // ZX_INFO_CPU_STATS_FLAG_ONLINE
                     ..Default::default()
                 };
                 let entry_size = core::mem::size_of::<CpuStatsInfo>();
-                let count = (buffer_size / entry_size).min(1);
-                if count > 0 {
-                    UserOutPtr::<CpuStatsInfo>::from(buffer).write(entry)?;
+                let max_entries = buffer_size / entry_size;
+                let count = max_entries.min(num_cpus);
+                for i in 0..count {
+                    let mut ptr = UserOutPtr::<CpuStatsInfo>::from_addr_size(
+                        buffer + i * entry_size,
+                        entry_size,
+                    )?;
+                    ptr.write(entry)?;
                 }
                 actual.write_if_not_null(count)?;
-                avail.write_if_not_null(1)?;
+                avail.write_if_not_null(num_cpus)?;
             }
             Topic::MemoryStall => {
                 // Requires a root or system-stall resource handle.
