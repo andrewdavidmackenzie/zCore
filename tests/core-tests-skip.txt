@@ -11,8 +11,7 @@ PagerWriteback.NotModifiedFailedPinWrite
 # WritebackResizedRangeAfterDetachTrapDirty: fixed by zero marker detach check
 
 # ── Pager: hangs (multi-thread pager interactions) ──
-# ResizeCommitTest: fixed by dirty-before-commit
-# FailEarlyWake: fixed by overlap waiter join
+Pager.FailEarlyWake
 Pager.SuspendReadTestVmar
 Pager.FailMultipleCommits
 Pager.EarlyWakeCloneRace
