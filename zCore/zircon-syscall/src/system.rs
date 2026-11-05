@@ -389,9 +389,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
 
-        // Use actual online CPU count. CpuStats reports avail=1 for
-        // our single-CPU QEMU configuration, so be consistent.
-        let online_cpus: usize = 1;
+        let online_cpus: usize = hal_impl::cpu::num_cpus();
         // count must match the number of online CPUs exactly.
         if count != online_cpus {
             return Err(ZxError::OUT_OF_RANGE);
@@ -472,7 +470,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate count and info pointer.
-        let online_cpus: usize = 1;
+        let online_cpus: usize = hal_impl::cpu::num_cpus();
         if count == 0 || count > online_cpus {
             return Err(ZxError::OUT_OF_RANGE);
         }
