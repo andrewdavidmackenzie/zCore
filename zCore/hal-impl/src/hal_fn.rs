@@ -39,6 +39,10 @@ hal_fn_def! {
         /// Current CPU frequency in MHz.
         pub fn cpu_frequency() -> u16 { 3000 }
 
+        /// Number of online CPUs. Discovered from hardware (ACPI,
+        /// device tree) at boot. Returns 1 in libos/single-CPU mode.
+        pub fn num_cpus() -> usize { 1 }
+
         /// Shutdown/reboot the machine.
         pub fn reset() -> !;
     }
@@ -169,9 +173,6 @@ hal_fn_def! {
         /// `cpu_id` and `task_key` are the values returned by
         /// `spawn_with_priority`. No-op in libos mode.
         pub fn change_task_priority(_cpu_id: u8, _task_key: usize, _new_priority: usize) {}
-
-        /// Return the number of online CPUs.
-        pub fn num_cpus() -> usize { 1 }
 
         /// Set tid and pid of current task.
         pub fn set_current_thread(thread: Option<Arc<dyn Any + Send + Sync>>) {}

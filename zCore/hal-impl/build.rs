@@ -1,8 +1,13 @@
 fn main() {
+    // ZCORE_MAX_CPUS sets the maximum number of CPUs to use.
+    // Also sizes per-CPU static arrays, so needs a finite default.
+    // Default 256 allows up to 256 CPUs; actual count comes from
+    // hardware discovery (ACPI / device tree / host parallelism)
+    // capped at this value.
     let max_cpus: usize = std::env::var("ZCORE_MAX_CPUS")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(4); // default to 4 if not set
+        .unwrap_or(256);
 
     println!("cargo:rustc-cfg=max_cpus=\"{max_cpus}\"");
     println!("cargo:rustc-env=MAX_CPUS={max_cpus}");

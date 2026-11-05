@@ -327,8 +327,9 @@ fn info_cpu_stats() {
         UserOutPtr::from(&mut avail as *mut _ as usize),
     )
     .unwrap();
-    assert_eq!(actual, 1, "should report 1 CPU");
-    assert_eq!(avail, 1);
+    let expected_cpus = hal_impl::cpu::num_cpus();
+    assert_eq!(actual, 1, "with 120-byte buffer, should fit 1 entry");
+    assert_eq!(avail, expected_cpus, "should report actual CPU count");
 
     // First 4 bytes = cpu_number (u32), next 4 = flags (u32).
     let flags = u32::from_le_bytes(buf[4..8].try_into().unwrap());

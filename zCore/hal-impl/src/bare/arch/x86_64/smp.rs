@@ -353,6 +353,7 @@ pub fn boot_application_processors() {
     let rsdp = crate::KCONFIG.acpi_rsdp;
     if rsdp == 0 {
         warn!("No ACPI RSDP -- cannot enumerate APs, skipping SMP boot");
+        super::cpu::set_num_cpus(1);
         init_executor_runtimes(bsp_id, &[]);
         return;
     }
@@ -361,9 +362,12 @@ pub fn boot_application_processors() {
     let ap_ids = enumerate_aps(rsdp as usize);
     if ap_ids.is_empty() {
         info!("No application processors found");
+        super::cpu::set_num_cpus(1);
         init_executor_runtimes(bsp_id, &[]);
         return;
     }
+    // Set the canonical CPU count: BSP + APs.
+    super::cpu::set_num_cpus(1 + ap_ids.len());
     info!(
         "Found {} application processor(s): {:?}",
         ap_ids.len(),

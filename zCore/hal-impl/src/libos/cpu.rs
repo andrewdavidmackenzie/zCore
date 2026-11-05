@@ -10,6 +10,13 @@ hal_fn_impl! {
             0 // LibOS is single-threaded from the kernel's perspective.
         }
 
+        fn num_cpus() -> usize {
+            let available = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1);
+            available.min(crate::config::MAX_CORE_NUM)
+        }
+
         fn reset() -> ! {
             info!("shutdown...");
             std::process::exit(0);

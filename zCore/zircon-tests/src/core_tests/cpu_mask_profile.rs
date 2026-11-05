@@ -80,7 +80,7 @@ fn apply_profile() {
     let rsrc_h = ctx.add_root_resource();
 
     // zCore reports 1 CPU — test CPU 0 only.
-    let num_cpus: usize = 1;
+    let num_cpus: usize = hal_impl::cpu::num_cpus();
     assert!(num_cpus < 64, "num_cpus should fit in one mask word");
 
     for i in 0..num_cpus {
