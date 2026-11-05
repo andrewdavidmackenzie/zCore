@@ -1492,11 +1492,27 @@ struct CpuStatsInfo {
     idle_energy_consumption_nj: u64,
 }
 
-/// `zx_info_guest_stats_t` — per-CPU guest stats (x86_64).
-/// On x86_64 Fuchsia uses 144 bytes per entry (same layout as CpuStatsInfo
-/// but with guest-specific fields). For zCore we reuse the CpuStatsInfo
-/// layout with zeroed counters.
-type GuestStatsInfo = CpuStatsInfo;
+/// `zx_x86_64_info_guest_stats_t` — 120 bytes per CPU on x86_64.
+#[repr(C)]
+#[derive(Default, Clone, Copy)]
+struct GuestStatsInfo {
+    cpu_number: u32,
+    flags: u32,
+    vm_entries: u64,
+    vm_exits: u64,
+    interrupts: u64,
+    interrupt_windows: u64,
+    cpuid_instructions: u64,
+    hlt_instructions: u64,
+    control_register_accesses: u64,
+    io_instructions: u64,
+    rdmsr_instructions: u64,
+    wrmsr_instructions: u64,
+    ept_violations: u64,
+    xsetbv_instructions: u64,
+    pause_instructions: u64,
+    vmcall_instructions: u64,
+}
 
 /// `zx_info_memory_stall_t` — 16 bytes.
 #[repr(C)]
