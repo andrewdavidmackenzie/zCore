@@ -13,7 +13,6 @@ PagerWriteback.NotModifiedFailedPinWrite
 # ── Pager: hangs / flaky ──
 Pager.FailEarlyWake
 Pager.ResizeCommitTest
-Pager.DecommitOnDetachTestVmar
 Pager.SuspendReadTestVmar
 Pager.FailMultipleCommits
 Pager.EarlyWakeCloneRace

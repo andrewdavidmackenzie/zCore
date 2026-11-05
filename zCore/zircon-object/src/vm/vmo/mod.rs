@@ -578,7 +578,7 @@ impl VmObject {
     pub fn decommit_clean_pages(&self) {
         let inner = self.inner.lock();
         let total_pages = self.len() / PAGE_SIZE;
-        let mut any_decommitted = false;
+        let mut decommitted_pages = alloc::vec::Vec::new();
         for page_idx in 0..total_pages {
             let state = inner
                 .dirty_pages
@@ -586,13 +586,22 @@ impl VmObject {
                 .copied()
                 .unwrap_or(PAGE_CLEAN);
             if state == PAGE_CLEAN {
-                // Clean page — can be safely decommitted.
-                // Insert a zero marker to prevent re-requesting from
-                // the (now-detached) pager.
+                // Clean page — decommit the frame. decommit_page
+                // inserts a zero marker, which we remove below so
+                // the page is fully empty. The detach fault handler
+                // returns BAD_STATE for empty pages on detached VMOs.
                 self.trait_.decommit_page(page_idx);
-                any_decommitted = true;
+                decommitted_pages.push(page_idx);
             }
         }
+        // Remove zero markers left by decommit_page. Clean pages on
+        // a detached VMO should be fully empty — zero markers would
+        // make the page fault handler treat them as "present" and
+        // return zeros instead of BAD_STATE.
+        for page_idx in &decommitted_pages {
+            self.trait_.remove_zero_marker(*page_idx);
+        }
+        let any_decommitted = !decommitted_pages.is_empty();
         // Invalidate all VMAR mappings for decommitted pages.
         // Without this, stale page table entries let threads read
         // zero data instead of faulting (which should deliver a
