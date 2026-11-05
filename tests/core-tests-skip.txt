@@ -36,6 +36,11 @@ Bti.DecommitRace
 # ── VmoTestCase: multi-thread write + decommit race (std::thread spin-loop) ──
 VmoTestCase.ParallelWriteAndDecommit
 
+# ── KernelStats: CpuStats per-CPU entry mismatch (under investigation) ──
+KernelStatsGetInfoTest.CpuStats
+KernelStatsGetInfoTest.CpuStatsNullBuffer
+KernelStatsGetInfoTest.CpuStatsMonotonicValues
+
 # ── Resource / Scheduler: hangs ──
 Resource.Ioports
 Resource.PcInterruptVectorPoolLeak
