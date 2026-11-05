@@ -485,6 +485,7 @@ impl Syscall<'_> {
             const ENTRY_SIZE: usize = 12; // 4 + 4 + 4
             let buf: UserInPtr<u8> = info.into();
             let data = buf.read_array(count * ENTRY_SIZE)?;
+            let mut last_cpu = u32::MAX;
             for i in 0..count {
                 let base = i * ENTRY_SIZE;
                 // Validate CPU number (first 4 bytes of each entry).
@@ -494,6 +495,12 @@ impl Syscall<'_> {
                     data[base + 2],
                     data[base + 3],
                 ]);
+                // CPU numbers must be strictly increasing.
+                // Matches Fuchsia's sys_system_set_performance_info.
+                if last_cpu != u32::MAX && cpu_number <= last_cpu {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                last_cpu = cpu_number;
                 if cpu_number as usize >= online_cpus {
                     return Err(ZxError::OUT_OF_RANGE);
                 }

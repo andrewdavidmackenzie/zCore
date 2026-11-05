@@ -36,9 +36,8 @@ Bti.DecommitRace
 # ── VmoTestCase: multi-thread write + decommit race (std::thread spin-loop) ──
 VmoTestCase.ParallelWriteAndDecommit
 
-# ── CPU affinity / performance: not implemented ──
+# ── CPU affinity: task migration not implemented ──
 CpuMaskProfile.ApplyProfile
-SystemCpu.SetPerformanceInfoArgumentValidation
 
 # ── Resource / Scheduler: hangs ──
 Resource.Ioports

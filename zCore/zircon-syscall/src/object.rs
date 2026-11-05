@@ -817,13 +817,7 @@ impl Syscall<'_> {
                 }
                 let mut info_ptr =
                     UserOutPtr::<ThreadStatsInfo>::from_addr_size(buffer, buffer_size)?;
-                // Report ZX_INFO_INVALID_CPU (0xFFFFFFFF) for threads that
-                // have never been scheduled.
-                let last_cpu = if thread.state() == ThreadState::New {
-                    0xFFFF_FFFFu32
-                } else {
-                    0 // stub: report CPU 0 until real tracking is added
-                };
+                let last_cpu = thread.last_cpu();
                 info_ptr.write(ThreadStatsInfo {
                     total_runtime: thread.get_time() as i64,
                     last_scheduled_cpu: last_cpu,

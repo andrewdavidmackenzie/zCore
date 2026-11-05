@@ -806,6 +806,16 @@ impl Thread {
 
     /// Get the time this thread has run on cpu, including the current
     /// userspace session if the thread is currently in userspace.
+    /// Get the CPU ID this thread was last scheduled on.
+    /// Returns 0xFFFFFFFF if the thread hasn't been started yet.
+    pub fn last_cpu(&self) -> u32 {
+        let inner = self.inner.lock();
+        inner
+            .task_sched
+            .map(|(_, cpu)| cpu as u32)
+            .unwrap_or(0xFFFF_FFFFu32)
+    }
+
     pub fn get_time(&self) -> u64 {
         let inner = self.inner.lock();
         let mut total = inner.time;
