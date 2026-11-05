@@ -1467,13 +1467,14 @@ struct KmemStatsExtendedInfo {
     vmo_reclaim_disabled_bytes: u64,
 }
 
-/// `zx_info_cpu_stats_t` — 120 bytes per CPU.
+/// `zx_info_cpu_stats_t` — 144 bytes per CPU.
 #[repr(C)]
 #[derive(Default, Clone, Copy)]
 struct CpuStatsInfo {
     cpu_number: u32,
     flags: u32,
     idle_time: i64,
+    normalized_busy_time: i64,
     reschedules: u64,
     context_switches: u64,
     irq_preempts: u64,
@@ -1487,10 +1488,12 @@ struct CpuStatsInfo {
     syscalls: u64,
     reschedule_ipis: u64,
     generic_ipis: u64,
+    active_energy_consumption_nj: u64,
+    idle_energy_consumption_nj: u64,
 }
 
 /// `zx_info_guest_stats_t` — per-CPU guest stats (x86_64).
-/// On x86_64 Fuchsia uses 120 bytes per entry (same layout as CpuStatsInfo
+/// On x86_64 Fuchsia uses 144 bytes per entry (same layout as CpuStatsInfo
 /// but with guest-specific fields). For zCore we reuse the CpuStatsInfo
 /// layout with zeroed counters.
 type GuestStatsInfo = CpuStatsInfo;
