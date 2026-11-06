@@ -11,7 +11,9 @@ PagerWriteback.NotModifiedFailedPinWrite
 # WritebackResizedRangeAfterDetachTrapDirty: fixed by zero marker detach check
 
 # ── Pager: hangs / flaky ──
+# Pager.FailEarlyWake: passes isolated, hangs in sequential suite (state leak)
 Pager.FailEarlyWake
+# Pager.ResizeCommitTest: passes isolated, fails in sequential suite (state leak)
 Pager.ResizeCommitTest
 Pager.SuspendReadTestVmar
 # Pager.FailMultipleCommits: fixed by propagating pager errors in overlap commit
