@@ -523,14 +523,13 @@ impl VmObject {
         for page_idx in start_page..end_page {
             if self.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
                 let page_offset = page_idx * PAGE_SIZE;
-                // Atomically request + register waiter under one lock.
-                match self.request_pages_and_wait(page_offset, PAGE_SIZE, Some(page_offset)) {
-                    Ok(None) => {} // already supplied
-                    Ok(Some(rx)) => {
-                        rx.await.unwrap_or(Err(ZxError::CANCELED))?;
-                    }
-                    Err(e) => return Err(e),
-                }
+                // request_pages sends ZX_PAGER_VMO_READ to the port.
+                // Note: wait_for_page registers the waiter under the VMO
+                // lock and re-checks committed status, so supply_pages
+                // completing between these two calls is handled correctly.
+                let _ = self.request_pages(page_offset, PAGE_SIZE);
+                // Block until the pager calls supply_pages for this page.
+                self.wait_for_page(page_offset).await?;
             }
         }
         // All pages should now be present.
@@ -1500,142 +1499,70 @@ impl VmObject {
     /// Send a page request to the pager for the given offset/length.
     /// Returns `Err(SHOULD_WAIT)` — the caller should then call
     /// `wait_for_page` to block until the page is supplied.
-    /// Send a READ request to the pager and optionally register a
-    /// waiter for a specific page, all under one lock acquisition.
-    ///
-    /// If `wait_page` is `Some(offset)`, atomically registers a waiter
-    /// for that page and returns a future to await. This prevents races
-    /// where two threads both send requests because neither sees the
-    /// other's outstanding entry.
-    ///
-    /// If `wait_page` is `None`, just sends the request (legacy
-    /// `request_pages` behavior). Callers should prefer the combined
-    /// form to avoid request/wait races.
-    ///
-    /// Matches Fuchsia's pattern where GetPages initializes the
-    /// PageRequest under the cow_pages lock, then the caller drops
-    /// the lock and waits.
-    pub fn request_pages_and_wait(
-        &self,
-        offset: usize,
-        length: usize,
-        wait_page: Option<usize>,
-    ) -> Result<Option<futures::channel::oneshot::Receiver<ZxResult>>, ZxError> {
+    pub fn request_pages(&self, offset: usize, length: usize) -> ZxResult {
         let mut inner = self.inner.lock();
         if let Some(port) = inner.pager_port.clone() {
             let pager_key = inner.pager_key;
             let start_page = offset / PAGE_SIZE;
             let end_page = (offset + length).div_ceil(PAGE_SIZE);
-
-            // When a specific wait_page is provided, check if it's
-            // already resolved BEFORE sending any request. This
-            // avoids sending a spurious request for a page that was
-            // supplied between the caller's check and this call
-            // (e.g., handle_page_fault sent request, supply_pages
-            // completed, then we arrive here).
-            if let Some(wait_offset) = wait_page {
-                let page_idx = wait_offset / PAGE_SIZE;
-                if self.committed_pages_in_range(page_idx, page_idx + 1) > 0
-                    || self.trait_.has_zero_marker(page_idx)
-                {
-                    return Ok(None); // already supplied
-                }
-                if inner.pager_port.is_none() {
-                    return Err(ZxError::BAD_STATE);
-                }
-                if wait_offset >= self.len() {
-                    return Err(ZxError::OUT_OF_RANGE);
-                }
-                // Don't return stale failed_page errors here. The
-                // caller is making a new request — clear the marker
-                // and let the request proceed. The pager will either
-                // supply or fail again. Stale markers from prior
-                // OP_FAIL operations must not block new commits
-                // (Pager.SupplyAfterFail test pattern).
-            }
-
             // Check if ALL pages are already committed.
             let committed = self.trait_.committed_pages_in_range(start_page, end_page);
-            if committed >= end_page - start_page && wait_page.is_none() {
+            if committed >= end_page - start_page {
                 return Err(ZxError::SHOULD_WAIT);
             }
             // Check if the request range falls within an existing
-            // outstanding request (overlap absorption).
+            // outstanding request (overlap absorption). Matching
+            // Fuchsia's SendRequestToProviderLocked: if the new
+            // request's offset is within an existing request, it is
+            // absorbed — no new port packet is sent.
             let is_absorbed = inner
                 .outstanding_requests
                 .iter()
                 .any(|req| start_page >= req.start_page && start_page < req.end_page);
             if !is_absorbed {
-                // Don't send a new request if the wait_page is already
-                // resolved (checked above). Only send if we actually
-                // have uncommitted pages.
-                let has_uncommitted = (start_page..end_page)
-                    .any(|pg| self.trait_.committed_pages_in_range(pg, pg + 1) == 0);
-                if has_uncommitted {
-                    for pg in start_page..end_page {
-                        inner.pager_failed_pages.remove(&pg);
-                    }
-                    port.push(PortPacketRepr {
-                        key: pager_key,
-                        status: ZxError::OK,
-                        data: PayloadRepr::PageRequest(PacketPageRequest {
-                            command: ZX_PAGER_VMO_READ,
-                            flags: 0,
-                            _reserved0: 0,
-                            offset: offset as u64,
-                            length: length as u64,
-                            _reserved1: 0,
-                        }),
-                    });
-                    let pending = (start_page..end_page)
-                        .filter(|&pg| self.trait_.committed_pages_in_range(pg, pg + 1) == 0)
-                        .count();
-                    inner.outstanding_requests.push(OutstandingPageRequest {
-                        start_page,
-                        end_page,
-                        pending_pages: pending,
-                        is_dirty: false,
-                        overlap_waiters: Vec::new(),
-                    });
+                // Clear any previous OP_FAIL markers in the requested
+                // range. A new request supersedes a prior failure —
+                // the pager will either supply or fail again. Without
+                // this, wait_for_page would immediately return the
+                // stale error and the retry would never reach the pager.
+                for pg in start_page..end_page {
+                    inner.pager_failed_pages.remove(&pg);
                 }
-            }
-            // If wait_page requested, register waiter under same lock.
-            // (Early-resolved states were already handled above.)
-            if let Some(wait_offset) = wait_page {
-                let page_idx = wait_offset / PAGE_SIZE;
-                let (tx, rx) = futures::channel::oneshot::channel();
-                let absorbed = inner
-                    .outstanding_requests
-                    .iter_mut()
-                    .find(|req| page_idx >= req.start_page && page_idx < req.end_page);
-                if let Some(req) = absorbed {
-                    req.overlap_waiters.push(OverlapWaiter {
-                        page_idx,
-                        sender: tx,
-                        error: None,
-                    });
-                } else {
-                    inner
-                        .pager_waiters
-                        .push((page_idx, PagerWaiterKind::Read, tx));
-                }
-                return Ok(Some(rx));
+                port.push(PortPacketRepr {
+                    key: pager_key,
+                    status: ZxError::OK,
+                    data: PayloadRepr::PageRequest(PacketPageRequest {
+                        command: ZX_PAGER_VMO_READ,
+                        flags: 0,
+                        _reserved0: 0,
+                        offset: offset as u64,
+                        length: length as u64,
+                        _reserved1: 0,
+                    }),
+                });
+                // Track as a new outstanding request.
+                let pending = (start_page..end_page)
+                    .filter(|&pg| self.trait_.committed_pages_in_range(pg, pg + 1) == 0)
+                    .count();
+                inner.outstanding_requests.push(OutstandingPageRequest {
+                    start_page,
+                    end_page,
+                    pending_pages: pending,
+                    is_dirty: false,
+                    overlap_waiters: Vec::new(),
+                });
+                info!(
+                    "pager: requested page at offset={:#x} len={:#x}",
+                    offset, length
+                );
             }
             Err(ZxError::SHOULD_WAIT)
         } else if self.trait_.is_pager_backed() {
+            // VMO was pager-backed but detached — unsupplied pages
+            // should fail with BAD_STATE, not silently allocate zeros.
             Err(ZxError::BAD_STATE)
         } else {
             Err(ZxError::NOT_FOUND)
-        }
-    }
-
-    /// Send a READ request without registering a waiter.
-    /// Prefer `request_pages_and_wait` with `wait_page` to avoid
-    /// request/wait races with concurrent threads.
-    pub fn request_pages(&self, offset: usize, length: usize) -> ZxResult {
-        match self.request_pages_and_wait(offset, length, None) {
-            Ok(_) => Err(ZxError::SHOULD_WAIT),
-            Err(e) => Err(e),
         }
     }
 

@@ -577,13 +577,6 @@ async fn handler_user_trap(
                         let is_dirty_wait = flags.contains(MMUFlags::WRITE)
                             && vmo.is_trap_dirty()
                             && !vmo.is_page_dirty(offset / PAGE_SIZE);
-                        // For DIRTY waits, use wait_for_dirty (dirty
-                        // request infrastructure is separate). For READ
-                        // waits, use wait_for_page — the request was
-                        // already sent by handle_page_fault above. We
-                        // only need to register the waiter. Using
-                        // request_pages_and_wait here would send a
-                        // duplicate request packet to the pager.
                         let future: core::pin::Pin<
                             alloc::boxed::Box<
                                 dyn core::future::Future<
