@@ -27,7 +27,7 @@ CpuMaskProfile.ApplyProfile
 
 # ── Resource / Scheduler: hangs ──
 Resource.Ioports
-Resource.PcInterruptVectorPoolLeak
+
 SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
 
 # ── Property: QEMU CPU model limitation (no #GP on noncanonical wrfsbase/wrgsbase) ──
