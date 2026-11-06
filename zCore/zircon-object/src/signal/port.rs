@@ -188,6 +188,11 @@ impl Port {
         }
     }
 
+    /// Number of packets in the queue (debug).
+    pub fn queue_len(&self) -> usize {
+        self.inner.lock().queue.len()
+    }
+
     /// Push a `packet` into the port.
     pub fn push(&self, packet: impl Into<PortPacket>) {
         self.push_with_source(packet, 0);

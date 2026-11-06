@@ -97,6 +97,10 @@ impl Syscall<'_> {
         }
         let aux_vmo =
             proc.get_object_with_rights::<VmObject>(aux_vmo_handle, Rights::READ | Rights::WRITE)?;
+        hal_impl::console::console_write_fmt(format_args!(
+            "\npager.supply_pages: off={:#x} len={:#x}\n",
+            offset, length
+        ));
         pager.supply_pages(&vmo, offset, length, &aux_vmo, aux_offset)
     }
 
