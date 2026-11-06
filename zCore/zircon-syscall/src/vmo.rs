@@ -203,6 +203,16 @@ impl Syscall<'_> {
                         }
                         let req_offset = (page_idx + root_page_off) * PAGE_SIZE;
                         let req_length = (run_end - page_idx) * PAGE_SIZE;
+                        // Cancel any stale outstanding requests that
+                        // overlap this range. After a partial supply
+                        // (early wake), the old request may still be
+                        // outstanding but its port packet was already
+                        // consumed. Without cancellation, the new
+                        // request would be silently absorbed and the
+                        // thread would block forever. This matches
+                        // Fuchsia's early-wake behavior where the old
+                        // PageRequest is replaced by a new one.
+                        pager_vmo.cancel_outstanding_requests_in_range(req_offset, req_length);
                         let _ = pager_vmo.request_pages(req_offset, req_length);
                     }
                     let mut fail_retries = 0;
