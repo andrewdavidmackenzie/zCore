@@ -234,22 +234,34 @@ impl Syscall<'_> {
                     });
                     let offset = vmar.vaddr_to_vmo_offset(vaddr);
                     if let (Some(vmo), Some(offset)) = (pager_vmo, offset) {
-                        let future = vmo.wait_for_page(offset);
-                        pin_mut!(future);
-                        self.thread.set_blocking_state(ThreadState::BlockedPager);
-                        // Mark as non-suspendable (kernel usercopy wait).
-                        self.thread.set_nonsuspendable_block(true);
-                        let result = self
-                            .thread
-                            .blocking_run::<_, (), _>(
-                                future,
-                                ThreadState::BlockedPager,
-                                core::time::Duration::from_nanos(u64::MAX),
-                                None,
-                            )
-                            .await;
-                        self.thread.set_nonsuspendable_block(false);
-                        result?;
+                        // Atomically request+wait. The request may
+                        // already be outstanding from handle_page_fault,
+                        // in which case this just registers the waiter.
+                        match vmo.request_pages_and_wait(offset, PAGE_SIZE, Some(offset)) {
+                            Ok(None) => {
+                                // Already supplied — re-fault below.
+                            }
+                            Ok(Some(rx)) => {
+                                let future = async {
+                                    rx.await.unwrap_or(Err(zircon_object::ZxError::CANCELED))
+                                };
+                                pin_mut!(future);
+                                self.thread.set_blocking_state(ThreadState::BlockedPager);
+                                self.thread.set_nonsuspendable_block(true);
+                                let result = self
+                                    .thread
+                                    .blocking_run::<_, (), _>(
+                                        future,
+                                        ThreadState::BlockedPager,
+                                        core::time::Duration::from_nanos(u64::MAX),
+                                        None,
+                                    )
+                                    .await;
+                                self.thread.set_nonsuspendable_block(false);
+                                result?;
+                            }
+                            Err(e) => return Err(e),
+                        }
                         // Re-fault to create the PTE now that the page is supplied.
                         let _ = vmar.handle_page_fault(vaddr, MMUFlags::READ | MMUFlags::USER);
                     }
@@ -376,7 +388,7 @@ impl Syscall<'_> {
     }
 
     /// Demand-page a single page on a pager VMO.
-    /// Requests the page from the pager and waits for supply.
+    /// Atomically requests the page and waits for supply.
     async fn demand_page_single(
         &self,
         pager_vmo: &Arc<zircon_object::vm::VmObject>,
@@ -390,19 +402,25 @@ impl Syscall<'_> {
                 return Ok(());
             }
             let pg_offset = page_idx * PAGE_SIZE;
-            let _ = pager_vmo.request_pages(pg_offset, PAGE_SIZE);
-            let future = pager_vmo.wait_for_page(pg_offset);
-            futures::pin_mut!(future);
-            self.thread
-                .set_blocking_state(zircon_object::task::ThreadState::BlockedPager);
-            self.thread
-                .blocking_run::<_, (), _>(
-                    future,
-                    zircon_object::task::ThreadState::BlockedPager,
-                    core::time::Duration::from_nanos(u64::MAX),
-                    None,
-                )
-                .await?;
+            match pager_vmo.request_pages_and_wait(pg_offset, PAGE_SIZE, Some(pg_offset)) {
+                Ok(None) => return Ok(()), // already supplied
+                Ok(Some(rx)) => {
+                    let future =
+                        async { rx.await.unwrap_or(Err(zircon_object::ZxError::CANCELED)) };
+                    futures::pin_mut!(future);
+                    self.thread
+                        .set_blocking_state(zircon_object::task::ThreadState::BlockedPager);
+                    self.thread
+                        .blocking_run::<_, (), _>(
+                            future,
+                            zircon_object::task::ThreadState::BlockedPager,
+                            core::time::Duration::from_nanos(u64::MAX),
+                            None,
+                        )
+                        .await?;
+                }
+                Err(e) => return Err(e),
+            }
         }
     }
 
@@ -529,23 +547,34 @@ impl Syscall<'_> {
                     }
                     let run_offset = run_start * PAGE_SIZE;
                     let run_len = (cursor - run_start) * PAGE_SIZE;
-                    let _ = pager_vmo.request_pages(run_offset, run_len);
-                    // Wait for each page in the run individually.
+                    // Atomically request+wait for each page in the run.
                     for pg in run_start..cursor {
                         if is_page_supplied(pg) {
                             continue;
                         }
-                        let future = pager_vmo.wait_for_page(pg * PAGE_SIZE);
-                        pin_mut!(future);
-                        self.thread.set_blocking_state(ThreadState::BlockedPager);
-                        self.thread
-                            .blocking_run::<_, (), _>(
-                                future,
-                                ThreadState::BlockedPager,
-                                core::time::Duration::from_nanos(u64::MAX),
-                                None,
-                            )
-                            .await?;
+                        match pager_vmo.request_pages_and_wait(
+                            run_offset,
+                            run_len,
+                            Some(pg * PAGE_SIZE),
+                        ) {
+                            Ok(None) => continue, // already supplied
+                            Ok(Some(rx)) => {
+                                let future = async {
+                                    rx.await.unwrap_or(Err(zircon_object::ZxError::CANCELED))
+                                };
+                                pin_mut!(future);
+                                self.thread.set_blocking_state(ThreadState::BlockedPager);
+                                self.thread
+                                    .blocking_run::<_, (), _>(
+                                        future,
+                                        ThreadState::BlockedPager,
+                                        core::time::Duration::from_nanos(u64::MAX),
+                                        None,
+                                    )
+                                    .await?;
+                            }
+                            Err(e) => return Err(e),
+                        }
                     }
                     // After all pages supplied, re-scan from
                     // run_start for DIRTY requests.
@@ -829,18 +858,24 @@ impl Syscall<'_> {
             }
             let run_offset = first_missing * PAGE_SIZE;
             let run_len = (run_end - first_missing) * PAGE_SIZE;
-            let _ = pager_vmo.request_pages(run_offset, run_len);
-            let future = pager_vmo.wait_for_page(run_offset);
-            pin_mut!(future);
-            self.thread.set_blocking_state(ThreadState::BlockedPager);
-            self.thread
-                .blocking_run::<_, (), _>(
-                    future,
-                    ThreadState::BlockedPager,
-                    core::time::Duration::from_nanos(u64::MAX),
-                    None,
-                )
-                .await?;
+            match pager_vmo.request_pages_and_wait(run_offset, run_len, Some(run_offset)) {
+                Ok(None) => continue, // already supplied
+                Ok(Some(rx)) => {
+                    let future =
+                        async { rx.await.unwrap_or(Err(zircon_object::ZxError::CANCELED)) };
+                    pin_mut!(future);
+                    self.thread.set_blocking_state(ThreadState::BlockedPager);
+                    self.thread
+                        .blocking_run::<_, (), _>(
+                            future,
+                            ThreadState::BlockedPager,
+                            core::time::Duration::from_nanos(u64::MAX),
+                            None,
+                        )
+                        .await?;
+                }
+                Err(e) => return Err(e),
+            }
         }
         Ok(())
     }

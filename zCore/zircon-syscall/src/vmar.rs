@@ -444,50 +444,61 @@ impl Syscall<'_> {
                     }
                     let req_off = run_start * PAGE_SIZE;
                     let req_len = (p - run_start) * PAGE_SIZE;
-                    match vmo.request_pages(req_off, req_len) {
-                        Err(ZxError::SHOULD_WAIT) => {
-                            for pg in run_start..p {
-                                if vmo.committed_pages_in_range(pg, pg + 1) == 0 {
-                                    // Suspend/resume retry loop.
-                                    loop {
-                                        let future = vmo.wait_for_page(pg * PAGE_SIZE);
-                                        pin_mut!(future);
-                                        self.thread.set_blocking_state(ThreadState::BlockedPager);
-                                        match self
-                                            .thread
-                                            .blocking_run_suspendable(
-                                                future,
-                                                ThreadState::BlockedPager,
-                                                Duration::from_nanos(u64::MAX),
-                                            )
-                                            .await
-                                        {
-                                            Ok(()) => break,
-                                            Err(ZxError::CANCELED) => {
-                                                self.thread.wait_for_resume().await;
-                                                if self.thread.state() == ThreadState::Dying {
-                                                    return Err(ZxError::STOP);
-                                                }
-                                                if vmo.committed_pages_in_range(pg, pg + 1) > 0 {
-                                                    break;
-                                                }
-                                                vmo.cancel_outstanding_requests_in_range(
-                                                    pg * PAGE_SIZE,
-                                                    PAGE_SIZE,
-                                                );
-                                                let _ =
-                                                    vmo.request_pages(pg * PAGE_SIZE, PAGE_SIZE);
-                                                continue;
+                    for pg in run_start..p {
+                        if vmo.committed_pages_in_range(pg, pg + 1) > 0 {
+                            continue;
+                        }
+                        loop {
+                            match vmo.request_pages_and_wait(req_off, req_len, Some(pg * PAGE_SIZE))
+                            {
+                                Ok(None) => break, // already supplied
+                                Ok(Some(rx)) => {
+                                    let future =
+                                        async { rx.await.unwrap_or(Err(ZxError::CANCELED)) };
+                                    pin_mut!(future);
+                                    self.thread.set_blocking_state(ThreadState::BlockedPager);
+                                    match self
+                                        .thread
+                                        .blocking_run_suspendable(
+                                            future,
+                                            ThreadState::BlockedPager,
+                                            Duration::from_nanos(u64::MAX),
+                                        )
+                                        .await
+                                    {
+                                        Ok(()) => break,
+                                        Err(ZxError::CANCELED) => {
+                                            self.thread.wait_for_resume().await;
+                                            if self.thread.state() == ThreadState::Dying {
+                                                return Err(ZxError::STOP);
                                             }
-                                            Err(ZxError::STOP) => return Err(ZxError::STOP),
-                                            Err(e) => return Err(e),
+                                            if vmo.committed_pages_in_range(pg, pg + 1) > 0 {
+                                                break;
+                                            }
+                                            vmo.cancel_outstanding_requests_in_range(
+                                                pg * PAGE_SIZE,
+                                                PAGE_SIZE,
+                                            );
+                                            continue;
                                         }
+                                        Err(ZxError::STOP) => return Err(ZxError::STOP),
+                                        Err(ZxError::SHOULD_WAIT) => {
+                                            // Outstanding request
+                                            // completed but page not
+                                            // supplied. Re-request.
+                                            continue;
+                                        }
+                                        Err(e) => return Err(e),
                                     }
                                 }
+                                Err(ZxError::BAD_STATE) => return Err(ZxError::BAD_STATE),
+                                Err(ZxError::SHOULD_WAIT) => {
+                                    // Same: re-request.
+                                    continue;
+                                }
+                                Err(e) => return Err(e),
                             }
                         }
-                        Err(e) => return Err(e),
-                        Ok(()) => {}
                     }
                 }
             }

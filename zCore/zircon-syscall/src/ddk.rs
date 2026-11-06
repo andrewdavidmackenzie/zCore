@@ -200,18 +200,25 @@ impl Syscall<'_> {
                 if page_idx * PAGE_SIZE >= vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
-                let _ = pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
-                let future = pager_vmo.wait_for_page(page_idx * PAGE_SIZE);
-                futures::pin_mut!(future);
-                self.thread.set_blocking_state(ThreadState::BlockedPager);
-                self.thread
-                    .blocking_run::<_, (), _>(
-                        future,
-                        ThreadState::BlockedPager,
-                        core::time::Duration::from_nanos(u64::MAX),
-                        None,
-                    )
-                    .await?;
+                let pg_offset = page_idx * PAGE_SIZE;
+                match pager_vmo.request_pages_and_wait(pg_offset, PAGE_SIZE, Some(pg_offset)) {
+                    Ok(None) => {} // already supplied
+                    Ok(Some(rx)) => {
+                        let future =
+                            async { rx.await.unwrap_or(Err(zircon_object::ZxError::CANCELED)) };
+                        futures::pin_mut!(future);
+                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                        self.thread
+                            .blocking_run::<_, (), _>(
+                                future,
+                                ThreadState::BlockedPager,
+                                core::time::Duration::from_nanos(u64::MAX),
+                                None,
+                            )
+                            .await?;
+                    }
+                    Err(e) => return Err(e),
+                }
             }
         }
         // Phase 3: DIRTY for pages supplied in Phase 2 (newly supplied).
