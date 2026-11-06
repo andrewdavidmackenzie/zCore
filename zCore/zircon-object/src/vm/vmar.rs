@@ -2529,10 +2529,6 @@ impl VmMapping {
             && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
             && !self.vmo.has_zero_marker(page_idx)
         {
-            warn!(
-                "handle_page_fault: READ request off={:#x} page={}",
-                vmo_offset, page_idx
-            );
             return self.vmo.request_pages(vmo_offset, PAGE_SIZE);
         }
         // Clone of a pager VMO: the clone itself is not pager-backed,
@@ -2580,10 +2576,6 @@ impl VmMapping {
             let needs_dirty =
                 !self.vmo.is_page_dirty(page_idx) || self.vmo.is_page_zero_dirty(page_idx);
             if needs_dirty {
-                warn!(
-                    "handle_page_fault: dirty request off={:#x} page={}",
-                    vmo_offset, page_idx
-                );
                 return self.vmo.request_dirty(vmo_offset, PAGE_SIZE);
             }
         }
