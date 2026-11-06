@@ -1,36 +1,20 @@
-# ── PagerWriteback: hangs (multi-thread pager interactions) ──
-PagerWriteback.ResizeWritebackInterleavedWriteWithMappingTrapDirty
-# ResizeWritebackWithMappingTrapDirty: fixed by dirty-before-commit
-# LargeWriteBatched: fixed by per-page READ wait
+# ── PagerWriteback: hangs ──
 PagerWriteback.SuspendDirtyTestVmar
-# WritebackResizedRangeAfterDetachNoTrapDirty: fixed by zero marker detach check
 PagerWriteback.OpZeroPinnedTrapDirty
-# CommitExtendedTailTrapDirty: fixed by TRAP_DIRTY commit dirty request
 PagerWriteback.FailedPinAwaitingClean
 PagerWriteback.NotModifiedFailedPinWrite
-# WritebackResizedRangeAfterDetachTrapDirty: fixed by zero marker detach check
 
 # ── Pager: hangs / flaky ──
-# Pager.FailEarlyWake: passes isolated, hangs in sequential suite (state leak)
 Pager.FailEarlyWake
-# Pager.ResizeCommitTest: passes isolated, fails in sequential suite (state leak)
 Pager.ResizeCommitTest
 Pager.SuspendReadTestVmar
-# Pager.FailMultipleCommits: fixed by propagating pager errors in overlap commit
 Pager.EarlyWakeCloneRace
-
-# ── StreamTestCase: fixed ──
-# StreamTestCase.PartialVmoDirty: fixed by per-page dirty ack in stream write
 
 # ── VmoClone2TestCase: concurrent VMO drop race ──
 VmoClone2TestCase.DropChildrenInParallel
 
 # ── PortStressTest: multi-threaded channel_call stress ──
 PortStressTest.ChannelCallWaitQueuePanicRepro
-
-# ── Threads: debug register hardware exception tests ──
-# (DR6 read/write state tests now pass; hardware breakpoint
-# exception delivery tests remain blocked on issue #799)
 
 # ── BTI: multi-thread pin/decommit race (std::thread spin-loop) ──
 Bti.DecommitRace
@@ -46,9 +30,6 @@ Resource.Ioports
 Resource.PcInterruptVectorPoolLeak
 SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
 
-# ── Property: QEMU qemu64 CPU model does not fault on wrfsbase/wrgsbase
-# with noncanonical addresses (Intel SDM requires #GP). These tests pass
-# with -cpu host -enable-kvm but the full suite hangs under KVM.
-# See issue #799 for exception delivery, #754 for CI KVM.
+# ── Property: QEMU CPU model limitation (no #GP on noncanonical wrfsbase/wrgsbase) ──
 Property.RegisterFsNoncanonical
 Property.RegisterGsNoncanonical
