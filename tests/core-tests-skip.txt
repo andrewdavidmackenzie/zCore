@@ -14,7 +14,7 @@ PagerWriteback.NotModifiedFailedPinWrite
 Pager.FailEarlyWake
 Pager.ResizeCommitTest
 Pager.SuspendReadTestVmar
-Pager.FailMultipleCommits
+# Pager.FailMultipleCommits: fixed by propagating pager errors in overlap commit
 Pager.EarlyWakeCloneRace
 
 # ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
