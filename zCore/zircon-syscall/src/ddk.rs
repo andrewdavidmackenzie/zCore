@@ -279,7 +279,7 @@ impl Syscall<'_> {
                 pv.set_modified();
                 let parent_offset = offset + vmo.get_slice_offset();
                 if pv.is_trap_dirty() {
-                    let _ = pv.mark_pages_dirty(parent_offset, size);
+                    pv.mark_pages_dirty(parent_offset, size)?;
                 } else {
                     let start_page = parent_offset / PAGE_SIZE;
                     let end_page = (parent_offset + size).div_ceil(PAGE_SIZE);

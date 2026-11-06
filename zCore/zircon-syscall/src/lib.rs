@@ -250,12 +250,27 @@ impl Syscall<'_> {
                             .await;
                         self.thread.set_nonsuspendable_block(false);
                         result?;
-                        // Re-fault to create the PTE now that the page is supplied.
-                        let _ = vmar.handle_page_fault(vaddr, MMUFlags::READ | MMUFlags::USER);
+                        // Re-fault to create the PTE now that the page
+                        // is supplied. Failure here means the mapping
+                        // changed while we were waiting — the user-copy
+                        // will re-fault naturally.
+                        if let Err(e) =
+                            vmar.handle_page_fault(vaddr, MMUFlags::READ | MMUFlags::USER)
+                        {
+                            warn!("prefault re-fault failed @ {:#x}: {:?}", vaddr, e);
+                        }
                     }
                 }
                 Err(ZxError::NOT_FOUND) => break,
-                Err(_) => {} // Non-pager page, skip silently
+                // Non-pager pages, already-mapped pages, or pages
+                // that don't need demand-paging. These are expected
+                // and we just move on to the next page.
+                Err(ZxError::ALREADY_EXISTS)
+                | Err(ZxError::NOT_SUPPORTED)
+                | Err(ZxError::INVALID_ARGS) => {}
+                Err(e) => {
+                    warn!("prefault_user_buffer page fault @ {:#x}: {:?}", vaddr, e);
+                }
             }
         }
         Ok(())
@@ -589,7 +604,7 @@ impl Syscall<'_> {
                             && pager_vmo.committed_pages_in_range(pg, pg + 1) == 0
                             && !pager_vmo.has_zero_marker(pg)
                         {
-                            let _ = pager_vmo.commit(pg * PAGE_SIZE, PAGE_SIZE);
+                            pager_vmo.commit(pg * PAGE_SIZE, PAGE_SIZE)?;
                         }
                     }
                     let run_offset = run_start * PAGE_SIZE;

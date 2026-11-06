@@ -802,7 +802,7 @@ impl Syscall<'_> {
             let zero_start = size.min(old_size);
             let zero_end = if size < old_size { vmo.len() } else { size };
             if zero_end > zero_start {
-                let _ = vmo.zero(zero_start, zero_end - zero_start);
+                vmo.zero(zero_start, zero_end - zero_start)?;
             }
             // For pager-backed VMOs with dirty tracking, update
             // dirty state when stream_size changes:
@@ -1491,8 +1491,11 @@ impl Syscall<'_> {
                 // succeed but the page is still readable from the parent
                 // chain. Zero the range to ensure the source reads as
                 // zeros after transfer, matching Fuchsia's "move" semantics.
+                // Decommit may fail for COW children (can't free
+                // parent pages). That's expected — zero below
+                // ensures the source reads as zeros regardless.
                 let _ = src.decommit(s_off, chunk);
-                let _ = src.zero(s_off, chunk);
+                src.zero(s_off, chunk)?;
                 s_off += chunk;
                 d_off += chunk;
                 remaining -= chunk;
