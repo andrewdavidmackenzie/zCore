@@ -13,8 +13,7 @@ Pager.EarlyWakeCloneRace
 # ── VmoClone2TestCase: concurrent VMO drop race ──
 VmoClone2TestCase.DropChildrenInParallel
 
-# ── PortStressTest: multi-threaded channel_call stress ──
-PortStressTest.ChannelCallWaitQueuePanicRepro
+
 
 # ── BTI: multi-thread pin/decommit race (std::thread spin-loop) ──
 Bti.DecommitRace
