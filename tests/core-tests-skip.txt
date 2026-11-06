@@ -1,4 +1,4 @@
-# ── PagerWriteback: hangs ──
+# ── PagerWriteback: hangs (BTI/pin or suspend) ──
 PagerWriteback.SuspendDirtyTestVmar
 PagerWriteback.OpZeroPinnedTrapDirty
 PagerWriteback.FailedPinAwaitingClean
@@ -10,25 +10,21 @@ Pager.ResizeCommitTest
 Pager.SuspendReadTestVmar
 Pager.EarlyWakeCloneRace
 
-# ── VmoClone2TestCase: concurrent VMO drop race ──
+# ── VmoClone2TestCase: SNAPSHOT not implemented ──
 VmoClone2TestCase.DropChildrenInParallel
 
-
-
-# ── BTI: multi-thread pin/decommit race (std::thread spin-loop) ──
+# ── BTI: multi-thread pin/decommit race ──
 Bti.DecommitRace
 
-# ── VmoTestCase: multi-thread write + decommit race (std::thread spin-loop) ──
+# ── VmoTestCase: multi-thread write + decommit race ──
 VmoTestCase.ParallelWriteAndDecommit
 
 # ── CPU affinity: task migration not implemented ──
 CpuMaskProfile.ApplyProfile
 
-# ── Resource / Scheduler: hangs ──
+# ── Resource: IO port TSS/IOPB not implemented ──
 Resource.Ioports
 
-
-
-# ── Property: QEMU CPU model limitation (no #GP on noncanonical wrfsbase/wrgsbase) ──
+# ── Property: QEMU CPU model limitation ──
 Property.RegisterFsNoncanonical
 Property.RegisterGsNoncanonical
