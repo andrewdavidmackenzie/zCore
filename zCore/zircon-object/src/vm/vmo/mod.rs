@@ -1503,6 +1503,13 @@ impl VmObject {
         let mut inner = self.inner.lock();
         if let Some(port) = inner.pager_port.clone() {
             let pager_key = inner.pager_key;
+            warn!(
+                "request_pages: port_id={} key={} off={:#x} len={:#x}",
+                port.id(),
+                pager_key,
+                offset,
+                length
+            );
             let start_page = offset / PAGE_SIZE;
             let end_page = (offset + length).div_ceil(PAGE_SIZE);
             // Check if ALL pages are already committed.

@@ -28,6 +28,12 @@ impl Syscall<'_> {
         assert_eq!(core::mem::size_of::<PortPacket>(), 48);
         let proc = self.thread.proc();
         let port = proc.get_object_with_rights::<Port>(handle_value, Rights::READ)?;
+        warn!(
+            "port.wait: handle={:#x} port_id={} queue_len={}",
+            handle_value,
+            port.id(),
+            port.queue_len()
+        );
         let future = port.wait();
         pin_mut!(future);
         self.thread.set_blocking_state(ThreadState::BlockedPort);
