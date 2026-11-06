@@ -931,7 +931,14 @@ impl Syscall<'_> {
                                 Err(ZxError::STOP) => return Err(ZxError::STOP),
                                 Err(ZxError::OUT_OF_RANGE) => {}
                                 Err(ZxError::BAD_STATE) => return Err(ZxError::BAD_STATE),
-                                Err(_) => {}
+                                // Pager errors (IO, etc.) from OP_FAIL
+                                // must propagate to the overlapping
+                                // commit. Without this, the thread
+                                // ignores the failure and sends a new
+                                // request for the next page, violating
+                                // the invariant that FailPages terminates
+                                // all concurrent commits.
+                                Err(e) => return Err(e),
                             }
                             p += 1;
                             continue;
