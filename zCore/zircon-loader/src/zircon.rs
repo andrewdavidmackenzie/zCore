@@ -577,6 +577,10 @@ async fn handler_user_trap(
                         let is_dirty_wait = flags.contains(MMUFlags::WRITE)
                             && vmo.is_trap_dirty()
                             && !vmo.is_page_dirty(offset / PAGE_SIZE);
+                        warn!(
+                            "pgfault SHOULD_WAIT: vaddr={:#x} off={:#x} dirty_wait={}",
+                            vaddr, offset, is_dirty_wait
+                        );
                         let future: core::pin::Pin<
                             alloc::boxed::Box<
                                 dyn core::future::Future<
