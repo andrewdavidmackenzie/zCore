@@ -208,12 +208,15 @@ impl Syscall<'_> {
         } else if options.contains(VmOptions::ALLOW_FAULTS) {
             // ALLOW_FAULTS: lazy commit, pages faulted in on demand
             false
+        } else if vmo.is_pager_backed() || vmo.is_in_pager_tree() {
+            // Pager-backed VMOs and their clones must use demand-
+            // faulting. Eager commit would trigger request_pages for
+            // every unsupplied page during map(), blocking the caller
+            // indefinitely while waiting for the pager to supply pages.
+            // Fuchsia always demand-faults pager-backed mappings.
+            false
         } else {
             // Default for bare-metal: eagerly commit pages.
-            // For COW children and initially-empty VMOs, this will
-            // demand-fault on access since commit_page may create
-            // new pages. Fuchsia only maps existing committed pages
-            // during map and demand-faults the rest.
             true
         };
         // Reject explicit MAP_RANGE when the mapping extends past the VMO,

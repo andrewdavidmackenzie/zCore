@@ -109,14 +109,6 @@ impl Syscall<'_> {
         // and copy page by page. This allows "early wake" — data becomes
         // available in the user buffer as pages are supplied.
         if (vmo.is_pager_backed() || vmo.is_in_pager_tree()) && buf_size > 0 {
-            warn!(
-                "vmo_read pager path: is_pager={} in_tree={} size={} buf_size={} offset={}",
-                vmo.is_pager_backed(),
-                vmo.is_in_pager_tree(),
-                vmo.len(),
-                buf_size,
-                offset
-            );
             use zircon_object::task::ThreadState;
             use zircon_object::vm::PAGE_SIZE;
             let start = offset as usize;
@@ -221,15 +213,10 @@ impl Syscall<'_> {
                         // Fuchsia's early-wake behavior where the old
                         // PageRequest is replaced by a new one.
                         pager_vmo.cancel_outstanding_requests_in_range(req_offset, req_length);
-                        warn!(
-                            "vmo_read: pager request offset={:#x} len={:#x} page_idx={}",
-                            req_offset, req_length, page_idx
-                        );
                         let _ = pager_vmo.request_pages(req_offset, req_length);
                     }
                     let mut fail_retries = 0;
-                    let rp = page_idx + root_page_off; // root-space page index
-                    warn!("vmo_read: waiting for page rp={}", rp);
+                    let rp = page_idx + root_page_off;
                     loop {
                         // Check if page was supplied in the meantime
                         // (or forked in the clone while we waited).
