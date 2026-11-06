@@ -686,31 +686,27 @@ impl Syscall<'_> {
     /// must send a ZX_PAGER_VMO_DIRTY request to the pager port and
     /// wait for acknowledgement. This function checks each page in the
     /// write range and sends dirty requests for clean pages.
-    async fn predirty_trap_dirty_pages(
+    /// Pre-dirty pages on a TRAP_DIRTY VMO, returning partial success.
+    /// Returns the number of bytes (from `offset`) that were
+    /// successfully dirtied. On full success this equals `len`.
+    /// On partial success (pager failed a page mid-range), returns
+    /// the bytes up to the failed page. This allows stream writes
+    /// to return partial byte counts matching Fuchsia's behavior.
+    async fn predirty_trap_dirty_pages_partial(
         &self,
         vmo: &Arc<zircon_object::vm::VmObject>,
         offset: usize,
         len: usize,
-    ) -> ZxResult {
+    ) -> ZxResult<usize> {
         use hal::PAGE_SIZE;
         use zircon_object::task::ThreadState;
 
-        // Validate range against the VMO length before translating
-        // offsets.  Without this, an out-of-range write on a slice
-        // would send a spurious dirty request to the parent before
-        // sys_vmo_write rejects it with OUT_OF_RANGE.
         if offset > vmo.len() || len > vmo.len() - offset {
-            return Ok(());
+            return Ok(len);
         }
         if len == 0 {
-            return Ok(());
+            return Ok(0);
         }
-        // Resolve to the root pager VMO for slices/references.
-        // A slice's own `is_trap_dirty()` is always false and its
-        // `pager_port` is None, so we must find the parent pager VMO
-        // that owns the dirty tracking and pager port.
-        // `find_root_pager_vmo_with_offset` accumulates slice offsets
-        // through any nesting levels (slice of slice of pager VMO).
         let (pager_vmo, base_offset) = if vmo.is_trap_dirty() {
             (vmo.clone(), 0usize)
         } else if vmo.is_slice_vmo() {
@@ -718,79 +714,78 @@ impl Syscall<'_> {
                 if root.is_trap_dirty() {
                     (root, cumulative_offset)
                 } else {
-                    return Ok(());
+                    return Ok(len);
                 }
             } else {
-                return Ok(());
+                return Ok(len);
             }
         } else {
-            return Ok(());
+            return Ok(len);
         };
-        // After pager detach, all writes to TRAP_DIRTY VMOs fail
-        // with BAD_STATE — the pager can no longer acknowledge dirty.
         if !pager_vmo.has_pager() {
             return Err(zircon_object::ZxError::BAD_STATE);
         }
-        // Match Fuchsia kernel's kMaxWriteWaitPages (256 pages = 1MB).
-        // The kernel batches dirty requests at this granularity in
-        // ReadWriteInternal. Pager test helpers (WaitForPageDirty)
-        // expect exact batch-size matching.
         const MAX_DIRTY_BATCH: usize = 256;
 
-        // Translate to parent-relative offsets.
         let parent_offset = offset + base_offset;
         let start_page = parent_offset / PAGE_SIZE;
         let end_page = parent_offset
             .checked_add(len)
-            .ok_or(ZxError::INVALID_ARGS)?
+            .ok_or(zircon_object::ZxError::INVALID_ARGS)?
             .div_ceil(PAGE_SIZE);
-        // Find contiguous runs of clean pages and send one dirty
-        // request per run, capped at MAX_DIRTY_BATCH pages per request.
         let mut page_idx = start_page;
         while page_idx < end_page {
-            // Skip already-dirty pages.
             if pager_vmo.is_page_dirty(page_idx) {
                 page_idx += 1;
                 continue;
             }
-            // Find the end of the contiguous clean run, capped at
-            // MAX_DIRTY_BATCH pages.
             let run_start = page_idx;
             let run_limit = (page_idx + MAX_DIRTY_BATCH).min(end_page);
             while page_idx < run_limit && !pager_vmo.is_page_dirty(page_idx) {
                 page_idx += 1;
             }
-            let run_len = page_idx - run_start;
             let run_offset = run_start * PAGE_SIZE;
-            let run_bytes = run_len * PAGE_SIZE;
+            let run_bytes = (page_idx - run_start) * PAGE_SIZE;
             match pager_vmo.request_dirty(run_offset, run_bytes) {
-                Err(zircon_object::ZxError::SHOULD_WAIT) => {} // expected
+                Err(zircon_object::ZxError::SHOULD_WAIT) => {}
                 Err(zircon_object::ZxError::NOT_FOUND) => {
-                    // Pager detached — writing to clean pages on a
-                    // detached TRAP_DIRTY VMO returns BAD_STATE.
                     return Err(zircon_object::ZxError::BAD_STATE);
                 }
                 Err(e) => return Err(e),
-                Ok(()) => {} // shouldn't happen but harmless
+                Ok(()) => {}
             }
-            // Wait for the first page of the run to become dirty.
-            let future = pager_vmo.wait_for_dirty(run_offset);
-            pin_mut!(future);
-            self.thread.set_blocking_state(ThreadState::BlockedPager);
-            self.thread
-                .blocking_run::<_, (), _>(
-                    future,
-                    ThreadState::BlockedPager,
-                    core::time::Duration::from_nanos(u64::MAX),
-                    None,
-                )
-                .await?;
-            // Re-scan from run_start: the pager may have acknowledged
-            // only part of the run. The outer loop will pick up any
-            // remaining clean pages and send new dirty requests.
+            // Wait per-page so we can detect partial approval.
+            for pg in run_start..page_idx {
+                let pg_offset = pg * PAGE_SIZE;
+                let future = pager_vmo.wait_for_dirty(pg_offset);
+                pin_mut!(future);
+                self.thread.set_blocking_state(ThreadState::BlockedPager);
+                match self
+                    .thread
+                    .blocking_run::<_, (), _>(
+                        future,
+                        ThreadState::BlockedPager,
+                        core::time::Duration::from_nanos(u64::MAX),
+                        None,
+                    )
+                    .await
+                {
+                    Ok(()) => {}
+                    Err(_) => {
+                        // Pager failed this page. Return the bytes
+                        // successfully dirtied from the start.
+                        let dirtied_pages = pg - start_page;
+                        return Ok(dirtied_pages * PAGE_SIZE);
+                    }
+                }
+            }
             page_idx = run_start;
+            // Re-scan: some pages may now be dirty.
+            while page_idx < end_page && pager_vmo.is_page_dirty(page_idx) {
+                page_idx += 1;
+            }
         }
-        Ok(())
+        Ok(len)
     }
 
     /// Pre-commit pages in a pager-tree VMO (clone of pager-backed VMO)
