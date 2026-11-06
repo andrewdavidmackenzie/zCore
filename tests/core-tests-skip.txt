@@ -19,8 +19,8 @@ Pager.SuspendReadTestVmar
 # Pager.FailMultipleCommits: fixed by propagating pager errors in overlap commit
 Pager.EarlyWakeCloneRace
 
-# ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
-StreamTestCase.PartialVmoDirty
+# ── StreamTestCase: fixed ──
+# StreamTestCase.PartialVmoDirty: fixed by per-page dirty ack in stream write
 
 # ── VmoClone2TestCase: concurrent VMO drop race ──
 VmoClone2TestCase.DropChildrenInParallel
