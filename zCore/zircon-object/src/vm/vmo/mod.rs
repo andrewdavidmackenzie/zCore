@@ -1747,12 +1747,11 @@ impl VmObject {
                         && req.overlap_waiters[wi].page_idx < end_page
                     {
                         let w = req.overlap_waiters.swap_remove(wi);
-                        if w.sender.send(Ok(())).is_err() {
-                            warn!(
-                                "complete_pager: send FAILED for page {} (receiver dropped)",
-                                w.page_idx
-                            );
-                        }
+                        let ok = w.sender.send(Ok(())).is_ok();
+                        hal_impl::console::console_write_fmt(format_args!(
+                            "CPR:pg={} ok={}\n",
+                            w.page_idx, ok
+                        ));
                     } else {
                         wi += 1;
                     }
