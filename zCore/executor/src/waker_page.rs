@@ -1,5 +1,7 @@
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
+
+static TOTAL_NOTIFIES: AtomicU64 = AtomicU64::new(0);
 // use core::task::{RawWaker, RawWakerVTable};
 use woke::Woke;
 
@@ -126,6 +128,12 @@ impl WakerPage {
     pub fn notify(&self, offset: usize) {
         debug_assert!(offset < 64);
         self.notified.fetch_or(1 << offset);
+        TOTAL_NOTIFIES.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Total notifications set (diagnostic).
+    pub fn total_notifies() -> u64 {
+        TOTAL_NOTIFIES.load(Ordering::Relaxed)
     }
 
     pub fn mark_borrowed(&self, offset: usize, borrowed: bool) {

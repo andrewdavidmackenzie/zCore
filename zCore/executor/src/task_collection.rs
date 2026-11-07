@@ -240,13 +240,33 @@ impl TaskCollection {
                 }
             }
         }
-        // Write diagnostic character to serial port 0x3F8.
-        // '.' for no notifications, '!' for found notifications.
-        if count % 100000 == 0 {
+        // Write diagnostic to serial port 0x3F8 periodically.
+        if count % 500000 == 0 {
             #[cfg(target_arch = "x86_64")]
-            unsafe {
-                let ch = if found_any { b'!' } else { b'.' };
-                core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") ch);
+            {
+                let notifies = crate::waker_page::WakerPage::total_notifies();
+                // Write: "S<scan_count_hex> N<notify_count_hex>\n"
+                let msg = if found_any { b"S! " } else { b"S. " };
+                for &b in msg {
+                    unsafe { core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") b) };
+                }
+                // Write notify count as decimal
+                let mut buf = [0u8; 20];
+                let mut n = notifies;
+                let mut i = buf.len();
+                if n == 0 {
+                    i -= 1;
+                    buf[i] = b'0';
+                }
+                while n > 0 {
+                    i -= 1;
+                    buf[i] = b'0' + (n % 10) as u8;
+                    n /= 10;
+                }
+                for &b in &buf[i..] {
+                    unsafe { core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") b) };
+                }
+                unsafe { core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") b'\n') };
             }
         }
     }
