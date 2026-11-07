@@ -11,7 +11,6 @@ pub mod mem;
 pub mod timer;
 pub mod vm;
 
-pub mod ioport;
 pub mod special;
 
 hal_fn_impl! {
