@@ -266,15 +266,16 @@ pub fn spawn_with_priority(
     if enable {
         crate::arch::intr_off();
     }
-    // Force all tasks to the current CPU. Cross-CPU task
-    // distribution is disabled because:
-    // 1. IPI wakeups don't reliably wake halted CPUs in QEMU TCG
-    //    mode, causing cross-CPU notifications to be lost (#680)
-    // 2. Stolen/migrated tasks retain their original waker page,
-    //    so future notifications go to the wrong CPU
-    // All tasks on the same CPU avoids these issues entirely.
-    // The cooperative executor handles concurrency within each CPU.
-    let cpu = Some(crate::arch::cpu_id());
+    // Distribute tasks across CPUs on x86_64. On aarch64/riscv64,
+    // hardware interrupts (serial, timer) are routed to CPU 0 and
+    // the waker system doesn't propagate cross-CPU (#684). Tasks
+    // on secondary CPUs can't be woken by IRQs on the BSP.
+    // x86_64 uses polled serial I/O so this isn't an issue there.
+    let cpu = if cfg!(target_arch = "x86_64") && CPU_RUNTIMES.get().is_some() {
+        None
+    } else {
+        Some(crate::arch::cpu_id())
+    };
     let result = spawn_task(future, Some(priority), cpu);
     if enable {
         crate::arch::intr_on();
