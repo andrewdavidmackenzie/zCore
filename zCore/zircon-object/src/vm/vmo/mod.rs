@@ -1747,7 +1747,12 @@ impl VmObject {
                         && req.overlap_waiters[wi].page_idx < end_page
                     {
                         let w = req.overlap_waiters.swap_remove(wi);
-                        let _ = w.sender.send(Ok(()));
+                        if w.sender.send(Ok(())).is_err() {
+                            warn!(
+                                "complete_pager: send FAILED for page {} (receiver dropped)",
+                                w.page_idx
+                            );
+                        }
                     } else {
                         wi += 1;
                     }
