@@ -90,43 +90,6 @@ pub fn create_tss_with_iopb(cpu_id: u8, trap_stack_top: u64) -> &'static TaskSta
     unsafe { &*tss_ptr }
 }
 
-/// Total size of TssWithIopb in bytes.
-const TSS_WITH_IOPB_SIZE: usize = core::mem::size_of::<TaskStateSegment>() + IOPB_SIZE + 1;
-
-/// Build a 64-bit system segment descriptor (TSS descriptor) with
-/// the correct limit for the extended TSS + IOPB structure.
-///
-/// Returns (low u64, high u64) for the GDT entry pair.
-pub fn make_tss_descriptor(tss: &'static TaskStateSegment) -> (u64, u64) {
-    let base = tss as *const TaskStateSegment as u64;
-    let limit = (TSS_WITH_IOPB_SIZE - 1) as u64;
-
-    // TSS descriptor format (Intel SDM Vol. 3A, Figure 8-4):
-    // Low u64:
-    //   bits 0-15:  limit[0:15]
-    //   bits 16-39: base[0:23]
-    //   bits 40-43: type (0x9 = available 64-bit TSS)
-    //   bit  44:    0 (system segment)
-    //   bits 45-46: DPL (0)
-    //   bit  47:    present (1)
-    //   bits 48-51: limit[16:19]
-    //   bit  52:    available (0)
-    //   bits 53-54: 0
-    //   bit  55:    granularity (0 = byte)
-    //   bits 56-63: base[24:31]
-    // High u64:
-    //   bits 0-31:  base[32:63]
-    //   bits 32-63: reserved (0)
-    let low = (limit & 0xFFFF)
-        | ((base & 0xFFFFFF) << 16)
-        | (0x9u64 << 40)        // type: available 64-bit TSS
-        | (1u64 << 47)          // present
-        | (((limit >> 16) & 0xF) << 48)
-        | (((base >> 24) & 0xFF) << 56);
-    let high = base >> 32;
-    (low, high)
-}
-
 /// Allow access to I/O ports in range [port, port+count).
 /// Updates the global IOPB and all per-CPU TSS IOPBs.
 pub fn ioports_allow(port: u16, count: u32) {
