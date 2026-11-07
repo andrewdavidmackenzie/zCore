@@ -212,9 +212,6 @@ impl TaskCollection {
     /// Scan waker pages for notifications and dropped tasks.
     /// Feeds notified tasks into the scheduler and removes dropped ones.
     fn scan_notifications(&self) {
-        static SCAN_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
-        let count = SCAN_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-        let mut found_any = false;
         let mut sched = self.sched_state.lock();
         for priority in 0..MAX_PRIORITY {
             let mut inner = self.get_mut_inner(priority);
@@ -223,7 +220,6 @@ impl TaskCollection {
                 let notified = page.take_notified();
                 let dropped = page.take_dropped();
                 if notified != 0 {
-                    found_any = true;
                     for subpage_idx in BitIter::from(notified) {
                         let key = pack_key(priority, page_idx, subpage_idx);
                         crate::sched::on_task_notified(&mut sched, key);
@@ -238,15 +234,6 @@ impl TaskCollection {
                         }
                     }
                 }
-            }
-        }
-        // Write diagnostic character to serial port 0x3F8.
-        // '.' for no notifications, '!' for found notifications.
-        if count % 100000 == 0 {
-            #[cfg(target_arch = "x86_64")]
-            unsafe {
-                let ch = if found_any { b'!' } else { b'.' };
-                core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") ch);
             }
         }
     }

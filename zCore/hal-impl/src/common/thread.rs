@@ -51,3 +51,14 @@ pub fn sched_yield() {
 pub fn sched_yield() {
     // No-op for libos.
 }
+
+/// Read the cross-CPU wake counter (diagnostic).
+#[cfg(not(feature = "libos"))]
+pub fn cross_cpu_wake_count() -> usize {
+    executor::waker_page::CROSS_CPU_WAKES.load(core::sync::atomic::Ordering::Relaxed)
+}
+
+#[cfg(feature = "libos")]
+pub fn cross_cpu_wake_count() -> usize {
+    0
+}
