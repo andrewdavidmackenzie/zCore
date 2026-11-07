@@ -776,7 +776,8 @@ pub fn replace_bsp_tss_with_iopb() {
     // that's acceptable for a one-time boot operation.
     let trap_stack_top = Box::leak(Box::new([0u8; 0x1000])).as_ptr() as u64 + 0x1000;
     let cpu_id = crate::cpu::cpu_id();
-    let new_tss = super::ioport::create_tss_with_iopb(cpu_id, trap_stack_top);
+    let ext = super::ioport::create_tss_with_iopb(cpu_id, trap_stack_top);
+    let desc = super::ioport::make_tss_descriptor(ext);
 
     unsafe {
         // Read the current GDT.
@@ -788,8 +789,11 @@ pub fn replace_bsp_tss_with_iopb() {
         let entry_count = (gdtp.limit + 1) as usize / core::mem::size_of::<u64>();
         let gdt = core::slice::from_raw_parts_mut(gdtp.base.as_mut_ptr::<u64>(), entry_count);
 
-        // Build TSS descriptor with extended limit for IOPB.
-        let (desc0, desc1) = super::ioport::make_tss_descriptor(new_tss);
+        // Patch the TSS descriptor in the GDT.
+        let (desc0, desc1) = match desc {
+            x86_64::structures::gdt::Descriptor::SystemSegment(d0, d1) => (d0, d1),
+            _ => unreachable!("tss_segment_with_iomap returned non-system descriptor"),
+        };
         gdt[tss_index as usize] = desc0;
         gdt[tss_index as usize + 1] = desc1;
 
@@ -825,10 +829,12 @@ pub fn init_ap_gdt_idt() {
     // Create a new TSS with IOPB for this AP.
     let trap_stack_top = Box::leak(Box::new([0u8; 0x1000])).as_ptr() as u64 + 0x1000;
     let cpu_id = crate::cpu::cpu_id();
-    let tss: &'static _ = super::ioport::create_tss_with_iopb(cpu_id, trap_stack_top);
-
-    // Build the TSS descriptor with extended limit for IOPB.
-    let (tss0, tss1) = super::ioport::make_tss_descriptor(tss);
+    let ext = super::ioport::create_tss_with_iopb(cpu_id, trap_stack_top);
+    let desc = super::ioport::make_tss_descriptor(ext);
+    let (tss0, tss1) = match desc {
+        x86_64::structures::gdt::Descriptor::SystemSegment(d0, d1) => (d0, d1),
+        _ => unreachable!(),
+    };
 
     // Clone the BSP's GDT and patch in this AP's TSS descriptor.
     let mut gdt = template.clone();
@@ -855,7 +861,7 @@ pub fn init_ap_gdt_idt() {
 
         // Set GS_BASE to this AP's TSS (per-CPU).
         #[allow(const_item_mutation)]
-        GsBase::MSR.write(tss as *const _ as u64);
+        GsBase::MSR.write(&ext.tss as *const _ as u64);
 
         // Write STAR MSR (same selectors as BSP).
         let eax = star_val as u32;

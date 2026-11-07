@@ -26,8 +26,8 @@ const IOPB_SIZE: usize = 8192;
 /// `offset_of!(TssWithIopb, iopb)` so the CPU knows where the
 /// bitmap starts.
 #[repr(C)]
-struct TssWithIopb {
-    tss: TaskStateSegment,
+pub struct TssWithIopb {
+    pub tss: TaskStateSegment,
     iopb: [u8; IOPB_SIZE],
     /// Intel SDM requires a terminating 0xFF byte after the bitmap.
     terminator: u8,
@@ -59,7 +59,12 @@ static GLOBAL_IOPB: [AtomicU8; IOPB_SIZE] = {
 /// Copies the trap stack from `trap_stack_top` into the new TSS.
 /// Returns a static reference to the TSS portion (for GDT descriptor
 /// creation) and stores the full TssWithIopb for later IOPB updates.
-pub fn create_tss_with_iopb(cpu_id: u8, trap_stack_top: u64) -> &'static TaskStateSegment {
+/// Create an extended TSS with IOPB for a CPU.
+///
+/// Returns a static reference to the full TssWithIopb so callers
+/// can build the GDT descriptor using `make_tss_descriptor`.
+/// The TSS portion is accessible via `&ext.tss`.
+pub fn create_tss_with_iopb(cpu_id: u8, trap_stack_top: u64) -> &'static TssWithIopb {
     let ext = Box::leak(Box::new(TssWithIopb {
         tss: TaskStateSegment::new(),
         iopb: [0xFF; IOPB_SIZE], // deny all by default
@@ -77,54 +82,34 @@ pub fn create_tss_with_iopb(cpu_id: u8, trap_stack_top: u64) -> &'static TaskSta
         ext.iopb[i] = GLOBAL_IOPB[i].load(Ordering::Relaxed);
     }
 
-    // Get the TSS pointer before storing ext (which consumes the
-    // mutable reference).
-    let tss_ptr: *const TaskStateSegment = &ext.tss;
+    // Get a raw pointer before storing (which consumes the &mut).
+    let ptr: *const TssWithIopb = ext;
 
     // Store reference for later IOPB updates.
     unsafe {
         PER_CPU_TSS[cpu_id as usize] = Some(ext);
     }
 
-    // Return reference to the TSS portion for GDT descriptor.
-    unsafe { &*tss_ptr }
+    unsafe { &*ptr }
 }
-
-/// Total size of TssWithIopb in bytes.
-const TSS_WITH_IOPB_SIZE: usize = core::mem::size_of::<TaskStateSegment>() + IOPB_SIZE + 1;
-
-/// Build a 64-bit system segment descriptor (TSS descriptor) with
-/// the correct limit for the extended TSS + IOPB structure.
+/// Build a GDT descriptor for the extended TSS with IOPB.
+/// Uses the x86_64 crate's built-in `tss_segment_with_iomap`
+/// which validates the layout and computes the correct limit.
 ///
-/// Returns (low u64, high u64) for the GDT entry pair.
-pub fn make_tss_descriptor(tss: &'static TaskStateSegment) -> (u64, u64) {
-    let base = tss as *const TaskStateSegment as u64;
-    let limit = (TSS_WITH_IOPB_SIZE - 1) as u64;
-
-    // TSS descriptor format (Intel SDM Vol. 3A, Figure 8-4):
-    // Low u64:
-    //   bits 0-15:  limit[0:15]
-    //   bits 16-39: base[0:23]
-    //   bits 40-43: type (0x9 = available 64-bit TSS)
-    //   bit  44:    0 (system segment)
-    //   bits 45-46: DPL (0)
-    //   bit  47:    present (1)
-    //   bits 48-51: limit[16:19]
-    //   bit  52:    available (0)
-    //   bits 53-54: 0
-    //   bit  55:    granularity (0 = byte)
-    //   bits 56-63: base[24:31]
-    // High u64:
-    //   bits 0-31:  base[32:63]
-    //   bits 32-63: reserved (0)
-    let low = (limit & 0xFFFF)
-        | ((base & 0xFFFFFF) << 16)
-        | (0x9u64 << 40)        // type: available 64-bit TSS
-        | (1u64 << 47)          // present
-        | (((limit >> 16) & 0xF) << 48)
-        | (((base >> 24) & 0xFF) << 56);
-    let high = base >> 32;
-    (low, high)
+/// `ext` must be a &'static TssWithIopb. We pass the TSS and
+/// iomap+terminator slices from it.
+pub fn make_tss_descriptor(ext: &'static TssWithIopb) -> x86_64::structures::gdt::Descriptor {
+    // The iomap slice includes the IOPB + terminator byte.
+    // Safety: ext is leaked (static), iopb and terminator are
+    // contiguous in repr(C) struct, terminator is 0xFF.
+    let iomap: &'static [u8] = unsafe {
+        core::slice::from_raw_parts(
+            ext.iopb.as_ptr(),
+            IOPB_SIZE + 1, // includes terminator
+        )
+    };
+    x86_64::structures::gdt::Descriptor::tss_segment_with_iomap(&ext.tss, iomap)
+        .expect("invalid IOPB layout")
 }
 
 /// Allow access to I/O ports in range [port, port+count).
