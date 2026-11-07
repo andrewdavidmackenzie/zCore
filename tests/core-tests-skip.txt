@@ -6,8 +6,7 @@ Pager.EarlyWakeCloneRace
 # ── VmoClone2TestCase: SNAPSHOT not implemented ──
 VmoClone2TestCase.DropChildrenInParallel
 
-# ── BTI: multi-thread pin/decommit race ──
-Bti.DecommitRace
+
 
 # ── VmoTestCase: multi-thread write + decommit race ──
 VmoTestCase.ParallelWriteAndDecommit
