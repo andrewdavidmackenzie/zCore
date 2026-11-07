@@ -1,6 +1,5 @@
 # ── PagerWriteback: hangs (BTI/pin or suspend) ──
 PagerWriteback.SuspendDirtyTestVmar
-PagerWriteback.OpZeroPinnedTrapDirty
 PagerWriteback.FailedPinAwaitingClean
 PagerWriteback.NotModifiedFailedPinWrite
 
