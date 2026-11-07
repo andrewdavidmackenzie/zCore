@@ -35,7 +35,7 @@ mod context;
 mod executor;
 mod runtime;
 pub mod task_collection;
-pub mod waker_page;
+mod waker_page;
 
 /// Per-CPU yield-pending flag. Set by PreemptYieldFuture::poll,
 /// consumed by Executor::run after polling a task. Using per-CPU

@@ -88,11 +88,10 @@ pub(super) fn init() -> DeviceResult {
     warn!("UART IRQs done, configuring APIC timer...");
 
     irq.register_local_apic_handler(trap::X86_INT_APIC_TIMER, Box::new(super::trap::super_timer))?;
-    // Register a no-op handler for the IPI wakeup vector (0xFE).
-    // The IPI itself breaks the target CPU out of HLT; no further
-    // action is needed — the executor will see pending notifications
-    // on its next iteration. Without this, the APIC driver logs
-    // "no registered handler for interrupt vector 254" on every IPI.
+    // IPI wakeup vector (0xFE): no-op handler. The IPI breaks the
+    // target CPU out of HLT so its executor loop resumes and calls
+    // scan_notifications. For CPUs not in HLT, the timer interrupt
+    // (every ~10ms) handles preemption via handle_timeout.
     irq.register_local_apic_handler(0xFE, Box::new(|| {}))?;
 
     warn!("Measuring CPU frequency...");
