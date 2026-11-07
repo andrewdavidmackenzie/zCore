@@ -161,31 +161,17 @@ impl Syscall<'_> {
                         if pager_vmo.is_page_dirty(pg) {
                             continue;
                         }
-                        let mut retries = 0;
-                        loop {
-                            let future = pager_vmo.wait_for_dirty(pg * PAGE_SIZE);
-                            futures::pin_mut!(future);
-                            self.thread.set_blocking_state(ThreadState::BlockedPager);
-                            match self
-                                .thread
-                                .blocking_run::<_, (), _>(
-                                    future,
-                                    ThreadState::BlockedPager,
-                                    core::time::Duration::from_nanos(u64::MAX),
-                                    None,
-                                )
-                                .await
-                            {
-                                Ok(()) => break,
-                                Err(e) => {
-                                    if retries >= 1 {
-                                        return Err(e);
-                                    }
-                                    retries += 1;
-                                    let _ = pager_vmo.request_dirty(pg * PAGE_SIZE, PAGE_SIZE);
-                                }
-                            }
-                        }
+                        let future = pager_vmo.wait_for_dirty(pg * PAGE_SIZE);
+                        futures::pin_mut!(future);
+                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                        self.thread
+                            .blocking_run::<_, (), _>(
+                                future,
+                                ThreadState::BlockedPager,
+                                core::time::Duration::from_nanos(u64::MAX),
+                                None,
+                            )
+                            .await?;
                     }
                 }
             }
