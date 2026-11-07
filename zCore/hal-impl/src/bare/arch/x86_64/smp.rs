@@ -763,7 +763,6 @@ pub fn save_bsp_gdt_template() {
 /// from primary_init() after save_bsp_gdt_template().
 pub fn replace_bsp_tss_with_iopb() {
     use x86_64::instructions::tables::{lgdt, load_tss};
-    use x86_64::structures::gdt::Descriptor;
     use x86_64::structures::DescriptorTablePointer;
     use x86_64::{PrivilegeLevel, VirtAddr};
 
@@ -794,11 +793,10 @@ pub fn replace_bsp_tss_with_iopb() {
         let cpu_id = crate::cpu::cpu_id();
         let new_tss = super::ioport::create_tss_with_iopb(cpu_id, trap_stack.as_u64());
 
-        // Build a new TSS descriptor pointing to the extended TSS.
-        let (desc0, desc1) = match Descriptor::tss_segment(new_tss) {
-            Descriptor::SystemSegment(d0, d1) => (d0, d1),
-            _ => unreachable!(),
-        };
+        // Build a TSS descriptor with the extended limit (TSS + IOPB + terminator).
+        // Descriptor::tss_segment uses size_of::<TaskStateSegment>() which is
+        // only 104 bytes. We need 104 + 8192 + 1 = 8297 bytes.
+        let (desc0, desc1) = super::ioport::make_tss_descriptor(new_tss);
         gdt[tss_index as usize] = desc0;
         gdt[tss_index as usize + 1] = desc1;
 
@@ -832,7 +830,7 @@ pub fn init_ap_gdt_idt() {
     use x86_64::registers::control::{Cr4, Cr4Flags};
     use x86_64::registers::model_specific::{Efer, EferFlags, GsBase, LStar, SFMask};
     use x86_64::registers::rflags::RFlags;
-    use x86_64::structures::gdt::{Descriptor, SegmentSelector};
+    use x86_64::structures::gdt::SegmentSelector;
     use x86_64::structures::DescriptorTablePointer;
     use x86_64::{PrivilegeLevel, VirtAddr};
 
@@ -845,11 +843,8 @@ pub fn init_ap_gdt_idt() {
     let cpu_id = crate::cpu::cpu_id();
     let tss: &'static _ = super::ioport::create_tss_with_iopb(cpu_id, trap_stack_top);
 
-    // Build the TSS descriptor for this AP's TSS.
-    let (tss0, tss1) = match Descriptor::tss_segment(tss) {
-        Descriptor::SystemSegment(tss0, tss1) => (tss0, tss1),
-        _ => unreachable!(),
-    };
+    // Build the TSS descriptor with extended limit for IOPB.
+    let (tss0, tss1) = super::ioport::make_tss_descriptor(tss);
 
     // Clone the BSP's GDT and patch in this AP's TSS descriptor.
     let mut gdt = template.clone();
