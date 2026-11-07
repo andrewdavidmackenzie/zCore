@@ -116,14 +116,6 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
             crate::interrupt::handle_irq(vector);
             if vector == X86_INT_APIC_TIMER {
                 executor::set_preempt_pending();
-                let cpu = super::cpu::cpu_id() as usize;
-                let stuck = executor::check_stuck_poll(cpu);
-                if stuck != 0 {
-                    crate::console::console_write_fmt(format_args!(
-                        "\nSTUCK POLL: cpu={} task_id={}\n",
-                        cpu, stuck
-                    ));
-                }
                 executor::handle_timeout();
             }
         }

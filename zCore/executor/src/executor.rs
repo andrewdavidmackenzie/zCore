@@ -1,43 +1,12 @@
 use crate::context::{Context as ExecuterContext, ContextData};
 use alloc::alloc::{Allocator, Global, Layout};
 use core::pin::Pin;
-use core::sync::atomic::{AtomicU64, Ordering};
 use {
     alloc::boxed::Box,
     alloc::sync::Arc,
     core::ptr::NonNull,
     core::task::{Context, Poll},
 };
-
-/// Per-CPU: task ID currently being polled (0 = idle).
-static POLLING_TASK: [AtomicU64; 64] = {
-    const INIT: AtomicU64 = AtomicU64::new(0);
-    [INIT; 64]
-};
-/// Per-CPU: consecutive timer ticks where the same task is polling.
-static STUCK_TICKS: [AtomicU64; 64] = {
-    const INIT: AtomicU64 = AtomicU64::new(0);
-    [INIT; 64]
-};
-
-/// Called from timer interrupt to detect stuck poll().
-/// If the same task has been polling for STUCK_THRESHOLD ticks,
-/// print a diagnostic. Returns the stuck task ID, or 0.
-pub fn check_stuck_poll(cpu: usize) -> u64 {
-    if cpu >= 64 {
-        return 0;
-    }
-    let current = POLLING_TASK[cpu].load(Ordering::Relaxed);
-    if current != 0 {
-        let ticks = STUCK_TICKS[cpu].fetch_add(1, Ordering::Relaxed);
-        if ticks > 0 && ticks % 100 == 0 {
-            return current;
-        }
-    } else {
-        STUCK_TICKS[cpu].store(0, Ordering::Relaxed);
-    }
-    0
-}
 
 use crate::arch::executor_entry;
 use crate::task_collection::TaskCollection;
@@ -149,16 +118,7 @@ impl Executor {
                 let mut cx = Context::from_waker(&waker);
                 waker_ref.mark_borrowed(true);
                 self.task_id = task.id();
-                let cpu = crate::arch::cpu_id() as usize;
-                if cpu < 64 {
-                    POLLING_TASK[cpu].store(task.id() as u64, Ordering::Relaxed);
-                    STUCK_TICKS[cpu].store(0, Ordering::Relaxed);
-                }
                 let ret = task.poll(&mut cx);
-                if cpu < 64 {
-                    POLLING_TASK[cpu].store(0, Ordering::Relaxed);
-                    STUCK_TICKS[cpu].store(0, Ordering::Relaxed);
-                }
                 self.task_id = 0;
                 waker_ref.mark_borrowed(false);
                 match ret {
