@@ -42,9 +42,11 @@ hal_fn_impl! {
                 // the same structure (same entry count, same selectors)
                 // but their own per-CPU TSS.
                 super::arch::smp::save_bsp_gdt_template();
-                // Replace the BSP's TSS with an extended one that
-                // includes an IOPB for IO port access control.
-                super::arch::smp::replace_bsp_tss_with_iopb();
+                // TODO: BSP TSS replacement with IOPB breaks boot.
+                // The tss_segment_with_iomap descriptor is validated
+                // but load_tss still causes the init process to crash.
+                // Needs GDB investigation.
+                // super::arch::smp::replace_bsp_tss_with_iopb();
             }
             super::arch::primary_init();
         }
