@@ -954,7 +954,12 @@ impl Task for Thread {
         // set the return register to ZX_ERR_INTERNAL_INTR_RETRY (-6).
         // This tells the debugger "the syscall was interrupted; if you
         // resume without modifying rax, the kernel will retry it."
-        if inner.context.is_some() && state.is_blocked() {
+        // Do NOT set this for BlockedPager — the thread is in a page
+        // fault handler, not a syscall. The return register holds
+        // user data, and overwriting it with -6 corrupts user state,
+        // causing a crash when the thread resumes and re-executes the
+        // faulting instruction with rax = 0xfffffffffffffffa.
+        if inner.context.is_some() && state.is_blocked() && state != ThreadState::BlockedPager {
             if let Some(ref mut ctx) = inner.context {
                 use hal_impl::context::UserContextField;
                 ctx.set_field(UserContextField::ReturnValue, (-6i64) as usize);
