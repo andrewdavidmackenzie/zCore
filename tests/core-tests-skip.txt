@@ -1,11 +1,9 @@
 # ── PagerWriteback: hangs (BTI/pin or suspend) ──
-PagerWriteback.SuspendDirtyTestVmar
 
 
 # ── Pager: hangs / flaky ──
 Pager.FailEarlyWake
 Pager.ResizeCommitTest
-Pager.SuspendReadTestVmar
 Pager.EarlyWakeCloneRace
 
 # ── VmoClone2TestCase: SNAPSHOT not implemented ──
