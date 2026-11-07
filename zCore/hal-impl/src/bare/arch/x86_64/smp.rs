@@ -758,6 +758,68 @@ pub fn save_bsp_gdt_template() {
     }
 }
 
+/// Replace the BSP's TSS (created by trapframe::init) with an extended
+/// TSS that includes an IOPB for IO port access control. Called once
+/// from primary_init() after save_bsp_gdt_template().
+pub fn replace_bsp_tss_with_iopb() {
+    use x86_64::instructions::tables::{lgdt, load_tss};
+    use x86_64::structures::gdt::Descriptor;
+    use x86_64::structures::DescriptorTablePointer;
+    use x86_64::{PrivilegeLevel, VirtAddr};
+
+    let tss_index = *BSP_TSS_INDEX.get().expect("BSP TSS index not set");
+
+    unsafe {
+        // Read the current GDT.
+        let mut gdtp = DescriptorTablePointer {
+            limit: 0,
+            base: VirtAddr::zero(),
+        };
+        core::arch::asm!("sgdt [{}]", in(reg) &mut gdtp);
+        let entry_count = (gdtp.limit + 1) as usize / core::mem::size_of::<u64>();
+        let gdt = core::slice::from_raw_parts_mut(gdtp.base.as_mut_ptr::<u64>(), entry_count);
+
+        // Extract the old TSS base address from the GDT descriptor to
+        // copy the privilege stack table.
+        let tss0 = gdt[tss_index as usize];
+        let tss1 = gdt[tss_index as usize + 1];
+        let old_base = ((tss0 >> 16) & 0xFFFF)
+            | (((tss0 >> 32) & 0xFF) << 16)
+            | (((tss0 >> 56) & 0xFF) << 24)
+            | ((tss1 & 0xFFFFFFFF) << 32);
+        let old_tss = &*(old_base as *const x86_64::structures::tss::TaskStateSegment);
+        let trap_stack = old_tss.privilege_stack_table[0];
+
+        // Create new extended TSS with IOPB.
+        let cpu_id = crate::cpu::cpu_id();
+        let new_tss = super::ioport::create_tss_with_iopb(cpu_id, trap_stack.as_u64());
+
+        // Build a new TSS descriptor pointing to the extended TSS.
+        let (desc0, desc1) = match Descriptor::tss_segment(new_tss) {
+            Descriptor::SystemSegment(d0, d1) => (d0, d1),
+            _ => unreachable!(),
+        };
+        gdt[tss_index as usize] = desc0;
+        gdt[tss_index as usize + 1] = desc1;
+
+        // Reload the GDT and TSS.
+        lgdt(&gdtp);
+        // Mark the TSS as not-busy before loading (clear bit 41).
+        gdt[tss_index as usize] &= !(1u64 << 41);
+        load_tss(x86_64::structures::gdt::SegmentSelector::new(
+            tss_index,
+            PrivilegeLevel::Ring0,
+        ));
+    }
+
+    // Update the saved GDT template so APs get the new TSS layout.
+    // (APs create their own TSS, but the template GDT size must be consistent.)
+    if let Some(template) = BSP_GDT_TEMPLATE.get() {
+        // Template was already saved — APs will create their own TSS anyway.
+        let _ = template;
+    }
+}
+
 /// Initialize GDT, IDT, TSS, and MSRs for an AP using the BSP's GDT
 /// template. Creates a GDT with the SAME layout and selectors as the
 /// BSP's, but with this AP's own TSS patched in.
@@ -771,7 +833,6 @@ pub fn init_ap_gdt_idt() {
     use x86_64::registers::model_specific::{Efer, EferFlags, GsBase, LStar, SFMask};
     use x86_64::registers::rflags::RFlags;
     use x86_64::structures::gdt::{Descriptor, SegmentSelector};
-    use x86_64::structures::tss::TaskStateSegment;
     use x86_64::structures::DescriptorTablePointer;
     use x86_64::{PrivilegeLevel, VirtAddr};
 
@@ -779,11 +840,10 @@ pub fn init_ap_gdt_idt() {
     let tss_index = *BSP_TSS_INDEX.get().expect("BSP TSS index not saved");
     let star_val = *BSP_STAR.get().expect("BSP STAR not saved");
 
-    // Create a new TSS for this AP with its own trap stack.
-    let mut tss = Box::new(TaskStateSegment::new());
+    // Create a new TSS with IOPB for this AP.
     let trap_stack_top = Box::leak(Box::new([0u8; 0x1000])).as_ptr() as u64 + 0x1000;
-    tss.privilege_stack_table[0] = VirtAddr::new(trap_stack_top);
-    let tss: &'static _ = Box::leak(tss);
+    let cpu_id = crate::cpu::cpu_id();
+    let tss: &'static _ = super::ioport::create_tss_with_iopb(cpu_id, trap_stack_top);
 
     // Build the TSS descriptor for this AP's TSS.
     let (tss0, tss1) = match Descriptor::tss_segment(tss) {
