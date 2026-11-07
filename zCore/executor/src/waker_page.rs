@@ -1,8 +1,5 @@
 use alloc::sync::Arc;
-use core::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
-
-/// Global counter of cross-CPU wakes (for debugging).
-pub static CROSS_CPU_WAKES: AtomicUsize = AtomicUsize::new(0);
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 // use core::task::{RawWaker, RawWakerVTable};
 use woke::Woke;
 
@@ -206,14 +203,11 @@ impl WakerRef {
 
     pub fn wake_by_ref(&self) {
         if !self.dropped.load(Ordering::SeqCst) {
-            let owner = self.page.owner_cpu();
-            let current = crate::arch::cpu_id();
             self.page.notify(self.idx);
-            if current != owner {
-                // Track cross-CPU wakes for debugging.
-                CROSS_CPU_WAKES.fetch_add(1, Ordering::Relaxed);
-            }
-            crate::ipi_wakeup(owner);
+            // If the owning CPU is different from ours, send an IPI
+            // to break it out of HLT/WFI so it sees the notification
+            // immediately instead of waiting for the next timer tick.
+            crate::ipi_wakeup(self.page.owner_cpu());
         }
     }
 

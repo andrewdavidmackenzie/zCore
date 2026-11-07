@@ -97,17 +97,7 @@ impl Syscall<'_> {
         }
         let aux_vmo =
             proc.get_object_with_rights::<VmObject>(aux_vmo_handle, Rights::READ | Rights::WRITE)?;
-        let cross_wakes_before = hal_impl::thread::cross_cpu_wake_count();
-        let result = pager.supply_pages(&vmo, offset, length, &aux_vmo, aux_offset);
-        let cross_wakes_after = hal_impl::thread::cross_cpu_wake_count();
-        if cross_wakes_after > cross_wakes_before {
-            warn!(
-                "supply_pages: {} cross-CPU wakes (total {})",
-                cross_wakes_after - cross_wakes_before,
-                cross_wakes_after
-            );
-        }
-        result
+        pager.supply_pages(&vmo, offset, length, &aux_vmo, aux_offset)
     }
 
     /// Perform an operation on a range of a pager-backed VMO.
