@@ -121,8 +121,6 @@ static WAKEUP_FN: spin::Once<WakeupFn> = spin::Once::new();
 
 /// Register the cross-CPU wakeup function. Called once during HAL
 /// initialization after the IPI infrastructure is ready.
-pub use executor::check_stuck_poll;
-
 pub fn set_ipi_wakeup(f: WakeupFn) {
     WAKEUP_FN.call_once(|| f);
 }
