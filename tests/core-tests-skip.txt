@@ -1,6 +1,3 @@
-# ── PagerWriteback: hangs (BTI/pin or suspend) ──
-
-
 # ── Pager: hangs / flaky ──
 Pager.FailEarlyWake
 Pager.ResizeCommitTest
