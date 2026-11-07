@@ -207,7 +207,7 @@ fn get_performance_info_argument_validation() {
     let sc = ctx.syscall();
     let cpu_resource = add_cpu_resource(&ctx);
 
-    let online_cpus: usize = 1; // zCore reports 1 CPU
+    let online_cpus: usize = hal_impl::cpu::num_cpus();
 
     // C++: invalid handle → ZX_ERR_BAD_HANDLE
     {
@@ -323,7 +323,7 @@ fn get_performance_info() {
     let sc = ctx.syscall();
     let cpu_resource = add_cpu_resource(&ctx);
 
-    let online_cpus: usize = 1; // zCore reports 1 CPU
+    let online_cpus: usize = hal_impl::cpu::num_cpus();
 
     // Query ZX_CPU_DEFAULT_PERF_SCALE (topic 2)
     {

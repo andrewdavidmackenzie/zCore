@@ -574,9 +574,19 @@ async fn handler_user_trap(
                         // For TRAP_DIRTY WRITE faults, wait for dirty
                         // acknowledgement. For READ faults, wait for
                         // page supply.
+                        // Dirty wait only if the page is already
+                        // committed (or has a zero marker) — the
+                        // SHOULD_WAIT came from request_dirty, not
+                        // request_pages. If the page isn't committed,
+                        // the SHOULD_WAIT came from request_pages
+                        // (READ) and we should wait for page supply.
+                        let page_idx = offset / PAGE_SIZE;
+                        let page_present = vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                            || vmo.has_zero_marker(page_idx);
                         let is_dirty_wait = flags.contains(MMUFlags::WRITE)
                             && vmo.is_trap_dirty()
-                            && !vmo.is_page_dirty(offset / PAGE_SIZE);
+                            && page_present
+                            && !vmo.is_page_dirty(page_idx);
                         let future: core::pin::Pin<
                             alloc::boxed::Box<
                                 dyn core::future::Future<

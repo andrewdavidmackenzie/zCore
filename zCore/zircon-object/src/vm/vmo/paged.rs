@@ -889,7 +889,7 @@ impl VMObjectTrait for VMObjectPaged {
                 return;
             }
             // Insert a zero marker so reads return zeros without
-            // hitting the (now-detached) pager.
+            // re-requesting from the pager.
             inner.zero_markers.insert(page_idx);
             // Unmap from all mappings.
             for map in inner.mappings.iter() {

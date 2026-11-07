@@ -230,7 +230,8 @@ pub fn primary_init() {
 
     // Initialize executor runtimes for all CPUs.
     // On aarch64, CPU IDs are contiguous 0..N.
-    let cpu_ids: alloc::vec::Vec<u8> = (0..crate::config::MAX_CORE_NUM as u8).collect();
+    let num = crate::config::MAX_CORE_NUM.min(255);
+    let cpu_ids: alloc::vec::Vec<u8> = (0..num as u8).collect();
     executor::init_runtimes(&cpu_ids);
     executor::set_ipi_wakeup(|target_cpu| {
         let _ = crate::interrupt::send_ipi(target_cpu as usize, 0);

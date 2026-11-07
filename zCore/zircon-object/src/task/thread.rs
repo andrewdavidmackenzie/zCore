@@ -806,6 +806,16 @@ impl Thread {
 
     /// Get the time this thread has run on cpu, including the current
     /// userspace session if the thread is currently in userspace.
+    /// Get the CPU ID this thread was last scheduled on.
+    /// Returns 0xFFFFFFFF if the thread hasn't been started yet.
+    pub fn last_cpu(&self) -> u32 {
+        let inner = self.inner.lock();
+        inner
+            .task_sched
+            .map(|(_, cpu)| cpu as u32)
+            .unwrap_or(0xFFFF_FFFFu32)
+    }
+
     pub fn get_time(&self) -> u64 {
         let inner = self.inner.lock();
         let mut total = inner.time;
@@ -927,6 +937,24 @@ impl Thread {
         // address a reused executor slab slot.
         inner.task_sched = None;
         inner.change_state(ThreadState::Dead, &self.base);
+        // Wake the wait_for_run waker so the run_user future can
+        // observe the Dead state and exit. Without this, threads
+        // killed while suspended (e.g., unhandled exceptions) leak
+        // their executor task — the run_user future stays Pending
+        // forever, accumulating over time and slowing down the
+        // executor's scan_notifications.
+        if let Some(waker) = inner.waker.take() {
+            waker.wake();
+        }
+        // Also fire the suspend interrupt and killer to unblock any
+        // blocking_run_suspendable or blocking_run that may be
+        // holding the run_user future.
+        if let Some(sender) = inner.suspend_interrupt.take() {
+            let _ = sender.send(());
+        }
+        if let Some(killer) = inner.killer.take() {
+            let _ = killer.send(());
+        }
         self.proc.remove_thread(self.base.id);
     }
 }
@@ -944,7 +972,12 @@ impl Task for Thread {
         // set the return register to ZX_ERR_INTERNAL_INTR_RETRY (-6).
         // This tells the debugger "the syscall was interrupted; if you
         // resume without modifying rax, the kernel will retry it."
-        if inner.context.is_some() && state.is_blocked() {
+        // Do NOT set this for BlockedPager — the thread is in a page
+        // fault handler, not a syscall. The return register holds
+        // user data, and overwriting it with -6 corrupts user state,
+        // causing a crash when the thread resumes and re-executes the
+        // faulting instruction with rax = 0xfffffffffffffffa.
+        if inner.context.is_some() && state.is_blocked() && state != ThreadState::BlockedPager {
             if let Some(ref mut ctx) = inner.context {
                 use hal_impl::context::UserContextField;
                 ctx.set_field(UserContextField::ReturnValue, (-6i64) as usize);
@@ -1030,9 +1063,15 @@ impl CurrentThread {
                 let mut inner = self.thread.inner.lock();
                 if inner.state() != ThreadState::Suspended {
                     // resume:  return the context token from thread object
-                    // There is no need to call change_state here
-                    // since take away the context of a non-suspended thread won't change it's state
-                    Poll::Ready(inner.context.take().unwrap())
+                    // For Dying/Dead threads, the context may have
+                    // already been consumed. Return a dummy context so
+                    // the run_user loop can observe the terminal state
+                    // and exit, freeing the executor task.
+                    let ctx = inner
+                        .context
+                        .take()
+                        .unwrap_or_else(|| Box::new(UserContext::default()));
+                    Poll::Ready(ctx)
                 } else {
                     // suspend: put waker into the thread object
                     inner.waker = Some(cx.waker().clone());

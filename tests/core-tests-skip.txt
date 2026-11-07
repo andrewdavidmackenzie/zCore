@@ -1,49 +1,23 @@
-# ── PagerWriteback: hangs (multi-thread pager interactions) ──
-PagerWriteback.ResizeWritebackInterleavedWriteWithMappingTrapDirty
-# ResizeWritebackWithMappingTrapDirty: fixed by dirty-before-commit
-# LargeWriteBatched: fixed by per-page READ wait
-PagerWriteback.SuspendDirtyTestVmar
-PagerWriteback.WritebackResizedRangeAfterDetachNoTrapDirty
-PagerWriteback.OpZeroPinnedTrapDirty
-# CommitExtendedTailTrapDirty: fixed by TRAP_DIRTY commit dirty request
-PagerWriteback.FailedPinAwaitingClean
-PagerWriteback.NotModifiedFailedPinWrite
-PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
-
-# ── Pager: hangs (multi-thread pager interactions) ──
-# ResizeCommitTest: fixed by dirty-before-commit
-# FailEarlyWake: fixed by overlap waiter join
-Pager.SuspendReadTestVmar
-Pager.FailMultipleCommits
+# ── Pager: hangs / flaky ──
+Pager.FailEarlyWake
+Pager.ResizeCommitTest
 Pager.EarlyWakeCloneRace
 
-# ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
-StreamTestCase.PartialVmoDirty
-
-# ── VmoClone2TestCase: concurrent VMO drop race ──
+# ── VmoClone2TestCase: SNAPSHOT not implemented ──
 VmoClone2TestCase.DropChildrenInParallel
 
-# ── PortStressTest: multi-threaded channel_call stress ──
-PortStressTest.ChannelCallWaitQueuePanicRepro
-
-# ── Threads: debug register hardware exception tests ──
-# (DR6 read/write state tests now pass; hardware breakpoint
-# exception delivery tests remain blocked on issue #799)
-
-# ── BTI: multi-thread pin/decommit race (std::thread spin-loop) ──
+# ── BTI: multi-thread pin/decommit race ──
 Bti.DecommitRace
 
-# ── VmoTestCase: multi-thread write + decommit race (std::thread spin-loop) ──
+# ── VmoTestCase: multi-thread write + decommit race ──
 VmoTestCase.ParallelWriteAndDecommit
 
-# ── Resource / Scheduler: hangs ──
-Resource.Ioports
-Resource.PcInterruptVectorPoolLeak
-SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
+# ── CPU affinity: task migration not implemented ──
+CpuMaskProfile.ApplyProfile
 
-# ── Property: QEMU qemu64 CPU model does not fault on wrfsbase/wrgsbase
-# with noncanonical addresses (Intel SDM requires #GP). These tests pass
-# with -cpu host -enable-kvm but the full suite hangs under KVM.
-# See issue #799 for exception delivery, #754 for CI KVM.
+# ── Resource: IO port TSS/IOPB not implemented ──
+Resource.Ioports
+
+# ── Property: QEMU CPU model limitation ──
 Property.RegisterFsNoncanonical
 Property.RegisterGsNoncanonical

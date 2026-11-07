@@ -817,13 +817,7 @@ impl Syscall<'_> {
                 }
                 let mut info_ptr =
                     UserOutPtr::<ThreadStatsInfo>::from_addr_size(buffer, buffer_size)?;
-                // Report ZX_INFO_INVALID_CPU (0xFFFFFFFF) for threads that
-                // have never been scheduled.
-                let last_cpu = if thread.state() == ThreadState::New {
-                    0xFFFF_FFFFu32
-                } else {
-                    0 // stub: report CPU 0 until real tracking is added
-                };
+                let last_cpu = thread.last_cpu();
                 info_ptr.write(ThreadStatsInfo {
                     total_runtime: thread.get_time() as i64,
                     last_scheduled_cpu: last_cpu,
@@ -1009,18 +1003,25 @@ impl Syscall<'_> {
                         1,
                     )?;
                 }
-                // Return one CPU stats record (single-CPU system).
-                let entry = CpuStatsInfo {
-                    flags: 1, // ZX_INFO_CPU_STATS_FLAG_ONLINE
-                    ..Default::default()
-                };
+                // Return per-CPU stats records for all online CPUs.
+                let num_cpus = hal_impl::cpu::num_cpus();
                 let entry_size = core::mem::size_of::<CpuStatsInfo>();
-                let count = (buffer_size / entry_size).min(1);
-                if count > 0 {
-                    UserOutPtr::<CpuStatsInfo>::from(buffer).write(entry)?;
+                let max_entries = buffer_size / entry_size;
+                let count = max_entries.min(num_cpus);
+                for i in 0..count {
+                    let entry = CpuStatsInfo {
+                        cpu_number: i as u32,
+                        flags: 1, // ZX_INFO_CPU_STATS_FLAG_ONLINE
+                        ..Default::default()
+                    };
+                    let mut ptr = UserOutPtr::<CpuStatsInfo>::from_addr_size(
+                        buffer + i * entry_size,
+                        entry_size,
+                    )?;
+                    ptr.write(entry)?;
                 }
                 actual.write_if_not_null(count)?;
-                avail.write_if_not_null(1)?;
+                avail.write_if_not_null(num_cpus)?;
             }
             Topic::MemoryStall => {
                 // Requires a root or system-stall resource handle.
@@ -1460,13 +1461,14 @@ struct KmemStatsExtendedInfo {
     vmo_reclaim_disabled_bytes: u64,
 }
 
-/// `zx_info_cpu_stats_t` — 120 bytes per CPU.
+/// `zx_info_cpu_stats_t` — 144 bytes per CPU.
 #[repr(C)]
 #[derive(Default, Clone, Copy)]
 struct CpuStatsInfo {
     cpu_number: u32,
     flags: u32,
     idle_time: i64,
+    normalized_busy_time: i64,
     reschedules: u64,
     context_switches: u64,
     irq_preempts: u64,
@@ -1480,13 +1482,31 @@ struct CpuStatsInfo {
     syscalls: u64,
     reschedule_ipis: u64,
     generic_ipis: u64,
+    active_energy_consumption_nj: u64,
+    idle_energy_consumption_nj: u64,
 }
 
-/// `zx_info_guest_stats_t` — per-CPU guest stats (x86_64).
-/// On x86_64 Fuchsia uses 120 bytes per entry (same layout as CpuStatsInfo
-/// but with guest-specific fields). For zCore we reuse the CpuStatsInfo
-/// layout with zeroed counters.
-type GuestStatsInfo = CpuStatsInfo;
+/// `zx_x86_64_info_guest_stats_t` — 120 bytes per CPU on x86_64.
+#[repr(C)]
+#[derive(Default, Clone, Copy)]
+struct GuestStatsInfo {
+    cpu_number: u32,
+    flags: u32,
+    vm_entries: u64,
+    vm_exits: u64,
+    interrupts: u64,
+    interrupt_windows: u64,
+    cpuid_instructions: u64,
+    hlt_instructions: u64,
+    control_register_accesses: u64,
+    io_instructions: u64,
+    rdmsr_instructions: u64,
+    wrmsr_instructions: u64,
+    ept_violations: u64,
+    xsetbv_instructions: u64,
+    pause_instructions: u64,
+    vmcall_instructions: u64,
+}
 
 /// `zx_info_memory_stall_t` — 16 bytes.
 #[repr(C)]
