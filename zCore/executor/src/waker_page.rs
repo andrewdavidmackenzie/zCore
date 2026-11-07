@@ -125,20 +125,8 @@ impl WakerPage {
 
     pub fn notify(&self, offset: usize) {
         debug_assert!(offset < 64);
-        let old = self.notified.0.fetch_or(1u64 << offset, Ordering::SeqCst);
-        let new = old | (1u64 << offset);
+        self.notified.fetch_or(1 << offset);
         TOTAL_NOTIFIES.fetch_add(1, Ordering::Relaxed);
-        // Verify the bit is actually set
-        let readback = self.notified.0.load(Ordering::SeqCst);
-        if readback & (1u64 << offset) == 0 {
-            // Bit was cleared between set and readback — someone
-            // called take_notified between our fetch_or and load.
-            #[cfg(target_arch = "x86_64")]
-            unsafe {
-                core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") b'X');
-                core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") b'\n');
-            }
-        }
     }
 
     pub fn mark_borrowed(&self, offset: usize, borrowed: bool) {
@@ -215,17 +203,19 @@ impl WakerRef {
     }
 
     pub fn wake_by_ref(&self) {
+        // Write 'W' to serial for every wake_by_ref call.
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            let ch = if self.dropped.load(Ordering::SeqCst) {
+                b'd'
+            } else {
+                b'w'
+            };
+            core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") ch);
+        }
         if !self.dropped.load(Ordering::SeqCst) {
             self.page.notify(self.idx);
             crate::ipi_wakeup(self.page.owner_cpu());
-        } else {
-            // Waker's dropped flag is set — notification lost.
-            // Write 'D' to serial for diagnostic.
-            #[cfg(target_arch = "x86_64")]
-            unsafe {
-                core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") b'D');
-                core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") b'\n');
-            }
         }
     }
 
