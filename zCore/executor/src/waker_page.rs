@@ -125,7 +125,20 @@ impl WakerPage {
 
     pub fn notify(&self, offset: usize) {
         debug_assert!(offset < 64);
-        self.notified.fetch_or(1 << offset);
+        let old = self.notified.0.fetch_or(1u64 << offset, Ordering::SeqCst);
+        let new = old | (1u64 << offset);
+        TOTAL_NOTIFIES.fetch_add(1, Ordering::Relaxed);
+        // Verify the bit is actually set
+        let readback = self.notified.0.load(Ordering::SeqCst);
+        if readback & (1u64 << offset) == 0 {
+            // Bit was cleared between set and readback — someone
+            // called take_notified between our fetch_or and load.
+            #[cfg(target_arch = "x86_64")]
+            unsafe {
+                core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") b'X');
+                core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") b'\n');
+            }
+        }
     }
 
     pub fn mark_borrowed(&self, offset: usize, borrowed: bool) {
