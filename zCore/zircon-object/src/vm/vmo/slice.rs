@@ -145,6 +145,11 @@ impl VMObjectTrait for VMObjectSlice {
             .committed_pages_in_range(start_idx + po, end_idx + po)
     }
 
+    fn commit_and_pin(&self, offset: usize, len: usize) -> ZxResult {
+        self.check_range(offset, len)?;
+        self.parent.commit_and_pin(offset + self.offset, len)
+    }
+
     fn pin(&self, offset: usize, len: usize) -> ZxResult {
         self.check_range(offset, len)?;
         self.parent.pin(offset + self.offset, len)

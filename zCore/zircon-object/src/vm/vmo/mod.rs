@@ -159,6 +159,12 @@ pub trait VMObjectTrait: Sync + Send {
         }
     }
 
+    /// Commit and pin atomically (under one lock acquisition).
+    /// Prevents concurrent decommit from removing just-committed frames.
+    fn commit_and_pin(&self, _offset: usize, _len: usize) -> ZxResult {
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
     /// Pin the given range of the VMO.
     fn pin(&self, _offset: usize, _len: usize) -> ZxResult {
         Err(ZxError::NOT_SUPPORTED)

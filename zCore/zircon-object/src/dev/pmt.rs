@@ -41,8 +41,11 @@ impl PinnedMemoryToken {
         size: usize,
     ) -> ZxResult<Arc<Self>> {
         if vmo.is_paged() {
-            vmo.commit(offset, size)?;
-            vmo.pin(offset, size)?;
+            // Commit and pin atomically to prevent a concurrent
+            // decommit from removing the just-committed frames
+            // between commit() and pin(). Without this, the
+            // Bti.DecommitRace test crashes with NOT_FOUND.
+            vmo.commit_and_pin(offset, size)?;
         }
         let mapped_addrs = Self::map_into_iommu(&bti.iommu(), vmo.clone(), offset, size, perms)?;
         Ok(Arc::new(PinnedMemoryToken {

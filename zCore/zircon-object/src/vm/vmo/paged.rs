@@ -711,6 +711,42 @@ impl VMObjectTrait for VMObjectPaged {
         inner.committed_pages_in_range(start_idx, end_idx)
     }
 
+    fn commit_and_pin(&self, offset: usize, len: usize) -> ZxResult {
+        let (_guard, inner) = self.get_inner_mut();
+        if offset + len > inner.size {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        if len == 0 {
+            return Ok(());
+        }
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + len).div_ceil(PAGE_SIZE);
+        // Commit all pages under the lock.
+        for page in start_page..end_page {
+            inner.commit_page(page, MMUFlags::WRITE)?;
+        }
+        // Pin all pages under the same lock — no window for
+        // concurrent decommit to remove the just-committed frames.
+        for i in start_page..end_page {
+            let frame = match inner.frames.get(&i) {
+                Some(f) => f,
+                None => return Err(ZxError::NOT_FOUND),
+            };
+            if frame.pin_count == VM_PAGE_OBJECT_MAX_PIN_COUNT {
+                return Err(ZxError::UNAVAILABLE);
+            }
+        }
+        for i in start_page..end_page {
+            if let Some(frame) = inner.frames.get_mut(&i) {
+                frame.pin_count += 1;
+            } else {
+                return Err(ZxError::NOT_FOUND);
+            }
+            inner.pin_count += 1;
+        }
+        Ok(())
+    }
+
     fn pin(&self, offset: usize, len: usize) -> ZxResult {
         let (_guard, inner) = self.get_inner_mut();
         if offset + len > inner.size {
