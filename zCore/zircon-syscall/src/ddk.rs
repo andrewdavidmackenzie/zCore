@@ -157,21 +157,58 @@ impl Syscall<'_> {
                         Err(e) => return Err(e),
                         Ok(()) => {}
                     }
+                    // Wait per-page, tracking which pages failed.
+                    let mut any_dirtied = false;
+                    let mut failed_pages: alloc::vec::Vec<usize> = alloc::vec![];
+                    let mut last_err = ZxError::INTERNAL;
                     for pg in fc..last_clean {
                         if pager_vmo.is_page_dirty(pg) {
+                            any_dirtied = true;
                             continue;
                         }
                         let future = pager_vmo.wait_for_dirty(pg * PAGE_SIZE);
                         futures::pin_mut!(future);
                         self.thread.set_blocking_state(ThreadState::BlockedPager);
-                        self.thread
+                        match self
+                            .thread
                             .blocking_run::<_, (), _>(
                                 future,
                                 ThreadState::BlockedPager,
                                 core::time::Duration::from_nanos(u64::MAX),
                                 None,
                             )
-                            .await?;
+                            .await
+                        {
+                            Ok(()) => {
+                                any_dirtied = true;
+                            }
+                            Err(e) => {
+                                failed_pages.push(pg);
+                                last_err = e;
+                            }
+                        }
+                    }
+                    // Retry failed pages only if some pages were
+                    // dirtied (partial success). If all failed,
+                    // propagate the error without retry.
+                    if !failed_pages.is_empty() {
+                        if !any_dirtied {
+                            return Err(last_err);
+                        }
+                        for &pg in &failed_pages {
+                            let _ = pager_vmo.request_dirty(pg * PAGE_SIZE, PAGE_SIZE);
+                            let future = pager_vmo.wait_for_dirty(pg * PAGE_SIZE);
+                            futures::pin_mut!(future);
+                            self.thread.set_blocking_state(ThreadState::BlockedPager);
+                            self.thread
+                                .blocking_run::<_, (), _>(
+                                    future,
+                                    ThreadState::BlockedPager,
+                                    core::time::Duration::from_nanos(u64::MAX),
+                                    None,
+                                )
+                                .await?;
+                        }
                     }
                 }
             }
