@@ -204,15 +204,10 @@ impl WakerRef {
     pub fn wake_by_ref(&self) {
         if !self.dropped.load(Ordering::SeqCst) {
             self.page.notify(self.idx);
+            // If the owning CPU is different from ours, send an IPI
+            // to break it out of HLT/WFI so it sees the notification
+            // immediately instead of waiting for the next timer tick.
             crate::ipi_wakeup(self.page.owner_cpu());
-        } else {
-            // Waker's dropped flag is set — notification lost.
-            // Write 'D' to serial for diagnostic.
-            #[cfg(target_arch = "x86_64")]
-            unsafe {
-                core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") b'D');
-                core::arch::asm!("out dx, al", in("dx") 0x3F8u16, in("al") b'\n');
-            }
         }
     }
 
