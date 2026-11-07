@@ -136,35 +136,30 @@ fn get_runtime(cpu_id: u8) -> &'static Mutex<ExecutorRuntime> {
 }
 
 // obtain a task from other cpu.
-/// Scan other CPUs' waker pages for pending notifications and
-/// process them on the owning CPU's task collection. Unlike
-/// take_task which atomically clears notification bits and
-/// dequeues tasks, this only runs scan_notifications (which
-/// moves notified tasks to the ready queue) without dequeuing.
-/// The owning CPU's next take_task will then pick them up.
+/// Scan ALL other CPUs' task collections for notified tasks.
+/// Returns the first notified task found, or None.
 ///
-/// Returns true if any notifications were found.
-pub(crate) fn scan_other_cpus_notifications() -> bool {
-    let Some(map) = CPU_RUNTIMES.get() else {
-        return false;
-    };
+/// This is used by idle CPUs to find cross-CPU notifications that
+/// the owning CPU hasn't processed (e.g., because IPI delivery
+/// failed in QEMU TCG mode).
+///
+/// Note: stolen tasks retain their original CPU's waker page, so
+/// future notifications go to the wrong CPU. For one-shot wakes
+/// (oneshot channels) this is fine. For recurring wakes, the next
+/// steal scan will find them.
+pub(crate) fn steal_task_from_other_cpu() -> Option<(Key, Arc<Task>, WakerRef, DroperRef)> {
+    let map = CPU_RUNTIMES.get()?;
     let current = crate::arch::cpu_id();
-    let mut found = false;
     for (&cpu_id, runtime) in map.iter() {
         if cpu_id == current {
             continue;
         }
         let rt = runtime.lock();
-        // scan_notifications moves notified tasks to the ready
-        // queue. The owning CPU's executor will find them on its
-        // next take_task call — which happens after HLT returns
-        // (timer tick wakes from HLT even if IPI doesn't).
-        rt.task_collection.scan_notifications();
-        if rt.task_num() > 0 {
-            found = true;
+        if let Some(task_info) = rt.task_collection.take_task() {
+            return Some(task_info);
         }
     }
-    found
+    None
 }
 
 // per-cpu scheduler.

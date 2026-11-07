@@ -211,7 +211,7 @@ impl TaskCollection {
 
     /// Scan waker pages for notifications and dropped tasks.
     /// Feeds notified tasks into the scheduler and removes dropped ones.
-    pub(crate) fn scan_notifications(&self) {
+    fn scan_notifications(&self) {
         let mut sched = self.sched_state.lock();
         for priority in 0..MAX_PRIORITY {
             let mut inner = self.get_mut_inner(priority);

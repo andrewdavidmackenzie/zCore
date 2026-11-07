@@ -174,19 +174,44 @@ impl Executor {
                     continue;
                 }
 
-                // Periodically scan other CPUs' waker pages for
-                // pending notifications. In QEMU TCG mode, IPIs
-                // don't reliably wake halted CPUs. This scan moves
-                // notified tasks to the owning CPU's ready queue,
-                // so the next timer tick (which DOES wake from HLT)
-                // will find them via take_task → pick_next.
+                // Periodically try stealing a notified task from
+                // another CPU. Cross-CPU wakes set notification bits on
+                // the owning CPU's waker page, but in QEMU TCG mode the
+                // IPI doesn't reliably wake halted CPUs. By scanning
+                // other CPUs' task collections here, we ensure notified
+                // tasks are found even if the owning CPU is in HLT.
+                // Rate-limited to avoid expensive cross-CPU scanning on
+                // every idle iteration.
                 self.idle_count += 1;
-                if self.idle_count % 64 == 0 && crate::runtime::scan_other_cpus_notifications() {
-                    // Found notifications on another CPU — loop back
-                    // so our next take_task might find them if we're
-                    // the owning CPU.
-                    continue;
-                }
+                if self.idle_count % 64 == 0 {
+                    if let Some((key, task, waker_ref, droper)) =
+                        crate::runtime::steal_task_from_other_cpu()
+                    {
+                        let waker_ref = Arc::new(waker_ref);
+                        let waker = woke::waker_ref(&waker_ref);
+                        let mut cx = Context::from_waker(&waker);
+                        waker_ref.mark_borrowed(true);
+                        self.task_id = task.id();
+                        let ret = task.poll(&mut cx);
+                        self.task_id = 0;
+                        waker_ref.mark_borrowed(false);
+                        match ret {
+                            Poll::Ready(()) => {
+                                droper.drop_by_ref();
+                            }
+                            Poll::Pending => {
+                                if crate::take_yield_pending() {
+                                    self.task_collection.set_pending_yield(key);
+                                }
+                            }
+                        };
+                        if let ExecutorState::WEAK = self.state {
+                            self.state = ExecutorState::KILLED;
+                            return;
+                        }
+                        continue;
+                    }
+                } // if idle_count % 64
 
                 let runtime = crate::runtime::get_current_runtime();
                 let task_num = runtime.task_num();
