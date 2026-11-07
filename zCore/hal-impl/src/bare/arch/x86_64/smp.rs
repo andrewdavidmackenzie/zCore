@@ -762,7 +762,7 @@ pub fn save_bsp_gdt_template() {
 /// TSS that includes an IOPB for IO port access control. Called once
 /// from primary_init() after save_bsp_gdt_template().
 pub fn replace_bsp_tss_with_iopb() {
-    use x86_64::instructions::tables::load_tss;
+    use x86_64::instructions::tables::{lgdt, load_tss};
     use x86_64::structures::DescriptorTablePointer;
     use x86_64::{PrivilegeLevel, VirtAddr};
 
@@ -800,11 +800,9 @@ pub fn replace_bsp_tss_with_iopb() {
         gdt[tss_index as usize] = desc0;
         gdt[tss_index as usize + 1] = desc1;
 
-        // The GDT is already loaded — we modified entries in place.
-        // Just reload the TSS from the updated descriptor.
-        // The new descriptor has type 0x9 (available), so load_tss
-        // should work directly. But clear bit 41 (busy) just in case
-        // the CPU cached the old descriptor's busy state.
+        // Reload the GDT and TSS.
+        lgdt(&gdtp);
+        // Mark the TSS as not-busy before loading (clear bit 41).
         gdt[tss_index as usize] &= !(1u64 << 41);
         load_tss(x86_64::structures::gdt::SegmentSelector::new(
             tss_index,
