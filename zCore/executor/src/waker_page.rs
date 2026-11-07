@@ -126,6 +126,7 @@ impl WakerPage {
     pub fn notify(&self, offset: usize) {
         debug_assert!(offset < 64);
         self.notified.fetch_or(1 << offset);
+        TOTAL_NOTIFIES.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn mark_borrowed(&self, offset: usize, borrowed: bool) {
