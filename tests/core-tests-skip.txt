@@ -12,8 +12,7 @@ VmoTestCase.ParallelWriteAndDecommit
 # ── CPU affinity: task migration not implemented ──
 CpuMaskProfile.ApplyProfile
 
-# ── Resource: IO port TSS/IOPB not implemented ──
-Resource.Ioports
+
 
 # ── Property: QEMU CPU model limitation ──
 Property.RegisterFsNoncanonical
