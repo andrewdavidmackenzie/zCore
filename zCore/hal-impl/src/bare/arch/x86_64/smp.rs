@@ -762,11 +762,21 @@ pub fn save_bsp_gdt_template() {
 /// TSS that includes an IOPB for IO port access control. Called once
 /// from primary_init() after save_bsp_gdt_template().
 pub fn replace_bsp_tss_with_iopb() {
+    use alloc::boxed::Box;
     use x86_64::instructions::tables::load_tss;
     use x86_64::structures::DescriptorTablePointer;
     use x86_64::{PrivilegeLevel, VirtAddr};
 
     let tss_index = *BSP_TSS_INDEX.get().expect("BSP TSS index not set");
+
+    // Allocate a new trap stack for the BSP's new TSS.
+    // We can't safely read the old TSS's stack pointer from the
+    // packed struct through a GDT descriptor extraction (fragile).
+    // Instead, allocate a fresh stack. The old stack is leaked but
+    // that's acceptable for a one-time boot operation.
+    let trap_stack_top = Box::leak(Box::new([0u8; 0x1000])).as_ptr() as u64 + 0x1000;
+    let cpu_id = crate::cpu::cpu_id();
+    let new_tss = super::ioport::create_tss_with_iopb(cpu_id, trap_stack_top);
 
     unsafe {
         // Read the current GDT.
@@ -778,45 +788,17 @@ pub fn replace_bsp_tss_with_iopb() {
         let entry_count = (gdtp.limit + 1) as usize / core::mem::size_of::<u64>();
         let gdt = core::slice::from_raw_parts_mut(gdtp.base.as_mut_ptr::<u64>(), entry_count);
 
-        // Extract the old TSS base address from the GDT descriptor to
-        // copy the privilege stack table.
-        let tss0 = gdt[tss_index as usize];
-        let tss1 = gdt[tss_index as usize + 1];
-        let old_base = ((tss0 >> 16) & 0xFFFF)
-            | (((tss0 >> 32) & 0xFF) << 16)
-            | (((tss0 >> 56) & 0xFF) << 24)
-            | ((tss1 & 0xFFFFFFFF) << 32);
-        let old_tss = &*(old_base as *const x86_64::structures::tss::TaskStateSegment);
-        let trap_stack = old_tss.privilege_stack_table[0];
-
-        // Create new extended TSS with IOPB.
-        let cpu_id = crate::cpu::cpu_id();
-        let new_tss = super::ioport::create_tss_with_iopb(cpu_id, trap_stack.as_u64());
-
-        // Build a TSS descriptor with the extended limit (TSS + IOPB + terminator).
-        // Descriptor::tss_segment uses size_of::<TaskStateSegment>() which is
-        // only 104 bytes. We need 104 + 8192 + 1 = 8297 bytes.
+        // Build TSS descriptor with extended limit for IOPB.
         let (desc0, desc1) = super::ioport::make_tss_descriptor(new_tss);
         gdt[tss_index as usize] = desc0;
         gdt[tss_index as usize + 1] = desc1;
 
-        // The GDT is already loaded — we modified entries in place.
-        // Just reload the TSS from the updated descriptor.
-        // The new descriptor has type 0x9 (available), so load_tss
-        // should work directly. But clear bit 41 (busy) just in case
-        // the CPU cached the old descriptor's busy state.
+        // Clear busy bit and reload TSS.
         gdt[tss_index as usize] &= !(1u64 << 41);
         load_tss(x86_64::structures::gdt::SegmentSelector::new(
             tss_index,
             PrivilegeLevel::Ring0,
         ));
-    }
-
-    // Update the saved GDT template so APs get the new TSS layout.
-    // (APs create their own TSS, but the template GDT size must be consistent.)
-    if let Some(template) = BSP_GDT_TEMPLATE.get() {
-        // Template was already saved — APs will create their own TSS anyway.
-        let _ = template;
     }
 }
 
