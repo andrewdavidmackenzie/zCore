@@ -172,46 +172,6 @@ impl Executor {
                     continue;
                 }
 
-                // Before going idle, try stealing a notified task from
-                // another CPU. Cross-CPU wakes set notification bits on
-                // the owning CPU's waker page, but in QEMU TCG mode the
-                // IPI doesn't reliably wake halted CPUs. By scanning
-                // other CPUs' task collections here, we ensure notified
-                // tasks are found even if the owning CPU is in HLT.
-                //
-                // Note: stolen tasks retain their original waker page,
-                // so future notifications go to the wrong CPU. This is
-                // acceptable for one-shot wakes (oneshot channels, signal
-                // callbacks) which are the common case. For recurring
-                // wakes, the task will be found on the next steal scan.
-                if let Some((key, task, waker_ref, droper)) =
-                    crate::runtime::steal_task_from_other_cpu()
-                {
-                    let waker_ref = Arc::new(waker_ref);
-                    let waker = woke::waker_ref(&waker_ref);
-                    let mut cx = Context::from_waker(&waker);
-                    waker_ref.mark_borrowed(true);
-                    self.task_id = task.id();
-                    let ret = task.poll(&mut cx);
-                    self.task_id = 0;
-                    waker_ref.mark_borrowed(false);
-                    match ret {
-                        Poll::Ready(()) => {
-                            droper.drop_by_ref();
-                        }
-                        Poll::Pending => {
-                            if crate::take_yield_pending() {
-                                self.task_collection.set_pending_yield(key);
-                            }
-                        }
-                    };
-                    if let ExecutorState::WEAK = self.state {
-                        self.state = ExecutorState::KILLED;
-                        return;
-                    }
-                    continue;
-                }
-
                 let runtime = crate::runtime::get_current_runtime();
                 let task_num = runtime.task_num();
                 let weak_executor = runtime.weak_executor_num();
