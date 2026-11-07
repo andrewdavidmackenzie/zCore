@@ -2,28 +2,52 @@
 
 ## Scheduler architecture
 
-zCore uses an **async executor** with **lazy preemption at
-kernel-user boundaries**. Each Zircon thread is a Rust Future
-polled by a per-CPU executor loop.
+**zCore has preemptive scheduling.** Do NOT describe it as
+"cooperative." The APIC timer fires every ~10ms, the timer
+interrupt handler calls `handle_timeout()` → `sched_yield()`
+which context-switches to a different task. User-mode code is
+preempted by hardware interrupts. Multiple threads make real
+concurrent progress across multiple CPUs.
+
+Each Zircon thread is a Rust Future polled by a per-CPU executor.
+There are 8 CPUs (on x86_64 QEMU), each with its own executor
+loop and task collection. Tasks are distributed across CPUs via
+`spawn_with_priority()`.
 
 **How preemption works:**
+- The APIC timer fires every ~10ms on every CPU.
+- The timer handler calls `set_preempt_pending()` and
+  `handle_timeout()` → `sched_yield()`, which does a coroutine
+  context switch from the current executor to the runtime idle
+  loop. The runtime picks a new executor which calls `take_task()`
+  → `scan_notifications()` → `pick_next()` and runs a different
+  task.
+- At the syscall return path, `take_preempt_pending()` and
+  `quantum_exhausted()` are checked. If either is true, the
+  thread yields via `preempt_yield()`.
 - Each thread has a time quantum (10ms default, weight-based per
-  priority). The syscall return path checks `quantum_exhausted()`
-  and calls `preempt_yield()` to re-queue the task.
-- Timer interrupts set a `preempt_pending` flag. The syscall
-  return path also checks this and yields.
-- User-mode code is preempted at every kernel entry point (syscall,
-  page fault, interrupt). Two user threads make concurrent progress
-  because each yields at syscall boundaries.
-- **Limitation:** kernel-side Future poll() cannot be interrupted
-  mid-execution. A thread blocked in a long kernel operation (e.g.,
-  walking a COW chain) won't yield until that poll completes.
+  priority).
+- User-mode code is preempted at every kernel entry point
+  (syscall, page fault, interrupt).
+
+**Known bug: cross-CPU IPI wakeup failure in QEMU TCG mode.**
+When a task on CPU A wakes a task on CPU B (via the oneshot
+channel waker), the notification bit is set on CPU B's waker
+page and an IPI is sent. In QEMU TCG mode, the IPI does NOT
+reliably wake CPU B from HLT. CPU B stays halted, the
+notification is never processed, and the task hangs. This
+affects `Pager.FailEarlyWake`, `Pager.ResizeCommitTest`, and
+`VmoTestCase.ParallelWriteAndDecommit`. GDB confirmed all 8
+CPUs in `wait_for_interrupt` (HLT) during these hangs. The
+fix requires making IPI delivery work in QEMU TCG mode or
+adding a cross-CPU notification fallback.
 
 **What works today:**
+- Preemptive scheduling via APIC timer on all CPUs
 - Per-thread time quantum checked at syscall return
 - Priority scheduler (32 levels, strict FIFO round-robin)
 - Weight-based time slices via priority-to-weight conversion
-- Cross-CPU IPI wakeup (port signal → waker → IPI → executor)
+- Cross-CPU IPI wakeup (works when target CPU is not in HLT)
 - Multi-CPU task distribution on x86_64
 - Deadline parameter storage (maps to priority 31)
 
@@ -37,15 +61,6 @@ polled by a per-CPU executor loop.
 - Libos-mode preemptive executor (real coroutine context switch)
 - Hardware exception delivery (breakpoints, #GP, #DB)
 - These block 7 Threads tests and 2 Property tests
-
-**Impact on test failures:**
-- Most remaining test hangs are caused by missing kernel code paths
-  (dirty request handling, writeback generation tracking, policy
-  exceptions), NOT by the executor architecture.
-- The ~30 skipped tests (Pager/PagerWriteback/PortStress) hang
-  because of multi-threaded C++ test patterns (std::thread +
-  WaitForBlocked polling) that require specific kernel features,
-  not because threads can't make concurrent progress.
 
 ## Default build command
 To build and run zCore the default command to use is:
