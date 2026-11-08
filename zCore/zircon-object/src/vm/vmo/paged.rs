@@ -18,8 +18,10 @@ use crate::mutex::{YieldingMutex, YieldingMutexGuard};
 
 /// Arcs whose drop may trigger cascading `VMObjectPaged::drop` calls.
 /// Must be dropped OUTSIDE the clone-tree lock to avoid deadlock.
+/// The `arcs` field is read only via `Drop`; suppress `dead_code`.
 #[derive(Default)]
 struct DeferredDrops {
+    #[allow(dead_code)]
     arcs: [Option<Arc<VMObjectPaged>>; 2],
 }
 
