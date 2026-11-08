@@ -22,6 +22,7 @@ mod error;
 #[cfg(feature = "hypervisor")]
 pub mod hypervisor;
 pub mod ipc;
+pub mod mutex;
 pub mod object;
 pub mod signal;
 pub mod task;

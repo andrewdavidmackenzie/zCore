@@ -14,7 +14,7 @@ use {
     },
 };
 
-use crate::util::yielding_mutex::{YieldingMutex, YieldingMutexGuard};
+use crate::mutex::{YieldingMutex, YieldingMutexGuard};
 
 enum VMOType {
     /// The original node.
