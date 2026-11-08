@@ -266,30 +266,8 @@ impl TaskCollection {
         }
         let key = crate::sched::pick_next(&mut self.sched_state.lock())?;
         let (priority, page_idx, subpage_idx) = unpack_key(key);
-        if priority >= MAX_PRIORITY {
-            warn!(
-                "take_task: bad key {:#x} (cpu={}, priority={}, page_idx={}, subpage_idx={})",
-                key,
-                self.cpu_id,
-                priority,
-                page_idx,
-                subpage_idx
-            );
-            return None;
-        }
         let inner = self.get_mut_inner(priority);
         let task = inner.slab.get(unmask_priority(key))?.clone();
-        if page_idx >= inner.pages.len() {
-            warn!(
-                "take_task: stale key {:#x} (cpu={}, priority={}, page_idx={} >= pages.len={})",
-                key,
-                self.cpu_id,
-                priority,
-                page_idx,
-                inner.pages.len()
-            );
-            return None;
-        }
         let waker = inner.pages[page_idx].make_waker(subpage_idx, &task.finish);
         let droper = waker.clone();
         Some((key, task, waker, droper))
@@ -309,8 +287,11 @@ pub mod key {
 
     pub fn unpack_key(key: Key) -> (usize, usize, usize) {
         let subpage_idx = key & 0x3F;
-        let page_idx = (key << 5) >> 11;
         let priority = key >> PRIORITY_SHIFT;
+        // Mask out the priority bits before extracting page_idx.
+        // The old formula `(key << 5) >> 11` overflowed for priorities >= 12,
+        // corrupting page_idx with leftover priority bits.
+        let page_idx = (key & ((1 << PRIORITY_SHIFT) - 1)) >> PAGE_INDEX_SHIFT;
         (priority, page_idx, subpage_idx)
     }
 
