@@ -115,28 +115,6 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
         TrapReason::Interrupt(vector) => {
             crate::interrupt::handle_irq(vector);
             if vector == X86_INT_APIC_TIMER {
-                // Print CPU digit every 100 timer ticks (~1s) to
-                // verify which CPUs are getting timer interrupts.
-                {
-                    static TICKS: [core::sync::atomic::AtomicU64; 8] = {
-                        const Z: core::sync::atomic::AtomicU64 =
-                            core::sync::atomic::AtomicU64::new(0);
-                        [Z; 8]
-                    };
-                    let cpu = super::cpu::cpu_id() as usize;
-                    if cpu < 8 {
-                        let t = TICKS[cpu].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                        if t % 100 == 0 {
-                            unsafe {
-                                core::arch::asm!(
-                                    "out dx, al",
-                                    in("dx") 0x3F8u16,
-                                    in("al") (b'0' + cpu as u8),
-                                );
-                            }
-                        }
-                    }
-                }
                 executor::set_preempt_pending();
                 executor::handle_timeout();
             }
