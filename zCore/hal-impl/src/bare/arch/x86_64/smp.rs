@@ -764,46 +764,6 @@ pub fn save_bsp_gdt_template() {
 ///
 /// This replaces the old approach of calling trapframe::init() on each
 /// AP (which cascaded the GDT, creating different-sized GDTs per CPU).
-/// Replace the BSP's TSS with an extended version containing an IOPB.
-pub fn replace_bsp_tss_with_iopb() {
-    use alloc::boxed::Box;
-    use x86_64::instructions::tables::load_tss;
-    use x86_64::structures::gdt::Descriptor;
-    use x86_64::structures::DescriptorTablePointer;
-    use x86_64::{PrivilegeLevel, VirtAddr};
-
-    let tss_index = *BSP_TSS_INDEX.get().expect("BSP TSS index not set");
-
-    let trap_stack_top = Box::leak(Box::new([0u8; 0x1000])).as_ptr() as u64 + 0x1000;
-    let cpu_id = crate::cpu::cpu_id();
-    let ext = super::ioport::create_tss_with_iopb(cpu_id, trap_stack_top);
-    let desc = super::ioport::make_tss_descriptor(ext);
-    let (desc0, desc1) = match desc {
-        Descriptor::SystemSegment(d0, d1) => (d0, d1),
-        _ => unreachable!(),
-    };
-
-    unsafe {
-        let mut gdtp = DescriptorTablePointer {
-            limit: 0,
-            base: VirtAddr::zero(),
-        };
-        core::arch::asm!("sgdt [{}]", in(reg) &mut gdtp);
-        let entry_count = (gdtp.limit + 1) as usize / core::mem::size_of::<u64>();
-        let gdt = core::slice::from_raw_parts_mut(gdtp.base.as_mut_ptr::<u64>(), entry_count);
-
-        gdt[tss_index as usize] = desc0;
-        gdt[tss_index as usize + 1] = desc1;
-
-        // Clear busy bit (bit 41) then reload TSS.
-        gdt[tss_index as usize] &= !(1u64 << 41);
-        load_tss(x86_64::structures::gdt::SegmentSelector::new(
-            tss_index,
-            PrivilegeLevel::Ring0,
-        ));
-    }
-}
-
 pub fn init_ap_gdt_idt() {
     use alloc::boxed::Box;
     use x86_64::instructions::tables::{lgdt, load_tss};
