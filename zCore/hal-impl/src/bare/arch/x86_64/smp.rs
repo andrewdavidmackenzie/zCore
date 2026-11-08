@@ -768,7 +768,11 @@ pub fn replace_bsp_tss_with_iopb() {
 
     let tss_index = *BSP_TSS_INDEX.get().expect("BSP TSS index not set");
 
-    let trap_stack_top = Box::leak(Box::new([0u8; 0x1000])).as_ptr() as u64 + 0x1000;
+    // x86_64 interrupt frames require 16-byte aligned stack.
+    #[repr(align(16))]
+    struct AlignedStack([u8; 0x1000]);
+    let trap_stack_top =
+        Box::leak(Box::new(AlignedStack([0u8; 0x1000]))).0.as_ptr() as u64 + 0x1000;
     let cpu_id = crate::cpu::cpu_id();
     let ext = super::ioport::create_tss_with_iopb(cpu_id, trap_stack_top);
     let desc = super::ioport::make_tss_descriptor(ext);
@@ -817,7 +821,11 @@ pub fn init_ap_gdt_idt() {
     let star_val = *BSP_STAR.get().expect("BSP STAR not saved");
 
     // Create a new TSS with IOPB for this AP.
-    let trap_stack_top = Box::leak(Box::new([0u8; 0x1000])).as_ptr() as u64 + 0x1000;
+    // x86_64 interrupt frames require 16-byte aligned stack.
+    #[repr(align(16))]
+    struct AlignedStack([u8; 0x1000]);
+    let trap_stack_top =
+        Box::leak(Box::new(AlignedStack([0u8; 0x1000]))).0.as_ptr() as u64 + 0x1000;
     let cpu_id = crate::cpu::cpu_id();
     let ext = super::ioport::create_tss_with_iopb(cpu_id, trap_stack_top);
     let desc = super::ioport::make_tss_descriptor(ext);
