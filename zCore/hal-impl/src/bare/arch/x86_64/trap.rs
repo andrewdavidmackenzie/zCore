@@ -130,7 +130,7 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
                         for c in 0..8u8 {
                             let t =
                                 TIMER_TICKS[c as usize].load(core::sync::atomic::Ordering::Relaxed);
-                            let s = if t > 0 { b'0' + (t % 10) as u8 } else { b'-' };
+                            let _s = if t > 0 { b'0' + (t % 10) as u8 } else { b'-' };
                             if pos < buf.len() {
                                 buf[pos] = b'T';
                                 pos += 1;
