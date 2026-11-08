@@ -18,12 +18,11 @@ use crate::mutex::{YieldingMutex, YieldingMutexGuard};
 
 /// Arcs whose drop may trigger cascading `VMObjectPaged::drop` calls.
 /// Must be dropped OUTSIDE the clone-tree lock to avoid deadlock.
-/// The `arcs` field is read only via `Drop`; suppress `dead_code`.
+///
+/// This is a tuple struct — the field has no name because it is never
+/// read; it exists solely so that `Drop` runs at the right time.
 #[derive(Default)]
-struct DeferredDrops {
-    #[allow(dead_code)]
-    arcs: [Option<Arc<VMObjectPaged>>; 2],
-}
+struct DeferredDrops([Option<Arc<VMObjectPaged>>; 2]);
 
 enum VMOType {
     /// The original node.
@@ -1702,9 +1701,7 @@ impl VMObjectPagedInner {
         // its inner. If the surviving child's handle was already closed
         // on another CPU, dropping `arc_child` would trigger its
         // VMObjectPaged::drop which needs the tree lock — deadlock.
-        DeferredDrops {
-            arcs: [Some(arc_child), old_parent],
-        }
+        DeferredDrops([Some(arc_child), old_parent])
     }
 
     /// Remove intermediate COW copies whose split tags point to a child
