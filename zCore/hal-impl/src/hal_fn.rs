@@ -169,6 +169,13 @@ hal_fn_def! {
             (0, 0)
         }
 
+        /// Spawn a task on a specific CPU with a given priority.
+        /// Returns `(task_key, cpu_id)`.
+        pub fn spawn_task_on_cpu(future: impl Future<Output = ()> + Send + 'static, priority: usize, cpu_id: u8) -> (usize, u8) {
+            spawn(future);
+            (0, cpu_id)
+        }
+
         /// Change the scheduling priority of an already-running task.
         /// `cpu_id` and `task_key` are the values returned by
         /// `spawn_with_priority`. No-op in libos mode.
