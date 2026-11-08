@@ -115,61 +115,24 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
         TrapReason::Interrupt(vector) => {
             crate::interrupt::handle_irq(vector);
             if vector == X86_INT_APIC_TIMER {
-                // Track per-CPU timer ticks for diagnostics.
-                static TIMER_TICKS: [core::sync::atomic::AtomicU64; 64] = {
-                    const Z: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
-                    [Z; 64]
-                };
-                let cpu = super::cpu::cpu_id() as usize;
-                if cpu < 64 {
-                    let tick = TIMER_TICKS[cpu].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                    // Every 1000 ticks (~10s), print per-CPU tick counts.
-                    if cpu == 0 && tick % 1000 == 999 {
-                        let mut buf = [0u8; 128];
-                        let mut pos = 0;
-                        for c in 0..8u8 {
-                            let t =
-                                TIMER_TICKS[c as usize].load(core::sync::atomic::Ordering::Relaxed);
-                            let _s = if t > 0 { b'0' + (t % 10) as u8 } else { b'-' };
-                            if pos < buf.len() {
-                                buf[pos] = b'T';
-                                pos += 1;
-                            }
-                            if pos < buf.len() {
-                                buf[pos] = b'0' + c;
-                                pos += 1;
-                            }
-                            if pos < buf.len() {
-                                buf[pos] = b'=';
-                                pos += 1;
-                            }
-                            // Write count as decimal
-                            let mut n = t;
-                            let start = pos;
-                            if n == 0 && pos < buf.len() {
-                                buf[pos] = b'0';
-                                pos += 1;
-                            }
-                            while n > 0 && pos < buf.len() {
-                                buf[pos] = b'0' + (n % 10) as u8;
-                                n /= 10;
-                                pos += 1;
-                            }
-                            // Reverse the digits
-                            buf[start..pos].reverse();
-                            if pos < buf.len() {
-                                buf[pos] = b' ';
-                                pos += 1;
-                            }
-                        }
-                        if pos < buf.len() {
-                            buf[pos] = b'\n';
-                            pos += 1;
-                        }
-                        for &b in &buf[..pos] {
+                // Print CPU digit every 100 timer ticks (~1s) to
+                // verify which CPUs are getting timer interrupts.
+                {
+                    static TICKS: [core::sync::atomic::AtomicU64; 8] = {
+                        const Z: core::sync::atomic::AtomicU64 =
+                            core::sync::atomic::AtomicU64::new(0);
+                        [Z; 8]
+                    };
+                    let cpu = super::cpu::cpu_id() as usize;
+                    if cpu < 8 {
+                        let t = TICKS[cpu].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                        if t % 100 == 0 {
                             unsafe {
-                                core::arch::asm!("out dx, al",
-                                    in("dx") 0x3F8u16, in("al") b);
+                                core::arch::asm!(
+                                    "out dx, al",
+                                    in("dx") 0x3F8u16,
+                                    in("al") (b'0' + cpu as u8),
+                                );
                             }
                         }
                     }
