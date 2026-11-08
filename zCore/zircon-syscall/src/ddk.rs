@@ -61,10 +61,12 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         if options != 0 {
+            warn!("bti_create: INVALID_ARGS: options={:#x}", options);
             return Err(ZxError::INVALID_ARGS);
         }
         let iommu = proc.get_object::<Iommu>(iommu)?;
         if !iommu.is_valid_bus_txn_id() {
+            warn!("bti_create: INVALID_ARGS: invalid bus_txn_id");
             return Err(ZxError::INVALID_ARGS);
         }
         let bti = BusTransactionInitiator::create(iommu, bti_id);
