@@ -792,21 +792,15 @@ pub fn replace_bsp_tss_with_iopb() {
         let entry_count = (gdtp.limit + 1) as usize / core::mem::size_of::<u64>();
         let gdt = core::slice::from_raw_parts_mut(gdtp.base.as_mut_ptr::<u64>(), entry_count);
 
-        crate::console::console_write_fmt(format_args!(
-            "BSP TSS: idx={} desc0={:#x} desc1={:#x}\n",
-            tss_index, desc0, desc1
-        ));
         gdt[tss_index as usize] = desc0;
         gdt[tss_index as usize + 1] = desc1;
 
         // Clear busy bit (bit 41) then reload TSS.
         gdt[tss_index as usize] &= !(1u64 << 41);
-        crate::console::console_write_fmt(format_args!("BSP TSS: loading...\n"));
         load_tss(x86_64::structures::gdt::SegmentSelector::new(
             tss_index,
             PrivilegeLevel::Ring0,
         ));
-        crate::console::console_write_fmt(format_args!("BSP TSS: loaded OK\n"));
     }
 }
 
