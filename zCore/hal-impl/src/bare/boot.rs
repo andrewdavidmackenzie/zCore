@@ -42,7 +42,6 @@ hal_fn_impl! {
                 // the same structure (same entry count, same selectors)
                 // but their own per-CPU TSS.
                 super::arch::smp::save_bsp_gdt_template();
-                super::arch::smp::replace_bsp_tss_with_iopb();
             }
             super::arch::primary_init();
         }
