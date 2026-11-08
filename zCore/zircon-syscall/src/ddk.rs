@@ -61,10 +61,6 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         if options != 0 {
-            hal_impl::console::console_write_fmt(format_args!(
-                "bti_create: options={:#x} iommu_h={:#x} bti_id={:#x}\n",
-                options, iommu, bti_id
-            ));
             return Err(ZxError::INVALID_ARGS);
         }
         let iommu = proc.get_object::<Iommu>(iommu)?;

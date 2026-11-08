@@ -797,6 +797,17 @@ pub fn replace_bsp_tss_with_iopb() {
             tss_index,
             PrivilegeLevel::Ring0,
         ));
+
+        // Update GsBase to point to the new TSS. The trapframe
+        // assembly uses gs:4 (TSS.sp0) to save/restore the kernel
+        // stack pointer during syscall entry/return. Without this,
+        // GsBase still points to the old TSS from trapframe::init,
+        // causing the software stack save/restore to use a different
+        // TSS than the hardware interrupt stack switch → register
+        // corruption on the first interrupt after user-mode entry.
+        use x86_64::registers::model_specific::GsBase;
+        #[allow(const_item_mutation)]
+        GsBase::MSR.write(&ext.tss as *const _ as u64);
     }
 }
 
