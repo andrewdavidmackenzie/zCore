@@ -191,40 +191,40 @@ pub fn run_until_idle() -> bool {
             crate::arch::intr_on();
             return false;
         }
-        // Only run weak_executors when the strong_executor voluntarily yields.
+        // When the strong executor was preempted mid-poll (holding
+        // kernel locks, etc.), demote it to a weak executor and create
+        // a fresh strong executor. Fall through to run all weak
+        // executors so the preempted one can finish and release locks.
         if runtime.strong_executor.is_running_future() {
             runtime.downgrade_strong_executor();
-            // drop(runtime) happens implicitly at loop top (reassignment).
-            // intr_on not needed — loop top re-does intr_off.
-            drop(runtime);
-            crate::arch::intr_on();
-            continue;
         }
-        // Iterate through all weak_executors
-        if runtime.weak_executors.is_empty() {
-            drop(runtime);
-            crate::arch::intr_on();
-            continue;
-        }
-        debug!("run weak executor");
+        // Run all pending weak executors. This is critical for
+        // preemption correctness: a demoted executor may hold a
+        // kernel lock (e.g., the COW tree mutex). If we don't
+        // resume it, every subsequent task that tries to acquire
+        // the same lock will also block, creating an ever-growing
+        // pile of demoted executors — a livelock.
         runtime
             .weak_executors
             .retain(|executor| executor.is_some() && !executor.as_ref().unwrap().killed());
-        for idx in 0..runtime.weak_executors.len() {
-            if let Some(executor) = &runtime.weak_executors[idx] {
-                if executor.killed() {
-                    continue;
+        if !runtime.weak_executors.is_empty() {
+            debug!("run weak executor");
+            for idx in 0..runtime.weak_executors.len() {
+                if let Some(executor) = &runtime.weak_executors[idx] {
+                    if executor.killed() {
+                        continue;
+                    }
+                    let executor = executor.clone();
+                    let executor_ctx = executor.context.get_context();
+                    debug!("switch idle -> {}", executor.id());
+                    runtime.current_executor = Some(executor);
+                    // Already under intr_off from loop top.
+                    drop(runtime);
+                    switch(runtime_cx as _, executor_ctx as _);
+                    // Back from weak executor. Re-acquire under intr_off.
+                    runtime = get_current_runtime();
+                    runtime.current_executor = None;
                 }
-                let executor = executor.clone();
-                let executor_ctx = executor.context.get_context();
-                debug!("switch idle -> {}", executor.id());
-                runtime.current_executor = Some(executor);
-                // Already under intr_off from loop top.
-                drop(runtime);
-                switch(runtime_cx as _, executor_ctx as _);
-                // Back from weak executor. Re-acquire under intr_off.
-                runtime = get_current_runtime();
-                runtime.current_executor = None;
             }
         }
         drop(runtime);
