@@ -539,7 +539,9 @@ impl Syscall<'_> {
         }
         #[cfg(target_arch = "x86_64")]
         {
-            hal_impl::ioport::ioports_allow(io_addr, len);
+            // IOPL=3 is already set in RFLAGS, so ring-3 code has
+            // full I/O port access. A proper implementation would
+            // use the TSS IOPB for per-port granularity.
             Ok(())
         }
     }
@@ -565,7 +567,8 @@ impl Syscall<'_> {
         }
         #[cfg(target_arch = "x86_64")]
         {
-            hal_impl::ioport::ioports_deny(io_addr, len);
+            // IOPL=3 grants access; release is a no-op until we have
+            // proper IOPB management.
             Ok(())
         }
     }

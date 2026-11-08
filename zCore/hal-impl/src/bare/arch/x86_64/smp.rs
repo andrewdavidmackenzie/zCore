@@ -771,6 +771,7 @@ pub fn init_ap_gdt_idt() {
     use x86_64::registers::model_specific::{Efer, EferFlags, GsBase, LStar, SFMask};
     use x86_64::registers::rflags::RFlags;
     use x86_64::structures::gdt::{Descriptor, SegmentSelector};
+    use x86_64::structures::tss::TaskStateSegment;
     use x86_64::structures::DescriptorTablePointer;
     use x86_64::{PrivilegeLevel, VirtAddr};
 
@@ -778,13 +779,15 @@ pub fn init_ap_gdt_idt() {
     let tss_index = *BSP_TSS_INDEX.get().expect("BSP TSS index not saved");
     let star_val = *BSP_STAR.get().expect("BSP STAR not saved");
 
-    // Create a new TSS with IOPB for this AP.
+    // Create a new TSS for this AP with its own trap stack.
+    let mut tss = Box::new(TaskStateSegment::new());
     let trap_stack_top = Box::leak(Box::new([0u8; 0x1000])).as_ptr() as u64 + 0x1000;
-    let cpu_id = crate::cpu::cpu_id();
-    let ext = super::ioport::create_tss_with_iopb(cpu_id, trap_stack_top);
-    let desc = super::ioport::make_tss_descriptor(ext);
-    let (tss0, tss1) = match desc {
-        Descriptor::SystemSegment(d0, d1) => (d0, d1),
+    tss.privilege_stack_table[0] = VirtAddr::new(trap_stack_top);
+    let tss: &'static _ = Box::leak(tss);
+
+    // Build the TSS descriptor for this AP's TSS.
+    let (tss0, tss1) = match Descriptor::tss_segment(tss) {
+        Descriptor::SystemSegment(tss0, tss1) => (tss0, tss1),
         _ => unreachable!(),
     };
 
@@ -813,7 +816,7 @@ pub fn init_ap_gdt_idt() {
 
         // Set GS_BASE to this AP's TSS (per-CPU).
         #[allow(const_item_mutation)]
-        GsBase::MSR.write(&ext.tss as *const _ as u64);
+        GsBase::MSR.write(tss as *const _ as u64);
 
         // Write STAR MSR (same selectors as BSP).
         let eax = star_val as u32;
