@@ -505,7 +505,7 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn set_len(&self, len: usize) -> ZxResult {
         assert!(page_aligned(len));
-        let (old_parent, old_size) = {
+        let (old_parent, old_size, resize_deferred) = {
             let (_guard, inner) = self.get_inner_mut();
             if inner.pin_count > 0 {
                 // Pager-backed VMOs can grow with pinned pages.
