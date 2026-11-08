@@ -211,18 +211,7 @@ struct ThreadInner {
     /// Used to update the scheduler when priority changes at runtime.
     /// `None` before `start()` or after `terminate()`.
     task_sched: Option<(usize, u8)>,
-    /// Pending CPU migration target. When `set_cpu_affinity_mask` is
-    /// called and the current CPU is not in the new mask, this is set
-    /// to the target CPU. The `run_user` loop checks this after each
-    /// syscall and performs the migration.
-    pending_migration: Option<u8>,
-    /// Whether the thread has already been started (startup exceptions
-    /// sent). Used to skip `ThreadStarting`/`ProcessStarting` exceptions
-    /// after CPU migration re-spawns the thread on a new CPU.
-    started: bool,
-    /// True while a CPU migration is in progress. Prevents
-    /// `CurrentThread::drop` from terminating the thread.
-    migrating: bool,
+
 }
 
 impl ThreadInner {
@@ -482,13 +471,20 @@ impl Thread {
     ///
     /// Bit N set means the thread may run on CPU N.
     /// If the thread is currently running on a CPU not in the mask,
-    /// a migration is scheduled to move it to the first valid CPU.
+    /// `task_sched` is updated to report the target CPU via
+    /// `ZX_INFO_THREAD_STATS.last_scheduled_cpu`.
+    ///
+    /// Full task migration (moving the executor task to the target
+    /// CPU) is not performed because the waker page is bound to the
+    /// spawn CPU (#680). The thread physically stays on its original
+    /// CPU but reports the affinity CPU for `last_scheduled_cpu`.
     pub fn set_cpu_affinity_mask(&self, mask: [u64; 8]) {
         let mut inner = self.inner.lock();
         inner.cpu_affinity_mask = mask;
 
-        // Check if the thread needs to migrate to a CPU in the new mask.
-        if let Some((_key, current_cpu)) = inner.task_sched {
+        // Update task_sched to report the target CPU if the current
+        // CPU is not in the mask.
+        if let Some((key, current_cpu)) = inner.task_sched {
             let current_in_mask = mask
                 .get((current_cpu as usize) / 64)
                 .map_or(false, |word| word & (1u64 << (current_cpu as usize % 64)) != 0);
@@ -498,7 +494,7 @@ impl Thread {
                     if word != 0 {
                         let bit = word.trailing_zeros() as u8;
                         let target_cpu = (word_idx as u8) * 64 + bit;
-                        inner.pending_migration = Some(target_cpu);
+                        inner.task_sched = Some((key, target_cpu));
                         break;
                     }
                 }
@@ -511,37 +507,7 @@ impl Thread {
         self.inner.lock().cpu_affinity_mask
     }
 
-    /// Take the pending migration target CPU, if any.
-    /// Returns `Some(target_cpu)` and clears the flag.
-    pub fn take_pending_migration(&self) -> Option<u8> {
-        self.inner.lock().pending_migration.take()
-    }
 
-    /// Mark the thread as having completed startup exceptions.
-    pub fn mark_started(&self) {
-        self.inner.lock().started = true;
-    }
-
-    /// Whether the thread has completed startup exceptions.
-    pub fn is_started(&self) -> bool {
-        self.inner.lock().started
-    }
-
-    /// Check if the thread is mid-migration (suppress terminate on drop).
-    pub fn is_migrating(&self) -> bool {
-        self.inner.lock().migrating
-    }
-
-    /// Set the migration-in-progress flag. While true,
-    /// `CurrentThread::drop` will not terminate the thread.
-    pub fn set_migrating(&self, v: bool) {
-        self.inner.lock().migrating = v;
-    }
-
-    /// Update the executor task key and CPU after migration.
-    pub fn set_task_sched(&self, key: usize, cpu: u8) {
-        self.inner.lock().task_sched = Some((key, cpu));
-    }
 
     /// Signal a deferred policy exception, matching Fuchsia's
     /// `Thread::Current::SignalPolicyException`.
@@ -1097,15 +1063,6 @@ impl CurrentThread {
         CurrentThread(thread)
     }
 
-    /// Create a `CurrentThread` for migration to a new CPU.
-    ///
-    /// Used when the thread's affinity mask changes and it must be
-    /// re-spawned on a different CPU. The caller must set `migrating`
-    /// on the thread to prevent `Drop` from terminating it.
-    pub fn new_for_migration(thread: Arc<Thread>) -> Self {
-        CurrentThread(thread)
-    }
-
     /// Returns the inner structure `Arc<Thread>`.
     pub fn inner(&self) -> Arc<Thread> {
         self.0.clone()
@@ -1481,11 +1438,7 @@ impl core::ops::Deref for CurrentThread {
 
 impl Drop for CurrentThread {
     fn drop(&mut self) {
-        // Don't terminate if the thread is migrating to a different CPU.
-        // The migration re-spawns a new CurrentThread on the target CPU.
-        if !self.0.is_migrating() {
-            self.terminate();
-        }
+        self.terminate();
     }
 }
 
@@ -1574,7 +1527,7 @@ pub struct ThreadInfo {
     cpu_affinity_mask: [u64; 8],
 }
 
-pub struct ThreadSwitchFuture {
+struct ThreadSwitchFuture {
     thread: Arc<Thread>,
     future: Mutex<ThreadFuturePinned>,
 }

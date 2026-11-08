@@ -27,9 +27,7 @@ use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
 use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::kcounter;
 use zircon_object::object::{Handle, KernelObject, Rights};
-use zircon_object::task::{
-    CurrentThread, ExceptionType, Job, Process, Thread, ThreadState, ThreadSwitchFuture,
-};
+use zircon_object::task::{CurrentThread, ExceptionType, Job, Process, Thread, ThreadState};
 
 use zircon_object::util::elf_loader::ElfExt;
 use zircon_object::vm::VmObject;
@@ -340,22 +338,12 @@ fn thread_fn(thread: CurrentThread) -> Pin<Box<dyn Future<Output = ()> + Send + 
 
 async fn run_user(thread: CurrentThread) {
     hal_impl::thread::set_current_thread(Some(thread.inner()));
-    // Clear migration flag if this is a migration re-spawn.
-    if thread.is_migrating() {
-        thread.set_migrating(false);
-    }
-    // Skip startup exceptions if this is a migration re-spawn.
-    if !thread.is_started() {
-        if thread.is_first_thread() {
-            thread
-                .handle_exception(ExceptionType::ProcessStarting)
-                .await;
-        };
+    if thread.is_first_thread() {
         thread
-            .handle_exception(ExceptionType::ThreadStarting)
+            .handle_exception(ExceptionType::ProcessStarting)
             .await;
-        thread.mark_started();
-    }
+    };
+    thread.handle_exception(ExceptionType::ThreadStarting).await;
 
     let mut ready_since: u128 = hal_impl::timer::timer_now().as_nanos();
     loop {
@@ -403,36 +391,10 @@ async fn run_user(thread: CurrentThread) {
                 thread.handle_exception(e.type_).await;
             }
         }
-
-        // Check for pending CPU migration after syscall handling.
-        if let Some(target_cpu) = thread.take_pending_migration() {
-            // Spawn a new task for this thread on the target CPU.
-            let arc_thread = thread.inner();
-            let priority = arc_thread.priority();
-            arc_thread.set_migrating(true);
-
-            let (task_key, task_cpu) = hal_impl::thread::spawn_task_on_cpu(
-                ThreadSwitchFuture::new(arc_thread.clone(), thread_fn(CurrentThread::new_for_migration(arc_thread.clone()))),
-                priority,
-                target_cpu,
-            );
-            arc_thread.set_task_sched(task_key, task_cpu);
-            // Break out — the old task completes. CurrentThread::drop
-            // sees `migrating` and skips terminate(). The new task on
-            // the target CPU picks up where we left off.
-            break;
-        }
-
         // Mark when the thread becomes ready again (for queue_time tracking).
         ready_since = hal_impl::timer::timer_now().as_nanos();
     }
-
-    // Only send ThreadExiting exception if not migrating.
-    if !thread.is_migrating() {
-        thread
-            .handle_exception(ExceptionType::ThreadExiting)
-            .await;
-    }
+    thread.handle_exception(ExceptionType::ThreadExiting).await;
 
     // In Zircon mode, when the root process (userstart) exits, shut down.
     // Only shut down for the "userstart" process, not child processes like "init".

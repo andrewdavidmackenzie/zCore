@@ -6,9 +6,6 @@ Pager.EarlyWakeCloneRace
 # ── VmoTestCase: multi-thread write + decommit race ──
 VmoTestCase.ParallelWriteAndDecommit
 
-# ── SystemCpu: kernel panic in task_collection (pre-existing) ──
-SystemCpu.TargetPreemptionTimeAssert
-
 # ── Property: QEMU CPU model limitation ──
 Property.RegisterFsNoncanonical
 Property.RegisterGsNoncanonical

@@ -120,10 +120,6 @@ hal_fn_impl! {
             executor::spawn_with_priority(future, priority)
         }
 
-        fn spawn_task_on_cpu(future: impl Future<Output = ()> + Send + 'static, priority: usize, cpu_id: u8) -> (usize, u8) {
-            executor::spawn_task(future, Some(priority), Some(cpu_id))
-        }
-
         fn change_task_priority(cpu_id: u8, task_key: usize, new_priority: usize) {
             executor::change_task_priority(cpu_id, task_key, new_priority);
         }
