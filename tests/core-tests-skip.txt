@@ -9,6 +9,9 @@ VmoClone2TestCase.DropChildrenInParallel
 # ── VmoTestCase: multi-thread write + decommit race ──
 VmoTestCase.ParallelWriteAndDecommit
 
+# ── Resource: IO port access needs BSP IOPB (BSP TSS replacement crashes) ──
+Resource.Ioports
+
 # ── CPU affinity: task migration not implemented ──
 CpuMaskProfile.ApplyProfile
 
