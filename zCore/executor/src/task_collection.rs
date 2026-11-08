@@ -266,8 +266,30 @@ impl TaskCollection {
         }
         let key = crate::sched::pick_next(&mut self.sched_state.lock())?;
         let (priority, page_idx, subpage_idx) = unpack_key(key);
+        if priority >= MAX_PRIORITY {
+            warn!(
+                "take_task: bad key {:#x} (cpu={}, priority={}, page_idx={}, subpage_idx={})",
+                key,
+                self.cpu_id,
+                priority,
+                page_idx,
+                subpage_idx
+            );
+            return None;
+        }
         let inner = self.get_mut_inner(priority);
         let task = inner.slab.get(unmask_priority(key))?.clone();
+        if page_idx >= inner.pages.len() {
+            warn!(
+                "take_task: stale key {:#x} (cpu={}, priority={}, page_idx={} >= pages.len={})",
+                key,
+                self.cpu_id,
+                priority,
+                page_idx,
+                inner.pages.len()
+            );
+            return None;
+        }
         let waker = inner.pages[page_idx].make_waker(subpage_idx, &task.finish);
         let droper = waker.clone();
         Some((key, task, waker, droper))
