@@ -13,7 +13,7 @@ use {
     bitflags::bitflags,
     core::ops::Deref,
     hal_impl::CachePolicy,
-    lock::{Mutex, MutexGuard},
+    lock::Mutex,
 };
 
 pub mod dirty_tracker;
@@ -289,7 +289,12 @@ pub trait VMObjectTrait: Sync + Send {
     fn shrink_parent_limit(&self, _new_parent_size: usize) {}
 
     /// If contiguous, transmute vmo to a mutable buffer
-    fn as_mut_buf(&self) -> ZxResult<(MutexGuard<'_, ()>, &mut [u8])> {
+    fn as_mut_buf(
+        &self,
+    ) -> ZxResult<(
+        crate::util::yielding_mutex::YieldingMutexGuard<'_, ()>,
+        &mut [u8],
+    )> {
         Err(ZxError::NOT_SUPPORTED)
     }
 

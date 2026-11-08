@@ -12,8 +12,9 @@ use {
         mem::{phys_to_virt, PhysFrame},
         PAGE_SIZE,
     },
-    lock::{Mutex, MutexGuard},
 };
+
+use crate::util::yielding_mutex::{YieldingMutex, YieldingMutexGuard};
 
 enum VMOType {
     /// The original node.
@@ -70,7 +71,7 @@ impl VMOType {
 pub struct VMObjectPaged {
     /// The lock that protected the `inner`
     /// This lock is shared between objects in the same clone tree to avoid deadlock
-    lock: Arc<Mutex<()>>,
+    lock: Arc<YieldingMutex<()>>,
     /// Interior mutability via UnsafeCell. Safety: the shared `lock` Mutex
     /// must be held whenever accessing the inner data. We use UnsafeCell
     /// instead of RefCell because RefCell's runtime borrow checking causes
@@ -291,9 +292,9 @@ impl VMObjectPaged {
     }
 
     /// Internal: Wrap an inner struct to object.
-    fn wrap(inner: VMObjectPagedInner, lock_ref: Option<Arc<Mutex<()>>>) -> Arc<Self> {
+    fn wrap(inner: VMObjectPagedInner, lock_ref: Option<Arc<YieldingMutex<()>>>) -> Arc<Self> {
         let obj = Arc::new(VMObjectPaged {
-            lock: lock_ref.unwrap_or_else(|| Arc::new(Mutex::new(()))),
+            lock: lock_ref.unwrap_or_else(|| Arc::new(YieldingMutex::new(()))),
             inner: core::cell::UnsafeCell::new(inner),
         });
         // Safety: obj is not yet shared — we're the only holder of the Arc.
@@ -310,7 +311,7 @@ impl VMObjectPaged {
     /// (which is returned alongside) keeps the lock held for the
     /// reference's lifetime.
     #[allow(unsafe_code)]
-    fn get_inner(&self) -> (MutexGuard<'_, ()>, &VMObjectPagedInner) {
+    fn get_inner(&self) -> (YieldingMutexGuard<'_, ()>, &VMObjectPagedInner) {
         let guard = self.lock.lock();
         // Safety: lock is held, guaranteeing exclusive access.
         let inner = unsafe { &*self.inner.get() };
@@ -319,7 +320,7 @@ impl VMObjectPaged {
 
     /// Get a mutable reference to inner, holding the clone-tree lock.
     #[allow(unsafe_code, clippy::mut_from_ref)]
-    fn get_inner_mut(&self) -> (MutexGuard<'_, ()>, &mut VMObjectPagedInner) {
+    fn get_inner_mut(&self) -> (YieldingMutexGuard<'_, ()>, &mut VMObjectPagedInner) {
         let guard = self.lock.lock();
         // Safety: lock is held, guaranteeing exclusive access.
         let inner = unsafe { &mut *self.inner.get() };
@@ -974,7 +975,7 @@ impl VMObjectTrait for VMObjectPaged {
         inner.content_boundary_pages = pages;
     }
 
-    fn as_mut_buf(&self) -> ZxResult<(MutexGuard<'_, ()>, &mut [u8])> {
+    fn as_mut_buf(&self) -> ZxResult<(YieldingMutexGuard<'_, ()>, &mut [u8])> {
         let (guard, inner) = self.get_inner_mut();
         inner.as_mut_buf().map(|(addr, size)| {
             (guard, unsafe {
@@ -1752,7 +1753,7 @@ impl VMObjectPagedInner {
         &mut self,
         offset: usize,
         len: usize,
-        lock_ref: &Arc<Mutex<()>>,
+        lock_ref: &Arc<YieldingMutex<()>>,
     ) -> ZxResult<Arc<VMObjectPaged>> {
         // clone contiguous vmo is no longer permitted
         // https://fuchsia.googlesource.com/fuchsia/+/e6b4c6751bbdc9ed2795e81b8211ea294f139a45
@@ -1931,7 +1932,7 @@ impl VMObjectPagedInner {
         &mut self,
         offset: usize,
         len: usize,
-        lock_ref: &Arc<Mutex<()>>,
+        lock_ref: &Arc<YieldingMutex<()>>,
     ) -> ZxResult<Arc<VMObjectPaged>> {
         if self.cache_policy != CachePolicy::Cached || self.pin_count != 0 {
             return Err(ZxError::BAD_STATE);
