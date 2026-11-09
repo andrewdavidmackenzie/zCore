@@ -12,10 +12,10 @@ pub fn init() {
 
     let idt = Box::leak(Box::new(InterruptDescriptorTable::new()));
     let entries = idt as *mut InterruptDescriptorTable as *mut Entry<()>;
-    for i in 0..256 {
+    for (i, vector) in unsafe { VECTORS }.iter().enumerate() {
         let opt = unsafe {
             (*entries.add(i))
-                .set_handler_addr(VirtAddr::new(VECTORS[i] as *const () as usize as u64))
+                .set_handler_addr(VirtAddr::new(*vector as *const () as usize as u64))
         };
         // Enable user space `int3` and `into`
         if i == 3 || i == 4 {
