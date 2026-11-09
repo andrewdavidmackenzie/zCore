@@ -2534,12 +2534,10 @@ impl VmMapping {
         // Clone of a pager VMO: the clone itself is not pager-backed,
         // but its root ancestor has a pager. Route the request there
         // with proper offset translation through the clone hierarchy.
-        let clone_committed = self.vmo.committed_pages_in_range(page_idx, page_idx + 1);
-        let clone_zero = self.vmo.has_zero_marker(page_idx);
         if !self.vmo.is_pager_backed()
             && self.vmo.is_in_pager_tree()
-            && clone_committed == 0
-            && !clone_zero
+            && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
+            && !self.vmo.has_zero_marker(page_idx)
         {
             if let Some((root, clone_offset)) = self.vmo.find_root_pager_vmo_with_offset() {
                 let root_offset = vmo_offset + clone_offset;
@@ -2548,10 +2546,6 @@ impl VmMapping {
                     && root.committed_pages_in_range(root_page, root_page + 1) == 0
                     && !root.has_zero_marker(root_page)
                 {
-                    warn!(
-                        "VMAR clone pgfault: page_idx={} root_page={}",
-                        page_idx, root_page
-                    );
                     return root.request_pages(root_offset, PAGE_SIZE);
                 }
             } else {
@@ -2562,10 +2556,6 @@ impl VmMapping {
                 return Err(ZxError::BAD_STATE);
             }
         }
-        warn!(
-            "VMAR commit_page: page_idx={} clone_committed={} clone_zero={} pager_backed={} in_tree={}",
-            page_idx, clone_committed, clone_zero, self.vmo.is_pager_backed(), self.vmo.is_in_pager_tree()
-        );
         let paddr = self.vmo.commit_page(page_idx, access_flags)?;
         // For TRAP_DIRTY VMOs: if a WRITE fault on a page that needs
         // dirty approval, send a DIRTY request and return SHOULD_WAIT.

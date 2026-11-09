@@ -517,13 +517,9 @@ async fn handler_user_trap(
             || thread.should_force_preempt_yield()
         {
             thread.reset_quantum();
-            warn!("syscall yield (preempt) num={}", num);
             hal_impl::thread::preempt_yield().await;
-            warn!("syscall yield (preempt) resumed num={}", num);
         } else {
-            warn!("syscall yield (now) num={}", num);
             hal_impl::thread::yield_now().await;
-            warn!("syscall yield (now) resumed num={}", num);
         }
         return Ok(());
     }
@@ -546,7 +542,7 @@ async fn handler_user_trap(
         }
         TrapReason::PageFault(vaddr, flags) => {
             EXCEPTIONS_PGFAULT.add(1);
-            warn!("page fault from user mode @ {:#x}({:?})", vaddr, flags);
+            trace!("page fault from user mode @ {:#x}({:?})", vaddr, flags);
             let vmar = thread.proc().vmar();
             match vmar.handle_page_fault(vaddr, flags) {
                 Ok(()) => Ok(()),

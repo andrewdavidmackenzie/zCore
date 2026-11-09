@@ -1505,7 +1505,6 @@ impl VmObject {
     /// Send a page request to the pager for the given offset/length.
     /// Returns `Err(SHOULD_WAIT)` — the caller should then call
     /// `wait_for_page` to block until the page is supplied.
-    #[track_caller]
     pub fn request_pages(&self, offset: usize, length: usize) -> ZxResult {
         let mut inner = self.inner.lock();
         if let Some(port) = inner.pager_port.clone() {
@@ -1515,7 +1514,6 @@ impl VmObject {
             // Check if ALL pages are already committed.
             let committed = self.trait_.committed_pages_in_range(start_page, end_page);
             if committed >= end_page - start_page {
-                warn!("pager: all pages {}-{} already committed ({})", start_page, end_page, committed);
                 return Err(ZxError::SHOULD_WAIT);
             }
             // Check if the request range falls within an existing
@@ -1527,11 +1525,7 @@ impl VmObject {
                 .outstanding_requests
                 .iter()
                 .any(|req| start_page >= req.start_page && start_page < req.end_page);
-            if is_absorbed {
-                let caller = core::panic::Location::caller();
-                warn!("pager: request for page {} absorbed (caller: {}:{})",
-                    start_page, caller.file(), caller.line());
-            }
+
             if !is_absorbed {
                 // Clear any previous OP_FAIL markers in the requested
                 // range. A new request supersedes a prior failure —
@@ -1564,9 +1558,9 @@ impl VmObject {
                     is_dirty: false,
                     overlap_waiters: Vec::new(),
                 });
-                warn!(
-                    "pager: requested page at offset={:#x} len={:#x} key={} port_id={}",
-                    offset, length, pager_key, port.id()
+                info!(
+                    "pager: requested page at offset={:#x} len={:#x}",
+                    offset, length
                 );
             }
             Err(ZxError::SHOULD_WAIT)

@@ -128,13 +128,6 @@ impl Syscall<'_> {
                     None => (None, 0),
                 }
             };
-            warn!(
-                "vmo_read: pager_backed={} in_pager_tree={} pager_vmo_found={} clone_to_root_offset={}",
-                vmo.is_pager_backed(),
-                vmo.is_in_pager_tree(),
-                pager_vmo_opt.is_some(),
-                clone_to_root_offset
-            );
             // If we can't find a pager VMO, fall through to the normal read.
             let Some(pager_vmo) = pager_vmo_opt else {
                 // fall through to non-pager read below
@@ -178,9 +171,9 @@ impl Syscall<'_> {
             for page_idx in start_page..end_page {
                 // Skip pages already committed or with zero markers
                 // in the reading VMO's clone tree.
-                let clone_committed = vmo.committed_pages_in_range(page_idx, page_idx + 1);
-                let clone_zero = vmo.has_zero_marker(page_idx);
-                if clone_committed > 0 || clone_zero {
+                if vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                    || vmo.has_zero_marker(page_idx)
+                {
                     // Page available locally — no pager needed.
                 } else if page_idx >= content_boundary {
                     // Beyond stream_size on unbounded VMO — reads
@@ -214,7 +207,6 @@ impl Syscall<'_> {
                     }
                     let mut fail_retries = 0;
                     let rp = page_idx + root_page_off; // root-space page index
-                    warn!("vmo_read: page {} (root {}) waiting", page_idx, rp);
                     loop {
                         // Check if page was supplied in the meantime
                         // (or forked in the clone while we waited).
@@ -1239,9 +1231,7 @@ impl Syscall<'_> {
                     alloc::vec::Vec::new()
                 };
 
-                warn!("OP_ZERO: calling vmo.zero(offset={}, len={})", offset, len);
                 let result = vmo.zero(offset, len);
-                warn!("OP_ZERO: vmo.zero returned {:?}", result);
                 // OP_ZERO on pager-backed VMOs with unsupplied pages
                 // inserts zero markers. Wake any threads blocked in
                 // wait_for_page for those pages — the zero marker

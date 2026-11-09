@@ -224,7 +224,6 @@ impl Syscall<'_> {
             match vmar.handle_page_fault(vaddr, MMUFlags::READ | MMUFlags::USER) {
                 Ok(()) => continue,
                 Err(ZxError::SHOULD_WAIT) => {
-                    warn!("prefault_user_buffer: SHOULD_WAIT at vaddr={:#x}", vaddr);
                     let pager_vmo = vmar.find_pager_vmo(vaddr).or_else(|| {
                         let mapping = vmar.find_mapping(vaddr)?;
                         if mapping.vmo.is_in_pager_tree() {
@@ -470,8 +469,13 @@ impl Syscall<'_> {
                     }
                 }
             } else {
-                // COW clone — use prefault_pager_write_pages logic
-                return self.prefault_pager_write_pages(vmo, offset, len).await;
+                // COW clone: commit_page(WRITE) allocates private zero
+                // frames when the parent page isn't supplied, so no
+                // pager preflight is needed. Calling
+                // prefault_pager_write_pages here would deadlock if the
+                // calling thread IS the pager (it blocks waiting for
+                // pages that only it can supply).
+                return Ok(());
             }
         } else if vmo.is_trap_dirty() && !vmo.has_pager() {
             // Detached TRAP_DIRTY VMO: is_in_pager_tree() is false

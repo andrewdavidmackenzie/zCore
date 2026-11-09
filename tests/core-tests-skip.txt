@@ -1,8 +1,3 @@
-# ── Pager: hangs / flaky ──
-Pager.FailEarlyWake
-Pager.ResizeCommitTest
-Pager.EarlyWakeCloneRace
-
 # ── Property: QEMU CPU model limitation ──
 Property.RegisterFsNoncanonical
 Property.RegisterGsNoncanonical
