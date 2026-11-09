@@ -302,4 +302,35 @@ pub mod key {
     pub fn unmask_priority(key: Key) -> usize {
         key & !(0x1F << PRIORITY_SHIFT)
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn pack_unpack_roundtrip() {
+            for priority in 0..MAX_PRIORITY {
+                for page_idx in [0, 1, 10, 100] {
+                    for subpage_idx in [0, 1, 63] {
+                        let key = pack_key(priority, page_idx, subpage_idx);
+                        let (p, pg, sp) = unpack_key(key);
+                        assert_eq!(
+                            (p, pg, sp),
+                            (priority, page_idx, subpage_idx),
+                            "roundtrip failed for priority={priority} page={page_idx} sub={subpage_idx} key={key:#x}"
+                        );
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn unmask_priority_strips_top_bits() {
+            for priority in 0..MAX_PRIORITY {
+                let key = pack_key(priority, 42, 7);
+                let slab_key = unmask_priority(key);
+                assert_eq!(slab_key, (42 << PAGE_INDEX_SHIFT) | 7);
+            }
+        }
+    }
 }
