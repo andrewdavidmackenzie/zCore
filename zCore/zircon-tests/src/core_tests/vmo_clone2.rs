@@ -1092,7 +1092,6 @@ fn disjoint_clone_test2() {
 /// create parent + child, race destruction on two std::threads using
 /// an atomic barrier.
 #[test]
-#[ignore] // std::thread spin-loop livelocks in single-CPU libos mode
 fn drop_children_in_parallel() {
     let _ctx = TestContext::new();
 
