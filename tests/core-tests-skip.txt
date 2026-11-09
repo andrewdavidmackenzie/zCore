@@ -1,3 +1,1 @@
-# ── Property: QEMU CPU model limitation ──
-Property.RegisterFsNoncanonical
-Property.RegisterGsNoncanonical
+# No tests skipped — all 1778 core-tests run.

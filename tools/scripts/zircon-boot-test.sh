@@ -131,7 +131,7 @@ launch_qemu() {
       qemu-system-x86_64 \
         -m 4G -display none -no-reboot -nographic \
         -machine q35 -smp "$CORES" \
-        -cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+        -cpu qemu64,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
         -serial mon:stdio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF" \
         -drive "format=raw,file=target/qemu-x86_64/release/boot.img" \

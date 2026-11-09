@@ -72,7 +72,7 @@ debug-x86-qemu: x86-zircon-build
 	@echo "    Kernel symbols: target/qemu-x86_64/release/kernel"
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
-		-machine q35 -smp $(X86_CORES) -cpu qemu64,+fsgsbase,+rdrand \
+		-machine q35 -smp $(X86_CORES) -cpu qemu64,+rdrand \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img \
@@ -88,7 +88,7 @@ debug-x86-core-tests: core-tests-build
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
 		-machine q35 -smp $(X86_CORES) \
-		-cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+		-cpu qemu64,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
@@ -276,7 +276,7 @@ x86-linux-run: x86-linux-build
 		--ramdisk target/qemu-x86_64/release/x86_64-linux.img
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
-		-machine q35 -cpu qemu64,+fsgsbase,+rdrand \
+		-machine q35 -cpu qemu64,+rdrand \
 		-smp $(X86_CORES) \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
@@ -291,7 +291,7 @@ x86-zircon-run: x86-zircon-build
 	@echo "==> Starting x86_64 Zircon (Ctrl-A X to exit QEMU)..."
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
-		-machine q35 -smp $(X86_CORES) -cpu qemu64,+fsgsbase,+rdrand \
+		-machine q35 -smp $(X86_CORES) -cpu qemu64,+rdrand \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img
@@ -472,7 +472,7 @@ endif
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
 		-machine q35 -smp $(X86_CORES) \
-		-cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+		-cpu qemu64,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive "format=raw,file=$(BOOT_IMG)" \
@@ -489,7 +489,7 @@ core-tests: core-tests-build
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
 		-machine q35 -smp $(X86_CORES) \
-		-cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+		-cpu qemu64,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
