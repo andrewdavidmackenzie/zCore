@@ -432,7 +432,7 @@ core-tests-kernel:
 		cargo build -p userstart --target x86_64-unknown-none \
 		--release --target-dir target/userstart -Z build-std=core,alloc
 	@USERSTART_ELF="$(USERSTART_ELF)" \
-		ZCORE_CMDLINE="LOG=warn kernel.enable-debugging-syscalls=true ROOTPROC=/bin/core-tests-standalone" \
+		ZCORE_CMDLINE="LOG=warn kernel.enable-debugging-syscalls=true ROOTPROC=/bin/core-tests-standalone?--gtest_shuffle=false" \
 		cargo zcore-build -m qemu-x86_64 --flavour ""
 
 # Step 3: Write extra-args filter file + build rootfs SFS image.
@@ -512,7 +512,11 @@ core-tests: core-tests-build
 	tail -5 $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g'; \
 	if [ "$$F" -gt 0 ] 2>/dev/null; then echo "FAIL: $$F test(s) failed"; exit 1; fi; \
 	if [ -z "$$R" ] || [ "$$R" -eq 0 ] 2>/dev/null; then echo "FAIL: no tests ran"; exit 1; fi; \
-	if [ -n "$$PARTIAL" ]; then echo "FAIL: incomplete run ($$R of $$T tests)"; exit 1; fi
+	if [ -n "$$PARTIAL" ]; then \
+		HUNG=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[ RUN      \]' | tail -1 | sed 's/.*\] //'); \
+		PREV=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[       OK \]' | tail -1 | sed 's/.*\] //' | sed 's/ (.*//'); \
+		echo "FAIL: incomplete run ($$P passed of $$T expected) — hung on: $$HUNG (after: $$PREV)"; exit 1; \
+	fi
 
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
 test: boot-test libc-test
