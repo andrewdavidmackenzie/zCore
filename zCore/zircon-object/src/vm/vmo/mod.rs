@@ -1505,6 +1505,7 @@ impl VmObject {
     /// Send a page request to the pager for the given offset/length.
     /// Returns `Err(SHOULD_WAIT)` — the caller should then call
     /// `wait_for_page` to block until the page is supplied.
+    #[track_caller]
     pub fn request_pages(&self, offset: usize, length: usize) -> ZxResult {
         let mut inner = self.inner.lock();
         if let Some(port) = inner.pager_port.clone() {
@@ -1527,9 +1528,9 @@ impl VmObject {
                 .iter()
                 .any(|req| start_page >= req.start_page && start_page < req.end_page);
             if is_absorbed {
-                // Capture caller location to identify who calls request_pages
-                warn!("pager: request for page {} absorbed into existing outstanding (caller: {}:{})",
-                    start_page, file!(), line!());
+                let caller = core::panic::Location::caller();
+                warn!("pager: request for page {} absorbed (caller: {}:{})",
+                    start_page, caller.file(), caller.line());
             }
             if !is_absorbed {
                 // Clear any previous OP_FAIL markers in the requested
