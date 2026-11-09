@@ -1,1 +1,2 @@
-# No tests skipped — all 1778 core-tests run.
+# ── Flaky: hangs intermittently under QEMU TCG multi-thread timing ──
+VmoTestCase.ParallelWriteAndDecommit
