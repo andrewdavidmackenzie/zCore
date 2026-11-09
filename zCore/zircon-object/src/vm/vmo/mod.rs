@@ -1514,6 +1514,7 @@ impl VmObject {
             // Check if ALL pages are already committed.
             let committed = self.trait_.committed_pages_in_range(start_page, end_page);
             if committed >= end_page - start_page {
+                warn!("pager: all pages {}-{} already committed ({})", start_page, end_page, committed);
                 return Err(ZxError::SHOULD_WAIT);
             }
             // Check if the request range falls within an existing
@@ -1525,6 +1526,9 @@ impl VmObject {
                 .outstanding_requests
                 .iter()
                 .any(|req| start_page >= req.start_page && start_page < req.end_page);
+            if is_absorbed {
+                warn!("pager: request for page {} absorbed into existing outstanding", start_page);
+            }
             if !is_absorbed {
                 // Clear any previous OP_FAIL markers in the requested
                 // range. A new request supersedes a prior failure —
@@ -1557,9 +1561,9 @@ impl VmObject {
                     is_dirty: false,
                     overlap_waiters: Vec::new(),
                 });
-                info!(
-                    "pager: requested page at offset={:#x} len={:#x}",
-                    offset, length
+                warn!(
+                    "pager: requested page at offset={:#x} len={:#x} key={} port_id={}",
+                    offset, length, pager_key, port.id()
                 );
             }
             Err(ZxError::SHOULD_WAIT)
