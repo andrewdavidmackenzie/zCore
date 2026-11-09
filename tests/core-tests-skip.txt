@@ -2,6 +2,7 @@
 VmoTestCase.ParallelWriteAndDecommit
 Threads.StartRegsNoncanonicalTp
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
+Threads.X86AcFlagUserCopy
 
 # ── Flaky: timing-dependent failure ──
 Pager.ResizeCommitTest
