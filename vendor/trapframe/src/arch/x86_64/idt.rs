@@ -14,8 +14,7 @@ pub fn init() {
     let entries = idt as *mut InterruptDescriptorTable as *mut Entry<()>;
     for (i, vector) in unsafe { VECTORS }.iter().enumerate() {
         let opt = unsafe {
-            (*entries.add(i))
-                .set_handler_addr(VirtAddr::new(*vector as *const () as usize as u64))
+            (*entries.add(i)).set_handler_addr(VirtAddr::new(*vector as *const () as usize as u64))
         };
         // Enable user space `int3` and `into`
         if i == 3 || i == 4 {
