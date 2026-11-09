@@ -1,3 +1,8 @@
+# MSR numbers for FS/GS base access (fallback when FSGSBASE not available)
+.set MSR_FS_BASE,           0xC0000100
+.set MSR_GS_BASE,           0xC0000101
+.set MSR_KERNEL_GS_BASE,    0xC0000102
+
 .text
     # extern "sysv64" fn syscall_return(&mut GeneralRegs)
 .global syscall_return
@@ -13,8 +18,17 @@ syscall_return:
     push rbp
     push rbx
 
-    # save fsbase, kernel may use
+    # save kernel fsbase
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
+    je 1f
     rdfsbase rbx
+    jmp 2f
+1:  mov ecx, MSR_FS_BASE
+    rdmsr
+    shl rdx, 32
+    or rax, rdx
+    mov rbx, rax
+2:
     push rbx
 
     push rdi
@@ -24,10 +38,30 @@ syscall_return:
 
     # pop fsbase gsbase
     swapgs                  # store kernel gsbase
+
+    # restore user fsbase
     mov rax, [rsp + 18*8]
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
+    je 1f
     wrfsbase rax
+    jmp 2f
+1:  mov rdx, rax
+    shr rdx, 32
+    mov ecx, MSR_FS_BASE
+    wrmsr
+2:
+
+    # restore user gsbase
     mov rax, [rsp + 19*8]
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
+    je 1f
     wrgsbase rax
+    jmp 2f
+1:  mov rdx, rax
+    shr rdx, 32
+    mov ecx, MSR_GS_BASE
+    wrmsr
+2:
 
     pop rax
     pop rbx
@@ -120,11 +154,31 @@ trap_syscall_entry:
     push rbx
     push rax
 
-    # save user fsbase/gsbase
+    # save user fsbase
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
+    je 1f
     rdfsbase rbx
+    jmp 2f
+1:  mov ecx, MSR_FS_BASE
+    rdmsr
+    shl rdx, 32
+    or rax, rdx
+    mov rbx, rax
+2:
     mov [rsp + 18*8], rbx
+
+    # save user gsbase (need swapgs dance to read user GS)
     swapgs
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
+    je 1f
     rdgsbase rbx
+    jmp 2f
+1:  mov ecx, MSR_GS_BASE
+    rdmsr
+    shl rdx, 32
+    or rax, rdx
+    mov rbx, rax
+2:
     mov [rsp + 19*8], rbx
     swapgs
 
@@ -133,9 +187,18 @@ trap_syscall_entry:
     pop rbx
     pop rbx
 
-    # restore fsbase of kernel
+    # restore kernel fsbase
     pop rbx
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
+    je 1f
     wrfsbase rbx
+    jmp 2f
+1:  mov rax, rbx
+    mov rdx, rbx
+    shr rdx, 32
+    mov ecx, MSR_FS_BASE
+    wrmsr
+2:
 
     pop rbx
     pop rbp
