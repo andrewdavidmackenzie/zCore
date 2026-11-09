@@ -484,9 +484,9 @@ impl Thread {
         // Update task_sched to report the target CPU if the current
         // CPU is not in the mask.
         if let Some((key, current_cpu)) = inner.task_sched {
-            let current_in_mask = mask.get((current_cpu as usize) / 64).map_or(false, |word| {
-                word & (1u64 << (current_cpu as usize % 64)) != 0
-            });
+            let current_in_mask = mask
+                .get((current_cpu as usize) / 64)
+                .is_some_and(|word| word & (1u64 << (current_cpu as usize % 64)) != 0);
             if !current_in_mask {
                 // Find the first CPU in the mask.
                 for (word_idx, &word) in mask.iter().enumerate() {
