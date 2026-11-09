@@ -261,7 +261,7 @@ jobs:
         run: make core-tests-build
 
       - name: Run core-tests
-        run: make core-tests CORE_TESTS_TIMEOUT=1800
+        run: make core-tests
 
   libc-test:
     name: Libc Test (aarch64, macOS)

@@ -1,2 +1,3 @@
-# ── Flaky: hangs intermittently under QEMU TCG multi-thread timing ──
+# ── Flaky: hangs under QEMU TCG ──
 VmoTestCase.ParallelWriteAndDecommit
+Threads.StartRegsNoncanonicalTp

@@ -393,7 +393,9 @@ zircon-rootfs-test:
 #   make core-tests FILTER='PortTest.*' # run specific test suite
 #
 # Results are written to /tmp/qemu-core-tests.log.
-CORE_TESTS_TIMEOUT ?= 1800
+# No default timeout — rely on CI job timeout-minutes.
+# Override with: make core-tests CORE_TESTS_TIMEOUT=900
+CORE_TESTS_TIMEOUT ?= 0
 CORE_TESTS_LOG ?= /tmp/qemu-core-tests.log
 CORE_TESTS_SKIP_FILE ?= tests/core-tests-skip.txt
 
@@ -496,8 +498,10 @@ core-tests: core-tests-build
 		> $(CORE_TESTS_LOG) 2>&1 & \
 	PID=$$!; \
 	ELAPSED=0; \
-	while [ $$ELAPSED -lt $(CORE_TESTS_TIMEOUT) ]; do \
+	TIMEOUT=$(CORE_TESTS_TIMEOUT); \
+	while true; do \
 		if ! kill -0 $$PID 2>/dev/null; then break; fi; \
+		if [ "$$TIMEOUT" -gt 0 ] 2>/dev/null && [ $$ELAPSED -ge $$TIMEOUT ]; then break; fi; \
 		sleep 1; ELAPSED=$$((ELAPSED + 1)); \
 	done; \
 	kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; \
