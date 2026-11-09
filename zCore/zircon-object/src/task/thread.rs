@@ -211,7 +211,6 @@ struct ThreadInner {
     /// Used to update the scheduler when priority changes at runtime.
     /// `None` before `start()` or after `terminate()`.
     task_sched: Option<(usize, u8)>,
-
 }
 
 impl ThreadInner {
@@ -485,9 +484,9 @@ impl Thread {
         // Update task_sched to report the target CPU if the current
         // CPU is not in the mask.
         if let Some((key, current_cpu)) = inner.task_sched {
-            let current_in_mask = mask
-                .get((current_cpu as usize) / 64)
-                .map_or(false, |word| word & (1u64 << (current_cpu as usize % 64)) != 0);
+            let current_in_mask = mask.get((current_cpu as usize) / 64).map_or(false, |word| {
+                word & (1u64 << (current_cpu as usize % 64)) != 0
+            });
             if !current_in_mask {
                 // Find the first CPU in the mask.
                 for (word_idx, &word) in mask.iter().enumerate() {
@@ -506,8 +505,6 @@ impl Thread {
     pub fn cpu_affinity_mask(&self) -> [u64; 8] {
         self.inner.lock().cpu_affinity_mask
     }
-
-
 
     /// Signal a deferred policy exception, matching Fuchsia's
     /// `Thread::Current::SignalPolicyException`.
