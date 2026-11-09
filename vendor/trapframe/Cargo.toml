@@ -30,7 +30,6 @@ autoexamples = false
 autotests = false
 autobenches = false
 description = "Handle Trap Frame across kernel and user space on multiple ISAs."
-homepage = "https://github.com/rcore-os/trapframe-rs"
 documentation = "https://docs.rs/trapframe"
 readme = "README.md"
 keywords = [

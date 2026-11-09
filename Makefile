@@ -511,7 +511,8 @@ core-tests: core-tests-build
 	echo "Passed: $$P  Failed: $$F  Ran: $$R/$$T  Skipped: $$S$$PARTIAL"; \
 	tail -5 $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g'; \
 	if [ "$$F" -gt 0 ] 2>/dev/null; then echo "FAIL: $$F test(s) failed"; exit 1; fi; \
-	if [ -z "$$R" ] || [ "$$R" -eq 0 ] 2>/dev/null; then echo "FAIL: no tests ran"; exit 1; fi
+	if [ -z "$$R" ] || [ "$$R" -eq 0 ] 2>/dev/null; then echo "FAIL: no tests ran"; exit 1; fi; \
+	if [ -n "$$PARTIAL" ]; then echo "FAIL: incomplete run ($$R of $$T tests)"; exit 1; fi
 
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
 test: boot-test libc-test

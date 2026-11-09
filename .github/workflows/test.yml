@@ -238,6 +238,7 @@ jobs:
   zircon-core-tests-x86:
     name: Zircon Core Tests (x86_64)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
