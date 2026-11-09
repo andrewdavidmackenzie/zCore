@@ -895,8 +895,10 @@ pub fn init_ap_gdt_idt() {
         // Enable syscall/sysret.
         Efer::update(|efer| efer.insert(EferFlags::SYSTEM_CALL_EXTENSIONS));
 
-        // Enable FSGSBASE.
-        Cr4::update(|cr4| cr4.insert(Cr4Flags::FSGSBASE));
+        // Enable FSGSBASE if CPU supports it.
+        if trapframe::has_fsgsbase() {
+            Cr4::update(|cr4| cr4.insert(Cr4Flags::FSGSBASE));
+        }
     }
 }
 
