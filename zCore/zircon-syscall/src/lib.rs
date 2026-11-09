@@ -224,6 +224,7 @@ impl Syscall<'_> {
             match vmar.handle_page_fault(vaddr, MMUFlags::READ | MMUFlags::USER) {
                 Ok(()) => continue,
                 Err(ZxError::SHOULD_WAIT) => {
+                    warn!("prefault_user_buffer: SHOULD_WAIT at vaddr={:#x}", vaddr);
                     let pager_vmo = vmar.find_pager_vmo(vaddr).or_else(|| {
                         let mapping = vmar.find_mapping(vaddr)?;
                         if mapping.vmo.is_in_pager_tree() {

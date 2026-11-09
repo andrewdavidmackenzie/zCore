@@ -1527,7 +1527,9 @@ impl VmObject {
                 .iter()
                 .any(|req| start_page >= req.start_page && start_page < req.end_page);
             if is_absorbed {
-                warn!("pager: request for page {} absorbed into existing outstanding", start_page);
+                // Capture caller location to identify who calls request_pages
+                warn!("pager: request for page {} absorbed into existing outstanding (caller: {}:{})",
+                    start_page, file!(), line!());
             }
             if !is_absorbed {
                 // Clear any previous OP_FAIL markers in the requested
