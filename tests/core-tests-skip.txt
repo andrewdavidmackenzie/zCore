@@ -1,3 +1,7 @@
+# ── Libos-only: std::thread spin-loop livelocks in single-CPU libos ──
+# (C++ test passes on bare-metal QEMU)
+VmoClone2TestCase.DropChildrenInParallel
+
 # ── Property: QEMU CPU model limitation ──
 Property.RegisterFsNoncanonical
 Property.RegisterGsNoncanonical
