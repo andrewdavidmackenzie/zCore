@@ -3,9 +3,6 @@ Pager.FailEarlyWake
 Pager.ResizeCommitTest
 Pager.EarlyWakeCloneRace
 
-# ── VmoTestCase: multi-thread write + decommit race ──
-VmoTestCase.ParallelWriteAndDecommit
-
 # ── Property: QEMU CPU model limitation ──
 Property.RegisterFsNoncanonical
 Property.RegisterGsNoncanonical
