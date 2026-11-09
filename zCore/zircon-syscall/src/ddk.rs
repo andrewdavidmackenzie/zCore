@@ -533,11 +533,11 @@ impl Syscall<'_> {
         if len == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        #[cfg(not(target_arch = "x86_64"))]
+        #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
         {
             Err(ZxError::NOT_SUPPORTED)
         }
-        #[cfg(target_arch = "x86_64")]
+        #[cfg(all(target_arch = "x86_64", target_os = "none"))]
         {
             hal_impl::ioport::ioports_allow(io_addr, len);
             Ok(())
@@ -559,11 +559,11 @@ impl Syscall<'_> {
         if len == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        #[cfg(not(target_arch = "x86_64"))]
+        #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
         {
             Err(ZxError::NOT_SUPPORTED)
         }
-        #[cfg(target_arch = "x86_64")]
+        #[cfg(all(target_arch = "x86_64", target_os = "none"))]
         {
             hal_impl::ioport::ioports_deny(io_addr, len);
             Ok(())
