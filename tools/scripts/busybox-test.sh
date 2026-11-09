@@ -59,7 +59,7 @@ case "$ARCH" in
     QEMU_CMD=(
       qemu-system-x86_64
       -m 2G -smp "$CORES" -display none -no-reboot -nographic
-      -machine q35 -cpu qemu64,+rdrand
+      -machine q35 -cpu qemu64,+fsgsbase,+rdrand
       -serial mon:stdio
       -drive if=pflash,format=raw,readonly=on,file="$OVMF"
       -drive "format=raw,file=$BOOT_IMG"
