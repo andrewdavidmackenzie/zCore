@@ -207,7 +207,7 @@ impl Syscall<'_> {
                     }
                     let mut fail_retries = 0;
                     let rp = page_idx + root_page_off; // root-space page index
-                    warn!("vmo_read: page {} (root {}) waiting, run_end={}", page_idx, rp, run_end);
+                    warn!("vmo_read: page {} (root {}) waiting", page_idx, rp);
                     loop {
                         // Check if page was supplied in the meantime
                         // (or forked in the clone while we waited).
