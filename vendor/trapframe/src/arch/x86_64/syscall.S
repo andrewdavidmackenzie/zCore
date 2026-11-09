@@ -19,7 +19,7 @@ syscall_return:
     push rbx
 
     # save fsbase, kernel may use
-    cmpb $0, TRAPFRAME_FSGSBASE[rip]
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
     je 1f
     rdfsbase rbx
     jmp 2f
@@ -42,7 +42,7 @@ syscall_return:
 
     # restore user fsbase
     mov rax, [rsp + 18*8]
-    cmpb $0, TRAPFRAME_FSGSBASE[rip]
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
     je 1f
     wrfsbase rax
     jmp 2f
@@ -55,7 +55,7 @@ syscall_return:
 
     # restore user gsbase
     mov rax, [rsp + 19*8]
-    cmpb $0, TRAPFRAME_FSGSBASE[rip]
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
     je 1f
     wrgsbase rax
     jmp 2f
@@ -165,7 +165,7 @@ trap_syscall_entry:
     push rax
 
     # save user fsbase
-    cmpb $0, TRAPFRAME_FSGSBASE[rip]
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
     je 1f
     rdfsbase rbx
     jmp 2f
@@ -180,7 +180,7 @@ trap_syscall_entry:
 
     # save user gsbase (need swapgs dance to read user GS)
     swapgs
-    cmpb $0, TRAPFRAME_FSGSBASE[rip]
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
     je 1f
     rdgsbase rbx
     jmp 2f
@@ -201,7 +201,7 @@ trap_syscall_entry:
 
     # restore fsbase of kernel
     pop rbx
-    cmpb $0, TRAPFRAME_FSGSBASE[rip]
+    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
     je 1f
     wrfsbase rbx
     jmp 2f
