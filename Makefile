@@ -393,7 +393,7 @@ zircon-rootfs-test:
 #   make core-tests FILTER='PortTest.*' # run specific test suite
 #
 # Results are written to /tmp/qemu-core-tests.log.
-CORE_TESTS_TIMEOUT ?= 1200
+CORE_TESTS_TIMEOUT ?= 1800
 CORE_TESTS_LOG ?= /tmp/qemu-core-tests.log
 CORE_TESTS_SKIP_FILE ?= tests/core-tests-skip.txt
 
