@@ -128,6 +128,13 @@ impl Syscall<'_> {
                     None => (None, 0),
                 }
             };
+            warn!(
+                "vmo_read: pager_backed={} in_pager_tree={} pager_vmo_found={} clone_to_root_offset={}",
+                vmo.is_pager_backed(),
+                vmo.is_in_pager_tree(),
+                pager_vmo_opt.is_some(),
+                clone_to_root_offset
+            );
             // If we can't find a pager VMO, fall through to the normal read.
             let Some(pager_vmo) = pager_vmo_opt else {
                 // fall through to non-pager read below
