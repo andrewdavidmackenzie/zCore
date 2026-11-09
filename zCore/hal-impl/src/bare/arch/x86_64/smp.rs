@@ -304,12 +304,10 @@ extern "C" fn ap_entry() -> ! {
         use x86_64::registers::model_specific::{Efer, EferFlags};
         Efer::update(|f| f.insert(EferFlags::NO_EXECUTE_ENABLE));
 
-        // Enable SSE and FSGSBASE (if supported) on this AP
+        // Enable FSGSBASE (required by trapframe) and SSE
         use x86_64::registers::control::{Cr4, Cr4Flags};
         Cr4::update(|f| {
-            if trapframe::has_fsgsbase() {
-                f.insert(Cr4Flags::FSGSBASE);
-            }
+            f.insert(Cr4Flags::FSGSBASE);
             f.insert(Cr4Flags::OSFXSR);
             f.insert(Cr4Flags::OSXMMEXCPT_ENABLE);
         });

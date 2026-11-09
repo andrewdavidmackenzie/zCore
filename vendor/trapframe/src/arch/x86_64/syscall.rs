@@ -1,29 +1,11 @@
 use super::UserContext;
 use core::arch::global_asm;
-use core::sync::atomic::{AtomicU8, Ordering};
 use x86_64::registers::control::{Cr4, Cr4Flags};
 use x86_64::registers::model_specific::{Efer, EferFlags, LStar, SFMask};
 use x86_64::registers::rflags::RFlags;
 use x86_64::VirtAddr;
 
 global_asm!(include_str!("syscall.S"));
-
-/// Whether the CPU supports FSGSBASE instructions (rdfsbase, wrfsbase,
-/// rdgsbase, wrgsbase). Detected via CPUID at init time.
-///
-/// When false, the syscall entry/exit assembly uses MSR-based access
-/// (rdmsr/wrmsr on IA32_FS_BASE / IA32_GS_BASE / IA32_KERNEL_GS_BASE),
-/// matching Fuchsia's fallback when `g_x86_feature_fsgsbase` is false.
-///
-/// This is an AtomicU8 (not bool) so it can be read from assembly via
-/// a simple byte load. 1 = supported, 0 = not supported.
-#[no_mangle]
-pub static TRAPFRAME_FSGSBASE: AtomicU8 = AtomicU8::new(0);
-
-/// Check whether FSGSBASE instructions are available on this CPU.
-pub fn has_fsgsbase() -> bool {
-    TRAPFRAME_FSGSBASE.load(Ordering::Relaxed) != 0
-}
 
 pub fn init() {
     let cpuid = raw_cpuid::CpuId::new();
@@ -37,16 +19,11 @@ pub fn init() {
             efer.insert(EferFlags::SYSTEM_CALL_EXTENSIONS);
         });
 
-        // enable `FSGSBASE` instructions if supported
-        let fsgsbase = cpuid
-            .get_extended_feature_info()
-            .is_some_and(|f| f.has_fsgsbase());
-        if fsgsbase {
-            Cr4::update(|cr4| {
-                cr4.insert(Cr4Flags::FSGSBASE);
-            });
-            TRAPFRAME_FSGSBASE.store(1, Ordering::Relaxed);
-        }
+        // enable `FSGSBASE` instructions
+        assert!(cpuid.get_extended_feature_info().unwrap().has_fsgsbase());
+        Cr4::update(|cr4| {
+            cr4.insert(Cr4Flags::FSGSBASE);
+        });
 
         // flags to clear on syscall
         // copy from Linux 5.0

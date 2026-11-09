@@ -15,8 +15,6 @@ mod trap;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub use fncall::syscall_fn_entry;
 #[cfg(any(target_os = "none", target_os = "uefi"))]
-pub use syscall::has_fsgsbase;
-#[cfg(any(target_os = "none", target_os = "uefi"))]
 pub use trap::TrapFrame;
 
 /// Initialize interrupt handling on x86_64.
