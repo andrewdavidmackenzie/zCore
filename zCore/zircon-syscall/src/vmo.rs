@@ -171,9 +171,9 @@ impl Syscall<'_> {
             for page_idx in start_page..end_page {
                 // Skip pages already committed or with zero markers
                 // in the reading VMO's clone tree.
-                if vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
-                    || vmo.has_zero_marker(page_idx)
-                {
+                let clone_committed = vmo.committed_pages_in_range(page_idx, page_idx + 1);
+                let clone_zero = vmo.has_zero_marker(page_idx);
+                if clone_committed > 0 || clone_zero {
                     // Page available locally — no pager needed.
                 } else if page_idx >= content_boundary {
                     // Beyond stream_size on unbounded VMO — reads
@@ -207,6 +207,7 @@ impl Syscall<'_> {
                     }
                     let mut fail_retries = 0;
                     let rp = page_idx + root_page_off; // root-space page index
+                    warn!("vmo_read: page {} (root {}) waiting, run_end={}", page_idx, rp, run_end);
                     loop {
                         // Check if page was supplied in the meantime
                         // (or forked in the clone while we waited).
