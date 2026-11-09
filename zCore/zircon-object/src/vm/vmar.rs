@@ -2546,6 +2546,10 @@ impl VmMapping {
                     && root.committed_pages_in_range(root_page, root_page + 1) == 0
                     && !root.has_zero_marker(root_page)
                 {
+                    warn!(
+                        "VMAR clone pgfault: vaddr={:#x} page_idx={} root_page={}",
+                        vmo_offset + self.addr - self.inner.offset, page_idx, root_page
+                    );
                     return root.request_pages(root_offset, PAGE_SIZE);
                 }
             } else {
