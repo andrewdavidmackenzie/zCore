@@ -1239,7 +1239,9 @@ impl Syscall<'_> {
                     alloc::vec::Vec::new()
                 };
 
+                warn!("OP_ZERO: calling vmo.zero(offset={}, len={})", offset, len);
                 let result = vmo.zero(offset, len);
+                warn!("OP_ZERO: vmo.zero returned {:?}", result);
                 // OP_ZERO on pager-backed VMOs with unsupplied pages
                 // inserts zero markers. Wake any threads blocked in
                 // wait_for_page for those pages — the zero marker
