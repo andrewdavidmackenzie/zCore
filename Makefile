@@ -509,6 +509,11 @@ core-tests: core-tests-build
 	S=$$(sed '/^[[:space:]]*\#/d; /^[[:space:]]*$$/d' $(CORE_TESTS_SKIP_FILE) 2>/dev/null | wc -l | tr -d ' '); \
 	T=$$(($$R + $$S)); \
 	echo "Passed: $$P  Failed: $$F  Ran: $$R/$$T  Skipped: $$S$$PARTIAL"; \
+	sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[  FAILED  \]' || true; \
+	HUNG=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[ RUN      \]' | tail -1 | sed 's/.*\] //'); \
+	LAST_OK=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[       OK \]' | tail -1 | sed 's/.*\] //' | sed 's/ (.*//'); \
+	echo "Last completed: $$LAST_OK"; \
+	echo "Last started:   $$HUNG"; \
 	tail -5 $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g'; \
 	if [ "$$F" -gt 0 ] 2>/dev/null; then echo "FAIL: $$F test(s) failed"; exit 1; fi; \
 	if [ -z "$$R" ] || [ "$$R" -eq 0 ] 2>/dev/null; then echo "FAIL: no tests ran"; exit 1; fi; \
