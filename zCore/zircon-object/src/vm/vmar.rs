@@ -2547,8 +2547,8 @@ impl VmMapping {
                     && !root.has_zero_marker(root_page)
                 {
                     warn!(
-                        "VMAR clone pgfault: vaddr={:#x} page_idx={} root_page={}",
-                        vmo_offset + self.addr - self.inner.offset, page_idx, root_page
+                        "VMAR clone pgfault: page_idx={} root_page={}",
+                        page_idx, root_page
                     );
                     return root.request_pages(root_offset, PAGE_SIZE);
                 }
