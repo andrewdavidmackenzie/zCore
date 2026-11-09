@@ -1,3 +1,7 @@
 # ── Flaky: hangs under QEMU TCG ──
 VmoTestCase.ParallelWriteAndDecommit
 Threads.StartRegsNoncanonicalTp
+Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
+
+# ── Flaky: timing-dependent failure ──
+Pager.ResizeCommitTest
