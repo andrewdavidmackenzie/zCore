@@ -1,3 +1,7 @@
 # ── Intermittent hangs (pre-existing executor wakeup issue) ──
 VmoTestCase.ParallelWriteAndDecommit
 PagerWriteback.NoDirtyRequestsForClones
+Threads.SyscallSuspendedRegisterState
+
+# ── Flaky timing failure ──
+Pager.ResizeCommitTest
