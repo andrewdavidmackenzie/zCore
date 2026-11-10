@@ -4,6 +4,7 @@ Threads.StartRegsNoncanonicalTp
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.X86AcFlagUserCopy
 Threads.NoncanonicalRipAddressIRETQ
+Threads.StartRegsSuspended
 
 # ── Flaky: timing-dependent failure ──
 Pager.ResizeCommitTest
