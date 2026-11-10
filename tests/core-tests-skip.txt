@@ -1,10 +1,14 @@
-# ── Flaky: hangs under QEMU TCG ──
+# ── Hangs under QEMU TCG (deterministic order) ──
 VmoTestCase.ParallelWriteAndDecommit
 Threads.StartRegsNoncanonicalTp
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.X86AcFlagUserCopy
 Threads.NoncanonicalRipAddressIRETQ
 Threads.StartRegsSuspended
+FutexTest.FutexRequeueTbiReturnsInvalidArgs
+TicksTest.TimeValuesPaddingLeak
+DebugLogTest.DrainAndSignal
+PagerWriteback.NoDirtyRequestsForClones
 
 # ── Flaky: timing-dependent failure ──
 Pager.ResizeCommitTest
