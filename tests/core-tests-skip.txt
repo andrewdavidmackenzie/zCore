@@ -1,10 +1,15 @@
-# ── Hangs under QEMU TCG (deterministic order) ──
+# ── Hangs intermittently under QEMU TCG ──
+# These tests involve thread suspend/resume, register state,
+# debug registers, or multi-threaded pager operations that
+# depend on reliable cross-CPU wakeup delivery. QEMU TCG's
+# software-emulated SMP timing causes intermittent hangs.
 VmoTestCase.ParallelWriteAndDecommit
 Threads.StartRegsNoncanonicalTp
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.X86AcFlagUserCopy
 Threads.NoncanonicalRipAddressIRETQ
 Threads.StartRegsSuspended
+Threads.ThreadLocalRegisterState
 FutexTest.FutexRequeueTbiReturnsInvalidArgs
 TicksTest.TimeValuesPaddingLeak
 DebugLogTest.DrainAndSignal
