@@ -9,6 +9,7 @@ FutexTest.FutexRequeueTbiReturnsInvalidArgs
 TicksTest.TimeValuesPaddingLeak
 DebugLogTest.DrainAndSignal
 PagerWriteback.NoDirtyRequestsForClones
+ProcessTest.SuspendWithDyingThread
 
 # ── Flaky: timing-dependent failure ──
 Pager.ResizeCommitTest
