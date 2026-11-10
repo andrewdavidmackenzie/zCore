@@ -36,33 +36,40 @@ syscall_return:
     mov gs:4, rsp           # store kernel rsp -> TSS.sp0
     mov rsp, rdi            # set rsp = bottom of trap frame
 
-    # pop fsbase gsbase
-    swapgs                  # store kernel gsbase
-
-    # restore user fsbase
-    mov rax, [rsp + 18*8]
+    # restore user fsbase and gsbase
     cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
-    je 1f
+    je .Lreturn_msr
+
+    # --- fast path: use fsgsbase instructions ---
+    swapgs                  # store kernel gsbase -> KERNEL_GS_BASE
+    mov rax, [rsp + 18*8]
     wrfsbase rax
-    jmp 2f
-1:  mov rdx, rax
+    mov rax, [rsp + 19*8]
+    wrgsbase rax
+    jmp .Lreturn_done
+
+.Lreturn_msr:
+    # --- MSR fallback: no swapgs needed (matches Fuchsia) ---
+    # Write user FS base via MSR
+    mov rax, [rsp + 18*8]
+    mov rdx, rax
     shr rdx, 32
     mov ecx, MSR_FS_BASE
     wrmsr
-2:
-
-    # restore user gsbase
+    # Write user GS base to KERNEL_GS_BASE. The kernel's GS base
+    # stays in GS_BASE (current). swapgs at sysret/iret will swap
+    # them, making user GS active in user mode.
     mov rax, [rsp + 19*8]
-    cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
-    je 1f
-    wrgsbase rax
-    jmp 2f
-1:  mov rdx, rax
+    mov rdx, rax
     shr rdx, 32
-    mov ecx, MSR_GS_BASE
+    mov ecx, MSR_KERNEL_GS_BASE
     wrmsr
-2:
+    # swapgs to match the fast path: after this, current GS = user GS
+    # (needed for sysret/iret which don't do swapgs themselves, but
+    # the original code path assumes current GS = user GS at this point)
+    swapgs
 
+.Lreturn_done:
     pop rax
     pop rbx
     pop rcx
@@ -167,20 +174,25 @@ trap_syscall_entry:
 2:
     mov [rsp + 18*8], rbx
 
-    # save user gsbase (need swapgs dance to read user GS)
-    swapgs
+    # save user gsbase
     cmp byte ptr [rip + TRAPFRAME_FSGSBASE], 0
     je 1f
+    # fast path: swapgs to access user GS, read it, swapgs back
+    swapgs
     rdgsbase rbx
+    swapgs
     jmp 2f
-1:  mov ecx, MSR_GS_BASE
+1:  # MSR fallback: read KERNEL_GS_BASE directly (no swapgs needed).
+    # During kernel execution, user GS is in KERNEL_GS_BASE (swapped
+    # at syscall_entry). This avoids a swapgs window where an interrupt
+    # could see user GS instead of kernel GS.
+    mov ecx, MSR_KERNEL_GS_BASE
     rdmsr
     shl rdx, 32
     or rax, rdx
     mov rbx, rax
 2:
     mov [rsp + 19*8], rbx
-    swapgs
 
     # restore callee-saved registers
     mov rsp, gs:4           # load kernel rsp <- TSS.sp0

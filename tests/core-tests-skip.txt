@@ -1,20 +1,8 @@
-# ── Hangs intermittently under QEMU TCG ──
-# These tests involve thread suspend/resume, register state,
-# debug registers, or multi-threaded pager operations that
-# depend on reliable cross-CPU wakeup delivery. QEMU TCG's
-# software-emulated SMP timing causes intermittent hangs.
-VmoTestCase.ParallelWriteAndDecommit
-Threads.StartRegsNoncanonicalTp
-Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
-Threads.X86AcFlagUserCopy
-Threads.NoncanonicalRipAddressIRETQ
-Threads.StartRegsSuspended
-Threads.ThreadLocalRegisterState
+# ── MSR fallback regression (trapframe without +fsgsbase) ──
+# These 4 tests hang without +fsgsbase due to the swapgs window
+# bug in the MSR fallback path. Fixing the assembly to use
+# KERNEL_GS_BASE directly (matching Fuchsia) should resolve them.
 FutexTest.FutexRequeueTbiReturnsInvalidArgs
 TicksTest.TimeValuesPaddingLeak
 DebugLogTest.DrainAndSignal
 PagerWriteback.NoDirtyRequestsForClones
-ProcessTest.SuspendWithDyingThread
-
-# ── Flaky: timing-dependent failure ──
-Pager.ResizeCommitTest
