@@ -162,6 +162,11 @@ impl WakerPage {
         actionable
     }
 
+    /// Peek at notified bits without clearing them.
+    pub fn peek_notified(&self) -> u64 {
+        self.notified.load()
+    }
+
     pub fn take_dropped(&self) -> u64 {
         self.dropped.swap(0)
     }

@@ -216,15 +216,27 @@ impl TaskCollection {
         static SCAN_COUNT: AtomicU64 = AtomicU64::new(0);
         static FOUND_COUNT: AtomicU64 = AtomicU64::new(0);
         let scan_num = SCAN_COUNT.fetch_add(1, AtOrd::Relaxed);
-        if scan_num > 0 && scan_num % 100_000 == 0 {
+        if scan_num > 0 && scan_num % 500_000 == 0 {
             let found = FOUND_COUNT.load(AtOrd::Relaxed);
-            warn!(
-                "scan_notifications: cpu={} scan#{} found_total={} task_num={}",
-                crate::arch::cpu_id(),
-                scan_num,
-                found,
-                self.task_num.load(Ordering::Relaxed)
-            );
+            let task_num = self.task_num.load(Ordering::Relaxed);
+            if task_num > 0 {
+                // Dump waker page state for this CPU
+                let mut notified_bits = 0u64;
+                let mut total_pages = 0usize;
+                for priority in 0..MAX_PRIORITY {
+                    let inner = self.get_mut_inner(priority);
+                    for page_idx in 0..inner.pages.len() {
+                        total_pages += 1;
+                        let page = &inner.pages[page_idx];
+                        let n = page.peek_notified();
+                        notified_bits |= n;
+                    }
+                }
+                warn!(
+                    "scan: cpu={} scan#{} found={} tasks={} pages={} notified_bits={:#x}",
+                    self.cpu_id, scan_num, found, task_num, total_pages, notified_bits
+                );
+            }
         }
         let mut sched = self.sched_state.lock();
         for priority in 0..MAX_PRIORITY {
