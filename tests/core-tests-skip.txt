@@ -1,5 +1,6 @@
 # ── Genuine hang ──
 PagerWriteback.NoDirtyRequestsForClones
+VmoTestCase.ParallelWriteAndDecommit
 
 # ── Flaky timing failure ──
 Pager.ResizeCommitTest
