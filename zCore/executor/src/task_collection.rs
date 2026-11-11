@@ -212,6 +212,20 @@ impl TaskCollection {
     /// Scan waker pages for notifications and dropped tasks.
     /// Feeds notified tasks into the scheduler and removes dropped ones.
     fn scan_notifications(&self) {
+        use core::sync::atomic::{AtomicU64, Ordering as AtOrd};
+        static SCAN_COUNT: AtomicU64 = AtomicU64::new(0);
+        static FOUND_COUNT: AtomicU64 = AtomicU64::new(0);
+        let scan_num = SCAN_COUNT.fetch_add(1, AtOrd::Relaxed);
+        if scan_num > 0 && scan_num % 100_000 == 0 {
+            let found = FOUND_COUNT.load(AtOrd::Relaxed);
+            warn!(
+                "scan_notifications: cpu={} scan#{} found_total={} task_num={}",
+                crate::arch::cpu_id(),
+                scan_num,
+                found,
+                self.task_num.load(Ordering::Relaxed)
+            );
+        }
         let mut sched = self.sched_state.lock();
         for priority in 0..MAX_PRIORITY {
             let mut inner = self.get_mut_inner(priority);
@@ -220,6 +234,7 @@ impl TaskCollection {
                 let notified = page.take_notified();
                 let dropped = page.take_dropped();
                 if notified != 0 {
+                    FOUND_COUNT.fetch_add(notified.count_ones() as u64, AtOrd::Relaxed);
                     for subpage_idx in BitIter::from(notified) {
                         let key = pack_key(priority, page_idx, subpage_idx);
                         crate::sched::on_task_notified(&mut sched, key);
