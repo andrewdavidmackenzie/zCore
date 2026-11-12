@@ -501,11 +501,18 @@ core-tests: core-tests-build
 	PID=$$!; \
 	ELAPSED=0; \
 	TIMEOUT=$(CORE_TESTS_TIMEOUT); \
+	LAST_P=0; \
 	while true; do \
 		if ! kill -0 $$PID 2>/dev/null; then break; fi; \
 		if [ "$$TIMEOUT" -gt 0 ] 2>/dev/null && [ $$ELAPSED -ge $$TIMEOUT ]; then break; fi; \
-		sleep 1; ELAPSED=$$((ELAPSED + 1)); \
+		sleep 5; ELAPSED=$$((ELAPSED + 5)); \
+		CUR_P=$$(grep -c '\[       OK \]' $(CORE_TESTS_LOG) 2>/dev/null || echo 0); \
+		if [ "$$CUR_P" != "$$LAST_P" ]; then \
+			printf '\r    %s tests passed (%ds)...' "$$CUR_P" "$$ELAPSED"; \
+			LAST_P=$$CUR_P; \
+		fi; \
 	done; \
+	printf '\n'; \
 	kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; \
 	echo "=== Core-tests results ($$ELAPSED s) ==="; \
 	P=$$(grep -c '\[       OK \]' $(CORE_TESTS_LOG) || true); \
