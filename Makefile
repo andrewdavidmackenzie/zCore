@@ -443,9 +443,14 @@ core-tests-kernel:
 core-tests-rootfs:
 	@mkdir -p target/rootfs/zircon/x86_64/etc
 ifneq ($(strip $(CORE_TESTS_FILTER)),)
-	@printf '%s\n' '--gtest_filter=$(CORE_TESTS_FILTER)' > $(EXTRA_ARGS)
+	@NEW_FILTER='--gtest_filter=$(CORE_TESTS_FILTER)'; \
+	OLD_FILTER=$$(cat $(EXTRA_ARGS) 2>/dev/null || true); \
+	if [ "$$NEW_FILTER" != "$$OLD_FILTER" ]; then \
+		printf '%s\n' "$$NEW_FILTER" > $(EXTRA_ARGS); \
+		rm -f $(ROOTFS_IMG); \
+	fi
 else
-	@rm -f $(EXTRA_ARGS)
+	@if [ -f $(EXTRA_ARGS) ]; then rm -f $(EXTRA_ARGS) $(ROOTFS_IMG); fi
 endif
 	@cargo xtask zircon-rootfs --arch x86_64
 
