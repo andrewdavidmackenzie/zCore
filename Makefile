@@ -440,17 +440,14 @@ core-tests-kernel:
 # Step 3: Write extra-args filter file + build rootfs SFS image.
 # Only rebuilds the image if rootfs files changed (xtask mtime check).
 .PHONY: core-tests-rootfs
-core-tests-rootfs:
+core-tests-rootfs: $(ROOTFS_IMG)
+
+$(ROOTFS_IMG): $(CORE_TESTS_SKIP_FILE)
 	@mkdir -p target/rootfs/zircon/x86_64/etc
 ifneq ($(strip $(CORE_TESTS_FILTER)),)
-	@NEW_FILTER='--gtest_filter=$(CORE_TESTS_FILTER)'; \
-	OLD_FILTER=$$(cat $(EXTRA_ARGS) 2>/dev/null || true); \
-	if [ "$$NEW_FILTER" != "$$OLD_FILTER" ]; then \
-		printf '%s\n' "$$NEW_FILTER" > $(EXTRA_ARGS); \
-		rm -f $(ROOTFS_IMG); \
-	fi
+	@printf '%s\n' '--gtest_filter=$(CORE_TESTS_FILTER)' > $(EXTRA_ARGS)
 else
-	@if [ -f $(EXTRA_ARGS) ]; then rm -f $(EXTRA_ARGS) $(ROOTFS_IMG); fi
+	@rm -f $(EXTRA_ARGS)
 endif
 	@cargo xtask zircon-rootfs --arch x86_64
 
