@@ -75,7 +75,7 @@ naive-timer = "0.2.0"
 # Frame/heap allocators (moved from kernel)
 customizable-buddy = "0.0.3"
 bitmap-allocator = "0.4"
-buddy_system_allocator = "0.13"
+buddy_system_allocator = { path = "../../vendor/buddy_system_allocator" }
 
 # For riscv
 [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
