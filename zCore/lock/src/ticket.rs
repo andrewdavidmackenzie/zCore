@@ -9,7 +9,15 @@ use core::{
 use crate::interrupt::{pop_off, push_off};
 use crate::lockdep::LockLevel;
 
-pub struct TicketMutex<T: ?Sized> {
+/// Interrupt-disabling ticket spinlock.
+///
+/// Disables interrupts on acquire, restores on drop. Use ONLY for
+/// locks that are accessed from interrupt handlers (timer, console,
+/// heap allocator). For kernel object state, use `KernelMutex` from
+/// `zircon-object::mutex` instead.
+///
+/// Re-exported as `lock::Mutex` for backward compatibility.
+pub struct InterruptSpinLock<T: ?Sized> {
     next_ticket: AtomicUsize,
     next_serving: AtomicUsize,
     /// Lock ordering level for deadlock detection. See `lockdep.rs`.
@@ -17,10 +25,17 @@ pub struct TicketMutex<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
-/// An RAII implementation of a "scoped lock" of a mutex.
-/// When this structure is dropped (falls out of scope),
-/// the lock will be unlocked and the interrupt state restored.
-pub struct TicketMutexGuard<'a, T: ?Sized + 'a> {
+// Keep old name as alias for any external references.
+pub type TicketMutex<T> = InterruptSpinLock<T>;
+
+/// RAII guard for [`InterruptSpinLock`].
+///
+/// When dropped, the lock is released and the interrupt state
+/// saved at acquisition time is restored.
+/// RAII guard for [`InterruptSpinLock`].
+pub type TicketMutexGuard<'a, T> = InterruptSpinLockGuard<'a, T>;
+
+pub struct InterruptSpinLockGuard<'a, T: ?Sized + 'a> {
     next_serving: &'a AtomicUsize,
     ticket: usize,
     data: &'a mut T,
@@ -72,7 +87,7 @@ impl<T> TicketMutex<T> {
 }
 
 impl<T: ?Sized> TicketMutex<T> {
-    pub fn lock(&self) -> TicketMutexGuard<'_, T> {
+    pub fn lock(&self) -> InterruptSpinLockGuard<'_, T> {
         #[cfg(feature = "lockdep")]
         crate::lockdep::check_lock_order(self.level);
         let irq_was_enabled = push_off();
@@ -112,7 +127,7 @@ impl<T: ?Sized> TicketMutex<T> {
         }
         #[cfg(feature = "lockdep")]
         crate::lockdep::on_lock_acquired(self.level);
-        TicketMutexGuard {
+        InterruptSpinLockGuard {
             next_serving: &self.next_serving,
             ticket,
             data: unsafe { &mut *self.data.get() },
@@ -122,7 +137,7 @@ impl<T: ?Sized> TicketMutex<T> {
     }
 
     #[inline(always)]
-    pub fn try_lock(&self) -> Option<TicketMutexGuard<'_, T>> {
+    pub fn try_lock(&self) -> Option<InterruptSpinLockGuard<'_, T>> {
         #[cfg(feature = "lockdep")]
         crate::lockdep::check_lock_order(self.level);
         let irq_was_enabled = push_off();
@@ -138,7 +153,7 @@ impl<T: ?Sized> TicketMutex<T> {
         if let Ok(ticket) = ticket {
             #[cfg(feature = "lockdep")]
             crate::lockdep::on_lock_acquired(self.level);
-            Some(TicketMutexGuard {
+            Some(InterruptSpinLockGuard {
                 next_serving: &self.next_serving,
                 ticket,
                 data: unsafe { &mut *self.data.get() },
@@ -163,7 +178,7 @@ impl<T: ?Sized> TicketMutex<T> {
     }
 }
 
-impl<'a, T: ?Sized> Drop for TicketMutexGuard<'a, T> {
+impl<'a, T: ?Sized> Drop for InterruptSpinLockGuard<'a, T> {
     fn drop(&mut self) {
         #[cfg(feature = "lockdep")]
         crate::lockdep::on_lock_released(self.level);
@@ -196,26 +211,26 @@ impl<T> From<T> for TicketMutex<T> {
     }
 }
 
-impl<'a, T: ?Sized + fmt::Display> fmt::Display for TicketMutexGuard<'a, T> {
+impl<'a, T: ?Sized + fmt::Display> fmt::Display for InterruptSpinLockGuard<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&**self, f)
     }
 }
 
-impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for TicketMutexGuard<'a, T> {
+impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for InterruptSpinLockGuard<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)
     }
 }
 
-impl<'a, T: ?Sized> Deref for TicketMutexGuard<'a, T> {
+impl<'a, T: ?Sized> Deref for InterruptSpinLockGuard<'a, T> {
     type Target = T;
     fn deref(&self) -> &T {
         self.data
     }
 }
 
-impl<'a, T: ?Sized> DerefMut for TicketMutexGuard<'a, T> {
+impl<'a, T: ?Sized> DerefMut for InterruptSpinLockGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut T {
         self.data
     }

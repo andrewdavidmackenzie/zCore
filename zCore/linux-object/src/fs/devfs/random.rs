@@ -3,7 +3,7 @@
 use alloc::sync::Arc;
 use core::any::Any;
 
-use lock::Mutex;
+use lock::KernelMutex as Mutex;
 use zcore_devfs::DevFS;
 use zcore_fs::vfs::*;
 

@@ -2,7 +2,7 @@ use alloc::{boxed::Box, collections::VecDeque, sync::Arc, vec::Vec};
 use core::task::{Context, Poll};
 use core::{any::Any, future::Future, pin::Pin};
 
-use lock::Mutex;
+use lock::KernelMutex as Mutex;
 
 use hal_impl::device_registry::prelude::input::{Mouse, MouseFlags, MouseState};
 use hal::{EventScheme, InputScheme};

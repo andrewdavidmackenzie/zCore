@@ -9,7 +9,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use lock::Mutex;
+use lock::KernelMutex as Mutex;
 use zcore_fs::vfs::*;
 
 #[derive(Clone, PartialEq, Eq)]
