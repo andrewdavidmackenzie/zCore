@@ -4,9 +4,9 @@
 //! and signal integration. It asserts `ZX_COUNTER_POSITIVE` when
 //! the value is positive and `ZX_COUNTER_NON_POSITIVE` otherwise.
 
+use crate::mutex::KernelMutex as Mutex;
 use crate::object::*;
 use alloc::sync::Arc;
-use crate::mutex::KernelMutex as Mutex;
 
 /// Signal asserted when the counter value is > 0 (bit 4 = 0x10).
 const COUNTER_POSITIVE: Signal = Signal::COUNTER_POSITIVE;

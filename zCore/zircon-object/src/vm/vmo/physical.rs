@@ -1,4 +1,4 @@
-use {super::*, alloc::sync::Arc, crate::mutex::KernelMutex as Mutex};
+use {super::*, crate::mutex::KernelMutex as Mutex, alloc::sync::Arc};
 
 /// VMO representing a physical range of memory.
 pub struct VMObjectPhysical {

@@ -1,11 +1,11 @@
 pub use self::port_packet::*;
+use crate::mutex::KernelMutex as Mutex;
 use crate::object::*;
 use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::bitflags;
 use core::sync::atomic::AtomicBool;
-use crate::mutex::KernelMutex as Mutex;
 
 #[path = "port_packet.rs"]
 mod port_packet;

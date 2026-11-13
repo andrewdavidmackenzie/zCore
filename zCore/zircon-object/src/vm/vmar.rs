@@ -1,11 +1,11 @@
 use {
     super::*,
+    crate::mutex::KernelMutex as Mutex,
     crate::object::*,
     alloc::{collections::BTreeMap, sync::Arc, vec, vec::Vec},
     bitflags::bitflags,
     hal::vm::{GenericPageTable, IgnoreNotMappedErr, Page, PageSize, PagingError, PagingResult},
     hal_impl::vm::PageTable,
-    crate::mutex::KernelMutex as Mutex,
 };
 
 /// Operations for `vmar_op_range`.
@@ -149,9 +149,9 @@ struct VmarInner {
 /// space exhaustion in long-running test suites.
 #[cfg(feature = "aspace-separate")]
 mod aspace_id {
+    use crate::mutex::KernelMutex as Mutex;
     use alloc::collections::BTreeSet;
     use core::sync::atomic::{AtomicUsize, Ordering};
-    use crate::mutex::KernelMutex as Mutex;
 
     static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
     static FREE_IDS: Mutex<BTreeSet<usize>> = Mutex::new(BTreeSet::new());
@@ -208,8 +208,14 @@ impl VmAddressRegion {
             addr,
             size,
             parent: None,
-            page_table: Arc::new(Mutex::new_with_level(PageTable::from_current().clone_kernel(), lock::lockdep::LockLevel::PageTable)), //hal PageTable
-            inner: Mutex::new_with_level(Some(VmarInner::default()), lock::lockdep::LockLevel::VmarInner),
+            page_table: Arc::new(Mutex::new_with_level(
+                PageTable::from_current().clone_kernel(),
+                lock::lockdep::LockLevel::PageTable,
+            )), //hal PageTable
+            inner: Mutex::new_with_level(
+                Some(VmarInner::default()),
+                lock::lockdep::LockLevel::VmarInner,
+            ),
             memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
@@ -226,8 +232,14 @@ impl VmAddressRegion {
             addr,
             size,
             parent: None,
-            page_table: Arc::new(Mutex::new_with_level(PageTable::from_current().clone_kernel(), lock::lockdep::LockLevel::PageTable)),
-            inner: Mutex::new_with_level(Some(VmarInner::default()), lock::lockdep::LockLevel::VmarInner),
+            page_table: Arc::new(Mutex::new_with_level(
+                PageTable::from_current().clone_kernel(),
+                lock::lockdep::LockLevel::PageTable,
+            )),
+            inner: Mutex::new_with_level(
+                Some(VmarInner::default()),
+                lock::lockdep::LockLevel::VmarInner,
+            ),
             memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
@@ -243,8 +255,14 @@ impl VmAddressRegion {
             addr: kernel_vmar_base,
             size: kernel_vmar_size,
             parent: None,
-            page_table: Arc::new(Mutex::new_with_level(PageTable::from_current().clone_kernel(), lock::lockdep::LockLevel::PageTable)),
-            inner: Mutex::new_with_level(Some(VmarInner::default()), lock::lockdep::LockLevel::VmarInner),
+            page_table: Arc::new(Mutex::new_with_level(
+                PageTable::from_current().clone_kernel(),
+                lock::lockdep::LockLevel::PageTable,
+            )),
+            inner: Mutex::new_with_level(
+                Some(VmarInner::default()),
+                lock::lockdep::LockLevel::VmarInner,
+            ),
             memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
@@ -261,8 +279,14 @@ impl VmAddressRegion {
             addr: guest_vmar_base,
             size: guest_vmar_size,
             parent: None,
-            page_table: Arc::new(Mutex::new_with_level(crate::hypervisor::VmmPageTable::new(), lock::lockdep::LockLevel::PageTable)),
-            inner: Mutex::new_with_level(Some(VmarInner::default()), lock::lockdep::LockLevel::VmarInner),
+            page_table: Arc::new(Mutex::new_with_level(
+                crate::hypervisor::VmmPageTable::new(),
+                lock::lockdep::LockLevel::PageTable,
+            )),
+            inner: Mutex::new_with_level(
+                Some(VmarInner::default()),
+                lock::lockdep::LockLevel::VmarInner,
+            ),
             memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
@@ -329,7 +353,10 @@ impl VmAddressRegion {
             size: len,
             parent: Some(self.clone()),
             page_table: self.page_table.clone(),
-            inner: Mutex::new_with_level(Some(VmarInner::default()), lock::lockdep::LockLevel::VmarInner),
+            inner: Mutex::new_with_level(
+                Some(VmarInner::default()),
+                lock::lockdep::LockLevel::VmarInner,
+            ),
             memory_priority: core::sync::atomic::AtomicBool::new(false),
         });
         inner.children.push(child.clone());
@@ -1999,15 +2026,18 @@ impl VmMapping {
             vec![flags; page_count]
         };
         let mapping = Arc::new(VmMapping {
-            inner: Mutex::new_with_level(VmMappingInner {
-                flags: per_page_flags,
-                default_flags: flags,
-                protection_overrides: BTreeMap::new(),
-                addr,
-                size,
-                vmo_offset,
-                fault_beyond_stream_size,
-            }, lock::lockdep::LockLevel::VmMappingInner),
+            inner: Mutex::new_with_level(
+                VmMappingInner {
+                    flags: per_page_flags,
+                    default_flags: flags,
+                    protection_overrides: BTreeMap::new(),
+                    addr,
+                    size,
+                    vmo_offset,
+                    fault_beyond_stream_size,
+                },
+                lock::lockdep::LockLevel::VmMappingInner,
+            ),
             permissions,
             page_table,
             vmo: vmo.clone(),
@@ -2197,15 +2227,18 @@ impl VmMapping {
                 permissions: self.permissions,
                 vmo: self.vmo.clone(),
                 page_table: self.page_table.clone(),
-                inner: Mutex::new_with_level(VmMappingInner {
-                    flags: inner.flags.drain(new_flags_range).collect(),
-                    default_flags: inner.default_flags,
-                    protection_overrides: BTreeMap::new(),
-                    addr: end,
-                    size: new_len2,
-                    vmo_offset: inner.vmo_offset + (end - inner.addr),
-                    fault_beyond_stream_size: inner.fault_beyond_stream_size,
-                }, lock::lockdep::LockLevel::VmMappingInner),
+                inner: Mutex::new_with_level(
+                    VmMappingInner {
+                        flags: inner.flags.drain(new_flags_range).collect(),
+                        default_flags: inner.default_flags,
+                        protection_overrides: BTreeMap::new(),
+                        addr: end,
+                        size: new_len2,
+                        vmo_offset: inner.vmo_offset + (end - inner.addr),
+                        fault_beyond_stream_size: inner.fault_beyond_stream_size,
+                    },
+                    lock::lockdep::LockLevel::VmMappingInner,
+                ),
             });
             inner.size = new_len1;
             inner.flags.truncate(new_len1);

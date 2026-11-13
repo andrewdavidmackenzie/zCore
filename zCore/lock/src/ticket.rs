@@ -42,6 +42,7 @@ pub struct InterruptSpinLockGuard<'a, T: ?Sized + 'a> {
     /// Whether interrupts were enabled before this lock was acquired.
     irq_was_enabled: bool,
     /// Lock ordering level for tracking.
+    #[cfg_attr(not(feature = "lockdep"), allow(dead_code))]
     level: LockLevel,
 }
 

@@ -3,11 +3,11 @@ use {
     super::job_policy::*,
     super::process::Process,
     super::thread::Thread,
+    crate::mutex::KernelMutex as Mutex,
     crate::object::*,
     crate::task::Task,
     alloc::sync::{Arc, Weak},
     alloc::vec::Vec,
-    crate::mutex::KernelMutex as Mutex,
 };
 
 /// Control a group of processes

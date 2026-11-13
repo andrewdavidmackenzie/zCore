@@ -95,6 +95,7 @@
 //! [interior mutability pattern]: https://doc.rust-lang.org/reference/interior-mutability.html
 
 use {
+    crate::mutex::KernelMutex as Mutex,
     crate::signal::*,
     alloc::{boxed::Box, string::String, sync::Arc, vec::Vec},
     core::{
@@ -105,7 +106,6 @@ use {
         task::{Context, Poll},
     },
     downcast_rs::{impl_downcast, DowncastSync},
-    crate::mutex::KernelMutex as Mutex,
 };
 
 pub use {super::*, handle::*, rights::*, signal::*};

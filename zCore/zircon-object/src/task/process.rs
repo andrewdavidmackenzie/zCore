@@ -5,9 +5,9 @@ use alloc::{
 };
 use core::any::Any;
 
+use crate::mutex::KernelMutex as Mutex;
 use futures::channel::oneshot::{self, Receiver, Sender};
 use hashbrown::HashMap;
-use crate::mutex::KernelMutex as Mutex;
 
 use super::exception::{ExceptionChannelType, Exceptionate};
 use super::job_policy::{JobPolicy, PolicyAction, PolicyCondition};

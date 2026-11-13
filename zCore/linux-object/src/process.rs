@@ -18,7 +18,7 @@ use alloc::{
 use core::time::Duration;
 use hal::VirtAddr;
 use hashbrown::HashMap;
-use lock::{Mutex, MutexGuard};
+use lock::{KernelMutex as Mutex, KernelMutexGuard as MutexGuard};
 use spin::Mutex as SpinMutex;
 use zcore_fs::vfs::{FileSystem, INode};
 

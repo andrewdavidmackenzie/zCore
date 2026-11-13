@@ -13,7 +13,7 @@
 
 pub mod lockdep;
 pub mod mutex;
-pub use mutex::{KernelMutex, KernelMutexGuard, set_yield_fn};
+pub use mutex::{set_yield_fn, KernelMutex, KernelMutexGuard};
 
 cfg_if::cfg_if! {
     if #[cfg(all(target_os = "none", feature = "ticket"))] {

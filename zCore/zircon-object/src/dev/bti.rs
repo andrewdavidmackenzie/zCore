@@ -1,10 +1,10 @@
 use {
     super::*,
+    crate::mutex::KernelMutex as Mutex,
     crate::object::*,
     crate::vm::*,
     alloc::{sync::Arc, vec::Vec},
     dev::Iommu,
-    crate::mutex::KernelMutex as Mutex,
 };
 
 /// Bus Transaction Initiator.

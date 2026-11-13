@@ -1,6 +1,7 @@
 use {
     self::{paged::*, physical::*, slice::*},
     super::*,
+    crate::mutex::KernelMutex as Mutex,
     crate::object::*,
     crate::signal::{
         PacketPageRequest, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_COMPLETE,
@@ -13,7 +14,6 @@ use {
     bitflags::bitflags,
     core::ops::Deref,
     hal_impl::CachePolicy,
-    crate::mutex::KernelMutex as Mutex,
 };
 
 pub mod dirty_tracker;
@@ -466,7 +466,10 @@ impl VmObject {
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new(pages),
-            inner: Mutex::new_with_level(VmObjectInner::default(), lock::lockdep::LockLevel::VmObjectInner),
+            inner: Mutex::new_with_level(
+                VmObjectInner::default(),
+                lock::lockdep::LockLevel::VmObjectInner,
+            ),
             base,
         })
     }
@@ -484,7 +487,10 @@ impl VmObject {
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPhysical::new(paddr, pages),
-            inner: Mutex::new_with_level(VmObjectInner::default(), lock::lockdep::LockLevel::VmObjectInner),
+            inner: Mutex::new_with_level(
+                VmObjectInner::default(),
+                lock::lockdep::LockLevel::VmObjectInner,
+            ),
         })
     }
 
@@ -501,7 +507,10 @@ impl VmObject {
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new_contiguous(pages, align_log2)?,
-            inner: Mutex::new_with_level(VmObjectInner::default(), lock::lockdep::LockLevel::VmObjectInner),
+            inner: Mutex::new_with_level(
+                VmObjectInner::default(),
+                lock::lockdep::LockLevel::VmObjectInner,
+            ),
         });
         Ok(vmo)
     }
@@ -1933,11 +1942,14 @@ impl VmObject {
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_,
-            inner: Mutex::new_with_level(VmObjectInner {
-                parent: Arc::downgrade(self),
-                pager_root,
-                ..VmObjectInner::default()
-            }, lock::lockdep::LockLevel::VmObjectInner),
+            inner: Mutex::new_with_level(
+                VmObjectInner {
+                    parent: Arc::downgrade(self),
+                    pager_root,
+                    ..VmObjectInner::default()
+                },
+                lock::lockdep::LockLevel::VmObjectInner,
+            ),
         });
         self.add_child(&child);
         Ok(child)
@@ -1995,11 +2007,14 @@ impl VmObject {
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_,
-            inner: Mutex::new_with_level(VmObjectInner {
-                parent: Arc::downgrade(self),
-                pager_root,
-                ..VmObjectInner::default()
-            }, lock::lockdep::LockLevel::VmObjectInner),
+            inner: Mutex::new_with_level(
+                VmObjectInner {
+                    parent: Arc::downgrade(self),
+                    pager_root,
+                    ..VmObjectInner::default()
+                },
+                lock::lockdep::LockLevel::VmObjectInner,
+            ),
         });
         self.add_child(&child);
         Ok(child)
@@ -2079,11 +2094,14 @@ impl VmObject {
             } else {
                 VMObjectSlice::new(self.trait_.clone(), offset, size)
             },
-            inner: Mutex::new_with_level(VmObjectInner {
-                parent: Arc::downgrade(self),
-                content_size: child_content_size,
-                ..VmObjectInner::default()
-            }, lock::lockdep::LockLevel::VmObjectInner),
+            inner: Mutex::new_with_level(
+                VmObjectInner {
+                    parent: Arc::downgrade(self),
+                    content_size: child_content_size,
+                    ..VmObjectInner::default()
+                },
+                lock::lockdep::LockLevel::VmObjectInner,
+            ),
         });
         self.add_child(&child);
         Ok(child)

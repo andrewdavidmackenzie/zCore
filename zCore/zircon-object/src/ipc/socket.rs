@@ -1,9 +1,9 @@
 use {
+    crate::mutex::KernelMutex as Mutex,
     crate::object::*,
     alloc::collections::VecDeque,
     alloc::sync::{Arc, Weak},
     bitflags::bitflags,
-    crate::mutex::KernelMutex as Mutex,
 };
 
 /// Bidirectional streaming IPC transport.

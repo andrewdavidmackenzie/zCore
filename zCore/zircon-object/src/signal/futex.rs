@@ -1,3 +1,4 @@
+use crate::mutex::KernelMutex as Mutex;
 use crate::{object::*, task::Thread};
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
@@ -5,7 +6,6 @@ use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::*;
 use core::task::{Context, Poll, Waker};
-use crate::mutex::KernelMutex as Mutex;
 
 /// A primitive for creating userspace synchronization tools.
 ///

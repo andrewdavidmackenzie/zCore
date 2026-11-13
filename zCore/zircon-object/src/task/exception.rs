@@ -1,10 +1,10 @@
 use alloc::{sync::Arc, vec::Vec};
 use core::mem::size_of;
 
+use crate::mutex::KernelMutex as Mutex;
 use futures::channel::oneshot;
 use hal::TrapReason;
 use hal_impl::context::UserContext;
-use crate::mutex::KernelMutex as Mutex;
 
 use super::{Job, Task, Thread};
 use crate::ipc::{Channel, MessagePacket};

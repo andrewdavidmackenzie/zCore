@@ -5,7 +5,7 @@ use crate::sync::Semaphore;
 use crate::time::*;
 use alloc::{collections::BTreeMap, sync::Arc, sync::Weak, vec::Vec};
 use core::ops::Index;
-use lock::{Mutex, RwLock};
+use lock::{KernelMutex as Mutex, RwLock};
 
 /// semid data structure
 ///
