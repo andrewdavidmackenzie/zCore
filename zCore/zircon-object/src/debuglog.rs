@@ -4,7 +4,7 @@ use {
     crate::object::*,
     alloc::{sync::Arc, vec::Vec},
     core::sync::atomic::{AtomicU64, Ordering},
-    lock::Mutex,
+    crate::mutex::KernelMutex as Mutex,
 };
 
 /// Global sequence counter for debuglog records.

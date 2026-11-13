@@ -4,7 +4,7 @@ use core::mem::size_of;
 use futures::channel::oneshot;
 use hal::TrapReason;
 use hal_impl::context::UserContext;
-use lock::Mutex;
+use crate::mutex::KernelMutex as Mutex;
 
 use super::{Job, Task, Thread};
 use crate::ipc::{Channel, MessagePacket};

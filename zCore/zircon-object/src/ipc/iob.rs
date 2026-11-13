@@ -10,7 +10,7 @@ use {
     crate::vm::VmObject,
     alloc::sync::{Arc, Weak},
     alloc::vec::Vec,
-    lock::Mutex,
+    crate::mutex::KernelMutex as Mutex,
 };
 
 /// Maximum number of regions per IOBuffer.

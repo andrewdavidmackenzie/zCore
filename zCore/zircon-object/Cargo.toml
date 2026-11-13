@@ -15,6 +15,7 @@ aspace-separate = []
 dynamic-linking = ["elf"]
 elf = ["xmas-elf"]
 linux = []
+lockdep = ["lock/lockdep"]
 #hypervisor = ["rvm"]
 hypervisor = []
 ## Expose test-only constructors (e.g., CurrentThread::new_for_test).
@@ -47,7 +48,7 @@ xmas-elf = { version = "0.7", optional = true }
 spin = "0.9"
 cfg-if = "1.0"
 #rvm = { git = "https://github.com/rcore-os/RVM", rev = "382fc60", optional = true }
-lock = { path = "../lock", features = ["lockdep"] }
+lock = { path = "../lock" }
 zircon-abi = { path = "../zircon-abi", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]

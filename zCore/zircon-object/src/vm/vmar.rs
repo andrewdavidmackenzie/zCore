@@ -5,7 +5,7 @@ use {
     bitflags::bitflags,
     hal::vm::{GenericPageTable, IgnoreNotMappedErr, Page, PageSize, PagingError, PagingResult},
     hal_impl::vm::PageTable,
-    lock::Mutex,
+    crate::mutex::KernelMutex as Mutex,
 };
 
 /// Operations for `vmar_op_range`.
@@ -151,7 +151,7 @@ struct VmarInner {
 mod aspace_id {
     use alloc::collections::BTreeSet;
     use core::sync::atomic::{AtomicUsize, Ordering};
-    use lock::Mutex;
+    use crate::mutex::KernelMutex as Mutex;
 
     static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
     static FREE_IDS: Mutex<BTreeSet<usize>> = Mutex::new(BTreeSet::new());
@@ -2795,8 +2795,8 @@ pub const USER_STACK_PAGES: usize = 128;
 
 /// Global list of root VMARs for COW fault lookup.
 /// Stored as Weak references — automatically cleaned when processes drop.
-static COW_VMARS: lock::Mutex<Vec<alloc::sync::Weak<VmAddressRegion>>> =
-    lock::Mutex::new(Vec::new());
+static COW_VMARS: crate::mutex::KernelMutex<Vec<alloc::sync::Weak<VmAddressRegion>>> =
+    crate::mutex::KernelMutex::new(Vec::new());
 
 /// Register a root VMAR for COW fault handling.
 pub fn register_cow_vmar(vmar: &Arc<VmAddressRegion>) {

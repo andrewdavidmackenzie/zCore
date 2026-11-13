@@ -2,7 +2,7 @@
 
 use crate::object::*;
 use alloc::sync::Arc;
-use lock::Mutex;
+use crate::mutex::KernelMutex as Mutex;
 
 /// An MSI allocation represents a block of contiguous MSI interrupt
 /// vectors allocated from the platform MSI controller.

@@ -105,7 +105,7 @@ use {
         task::{Context, Poll},
     },
     downcast_rs::{impl_downcast, DowncastSync},
-    lock::Mutex,
+    crate::mutex::KernelMutex as Mutex,
 };
 
 pub use {super::*, handle::*, rights::*, signal::*};

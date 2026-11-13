@@ -6,7 +6,7 @@
 
 use crate::object::*;
 use alloc::sync::Arc;
-use lock::Mutex;
+use crate::mutex::KernelMutex as Mutex;
 
 /// Signal asserted when the counter value is > 0 (bit 4 = 0x10).
 const COUNTER_POSITIVE: Signal = Signal::COUNTER_POSITIVE;

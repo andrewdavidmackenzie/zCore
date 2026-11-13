@@ -5,7 +5,7 @@ use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::*;
 use core::task::{Context, Poll, Waker};
-use lock::Mutex;
+use crate::mutex::KernelMutex as Mutex;
 
 /// A primitive for creating userspace synchronization tools.
 ///

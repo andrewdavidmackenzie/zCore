@@ -1,5 +1,5 @@
 use {
-    crate::object::*, alloc::sync::Arc, alloc::vec::Vec, bitflags::bitflags, lock::Mutex,
+    crate::object::*, alloc::sync::Arc, alloc::vec::Vec, bitflags::bitflags, crate::mutex::KernelMutex as Mutex,
     numeric_enum_macro::numeric_enum,
 };
 

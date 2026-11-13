@@ -7,7 +7,7 @@ use {
     crate::task::Task,
     alloc::sync::{Arc, Weak},
     alloc::vec::Vec,
-    lock::Mutex,
+    crate::mutex::KernelMutex as Mutex,
 };
 
 /// Control a group of processes

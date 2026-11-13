@@ -6,7 +6,7 @@
 
 use crate::object::*;
 use hal_impl::timer::timer_now;
-use lock::Mutex;
+use crate::mutex::KernelMutex as Mutex;
 
 /// Clock creation options.
 pub const ZX_CLOCK_OPT_MONOTONIC: u64 = 1 << 0;

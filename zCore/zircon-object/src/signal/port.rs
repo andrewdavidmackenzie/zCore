@@ -5,7 +5,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::bitflags;
 use core::sync::atomic::AtomicBool;
-use lock::Mutex;
+use crate::mutex::KernelMutex as Mutex;
 
 #[path = "port_packet.rs"]
 mod port_packet;

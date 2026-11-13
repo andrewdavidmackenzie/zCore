@@ -10,7 +10,7 @@ use crate::signal::port::*;
 use crate::vm::VmObject;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use lock::Mutex;
+use crate::mutex::KernelMutex as Mutex;
 
 /// A pager object that manages demand-paged VMOs.
 pub struct Pager {

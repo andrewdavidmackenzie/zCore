@@ -7,7 +7,7 @@ use {
     core::sync::atomic::{AtomicU32, Ordering},
     futures::channel::oneshot::{self, Sender},
     hashbrown::HashMap,
-    lock::Mutex,
+    crate::mutex::KernelMutex as Mutex,
 };
 
 /// Bidirectional interprocess communication

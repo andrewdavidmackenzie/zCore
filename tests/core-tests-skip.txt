@@ -4,5 +4,9 @@ PagerWriteback.NoDirtyRequestsForClones
 # ── Flaky timing failure: WaitForBlocked races with thread state transition ──
 Pager.ResizeCommitTest
 
-# ── Hang: debug registers watchpoint test hangs, blocks 566 remaining tests ──
+# ── Hang: debug registers watchpoint test, blocks remaining tests ──
 Threads.DebugRegistersWatchpointSyscallPanicRepro
+
+# ── Hang: passes alone and in Pager.* suite, hangs in full suite ──
+# Contamination from a test running before Pager suite in full run
+Pager.FailEarlyWake

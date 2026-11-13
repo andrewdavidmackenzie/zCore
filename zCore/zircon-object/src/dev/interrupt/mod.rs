@@ -11,7 +11,7 @@ use {
         sync::atomic::{AtomicU64, Ordering},
         task::{Context, Poll},
     },
-    lock::Mutex,
+    crate::mutex::KernelMutex as Mutex,
 };
 
 /// Global registry of wake sources (interrupt objects with WAKE_VECTOR).

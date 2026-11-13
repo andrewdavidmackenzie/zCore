@@ -12,7 +12,7 @@ use crate::object::ZxError;
 use crate::ZxResult;
 use alloc::vec;
 use alloc::vec::Vec;
-use lock::Mutex;
+use crate::mutex::KernelMutex as Mutex;
 
 /// Default trace buffer size (1 MiB). Fuchsia uses 32 MiB by default
 /// but we start smaller since we don't emit records yet.

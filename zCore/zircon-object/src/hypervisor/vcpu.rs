@@ -7,7 +7,7 @@ use {
     },
     alloc::sync::Arc,
     core::convert::TryInto,
-    lock::Mutex,
+    crate::mutex::KernelMutex as Mutex,
     rvm::{self, Vcpu as VcpuInner},
 };
 

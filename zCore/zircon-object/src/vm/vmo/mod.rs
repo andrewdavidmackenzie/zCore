@@ -13,7 +13,7 @@ use {
     bitflags::bitflags,
     core::ops::Deref,
     hal_impl::CachePolicy,
-    lock::Mutex,
+    crate::mutex::KernelMutex as Mutex,
 };
 
 pub mod dirty_tracker;
