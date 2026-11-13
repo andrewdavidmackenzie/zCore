@@ -10,7 +10,7 @@ use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
 use hal_impl::context::{UserContext, UserContextField};
 use hal_impl::user::{Out, UserInPtr, UserOutPtr, UserPtr};
-use lock::{KernelMutex as Mutex, KernelMutexGuard as MutexGuard};
+use lock::{Mutex, MutexGuard};
 use zircon_object::task::{CurrentThread, Process, Thread};
 use zircon_object::ZxResult;
 

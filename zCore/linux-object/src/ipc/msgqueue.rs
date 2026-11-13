@@ -7,7 +7,7 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use lock::{KernelMutex as Mutex, RwLock};
+use lock::{Mutex, RwLock};
 
 use super::IpcPerm;
 

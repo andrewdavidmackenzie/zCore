@@ -1,5 +1,4 @@
 use {
-    crate::mutex::KernelMutex as Mutex,
     crate::{
         hypervisor::{Guest, VcpuIo, VcpuState},
         object::*,
@@ -8,6 +7,7 @@ use {
     },
     alloc::sync::Arc,
     core::convert::TryInto,
+    lock::Mutex,
     rvm::{self, Vcpu as VcpuInner},
 };
 

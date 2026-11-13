@@ -21,7 +21,7 @@ use core::any::Any;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
-use lock::KernelMutex as Mutex;
+use lock::Mutex;
 use zcore_fs::vfs::PollStatus;
 use zircon_object::impl_kobject;
 use zircon_object::object::*;

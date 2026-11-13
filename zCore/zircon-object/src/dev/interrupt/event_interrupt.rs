@@ -1,5 +1,5 @@
 use hal_impl::interrupt;
-use {super::*, crate::mutex::KernelMutex as Mutex};
+use {super::*, lock::Mutex};
 
 pub struct EventInterrupt {
     vector: usize,

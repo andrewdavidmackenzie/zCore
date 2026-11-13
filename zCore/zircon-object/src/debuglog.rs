@@ -1,10 +1,10 @@
 //! Objects for Kernel Debuglog.
 use {
     super::*,
-    crate::mutex::KernelMutex as Mutex,
     crate::object::*,
     alloc::{sync::Arc, vec::Vec},
     core::sync::atomic::{AtomicU64, Ordering},
+    lock::Mutex,
 };
 
 /// Global sequence counter for debuglog records.

@@ -1,7 +1,6 @@
 use {
     self::event_interrupt::*,
     self::virtual_interrupt::*,
-    crate::mutex::KernelMutex as Mutex,
     crate::object::*,
     crate::signal::*,
     alloc::{boxed::Box, sync::Arc, vec::Vec},
@@ -12,6 +11,7 @@ use {
         sync::atomic::{AtomicU64, Ordering},
         task::{Context, Poll},
     },
+    lock::Mutex,
 };
 
 /// Global registry of wake sources (interrupt objects with WAKE_VECTOR).

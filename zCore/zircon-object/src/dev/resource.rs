@@ -1,6 +1,6 @@
 use {
-    crate::mutex::KernelMutex as Mutex, crate::object::*, alloc::sync::Arc, alloc::vec::Vec,
-    bitflags::bitflags, numeric_enum_macro::numeric_enum,
+    crate::object::*, alloc::sync::Arc, alloc::vec::Vec, bitflags::bitflags, lock::Mutex,
+    numeric_enum_macro::numeric_enum,
 };
 
 /// Global registry of allocated resource ranges.

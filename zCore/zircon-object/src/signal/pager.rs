@@ -5,12 +5,12 @@
 //! VMO page, the kernel sends a `ZX_PAGER_VMO_READ` packet to the
 //! pager's port. The pager supplies pages via `pager_supply_pages`.
 
-use crate::mutex::KernelMutex as Mutex;
 use crate::object::*;
 use crate::signal::port::*;
 use crate::vm::VmObject;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+use lock::Mutex;
 
 /// A pager object that manages demand-paged VMOs.
 pub struct Pager {
@@ -41,10 +41,7 @@ impl Pager {
     pub fn new() -> Arc<Self> {
         Arc::new(Pager {
             base: KObjectBase::new(),
-            inner: Mutex::new_with_level(
-                PagerInner::default(),
-                lock::lockdep::LockLevel::PagerInner,
-            ),
+            inner: Mutex::new(PagerInner::default()),
         })
     }
 

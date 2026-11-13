@@ -4,9 +4,9 @@
 //! The clock's time is computed from the monotonic clock via a linear
 //! transformation: `clock_time = (mono - reference_mono) * rate + offset`.
 
-use crate::mutex::KernelMutex as Mutex;
 use crate::object::*;
 use hal_impl::timer::timer_now;
+use lock::Mutex;
 
 /// Clock creation options.
 pub const ZX_CLOCK_OPT_MONOTONIC: u64 = 1 << 0;

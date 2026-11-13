@@ -20,9 +20,6 @@ hal_fn_impl! {
         }
 
         fn primary_init() {
-            // Register yield function for KernelMutex contention.
-            lock::set_yield_fn(executor::sched_yield);
-
             // Save the kernel page table before trapframe::init may modify it.
             #[cfg(target_arch = "x86_64")]
             super::arch::vm::save_kernel_page_table();

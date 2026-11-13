@@ -1,5 +1,4 @@
 use {
-    crate::mutex::KernelMutex as Mutex,
     crate::object::*,
     alloc::collections::VecDeque,
     alloc::sync::{Arc, Weak},
@@ -8,6 +7,7 @@ use {
     core::sync::atomic::{AtomicU32, Ordering},
     futures::channel::oneshot::{self, Sender},
     hashbrown::HashMap,
+    lock::Mutex,
 };
 
 /// Bidirectional interprocess communication

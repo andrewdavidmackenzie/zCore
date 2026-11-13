@@ -1,8 +1,8 @@
 use {
-    crate::mutex::KernelMutex as Mutex,
     crate::object::*,
     alloc::collections::VecDeque,
     alloc::sync::{Arc, Weak},
+    lock::Mutex,
 };
 
 /// First-In First-Out inter-process queue.

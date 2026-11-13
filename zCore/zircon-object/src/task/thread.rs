@@ -7,11 +7,11 @@ use core::task::{Context, Poll, Waker};
 use core::time::Duration;
 use core::{any::Any, future::Future, pin::Pin};
 
-use crate::mutex::KernelMutex as Mutex;
 use bitflags::bitflags;
 use cfg_if::cfg_if;
 use futures::{channel::oneshot::*, future::FutureExt, pin_mut, select_biased};
 use hal_impl::context::UserContext;
+use lock::Mutex;
 
 use self::thread_state::ContextAccessState;
 use super::{exception::*, Process, Task};

@@ -10,7 +10,7 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use hal_impl::console::{self, ConsoleWinSize};
-use lock::KernelMutex as Mutex;
+use lock::Mutex;
 use zcore_fs::vfs::*;
 
 /// STDIN global reference.

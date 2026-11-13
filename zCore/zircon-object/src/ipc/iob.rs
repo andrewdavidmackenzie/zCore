@@ -6,11 +6,11 @@
 //! per-region, per-endpoint access control.
 
 use {
-    crate::mutex::KernelMutex as Mutex,
     crate::object::*,
     crate::vm::VmObject,
     alloc::sync::{Arc, Weak},
     alloc::vec::Vec,
+    lock::Mutex,
 };
 
 /// Maximum number of regions per IOBuffer.

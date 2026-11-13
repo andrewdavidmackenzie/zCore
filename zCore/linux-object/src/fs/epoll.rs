@@ -8,7 +8,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use async_trait::async_trait;
-use lock::KernelMutex as Mutex;
+use lock::Mutex;
 use zircon_object::object::*;
 
 use crate::error::{LxError, LxResult};

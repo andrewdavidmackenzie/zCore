@@ -2,7 +2,7 @@ use alloc::{boxed::Box, collections::VecDeque, sync::Arc};
 use core::task::{Context, Poll};
 use core::{any::Any, future::Future, mem::size_of, pin::Pin};
 
-use lock::KernelMutex as Mutex;
+use lock::Mutex;
 
 use hal::scheme::input::{InputEvent, InputEventType};
 use hal::InputScheme;

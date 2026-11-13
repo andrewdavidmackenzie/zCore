@@ -3,7 +3,7 @@ use super::*;
 use crate::error::LxError;
 use crate::time::TimeSpec;
 use alloc::{collections::BTreeMap, sync::Arc, sync::Weak};
-use lock::{KernelMutex as Mutex, RwLock};
+use lock::{Mutex, RwLock};
 use zircon_object::vm::*;
 
 static KEY2SHM: spin::Lazy<RwLock<BTreeMap<u32, Weak<Mutex<ShmGuard>>>>> =
