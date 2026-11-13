@@ -212,6 +212,32 @@ impl TaskCollection {
     /// Scan waker pages for notifications and dropped tasks.
     /// Feeds notified tasks into the scheduler and removes dropped ones.
     fn scan_notifications(&self) {
+        use core::sync::atomic::{AtomicU64, Ordering as AtOrd};
+        static SCAN_COUNT: AtomicU64 = AtomicU64::new(0);
+        static FOUND_COUNT: AtomicU64 = AtomicU64::new(0);
+        let scan_num = SCAN_COUNT.fetch_add(1, AtOrd::Relaxed);
+        if scan_num > 0 && scan_num % 500_000 == 0 {
+            let found = FOUND_COUNT.load(AtOrd::Relaxed);
+            let task_num = self.task_num.load(Ordering::Relaxed);
+            if task_num > 0 {
+                // Dump waker page state for this CPU
+                let mut notified_bits = 0u64;
+                let mut total_pages = 0usize;
+                for priority in 0..MAX_PRIORITY {
+                    let inner = self.get_mut_inner(priority);
+                    for page_idx in 0..inner.pages.len() {
+                        total_pages += 1;
+                        let page = &inner.pages[page_idx];
+                        let n = page.peek_notified();
+                        notified_bits |= n;
+                    }
+                }
+                warn!(
+                    "scan: cpu={} scan#{} found={} tasks={} pages={} notified_bits={:#x}",
+                    self.cpu_id, scan_num, found, task_num, total_pages, notified_bits
+                );
+            }
+        }
         let mut sched = self.sched_state.lock();
         for priority in 0..MAX_PRIORITY {
             let mut inner = self.get_mut_inner(priority);
@@ -220,6 +246,7 @@ impl TaskCollection {
                 let notified = page.take_notified();
                 let dropped = page.take_dropped();
                 if notified != 0 {
+                    FOUND_COUNT.fetch_add(notified.count_ones() as u64, AtOrd::Relaxed);
                     for subpage_idx in BitIter::from(notified) {
                         let key = pack_key(priority, page_idx, subpage_idx);
                         crate::sched::on_task_notified(&mut sched, key);
@@ -287,8 +314,11 @@ pub mod key {
 
     pub fn unpack_key(key: Key) -> (usize, usize, usize) {
         let subpage_idx = key & 0x3F;
-        let page_idx = (key << 5) >> 11;
         let priority = key >> PRIORITY_SHIFT;
+        // Mask out the priority bits before extracting page_idx.
+        // The old formula `(key << 5) >> 11` overflowed for priorities >= 12,
+        // corrupting page_idx with leftover priority bits.
+        let page_idx = (key & ((1 << PRIORITY_SHIFT) - 1)) >> PAGE_INDEX_SHIFT;
         (priority, page_idx, subpage_idx)
     }
 
@@ -298,5 +328,36 @@ pub mod key {
 
     pub fn unmask_priority(key: Key) -> usize {
         key & !(0x1F << PRIORITY_SHIFT)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn pack_unpack_roundtrip() {
+            for priority in 0..MAX_PRIORITY {
+                for page_idx in [0, 1, 10, 100] {
+                    for subpage_idx in [0, 1, 63] {
+                        let key = pack_key(priority, page_idx, subpage_idx);
+                        let (p, pg, sp) = unpack_key(key);
+                        assert_eq!(
+                            (p, pg, sp),
+                            (priority, page_idx, subpage_idx),
+                            "roundtrip failed for priority={priority} page={page_idx} sub={subpage_idx} key={key:#x}"
+                        );
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn unmask_priority_strips_top_bits() {
+            for priority in 0..MAX_PRIORITY {
+                let key = pack_key(priority, 42, 7);
+                let slab_key = unmask_priority(key);
+                assert_eq!(slab_key, (42 << PAGE_INDEX_SHIFT) | 7);
+            }
+        }
     }
 }

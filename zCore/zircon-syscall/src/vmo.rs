@@ -802,7 +802,7 @@ impl Syscall<'_> {
             let zero_start = size.min(old_size);
             let zero_end = if size < old_size { vmo.len() } else { size };
             if zero_end > zero_start {
-                let _ = vmo.zero(zero_start, zero_end - zero_start);
+                vmo.zero(zero_start, zero_end - zero_start)?;
             }
             // For pager-backed VMOs with dirty tracking, update
             // dirty state when stream_size changes:
@@ -842,15 +842,36 @@ impl Syscall<'_> {
     ) -> ZxResult {
         // ZX_VMO_OP_ZERO = 10: partial-page zeros on pager-backed VMOs
         // need demand-paging (read the page first, then zero in-place).
-        // Also needs TRAP_DIRTY handling for the dirtied partial page.
+        // Also needs TRAP_DIRTY handling for pinned pages.
         if op == 10 {
             let proc = self.thread.proc();
             if let Ok(vmo) = proc.get_object::<VmObject>(handle_value) {
                 if vmo.is_pager_backed() || vmo.is_in_pager_tree() {
                     // Pre-flight: demand-page partial-page boundaries.
-                    // Full-page zeros don't need demand-paging (zero()
-                    // handles them by inserting zero markers).
                     self.preflight_zero_pager(&vmo, offset, len).await?;
+                    // TRAP_DIRTY: pinned pages can't be decommitted by
+                    // zero(), so they'll be zeroed in place (a "write").
+                    // Request dirty for pinned clean pages before zero()
+                    // writes to them. Non-pinned pages are decommitted
+                    // by zero() (no write → no dirty request needed).
+                    if vmo.is_trap_dirty() && vmo.has_pager() {
+                        use zircon_object::vm::PAGE_SIZE;
+                        let start_page = offset / PAGE_SIZE;
+                        let end_page = (offset + len).div_ceil(PAGE_SIZE);
+                        for pg in start_page..end_page {
+                            if vmo.is_page_pinned(pg)
+                                && vmo.committed_pages_in_range(pg, pg + 1) > 0
+                                && !vmo.is_page_dirty(pg)
+                            {
+                                self.predirty_trap_dirty_pages_partial(
+                                    &vmo,
+                                    pg * PAGE_SIZE,
+                                    PAGE_SIZE,
+                                )
+                                .await?;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -931,7 +952,14 @@ impl Syscall<'_> {
                                 Err(ZxError::STOP) => return Err(ZxError::STOP),
                                 Err(ZxError::OUT_OF_RANGE) => {}
                                 Err(ZxError::BAD_STATE) => return Err(ZxError::BAD_STATE),
-                                Err(_) => {}
+                                // Pager errors (IO, etc.) from OP_FAIL
+                                // must propagate to the overlapping
+                                // commit. Without this, the thread
+                                // ignores the failure and sends a new
+                                // request for the next page, violating
+                                // the invariant that FailPages terminates
+                                // all concurrent commits.
+                                Err(e) => return Err(e),
                             }
                             p += 1;
                             continue;
@@ -1484,8 +1512,11 @@ impl Syscall<'_> {
                 // succeed but the page is still readable from the parent
                 // chain. Zero the range to ensure the source reads as
                 // zeros after transfer, matching Fuchsia's "move" semantics.
+                // Decommit may fail for COW children (can't free
+                // parent pages). That's expected — zero below
+                // ensures the source reads as zeros regardless.
                 let _ = src.decommit(s_off, chunk);
-                let _ = src.zero(s_off, chunk);
+                src.zero(s_off, chunk)?;
                 s_off += chunk;
                 d_off += chunk;
                 remaining -= chunk;

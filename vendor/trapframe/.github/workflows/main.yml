@@ -1,0 +1,69 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [
+          x86_64-unknown-linux-gnu,
+          x86_64-apple-darwin,
+          aarch64-unknown-linux-gnu,
+          aarch64-unknown-none-softfloat,
+          riscv32imac-unknown-none-elf,
+          riscv64imac-unknown-none-elf,
+        ]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+        components: clippy
+    - run: cargo build --all-features --target ${{ matrix.target }}
+    - run: cargo clippy --target ${{ matrix.target }}
+    - run: cargo doc --target ${{ matrix.target }}
+
+  build-x86_64-none:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+      - run: cargo +nightly build --all-features --target x86_64-unknown-linux-gnu -Z build-std=core,alloc
+      - run: cargo +nightly doc --all-features --target x86_64-unknown-linux-gnu -Z build-std=core,alloc
+
+  test-x86_64:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --all-features
+
+  test-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+      - run: sudo apt-get update && sudo apt-get install -y qemu-user gcc-aarch64-linux-gnu
+      - run: cargo test --target aarch64-unknown-linux-gnu
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER: qemu-aarch64
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          QEMU_LD_PREFIX: /usr/aarch64-linux-gnu

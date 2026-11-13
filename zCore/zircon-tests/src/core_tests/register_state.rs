@@ -41,7 +41,7 @@ fn context_switch_of_gs_base() {
     let proc = zircon_object::task::Process::create(&job, "gs-base-test").unwrap();
 
     // Create num_cpus * 2 threads (1 CPU in zCore → 2 threads).
-    let num_cpus: usize = 1;
+    let num_cpus: usize = hal_impl::cpu::num_cpus();
     let thread_count = num_cpus * 2;
     let threads: Vec<_> = (0..thread_count)
         .map(|i| {

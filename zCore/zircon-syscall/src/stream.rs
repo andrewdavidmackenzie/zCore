@@ -358,31 +358,71 @@ impl Syscall<'_> {
             // 1. Commit pages for this batch.
             vmo.commit(cur_off, batch_len)?;
             // 2. Send dirty requests and wait for pager ack.
-            match self
-                .predirty_trap_dirty_pages(vmo, cur_off, batch_len)
-                .await
-            {
-                Ok(()) => {}
-                Err(e) => {
-                    // Pager failed some pages. If we already wrote
-                    // data in prior batches, return partial success.
+            //    predirty_trap_dirty_pages_partial returns the number
+            //    of bytes from the start that were successfully
+            //    dirtied. On full success, this equals batch_len.
+            //    On partial success (pager failed a page mid-range),
+            //    only the approved prefix is returned.
+            let dirty_bytes = self
+                .predirty_trap_dirty_pages_partial(vmo, cur_off, batch_len)
+                .await?;
+            if dirty_bytes == 0 {
+                // Nothing dirtied — pager failed the first page.
+                // Retry once (Fuchsia retries the failed page to give
+                // the pager a second chance). If it fails again, stop.
+                let retry_bytes = self
+                    .predirty_trap_dirty_pages_partial(vmo, cur_off, PAGE_SIZE)
+                    .await?;
+                if retry_bytes == 0 {
                     if written_total > 0 {
                         break;
                     }
-                    return Err(e);
+                    return Err(zircon_object::ZxError::NO_SPACE);
                 }
+                // Retry succeeded — write this page and continue.
+                let buf_slice = &buf[written_total..written_total + retry_bytes];
+                vmo.write(cur_off, buf_slice)?;
+                let new_end = cur_off + retry_bytes;
+                let old_cs = vmo.content_size();
+                if new_end > old_cs {
+                    vmo.set_content_size(new_end)?;
+                }
+                written_total += retry_bytes;
+                cur_off += retry_bytes;
+                continue;
             }
-            // 3. Write this batch's data directly to the VMO.
-            let buf_slice = &buf[written_total..written_total + batch_len];
+            // 3. Write only the approved portion.
+            let buf_slice = &buf[written_total..written_total + dirty_bytes];
             vmo.write(cur_off, buf_slice)?;
             // 4. Update content_size to reflect this batch's progress.
-            let new_end = cur_off + batch_len;
+            let new_end = cur_off + dirty_bytes;
             let old_cs = vmo.content_size();
             if new_end > old_cs {
                 vmo.set_content_size(new_end)?;
             }
-            written_total += batch_len;
-            cur_off += batch_len;
+            written_total += dirty_bytes;
+            cur_off += dirty_bytes;
+            if dirty_bytes < batch_len {
+                // Partial dirty — retry the next page.
+                let next_page_len = PAGE_SIZE.min(batch_len - dirty_bytes);
+                let retry_bytes = self
+                    .predirty_trap_dirty_pages_partial(vmo, cur_off, next_page_len)
+                    .await?;
+                if retry_bytes == 0 {
+                    // Retry also failed — stop with partial success.
+                    break;
+                }
+                // Retry succeeded — write and continue.
+                let buf_slice2 = &buf[written_total..written_total + retry_bytes];
+                vmo.write(cur_off, buf_slice2)?;
+                let new_end2 = cur_off + retry_bytes;
+                let old_cs2 = vmo.content_size();
+                if new_end2 > old_cs2 {
+                    vmo.set_content_size(new_end2)?;
+                }
+                written_total += retry_bytes;
+                cur_off += retry_bytes;
+            }
         }
         // Update seek position for append or regular writes.
         if written_total > 0 {

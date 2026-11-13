@@ -389,9 +389,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
 
-        // Use actual online CPU count. CpuStats reports avail=1 for
-        // our single-CPU QEMU configuration, so be consistent.
-        let online_cpus: usize = 1;
+        let online_cpus: usize = hal_impl::cpu::num_cpus();
         // count must match the number of online CPUs exactly.
         if count != online_cpus {
             return Err(ZxError::OUT_OF_RANGE);
@@ -472,7 +470,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate count and info pointer.
-        let online_cpus: usize = 1;
+        let online_cpus: usize = hal_impl::cpu::num_cpus();
         if count == 0 || count > online_cpus {
             return Err(ZxError::OUT_OF_RANGE);
         }
@@ -487,6 +485,7 @@ impl Syscall<'_> {
             const ENTRY_SIZE: usize = 12; // 4 + 4 + 4
             let buf: UserInPtr<u8> = info.into();
             let data = buf.read_array(count * ENTRY_SIZE)?;
+            let mut last_cpu = u32::MAX;
             for i in 0..count {
                 let base = i * ENTRY_SIZE;
                 // Validate CPU number (first 4 bytes of each entry).
@@ -496,6 +495,12 @@ impl Syscall<'_> {
                     data[base + 2],
                     data[base + 3],
                 ]);
+                // CPU numbers must be strictly increasing.
+                // Matches Fuchsia's sys_system_set_performance_info.
+                if last_cpu != u32::MAX && cpu_number <= last_cpu {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                last_cpu = cpu_number;
                 if cpu_number as usize >= online_cpus {
                     return Err(ZxError::OUT_OF_RANGE);
                 }

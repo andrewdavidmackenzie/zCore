@@ -157,34 +157,57 @@ impl Syscall<'_> {
                         Err(e) => return Err(e),
                         Ok(()) => {}
                     }
+                    // Wait per-page, tracking which pages failed.
+                    let mut any_dirtied = false;
+                    let mut failed_pages: alloc::vec::Vec<usize> = alloc::vec![];
+                    let mut last_err = ZxError::INTERNAL;
                     for pg in fc..last_clean {
                         if pager_vmo.is_page_dirty(pg) {
+                            any_dirtied = true;
                             continue;
                         }
-                        let mut retries = 0;
-                        loop {
+                        let future = pager_vmo.wait_for_dirty(pg * PAGE_SIZE);
+                        futures::pin_mut!(future);
+                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                        match self
+                            .thread
+                            .blocking_run::<_, (), _>(
+                                future,
+                                ThreadState::BlockedPager,
+                                core::time::Duration::from_nanos(u64::MAX),
+                                None,
+                            )
+                            .await
+                        {
+                            Ok(()) => {
+                                any_dirtied = true;
+                            }
+                            Err(e) => {
+                                failed_pages.push(pg);
+                                last_err = e;
+                            }
+                        }
+                    }
+                    // Retry failed pages only if some pages were
+                    // dirtied (partial success). If all failed,
+                    // propagate the error without retry.
+                    if !failed_pages.is_empty() {
+                        if !any_dirtied {
+                            return Err(last_err);
+                        }
+                        for &pg in &failed_pages {
+                            let _ = pager_vmo.request_dirty(pg * PAGE_SIZE, PAGE_SIZE);
                             let future = pager_vmo.wait_for_dirty(pg * PAGE_SIZE);
                             futures::pin_mut!(future);
                             self.thread.set_blocking_state(ThreadState::BlockedPager);
-                            match self
-                                .thread
+                            self.thread
                                 .blocking_run::<_, (), _>(
                                     future,
                                     ThreadState::BlockedPager,
                                     core::time::Duration::from_nanos(u64::MAX),
                                     None,
                                 )
-                                .await
-                            {
-                                Ok(()) => break,
-                                Err(e) => {
-                                    if retries >= 1 {
-                                        return Err(e);
-                                    }
-                                    retries += 1;
-                                    let _ = pager_vmo.request_dirty(pg * PAGE_SIZE, PAGE_SIZE);
-                                }
-                            }
+                                .await?;
                         }
                     }
                 }
@@ -279,7 +302,7 @@ impl Syscall<'_> {
                 pv.set_modified();
                 let parent_offset = offset + vmo.get_slice_offset();
                 if pv.is_trap_dirty() {
-                    let _ = pv.mark_pages_dirty(parent_offset, size);
+                    pv.mark_pages_dirty(parent_offset, size)?;
                 } else {
                     let start_page = parent_offset / PAGE_SIZE;
                     let end_page = (parent_offset + size).div_ceil(PAGE_SIZE);
@@ -510,15 +533,13 @@ impl Syscall<'_> {
         if len == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        #[cfg(not(target_arch = "x86_64"))]
+        #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
         {
             Err(ZxError::NOT_SUPPORTED)
         }
-        #[cfg(target_arch = "x86_64")]
+        #[cfg(all(target_arch = "x86_64", target_os = "none"))]
         {
-            // IOPL=3 is already set in RFLAGS, so ring-3 code has
-            // full I/O port access. A proper implementation would
-            // use the TSS IOPB for per-port granularity.
+            hal_impl::ioport::ioports_allow(io_addr, len);
             Ok(())
         }
     }
@@ -538,14 +559,13 @@ impl Syscall<'_> {
         if len == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        #[cfg(not(target_arch = "x86_64"))]
+        #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
         {
             Err(ZxError::NOT_SUPPORTED)
         }
-        #[cfg(target_arch = "x86_64")]
+        #[cfg(all(target_arch = "x86_64", target_os = "none"))]
         {
-            // IOPL=3 grants access; release is a no-op until we have
-            // proper IOPB management.
+            hal_impl::ioport::ioports_deny(io_addr, len);
             Ok(())
         }
     }

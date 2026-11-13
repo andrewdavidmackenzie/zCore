@@ -3062,14 +3062,14 @@ fn pager_decommit_pager_range() {
     pager.detach_vmo(&vmo).unwrap();
     // All pages should be decommitted (they were clean).
     assert_eq!(vmo.committed_pages_in_range(0, 3), 0);
-    // Reads return zeros (zero markers from decommit).
+    // Reads after detach should fail — the pager is gone and
+    // clean pages were fully decommitted (no zero markers).
+    // Matches Fuchsia where accessing decommitted pages on a
+    // detached VMO returns BAD_STATE.
     let mut val = [0u8; 8];
-    vmo.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 0);
-    vmo.read(PAGE_SIZE, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 0);
-    vmo.read(2 * PAGE_SIZE, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 0);
+    assert!(vmo.read(0, &mut val).is_err());
+    assert!(vmo.read(PAGE_SIZE, &mut val).is_err());
+    assert!(vmo.read(2 * PAGE_SIZE, &mut val).is_err());
 }
 
 ///

@@ -12,8 +12,13 @@ use {
         mem::{phys_to_virt, PhysFrame},
         PAGE_SIZE,
     },
-    lock::{Mutex, MutexGuard},
 };
+
+use crate::mutex::{YieldingMutex, YieldingMutexGuard};
+
+/// Arcs whose drop may trigger cascading `VMObjectPaged::drop` calls.
+/// Must be dropped OUTSIDE the clone-tree lock to avoid deadlock.
+type DeferredDrops = Vec<Arc<VMObjectPaged>>;
 
 enum VMOType {
     /// The original node.
@@ -70,7 +75,7 @@ impl VMOType {
 pub struct VMObjectPaged {
     /// The lock that protected the `inner`
     /// This lock is shared between objects in the same clone tree to avoid deadlock
-    lock: Arc<Mutex<()>>,
+    lock: Arc<YieldingMutex<()>>,
     /// Interior mutability via UnsafeCell. Safety: the shared `lock` Mutex
     /// must be held whenever accessing the inner data. We use UnsafeCell
     /// instead of RefCell because RefCell's runtime borrow checking causes
@@ -291,9 +296,9 @@ impl VMObjectPaged {
     }
 
     /// Internal: Wrap an inner struct to object.
-    fn wrap(inner: VMObjectPagedInner, lock_ref: Option<Arc<Mutex<()>>>) -> Arc<Self> {
+    fn wrap(inner: VMObjectPagedInner, lock_ref: Option<Arc<YieldingMutex<()>>>) -> Arc<Self> {
         let obj = Arc::new(VMObjectPaged {
-            lock: lock_ref.unwrap_or_else(|| Arc::new(Mutex::new(()))),
+            lock: lock_ref.unwrap_or_else(|| Arc::new(YieldingMutex::new(()))),
             inner: core::cell::UnsafeCell::new(inner),
         });
         // Safety: obj is not yet shared — we're the only holder of the Arc.
@@ -310,7 +315,7 @@ impl VMObjectPaged {
     /// (which is returned alongside) keeps the lock held for the
     /// reference's lifetime.
     #[allow(unsafe_code)]
-    fn get_inner(&self) -> (MutexGuard<'_, ()>, &VMObjectPagedInner) {
+    fn get_inner(&self) -> (YieldingMutexGuard<'_, ()>, &VMObjectPagedInner) {
         let guard = self.lock.lock();
         // Safety: lock is held, guaranteeing exclusive access.
         let inner = unsafe { &*self.inner.get() };
@@ -319,7 +324,7 @@ impl VMObjectPaged {
 
     /// Get a mutable reference to inner, holding the clone-tree lock.
     #[allow(unsafe_code, clippy::mut_from_ref)]
-    fn get_inner_mut(&self) -> (MutexGuard<'_, ()>, &mut VMObjectPagedInner) {
+    fn get_inner_mut(&self) -> (YieldingMutexGuard<'_, ()>, &mut VMObjectPagedInner) {
         let guard = self.lock.lock();
         // Safety: lock is held, guaranteeing exclusive access.
         let inner = unsafe { &mut *self.inner.get() };
@@ -497,7 +502,7 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn set_len(&self, len: usize) -> ZxResult {
         assert!(page_aligned(len));
-        let (old_parent, old_size) = {
+        let (old_parent, old_size, resize_deferred) = {
             let (_guard, inner) = self.get_inner_mut();
             if inner.pin_count > 0 {
                 // Pager-backed VMOs can grow with pinned pages.
@@ -521,7 +526,7 @@ impl VMObjectTrait for VMObjectPaged {
                 }
             }
             let old_size = inner.size;
-            let old_parent = inner.resize(len);
+            let (old_parent, resize_deferred) = inner.resize(len);
             // For pager-backed VMOs growing beyond old size, insert
             // zero markers for the extended pages so reads return
             // zeros without triggering pager requests.
@@ -544,9 +549,11 @@ impl VMObjectTrait for VMObjectPaged {
                     }
                 }
             }
-            (old_parent, old_size)
+            (old_parent, old_size, resize_deferred)
         };
+        // Drop old_parent and deferred Arcs after tree lock is released.
         drop(old_parent);
+        drop(resize_deferred);
         let _ = old_size; // suppress unused warning
         Ok(())
     }
@@ -709,6 +716,42 @@ impl VMObjectTrait for VMObjectPaged {
     fn committed_pages_in_range(&self, start_idx: usize, end_idx: usize) -> usize {
         let (_guard, inner) = self.get_inner();
         inner.committed_pages_in_range(start_idx, end_idx)
+    }
+
+    fn commit_and_pin(&self, offset: usize, len: usize) -> ZxResult {
+        let (_guard, inner) = self.get_inner_mut();
+        if offset + len > inner.size {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        if len == 0 {
+            return Ok(());
+        }
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + len).div_ceil(PAGE_SIZE);
+        // Commit all pages under the lock.
+        for page in start_page..end_page {
+            inner.commit_page(page, MMUFlags::WRITE)?;
+        }
+        // Pin all pages under the same lock — no window for
+        // concurrent decommit to remove the just-committed frames.
+        for i in start_page..end_page {
+            let frame = match inner.frames.get(&i) {
+                Some(f) => f,
+                None => return Err(ZxError::NOT_FOUND),
+            };
+            if frame.pin_count == VM_PAGE_OBJECT_MAX_PIN_COUNT {
+                return Err(ZxError::UNAVAILABLE);
+            }
+        }
+        for i in start_page..end_page {
+            if let Some(frame) = inner.frames.get_mut(&i) {
+                frame.pin_count += 1;
+            } else {
+                return Err(ZxError::NOT_FOUND);
+            }
+            inner.pin_count += 1;
+        }
+        Ok(())
     }
 
     fn pin(&self, offset: usize, len: usize) -> ZxResult {
@@ -889,7 +932,7 @@ impl VMObjectTrait for VMObjectPaged {
                 return;
             }
             // Insert a zero marker so reads return zeros without
-            // hitting the (now-detached) pager.
+            // re-requesting from the pager.
             inner.zero_markers.insert(page_idx);
             // Unmap from all mappings.
             for map in inner.mappings.iter() {
@@ -938,7 +981,7 @@ impl VMObjectTrait for VMObjectPaged {
         inner.content_boundary_pages = pages;
     }
 
-    fn as_mut_buf(&self) -> ZxResult<(MutexGuard<'_, ()>, &mut [u8])> {
+    fn as_mut_buf(&self) -> ZxResult<(YieldingMutexGuard<'_, ()>, &mut [u8])> {
         let (guard, inner) = self.get_inner_mut();
         inner.as_mut_buf().map(|(addr, size)| {
             (guard, unsafe {
@@ -1525,17 +1568,24 @@ impl VMObjectPagedInner {
     ///  A   B       B
     ///  ^remove
     /// ```
-    fn remove_child(&mut self, child: &WeakRef) {
+    /// Remove a dying child from this hidden node, merging frames to
+    /// the surviving sibling.
+    ///
+    /// Returns Arcs that must be dropped AFTER the caller releases the
+    /// clone-tree lock. Dropping them while the lock is held would
+    /// trigger cascading `VMObjectPaged::drop` calls that try to
+    /// re-acquire the same non-reentrant lock → deadlock.
+    fn remove_child(&mut self, child: &WeakRef) -> DeferredDrops {
         // a child slice do not have to belong to a hidden parent
         if !self.type_.is_hidden() {
-            return;
+            return DeferredDrops::default();
         }
         let (tag, other_child) = self.type_.get_tag_and_other(child);
         // If the other child is already dropped (concurrent destruction
         // race), there's no surviving child to merge into. Just let the
         // hidden node's frames be freed when it's dropped.
         let Some(arc_child) = other_child.upgrade() else {
-            return;
+            return DeferredDrops::default();
         };
         let surviving = arc_child.borrow_inner_mut();
         let start = surviving.parent_offset / PAGE_SIZE;
@@ -1609,8 +1659,6 @@ impl VMObjectPagedInner {
         surviving.parent_limit += self.parent_offset;
         let surviving_offset = surviving.parent_offset;
         let surviving_limit = surviving.parent_limit;
-        // Drop the surviving borrow before accessing the parent, since
-        // the parent's cleanup may need to borrow its children.
 
         if let Some(parent) = &self.parent {
             let parent_inner = parent.borrow_inner_mut();
@@ -1633,6 +1681,9 @@ impl VMObjectPagedInner {
         }
         // Re-borrow to set parent.
         let surviving = arc_child.borrow_inner_mut();
+        // Take the old parent Arc from the surviving child before
+        // overwriting. It will be dropped after the lock is released.
+        let old_parent = surviving.parent.take();
         surviving.parent = self.parent.take();
 
         // If the surviving child now has no parent, zero markers are
@@ -1640,6 +1691,18 @@ impl VMObjectPagedInner {
         if surviving.parent.is_none() {
             surviving.zero_markers.clear();
         }
+
+        // Return Arcs for deferred drop outside the lock scope.
+        // `arc_child` keeps the surviving child alive while we borrow
+        // its inner. If the surviving child's handle was already closed
+        // on another CPU, dropping `arc_child` would trigger its
+        // VMObjectPaged::drop which needs the tree lock — deadlock.
+        let mut deferred = Vec::with_capacity(2);
+        deferred.push(arc_child);
+        if let Some(p) = old_parent {
+            deferred.push(p);
+        }
+        deferred
     }
 
     /// Remove intermediate COW copies whose split tags point to a child
@@ -1716,7 +1779,7 @@ impl VMObjectPagedInner {
         &mut self,
         offset: usize,
         len: usize,
-        lock_ref: &Arc<Mutex<()>>,
+        lock_ref: &Arc<YieldingMutex<()>>,
     ) -> ZxResult<Arc<VMObjectPaged>> {
         // clone contiguous vmo is no longer permitted
         // https://fuchsia.googlesource.com/fuchsia/+/e6b4c6751bbdc9ed2795e81b8211ea294f139a45
@@ -1895,7 +1958,7 @@ impl VMObjectPagedInner {
         &mut self,
         offset: usize,
         len: usize,
-        lock_ref: &Arc<Mutex<()>>,
+        lock_ref: &Arc<YieldingMutex<()>>,
     ) -> ZxResult<Arc<VMObjectPaged>> {
         if self.cache_policy != CachePolicy::Cached || self.pin_count != 0 {
             return Err(ZxError::BAD_STATE);
@@ -2376,15 +2439,16 @@ impl VMObjectPagedInner {
         }
     }
 
-    fn resize(&mut self, new_size: usize) -> Option<Arc<VMObjectPaged>> {
+    fn resize(&mut self, new_size: usize) -> (Option<Arc<VMObjectPaged>>, DeferredDrops) {
         let mut old_parent = None;
+        let mut deferred = DeferredDrops::default();
         if new_size == 0 && new_size < self.size {
             // Decrement share_count for ALL visible parent pages
             // before clearing frames and detaching from parent.
             self.decrement_parent_share_counts(0, self.size / PAGE_SIZE);
             self.frames.clear();
             if let Some(parent) = self.parent.as_ref() {
-                parent.borrow_inner_mut().remove_child(&self.self_ref);
+                deferred = parent.borrow_inner_mut().remove_child(&self.self_ref);
             }
             // We cannot drop the parent Arc here since we are holding the lock
             // pass it to caller who can drop it after unlocking the lock
@@ -2410,7 +2474,7 @@ impl VMObjectPagedInner {
             }
         }
         self.size = new_size;
-        old_parent
+        (old_parent, deferred)
     }
 
     fn is_contiguous(&self) -> bool {
@@ -2454,43 +2518,55 @@ impl VMObjectPagedInner {
 
 impl Drop for VMObjectPaged {
     fn drop(&mut self) {
-        let (_guard, inner) = self.get_inner_mut();
-        // Decrement share_count for pages this VMO sees through the
-        // parent chain, then remove from parent's child list.
+        // Collect Arcs that must be dropped AFTER releasing the tree
+        // lock. Dropping them while the lock is held would trigger
+        // cascading VMObjectPaged::drop → get_inner_mut → deadlock.
+        let deferred;
+        {
+            let (_guard, inner) = self.get_inner_mut();
+            // Decrement share_count for pages this VMO sees through the
+            // parent chain, then remove from parent's child list.
 
-        if let Some(parent) = &inner.parent {
-            // Unidirectional children whose parent is still a non-hidden
-            // node (pager root) skip share_count tracking and remove_child.
-            // But if a unidirectional child later created a bidirectional
-            // child (hidden node), its parent changed to the hidden node.
-            // In that case, it must participate in normal COW merge.
-            let parent_is_hidden = parent.borrow_inner().type_.is_hidden();
-            if inner.type_.is_unidirectional() && !parent_is_hidden {
-                // True unidirectional: parent is still the pager root.
-                // No share_count, no merge needed.
+            deferred = if let Some(parent) = &inner.parent {
+                // Unidirectional children whose parent is still a non-hidden
+                // node (pager root) skip share_count tracking and remove_child.
+                // But if a unidirectional child later created a bidirectional
+                // child (hidden node), its parent changed to the hidden node.
+                // In that case, it must participate in normal COW merge.
+                let parent_is_hidden = parent.borrow_inner().type_.is_hidden();
+                if inner.type_.is_unidirectional() && !parent_is_hidden {
+                    // True unidirectional: parent is still the pager root.
+                    // No share_count, no merge needed.
+                    DeferredDrops::default()
+                } else {
+                    inner.decrement_parent_share_counts(0, inner.size / PAGE_SIZE);
+                    parent.borrow_inner_mut().remove_child(&inner.self_ref)
+                }
             } else {
-                inner.decrement_parent_share_counts(0, inner.size / PAGE_SIZE);
-                parent.borrow_inner_mut().remove_child(&inner.self_ref);
+                DeferredDrops::default()
+            };
+            let is_conti = inner.is_contiguous();
+            for frame in inner.frames.iter_mut() {
+                if is_conti && frame.1.pin_count >= 1 {
+                    frame.1.pin_count -= 1;
+                }
+                // Clear any remaining pin count. Fuchsia doesn't panic
+                // when dropping VMOs with pinned pages — it just unpins.
+                // Panicking here crashes the kernel when a test fails
+                // to clean up its BTI pins.
+                if frame.1.pin_count > 0 {
+                    warn!(
+                        "VMObjectPaged::drop: frame has pin_count={}, clearing",
+                        frame.1.pin_count
+                    );
+                    inner.pin_count -= frame.1.pin_count as usize;
+                    frame.1.pin_count = 0;
+                }
             }
+            // _guard dropped here — tree lock released.
         }
-        let is_conti = inner.is_contiguous();
-        for frame in inner.frames.iter_mut() {
-            if is_conti && frame.1.pin_count >= 1 {
-                frame.1.pin_count -= 1;
-            }
-            // Clear any remaining pin count. Fuchsia doesn't panic
-            // when dropping VMOs with pinned pages — it just unpins.
-            // Panicking here crashes the kernel when a test fails
-            // to clean up its BTI pins.
-            if frame.1.pin_count > 0 {
-                warn!(
-                    "VMObjectPaged::drop: frame has pin_count={}, clearing",
-                    frame.1.pin_count
-                );
-                inner.pin_count -= frame.1.pin_count as usize;
-                frame.1.pin_count = 0;
-            }
-        }
+        // Now safe to drop deferred Arcs — tree lock is free.
+        drop(deferred);
     }
 }
 

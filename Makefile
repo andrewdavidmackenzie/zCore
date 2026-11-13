@@ -72,7 +72,7 @@ debug-x86-qemu: x86-zircon-build
 	@echo "    Kernel symbols: target/qemu-x86_64/release/kernel"
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
-		-machine q35 -smp $(X86_CORES) -cpu qemu64,+fsgsbase,+rdrand \
+		-machine q35 -smp $(X86_CORES) -cpu qemu64,+rdrand \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img \
@@ -88,7 +88,7 @@ debug-x86-core-tests: core-tests-build
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
 		-machine q35 -smp $(X86_CORES) \
-		-cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+		-cpu qemu64,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
@@ -276,7 +276,7 @@ x86-linux-run: x86-linux-build
 		--ramdisk target/qemu-x86_64/release/x86_64-linux.img
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
-		-machine q35 -cpu qemu64,+fsgsbase,+rdrand \
+		-machine q35 -cpu qemu64,+rdrand \
 		-smp $(X86_CORES) \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
@@ -291,7 +291,7 @@ x86-zircon-run: x86-zircon-build
 	@echo "==> Starting x86_64 Zircon (Ctrl-A X to exit QEMU)..."
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
-		-machine q35 -smp $(X86_CORES) -cpu qemu64,+fsgsbase,+rdrand \
+		-machine q35 -smp $(X86_CORES) -cpu qemu64,+rdrand \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img
@@ -393,7 +393,9 @@ zircon-rootfs-test:
 #   make core-tests FILTER='PortTest.*' # run specific test suite
 #
 # Results are written to /tmp/qemu-core-tests.log.
-CORE_TESTS_TIMEOUT ?= 900
+# No default timeout — rely on CI job timeout-minutes.
+# Override with: make core-tests CORE_TESTS_TIMEOUT=900
+CORE_TESTS_TIMEOUT ?= 0
 CORE_TESTS_LOG ?= /tmp/qemu-core-tests.log
 CORE_TESTS_SKIP_FILE ?= tests/core-tests-skip.txt
 
@@ -432,13 +434,15 @@ core-tests-kernel:
 		cargo build -p userstart --target x86_64-unknown-none \
 		--release --target-dir target/userstart -Z build-std=core,alloc
 	@USERSTART_ELF="$(USERSTART_ELF)" \
-		ZCORE_CMDLINE="LOG=warn kernel.enable-debugging-syscalls=true ROOTPROC=/bin/core-tests-standalone" \
+		ZCORE_CMDLINE="LOG=warn kernel.enable-debugging-syscalls=true ROOTPROC=/bin/core-tests-standalone?--gtest_shuffle=false" \
 		cargo zcore-build -m qemu-x86_64 --flavour ""
 
 # Step 3: Write extra-args filter file + build rootfs SFS image.
 # Only rebuilds the image if rootfs files changed (xtask mtime check).
 .PHONY: core-tests-rootfs
-core-tests-rootfs:
+core-tests-rootfs: $(ROOTFS_IMG)
+
+$(ROOTFS_IMG): $(CORE_TESTS_SKIP_FILE)
 	@mkdir -p target/rootfs/zircon/x86_64/etc
 ifneq ($(strip $(CORE_TESTS_FILTER)),)
 	@printf '%s\n' '--gtest_filter=$(CORE_TESTS_FILTER)' > $(EXTRA_ARGS)
@@ -472,7 +476,7 @@ endif
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
 		-machine q35 -smp $(X86_CORES) \
-		-cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+		-cpu qemu64,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive "format=raw,file=$(BOOT_IMG)" \
@@ -489,17 +493,26 @@ core-tests: core-tests-build
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
 		-machine q35 -smp $(X86_CORES) \
-		-cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+		-cpu qemu64,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
 		> $(CORE_TESTS_LOG) 2>&1 & \
 	PID=$$!; \
 	ELAPSED=0; \
-	while [ $$ELAPSED -lt $(CORE_TESTS_TIMEOUT) ]; do \
+	TIMEOUT=$(CORE_TESTS_TIMEOUT); \
+	LAST_P=0; \
+	while true; do \
 		if ! kill -0 $$PID 2>/dev/null; then break; fi; \
-		sleep 1; ELAPSED=$$((ELAPSED + 1)); \
+		if [ "$$TIMEOUT" -gt 0 ] 2>/dev/null && [ $$ELAPSED -ge $$TIMEOUT ]; then break; fi; \
+		sleep 5; ELAPSED=$$((ELAPSED + 5)); \
+		CUR_P=$$(grep -c '\[       OK \]' $(CORE_TESTS_LOG) 2>/dev/null || echo 0); \
+		if [ "$$CUR_P" != "$$LAST_P" ]; then \
+			printf '\r    %s tests passed (%ds)...' "$$CUR_P" "$$ELAPSED"; \
+			LAST_P=$$CUR_P; \
+		fi; \
 	done; \
+	printf '\n'; \
 	kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; \
 	echo "=== Core-tests results ($$ELAPSED s) ==="; \
 	P=$$(grep -c '\[       OK \]' $(CORE_TESTS_LOG) || true); \
@@ -509,9 +522,19 @@ core-tests: core-tests-build
 	S=$$(sed '/^[[:space:]]*\#/d; /^[[:space:]]*$$/d' $(CORE_TESTS_SKIP_FILE) 2>/dev/null | wc -l | tr -d ' '); \
 	T=$$(($$R + $$S)); \
 	echo "Passed: $$P  Failed: $$F  Ran: $$R/$$T  Skipped: $$S$$PARTIAL"; \
+	sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[  FAILED  \]' || true; \
+	HUNG=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[ RUN      \]' | tail -1 | sed 's/.*\] //'); \
+	LAST_OK=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[       OK \]' | tail -1 | sed 's/.*\] //' | sed 's/ (.*//'); \
+	echo "Last completed: $$LAST_OK"; \
+	echo "Last started:   $$HUNG"; \
 	tail -5 $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g'; \
 	if [ "$$F" -gt 0 ] 2>/dev/null; then echo "FAIL: $$F test(s) failed"; exit 1; fi; \
-	if [ -z "$$R" ] || [ "$$R" -eq 0 ] 2>/dev/null; then echo "FAIL: no tests ran"; exit 1; fi
+	if [ -z "$$R" ] || [ "$$R" -eq 0 ] 2>/dev/null; then echo "FAIL: no tests ran"; exit 1; fi; \
+	if [ -n "$$PARTIAL" ]; then \
+		HUNG=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[ RUN      \]' | tail -1 | sed 's/.*\] //'); \
+		PREV=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[       OK \]' | tail -1 | sed 's/.*\] //' | sed 's/ (.*//'); \
+		echo "FAIL: incomplete run ($$P passed of $$T expected) — hung on: $$HUNG (after: $$PREV)"; exit 1; \
+	fi
 
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
 test: boot-test libc-test

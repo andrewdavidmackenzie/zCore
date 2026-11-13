@@ -56,7 +56,8 @@ pub fn primary_init() {
     vm::init();
     drivers::init().unwrap();
     // Initialize per-CPU executor runtimes (must happen before any spawn).
-    let cpu_ids: alloc::vec::Vec<u8> = (0..crate::config::MAX_CORE_NUM as u8).collect();
+    let num = crate::config::MAX_CORE_NUM.min(255);
+    let cpu_ids: alloc::vec::Vec<u8> = (0..num as u8).collect();
     executor::init_runtimes(&cpu_ids);
 }
 

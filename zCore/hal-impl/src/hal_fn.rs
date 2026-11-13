@@ -39,6 +39,10 @@ hal_fn_def! {
         /// Current CPU frequency in MHz.
         pub fn cpu_frequency() -> u16 { 3000 }
 
+        /// Number of online CPUs. Discovered from hardware (ACPI,
+        /// device tree) at boot. Returns 1 in libos/single-CPU mode.
+        pub fn num_cpus() -> usize { 1 }
+
         /// Shutdown/reboot the machine.
         pub fn reset() -> !;
     }

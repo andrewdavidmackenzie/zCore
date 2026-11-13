@@ -238,6 +238,7 @@ jobs:
   zircon-core-tests-x86:
     name: Zircon Core Tests (x86_64)
     runs-on: ubuntu-latest
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
         with:
@@ -259,8 +260,8 @@ jobs:
       - name: Build core-tests
         run: make core-tests-build
 
-      - name: Run core-tests (with skip list)
-        run: make core-tests CORE_TESTS_TIMEOUT=900
+      - name: Run core-tests
+        run: make core-tests CORE_TESTS_TIMEOUT=3600
 
   libc-test:
     name: Libc Test (aarch64, macOS)

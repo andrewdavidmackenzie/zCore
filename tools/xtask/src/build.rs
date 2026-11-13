@@ -434,7 +434,7 @@ impl QemuArgs {
                          (e.g., `brew install qemu` on macOS or `apt install ovmf` on Ubuntu).",
                     );
                 qemu.args(["-machine", "q35"])
-                    .args(["-cpu", "qemu64,+fsgsbase,+rdrand"])
+                    .args(["-cpu", "qemu64,+rdrand"])
                     .args(["-serial", "mon:stdio"])
                     .args([
                         "-drive",

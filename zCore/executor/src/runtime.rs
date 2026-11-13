@@ -136,23 +136,30 @@ fn get_runtime(cpu_id: u8) -> &'static Mutex<ExecutorRuntime> {
 }
 
 // obtain a task from other cpu.
-/// Steal a task from another CPU's run queue.
+/// Scan ALL other CPUs' task collections for notified tasks.
+/// Returns the first notified task found, or None.
 ///
-/// Currently unused: stolen tasks retain their original CPU's waker
-/// page, so waker notifications are delivered to the wrong CPU.
-/// This causes tasks to never wake up after being stolen. (#680)
-#[allow(dead_code)]
+/// This is used by idle CPUs to find cross-CPU notifications that
+/// the owning CPU hasn't processed (e.g., because IPI delivery
+/// failed in QEMU TCG mode).
+///
+/// Note: stolen tasks retain their original CPU's waker page, so
+/// future notifications go to the wrong CPU. For one-shot wakes
+/// (oneshot channels) this is fine. For recurring wakes, the next
+/// steal scan will find them.
 pub(crate) fn steal_task_from_other_cpu() -> Option<(Key, Arc<Task>, WakerRef, DroperRef)> {
     let map = CPU_RUNTIMES.get()?;
-    let runtime = map
-        .values()
-        .max_by_key(|runtime| runtime.lock().task_num())?;
-    let runtime = runtime.lock();
-    if runtime.task_num() > 0 {
-        runtime.task_collection.take_task()
-    } else {
-        None
+    let current = crate::arch::cpu_id();
+    for (&cpu_id, runtime) in map.iter() {
+        if cpu_id == current {
+            continue;
+        }
+        let rt = runtime.lock();
+        if let Some(task_info) = rt.task_collection.take_task() {
+            return Some(task_info);
+        }
     }
+    None
 }
 
 // per-cpu scheduler.
@@ -184,40 +191,40 @@ pub fn run_until_idle() -> bool {
             crate::arch::intr_on();
             return false;
         }
-        // Only run weak_executors when the strong_executor voluntarily yields.
+        // When the strong executor was preempted mid-poll (holding
+        // kernel locks, etc.), demote it to a weak executor and create
+        // a fresh strong executor. Fall through to run all weak
+        // executors so the preempted one can finish and release locks.
         if runtime.strong_executor.is_running_future() {
             runtime.downgrade_strong_executor();
-            // drop(runtime) happens implicitly at loop top (reassignment).
-            // intr_on not needed — loop top re-does intr_off.
-            drop(runtime);
-            crate::arch::intr_on();
-            continue;
         }
-        // Iterate through all weak_executors
-        if runtime.weak_executors.is_empty() {
-            drop(runtime);
-            crate::arch::intr_on();
-            continue;
-        }
-        debug!("run weak executor");
+        // Run all pending weak executors. This is critical for
+        // preemption correctness: a demoted executor may hold a
+        // kernel lock (e.g., the COW tree mutex). If we don't
+        // resume it, every subsequent task that tries to acquire
+        // the same lock will also block, creating an ever-growing
+        // pile of demoted executors — a livelock.
         runtime
             .weak_executors
             .retain(|executor| executor.is_some() && !executor.as_ref().unwrap().killed());
-        for idx in 0..runtime.weak_executors.len() {
-            if let Some(executor) = &runtime.weak_executors[idx] {
-                if executor.killed() {
-                    continue;
+        if !runtime.weak_executors.is_empty() {
+            debug!("run weak executor");
+            for idx in 0..runtime.weak_executors.len() {
+                if let Some(executor) = &runtime.weak_executors[idx] {
+                    if executor.killed() {
+                        continue;
+                    }
+                    let executor = executor.clone();
+                    let executor_ctx = executor.context.get_context();
+                    debug!("switch idle -> {}", executor.id());
+                    runtime.current_executor = Some(executor);
+                    // Already under intr_off from loop top.
+                    drop(runtime);
+                    switch(runtime_cx as _, executor_ctx as _);
+                    // Back from weak executor. Re-acquire under intr_off.
+                    runtime = get_current_runtime();
+                    runtime.current_executor = None;
                 }
-                let executor = executor.clone();
-                let executor_ctx = executor.context.get_context();
-                debug!("switch idle -> {}", executor.id());
-                runtime.current_executor = Some(executor);
-                // Already under intr_off from loop top.
-                drop(runtime);
-                switch(runtime_cx as _, executor_ctx as _);
-                // Back from weak executor. Re-acquire under intr_off.
-                runtime = get_current_runtime();
-                runtime.current_executor = None;
             }
         }
         drop(runtime);

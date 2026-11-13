@@ -1,6 +1,19 @@
 //! CPU information.
 
+use core::sync::atomic::{AtomicUsize, Ordering};
 use raw_cpuid::CpuId;
+
+/// Number of online CPUs, set during SMP initialization from ACPI
+/// discovery. Starts at 1 (BSP only) and is updated by
+/// `set_num_cpus` after APs are enumerated.
+static NUM_CPUS: AtomicUsize = AtomicUsize::new(1);
+
+/// Set the online CPU count. Called from SMP init after ACPI
+/// enumerates application processors. Capped at MAX_CORE_NUM
+/// from the build-time config.
+pub fn set_num_cpus(count: usize) {
+    NUM_CPUS.store(count.min(crate::config::MAX_CORE_NUM), Ordering::Relaxed);
+}
 
 hal_fn_impl! {
     impl mod crate::hal_fn::cpu {
@@ -29,6 +42,10 @@ hal_fn_impl! {
                     .unwrap_or(DEFAULT)
                     .max(DEFAULT)
             })
+        }
+
+        fn num_cpus() -> usize {
+            NUM_CPUS.load(Ordering::Relaxed)
         }
 
         fn reset() -> ! {

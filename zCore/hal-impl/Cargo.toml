@@ -59,7 +59,7 @@ log = "0.4"
 spin = "0.9"
 cfg-if = "1.0"
 bitflags = "1.3"
-trapframe = "0.11"
+trapframe = { path = "../../vendor/trapframe" }
 git-version = "0.3"
 drivers = { path = "../drivers", features = ["virtio"] }
 lock = { path = "../lock" }
@@ -75,7 +75,7 @@ naive-timer = "0.2.0"
 # Frame/heap allocators (moved from kernel)
 customizable-buddy = "0.0.3"
 bitmap-allocator = "0.4"
-buddy_system_allocator = "0.8"
+buddy_system_allocator = { path = "../../vendor/buddy_system_allocator" }
 
 # For riscv
 [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
