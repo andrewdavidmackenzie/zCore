@@ -1,7 +1,8 @@
-# ── Intermittent hang (pager wakeup race) ──
+# ── Hang: sys_vmo_write on clone of pager tree lacks async demand-paging ──
 PagerWriteback.NoDirtyRequestsForClones
-VmoTestCase.ParallelWriteAndDecommit
-Pager.FailEarlyWake
 
-# ── Flaky timing failure ──
+# ── Flaky timing failure: WaitForBlocked races with thread state transition ──
 Pager.ResizeCommitTest
+
+# ── Hang: debug registers watchpoint test hangs, blocks 566 remaining tests ──
+Threads.DebugRegistersWatchpointSyscallPanicRepro

@@ -438,18 +438,29 @@ core-tests-kernel:
 		cargo zcore-build -m qemu-x86_64 --flavour ""
 
 # Step 3: Write extra-args filter file + build rootfs SFS image.
-# Only rebuilds the image if rootfs files changed (xtask mtime check).
+# Always compare the desired filter against the baked-in extra-args.
+# If they differ (or if the rootfs image is missing), rebuild.
 .PHONY: core-tests-rootfs
-core-tests-rootfs: $(ROOTFS_IMG)
-
-$(ROOTFS_IMG): $(CORE_TESTS_SKIP_FILE)
+core-tests-rootfs:
 	@mkdir -p target/rootfs/zircon/x86_64/etc
-ifneq ($(strip $(CORE_TESTS_FILTER)),)
-	@printf '%s\n' '--gtest_filter=$(CORE_TESTS_FILTER)' > $(EXTRA_ARGS)
-else
-	@rm -f $(EXTRA_ARGS)
-endif
-	@cargo xtask zircon-rootfs --arch x86_64
+	@REBUILD=0; \
+	CURRENT=$$(cat $(EXTRA_ARGS) 2>/dev/null || true); \
+	if [ -n "$(strip $(CORE_TESTS_FILTER))" ]; then \
+		DESIRED="--gtest_filter=$(CORE_TESTS_FILTER)"; \
+		if [ "$$DESIRED" != "$$CURRENT" ]; then \
+			printf '%s\n' "$$DESIRED" > $(EXTRA_ARGS); \
+			REBUILD=1; \
+		fi; \
+	else \
+		if [ -n "$$CURRENT" ]; then \
+			rm -f $(EXTRA_ARGS); \
+			REBUILD=1; \
+		fi; \
+	fi; \
+	if [ ! -f $(ROOTFS_IMG) ] || [ $$REBUILD -eq 1 ]; then \
+		rm -f $(ROOTFS_IMG); \
+		cargo xtask zircon-rootfs --arch x86_64; \
+	fi
 
 # Step 4: Create UEFI boot image from kernel + rootfs.
 .PHONY: core-tests-bootimg
@@ -461,18 +472,25 @@ core-tests-bootimg: core-tests-kernel core-tests-rootfs
 core-tests-build: core-tests-bootimg
 
 # Run a single test (or filter pattern) quickly.
-# Usage: make core-test-run T=Pager.SinglePageTestVmar
+# Usage: make core-test-run T='Pager.FailEarlyWake'
+#        make core-test-run T='Pager.*' CORE_TEST_TIMEOUT=120
+#        make core-test-run T='Pager.FailEarlyWake:Pager.ResizeCommitTest'
 # Only rebuilds rootfs + boot image (not kernel).
+# Set CORE_TEST_TIMEOUT (seconds, default 60) for longer suites.
 .PHONY: core-test-run
 core-test-run:
 ifndef T
-	$(error Usage: make core-test-run T=TestName)
+	$(error Usage: make core-test-run T=TestName [CORE_TEST_TIMEOUT=60])
 endif
+	@# Kill any stale QEMU using our boot image
+	@pkill -f 'qemu-system-x86_64.*boot\.img' 2>/dev/null; sleep 1 || true
+	@# Force rootfs rebuild with the new filter
 	@mkdir -p target/rootfs/zircon/x86_64/etc
 	@printf '%s\n' '--gtest_filter=$(T)' > $(EXTRA_ARGS)
-	@rm -f $(ROOTFS_IMG)
+	@rm -f $(ROOTFS_IMG) $(BOOT_IMG)
 	@cargo xtask zircon-rootfs --arch x86_64 > /dev/null 2>&1
 	@$(BOOTIMAGE_BIN) $(KERNEL_ELF) $(BOOT_IMG) --ramdisk $(ROOTFS_IMG) > /dev/null 2>&1
+	@echo "==> Filter: $(T)  Timeout: $${CORE_TEST_TIMEOUT:-60}s"
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
 		-machine q35 -smp $(X86_CORES) \
@@ -481,14 +499,54 @@ endif
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive "format=raw,file=$(BOOT_IMG)" \
 		> $(CORE_TESTS_LOG) 2>&1 & \
-	PID=$$!; sleep $${CORE_TEST_TIMEOUT:-15}; \
+	PID=$$!; \
+	TIMEOUT=$${CORE_TEST_TIMEOUT:-60}; \
+	ELAPSED=0; LAST_P=0; \
+	while true; do \
+		if ! kill -0 $$PID 2>/dev/null; then break; fi; \
+		if [ $$ELAPSED -ge $$TIMEOUT ]; then break; fi; \
+		sleep 5; ELAPSED=$$((ELAPSED + 5)); \
+		CUR_P=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) 2>/dev/null \
+			| grep -c '\[       OK \]' || echo 0); \
+		if [ "$$CUR_P" != "$$LAST_P" ]; then \
+			printf '\r    %s passed (%ds)...' "$$CUR_P" "$$ELAPSED"; \
+			LAST_P=$$CUR_P; \
+		fi; \
+	done; \
+	printf '\n'; \
 	kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; \
-	if grep -q '\[  FAILED  \]' $(CORE_TESTS_LOG); then echo "FAIL: $(T)"; exit 1; \
-	elif grep -q '\[       OK \]' $(CORE_TESTS_LOG); then echo "PASS: $(T)"; \
-	else echo "HANG: $(T)"; exit 1; fi
+	CLEAN=$(CORE_TESTS_LOG).clean; \
+	sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) > $$CLEAN; \
+	P=$$(grep -c '\[       OK \]' $$CLEAN || true); \
+	F=$$(grep -c '\[  FAILED  \]' $$CLEAN || true); \
+	R=$$(grep '\[==========\]' $$CLEAN | tail -1 | sed -n 's/.*\] \([0-9]*\) test.*/\1/p'); \
+	echo "--- Results ($$ELAPSED s) ---"; \
+	echo "Passed: $$P  Failed: $$F  Ran: $${R:-$$P}"; \
+	if [ "$$F" -gt 0 ] 2>/dev/null; then \
+		echo "Failed tests:"; \
+		grep '\[  FAILED  \]' $$CLEAN | sed 's/.*\] /  /'; \
+	fi; \
+	LAST_RUN=$$(grep '\[ RUN      \]' $$CLEAN | tail -1 | sed 's/.*\] //'); \
+	LAST_OK=$$(grep '\[       OK \]' $$CLEAN | tail -1 | sed 's/.*\] //' | sed 's/ (.*//'); \
+	if [ "$$P" -eq 0 ] 2>/dev/null && [ "$$F" -eq 0 ] 2>/dev/null; then \
+		echo "HANG: no tests completed (last started: $$LAST_RUN)"; exit 1; \
+	elif [ -n "$$R" ] && [ "$$P" -eq "$$R" ] 2>/dev/null && [ "$$F" -eq 0 ] 2>/dev/null; then \
+		echo "OK: all $$R tests passed"; \
+	elif [ "$$F" -gt 0 ] 2>/dev/null; then \
+		exit 1; \
+	elif [ -z "$$R" ]; then \
+		if [ -n "$$LAST_RUN" ] && [ "$$LAST_RUN" != "$$LAST_OK" ]; then \
+			echo "HANG: stuck on $$LAST_RUN (after $$LAST_OK)"; exit 1; \
+		else \
+			echo "OK: $$P tests passed (QEMU exited before summary)"; \
+		fi; \
+	else \
+		echo "INCOMPLETE: $$P/$$R passed, hung on: $$LAST_RUN"; exit 1; \
+	fi
 
 # Build and run the full core-tests suite.
 core-tests: core-tests-build
+	@pkill -f 'qemu-system-x86_64.*boot\.img' 2>/dev/null; sleep 1 || true
 	@echo "==> Running QEMU (timeout=$(CORE_TESTS_TIMEOUT)s, log=$(CORE_TESTS_LOG))..."
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
@@ -514,26 +572,26 @@ core-tests: core-tests-build
 	done; \
 	printf '\n'; \
 	kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; \
+	CLEAN=$(CORE_TESTS_LOG).clean; \
+	sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) > $$CLEAN; \
 	echo "=== Core-tests results ($$ELAPSED s) ==="; \
-	P=$$(grep -c '\[       OK \]' $(CORE_TESTS_LOG) || true); \
-	F=$$(grep -c '\[  FAILED  \]' $(CORE_TESTS_LOG) || true); \
-	R=$$(grep -ao '\[==========\] [0-9]* tests from' $(CORE_TESTS_LOG) | awk '{print $$2}' | tail -1); \
+	P=$$(grep -c '\[       OK \]' $$CLEAN || true); \
+	F=$$(grep -c '\[  FAILED  \]' $$CLEAN || true); \
+	R=$$(grep '\[==========\]' $$CLEAN | tail -1 | sed -n 's/.*\] \([0-9]*\) test.*/\1/p'); \
 	if [ -z "$$R" ]; then R=$$(($$P + $$F)); PARTIAL=" (no summary — partial run)"; else PARTIAL=""; fi; \
 	S=$$(sed '/^[[:space:]]*\#/d; /^[[:space:]]*$$/d' $(CORE_TESTS_SKIP_FILE) 2>/dev/null | wc -l | tr -d ' '); \
 	T=$$(($$R + $$S)); \
 	echo "Passed: $$P  Failed: $$F  Ran: $$R/$$T  Skipped: $$S$$PARTIAL"; \
-	sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[  FAILED  \]' || true; \
-	HUNG=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[ RUN      \]' | tail -1 | sed 's/.*\] //'); \
-	LAST_OK=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[       OK \]' | tail -1 | sed 's/.*\] //' | sed 's/ (.*//'); \
+	grep '\[  FAILED  \]' $$CLEAN || true; \
+	HUNG=$$(grep '\[ RUN      \]' $$CLEAN | tail -1 | sed 's/.*\] //'); \
+	LAST_OK=$$(grep '\[       OK \]' $$CLEAN | tail -1 | sed 's/.*\] //' | sed 's/ (.*//'); \
 	echo "Last completed: $$LAST_OK"; \
 	echo "Last started:   $$HUNG"; \
-	tail -5 $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g'; \
+	tail -5 $$CLEAN; \
 	if [ "$$F" -gt 0 ] 2>/dev/null; then echo "FAIL: $$F test(s) failed"; exit 1; fi; \
 	if [ -z "$$R" ] || [ "$$R" -eq 0 ] 2>/dev/null; then echo "FAIL: no tests ran"; exit 1; fi; \
 	if [ -n "$$PARTIAL" ]; then \
-		HUNG=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[ RUN      \]' | tail -1 | sed 's/.*\] //'); \
-		PREV=$$(sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) | grep '\[       OK \]' | tail -1 | sed 's/.*\] //' | sed 's/ (.*//'); \
-		echo "FAIL: incomplete run ($$P passed of $$T expected) — hung on: $$HUNG (after: $$PREV)"; exit 1; \
+		echo "FAIL: incomplete run ($$P passed of $$T expected) — hung on: $$HUNG (after: $$LAST_OK)"; exit 1; \
 	fi
 
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).

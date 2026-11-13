@@ -1,5 +1,7 @@
 #![no_std]
 
+pub mod lockdep;
+
 cfg_if::cfg_if! {
     if #[cfg(all(target_os = "none", feature = "ticket"))] {
         extern crate alloc;

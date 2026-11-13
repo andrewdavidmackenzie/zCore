@@ -41,7 +41,7 @@ impl Pager {
     pub fn new() -> Arc<Self> {
         Arc::new(Pager {
             base: KObjectBase::new(),
-            inner: Mutex::new(PagerInner::default()),
+            inner: Mutex::new_with_level(PagerInner::default(), lock::lockdep::LockLevel::PagerInner),
         })
     }
 
