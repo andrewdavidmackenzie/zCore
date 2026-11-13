@@ -1,8 +1,11 @@
-use crate::mutex::KernelMutex as Mutex;
+// Timer::inner uses InterruptSpinLock (not KernelMutex) because
+// Timer::touch() is called from timer interrupt callbacks via
+// timer_tick() → expire() → callback → touch() → inner.lock().
 use crate::object::*;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::time::Duration;
+use lock::Mutex;
 
 /// An object that may be signaled at some point in the future
 ///
