@@ -1,11 +1,14 @@
 pub use self::port_packet::*;
-use crate::mutex::KernelMutex as Mutex;
+// Port::inner uses InterruptSpinLock (not KernelMutex) because
+// port.push is called from signal callbacks which fire in timer
+// interrupt context via signal_set → callback chain.
 use crate::object::*;
 use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::bitflags;
 use core::sync::atomic::AtomicBool;
+use lock::Mutex;
 
 #[path = "port_packet.rs"]
 mod port_packet;

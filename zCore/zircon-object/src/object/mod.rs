@@ -95,7 +95,6 @@
 //! [interior mutability pattern]: https://doc.rust-lang.org/reference/interior-mutability.html
 
 use {
-    crate::mutex::KernelMutex as Mutex,
     crate::signal::*,
     alloc::{boxed::Box, string::String, sync::Arc, vec::Vec},
     core::{
@@ -106,6 +105,11 @@ use {
         task::{Context, Poll},
     },
     downcast_rs::{impl_downcast, DowncastSync},
+    // KObjectBase::inner uses InterruptSpinLock (not KernelMutex)
+    // because signal_set/signal_change are called from timer interrupt
+    // callbacks. Using KernelMutex here would deadlock if the
+    // interrupted thread holds the same lock.
+    lock::Mutex,
 };
 
 pub use {super::*, handle::*, rights::*, signal::*};
