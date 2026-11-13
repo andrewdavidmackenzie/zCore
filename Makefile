@@ -516,7 +516,7 @@ endif
 	printf '\n'; \
 	kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; \
 	CLEAN=$(CORE_TESTS_LOG).clean; \
-	sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) > $$CLEAN; \
+	tr -d '\000' < $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g' > $$CLEAN; \
 	P=$$(grep -c '\[       OK \]' $$CLEAN || true); \
 	F=$$(grep -c '\[  FAILED  \]' $$CLEAN || true); \
 	R=$$(grep '\[==========\]' $$CLEAN | tail -1 | sed -n 's/.*\] \([0-9]*\) test.*/\1/p'); \
@@ -573,7 +573,7 @@ core-tests: core-tests-build
 	printf '\n'; \
 	kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; \
 	CLEAN=$(CORE_TESTS_LOG).clean; \
-	sed 's/\x1b\[[0-9;]*m//g' $(CORE_TESTS_LOG) > $$CLEAN; \
+	tr -d '\000' < $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g' > $$CLEAN; \
 	echo "=== Core-tests results ($$ELAPSED s) ==="; \
 	P=$$(grep -c '\[       OK \]' $$CLEAN || true); \
 	F=$$(grep -c '\[  FAILED  \]' $$CLEAN || true); \
