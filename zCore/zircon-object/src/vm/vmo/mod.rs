@@ -418,6 +418,11 @@ struct OutstandingPageRequest {
     pending_pages: usize,
     /// True if this is a DIRTY request, false for READ.
     is_dirty: bool,
+    /// Pages already resolved (supplied or failed). Prevents double-
+    /// decrement of `pending_pages` when the same page is supplied
+    /// twice (e.g., by both the pager thread and a manual SupplyPages
+    /// call racing each other).
+    resolved_pages: alloc::collections::BTreeSet<usize>,
     /// Overlapping page waiters attached to this request. Each has:
     /// - page index
     /// - oneshot sender to wake the waiter
@@ -937,6 +942,7 @@ impl VmObject {
                     end_page,
                     pending_pages: end_page - start_page,
                     is_dirty: true,
+                    resolved_pages: alloc::collections::BTreeSet::new(),
                     overlap_waiters: alloc::vec![],
                 });
             }
@@ -1047,7 +1053,13 @@ impl VmObject {
             let overlap_start = start_page.max(req.start_page);
             let overlap_end = end_page.min(req.end_page);
             if overlap_start < overlap_end {
-                let newly_dirtied = overlap_end - overlap_start;
+                // Count only genuinely new pages (not already resolved).
+                let mut newly_dirtied = 0usize;
+                for pg in overlap_start..overlap_end {
+                    if req.resolved_pages.insert(pg) {
+                        newly_dirtied += 1;
+                    }
+                }
                 req.pending_pages = req.pending_pages.saturating_sub(newly_dirtied);
                 if req.pending_pages == 0 {
                     let completed = inner.outstanding_requests.swap_remove(req_idx);
@@ -1551,11 +1563,20 @@ impl VmObject {
                 let pending = (start_page..end_page)
                     .filter(|&pg| self.trait_.committed_pages_in_range(pg, pg + 1) == 0)
                     .count();
+                // Track pages that are already committed at request
+                // time as resolved so they aren't double-counted.
+                let mut resolved = alloc::collections::BTreeSet::new();
+                for pg in start_page..end_page {
+                    if self.trait_.committed_pages_in_range(pg, pg + 1) > 0 {
+                        resolved.insert(pg);
+                    }
+                }
                 inner.outstanding_requests.push(OutstandingPageRequest {
                     start_page,
                     end_page,
                     pending_pages: pending,
                     is_dirty: false,
+                    resolved_pages: resolved,
                     overlap_waiters: Vec::new(),
                 });
                 info!(
@@ -1669,6 +1690,27 @@ impl VmObject {
                     error: None,
                 });
             } else {
+                // No outstanding request covers this page — the original
+                // request was already completed/removed. Send a fresh
+                // page request so the pager sees a port packet. Without
+                // this, a waiter arriving after the outstanding request
+                // was removed would block forever (no port packet, pager
+                // never supplies the page).
+                if let Some(port) = inner.pager_port.clone() {
+                    let pager_key = inner.pager_key;
+                    port.push(PortPacketRepr {
+                        key: pager_key,
+                        status: ZxError::OK,
+                        data: PayloadRepr::PageRequest(PacketPageRequest {
+                            command: ZX_PAGER_VMO_READ,
+                            flags: 0,
+                            _reserved0: 0,
+                            offset: offset as u64,
+                            length: PAGE_SIZE as u64,
+                            _reserved1: 0,
+                        }),
+                    });
+                }
                 inner
                     .pager_waiters
                     .push((page_idx, PagerWaiterKind::Read, tx));
@@ -1744,8 +1786,16 @@ impl VmObject {
             let overlap_start = start_page.max(req.start_page);
             let overlap_end = end_page.min(req.end_page);
             if overlap_start < overlap_end {
-                // Count newly-supplied pages in the overlap.
-                let newly_supplied = overlap_end - overlap_start;
+                // Count only genuinely new pages (not already resolved).
+                // This prevents double-decrement when the same page is
+                // supplied twice (e.g., pager thread and manual SupplyPages
+                // racing).
+                let mut newly_supplied = 0usize;
+                for pg in overlap_start..overlap_end {
+                    if req.resolved_pages.insert(pg) {
+                        newly_supplied += 1;
+                    }
+                }
                 req.pending_pages = req.pending_pages.saturating_sub(newly_supplied);
                 // Wake overlap waiters for pages in the supplied range.
                 let mut wi = 0;
@@ -1837,15 +1887,43 @@ impl VmObject {
             let overlap_start = start_page.max(req.start_page);
             let overlap_end = end_page.min(req.end_page);
             if overlap_start < overlap_end {
-                let newly_failed = overlap_end - overlap_start;
+                // Count only genuinely new pages (not already resolved).
+                let mut newly_failed = 0usize;
+                for pg in overlap_start..overlap_end {
+                    if req.resolved_pages.insert(pg) {
+                        newly_failed += 1;
+                    }
+                }
                 req.pending_pages = req.pending_pages.saturating_sub(newly_failed);
-                // Store the error on overlap waiters whose pages fall
-                // in the failed range. Don't wake them yet — they're
-                // woken when the primary request completes, matching
-                // Fuchsia's complete_status_ mechanism.
-                for w in req.overlap_waiters.iter_mut() {
-                    if w.page_idx >= start_page && w.page_idx < end_page && w.error.is_none() {
-                        w.error = Some(err);
+                // Check if an early wake has occurred: if any page
+                // was already resolved before this fail, the primary
+                // reader has resumed and its waiter should be woken
+                // immediately (the reader processes pages sequentially
+                // and won't wait for the entire request to complete).
+                // Without early wake, defer waking to request completion
+                // matching Fuchsia's complete_status_ mechanism.
+                let had_early_wake = req.resolved_pages.len() > newly_failed;
+                if had_early_wake {
+                    // Immediately wake overlap waiters whose page was
+                    // failed — the reader has already resumed after
+                    // partial supply and needs the error now.
+                    let mut wi = 0;
+                    while wi < req.overlap_waiters.len() {
+                        if req.overlap_waiters[wi].page_idx >= start_page
+                            && req.overlap_waiters[wi].page_idx < end_page
+                        {
+                            let w = req.overlap_waiters.swap_remove(wi);
+                            let _ = w.sender.send(Err(err));
+                        } else {
+                            wi += 1;
+                        }
+                    }
+                } else {
+                    // No early wake — defer waking to request completion.
+                    for w in req.overlap_waiters.iter_mut() {
+                        if w.page_idx >= start_page && w.page_idx < end_page && w.error.is_none() {
+                            w.error = Some(err);
+                        }
                     }
                 }
                 if req.pending_pages == 0 {

@@ -184,10 +184,11 @@ impl Syscall<'_> {
                 ) == 0
                     && !pager_vmo.has_zero_marker(page_idx + root_page_off)
                 {
-                    // Page not committed — find the run of consecutive
-                    // missing pages and send ONE batched request. Stop
-                    // the run at the first committed page (in clone or
-                    // root), matching Fuchsia's LookupCursor batching.
+                    let rp = page_idx + root_page_off; // root-space page index
+                                                       // Page not committed — find the run of consecutive
+                                                       // missing pages and send ONE batched request. Stop
+                                                       // the run at the first committed page (in clone or
+                                                       // root), matching Fuchsia's LookupCursor batching.
                     {
                         let mut run_end = page_idx + 1;
                         while run_end < end_page
@@ -201,12 +202,10 @@ impl Syscall<'_> {
                         {
                             run_end += 1;
                         }
-                        let req_offset = (page_idx + root_page_off) * PAGE_SIZE;
+                        let req_offset = rp * PAGE_SIZE;
                         let req_length = (run_end - page_idx) * PAGE_SIZE;
                         let _ = pager_vmo.request_pages(req_offset, req_length);
                     }
-                    let mut fail_retries = 0;
-                    let rp = page_idx + root_page_off; // root-space page index
                     loop {
                         // Check if page was supplied in the meantime
                         // (or forked in the clone while we waited).
@@ -217,11 +216,10 @@ impl Syscall<'_> {
                         {
                             break;
                         }
-                        if let Some(err) = pager_vmo.get_failed_page(rp) {
-                            if fail_retries >= 1 {
-                                return Err(err);
-                            }
-                            fail_retries += 1;
+                        if pager_vmo.get_failed_page(rp).is_some() {
+                            // Page was failed by OP_FAIL. Clear the marker
+                            // and re-request so the pager gets a fresh
+                            // chance to supply.
                             pager_vmo.clear_failed_page(rp);
                             let _ = pager_vmo.request_pages(rp * PAGE_SIZE, PAGE_SIZE);
                         }
