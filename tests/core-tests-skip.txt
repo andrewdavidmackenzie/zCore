@@ -1,9 +1,6 @@
 # ── Hang: sys_vmo_write on clone of pager tree lacks async demand-paging ──
 PagerWriteback.NoDirtyRequestsForClones
 
-# ── Flaky timing failure: WaitForBlocked races with thread state transition ──
-Pager.ResizeCommitTest
-
 # ── Hang: debug registers watchpoint test, blocks remaining tests ──
 Threads.DebugRegistersWatchpointSyscallPanicRepro
 
