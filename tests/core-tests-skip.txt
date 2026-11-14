@@ -1,6 +1,2 @@
 # ── Hang: sys_vmo_write on clone of pager tree lacks async demand-paging ──
 PagerWriteback.NoDirtyRequestsForClones
-
-# ── Hang: passes alone and in Pager.* suite, hangs in full suite ──
-# Contamination from a test running before Pager suite in full run
-Pager.FailEarlyWake
