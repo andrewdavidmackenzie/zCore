@@ -121,7 +121,7 @@ async fn basic_transfer() {
     // Write data to src.
     let src_data = vec![0xAAu8; PAGE_SIZE];
     let in_ptr = UserInPtr::from(src_data.as_ptr() as usize);
-    sc.sys_vmo_write(src_h, in_ptr, 0, PAGE_SIZE).unwrap();
+    sc.sys_vmo_write(src_h, in_ptr, 0, PAGE_SIZE).await.unwrap();
 
     // Transfer first page of src to second page of dst.
     sc.sys_vmo_transfer_data(dst_h, 0, page_size, page_size, src_h, 0)

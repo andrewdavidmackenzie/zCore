@@ -104,6 +104,7 @@ async fn read_write_while_locked() {
     // Write data.
     let data = [0xDE, 0xAD, 0xBE, 0xEF];
     sc.sys_vmo_write(h, UserInPtr::from(data.as_ptr() as usize), 0, 4)
+        .await
         .unwrap();
 
     // Read it back.
@@ -144,6 +145,7 @@ async fn read_after_discard() {
     .unwrap();
     let data = [0xAAu8; 16];
     sc.sys_vmo_write(h, UserInPtr::from(data.as_ptr() as usize), 0, 16)
+        .await
         .unwrap();
     sc.sys_vmo_op_range(h, VMO_OP_UNLOCK, 0, PAGE_SIZE, UserOutPtr::from(0usize), 0)
         .unwrap();
