@@ -1860,7 +1860,12 @@ impl VmObject {
                         {
                             let _ = w.sender.send(Ok(()));
                         } else {
-                            let _ = w.sender.send(Err(err));
+                            // Page was neither failed nor supplied —
+                            // the outstanding request completed but
+                            // this waiter's page is still pending
+                            // (e.g., after resize removed other pages).
+                            // Send SHOULD_WAIT so the caller retries.
+                            let _ = w.sender.send(Err(ZxError::SHOULD_WAIT));
                         }
                     }
                     continue;

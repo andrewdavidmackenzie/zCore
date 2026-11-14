@@ -627,6 +627,12 @@ async fn handler_user_trap(
                                 // Pass the pager error code as synth_code
                                 // in the exception report. Tests check this
                                 // via WaitForCrash(addr, ZX_ERR_IO).
+                                warn!(
+                                    "FatalPageFault: tid={} vaddr={:#x} err={:?}",
+                                    thread.inner().id(),
+                                    vaddr,
+                                    e
+                                );
                                 Err(ExceptionInfo {
                                     type_: ExceptionType::FatalPageFault,
                                     synth_code: e as u32,
@@ -641,7 +647,13 @@ async fn handler_user_trap(
                 Err(err) => {
                     // BAD_STATE from a detached pager VMO is expected —
                     // the thread should get a FatalPageFault exception.
-                    // Only log unexpected errors.
+                    warn!(
+                        "page_fault err: tid={} vaddr={:#x} flags={:?} err={:?}",
+                        thread.inner().id(),
+                        vaddr,
+                        flags,
+                        err
+                    );
                     if err != ZxError::BAD_STATE {
                         #[cfg_attr(not(target_arch = "x86_64"), allow(unused_variables))]
                         let ctx = thread.context_cloned();

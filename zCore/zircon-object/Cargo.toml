@@ -15,6 +15,7 @@ aspace-separate = []
 dynamic-linking = ["elf"]
 elf = ["xmas-elf"]
 linux = []
+lockdep = ["lock/lockdep"]
 #hypervisor = ["rvm"]
 hypervisor = []
 ## Expose test-only constructors (e.g., CurrentThread::new_for_test).
