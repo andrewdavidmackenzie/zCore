@@ -469,22 +469,13 @@ impl Syscall<'_> {
                     }
                 }
             } else {
-                // COW clone: writing to a clone needs to read the
-                // parent's pages first (for COW copy). If the parent
-                // is pager-backed and the pages aren't supplied yet,
-                // we need to demand-page them before the write.
-                match vmo.find_root_pager_vmo_with_offset() {
-                    Some((root, cumulative_offset)) => {
-                        // Preflight the parent pages as READ requests
-                        // so the pager supplies them before the COW
-                        // copy in commit_page. Use is_trap_dirty=false
-                        // because we're reading FROM the parent (for
-                        // COW copy), not writing TO it — no DIRTY
-                        // requests needed.
-                        (root, cumulative_offset, false)
-                    }
-                    None => return Ok(()),
-                }
+                // COW clone: commit_page(WRITE) allocates private zero
+                // frames when the parent page isn't supplied, so no
+                // pager preflight is needed. Calling
+                // prefault_pager_write_pages here would deadlock if the
+                // calling thread IS the pager (it blocks waiting for
+                // pages that only it can supply).
+                return Ok(());
             }
         } else if vmo.is_trap_dirty() && !vmo.has_pager() {
             // Detached TRAP_DIRTY VMO: is_in_pager_tree() is false
