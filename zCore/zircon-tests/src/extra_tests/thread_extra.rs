@@ -267,7 +267,7 @@ async fn suspend_multiple_wait_async() {
         .await;
 
     // Port should have received the RUNNING signal
-    let pkt = crate::test_runtime::block_on(port.wait());
+    let pkt = port.wait().await;
     let repr = PortPacketRepr::from(&pkt);
     assert_eq!(repr.key, 99);
 

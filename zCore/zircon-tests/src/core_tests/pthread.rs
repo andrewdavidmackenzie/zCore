@@ -52,7 +52,7 @@ async fn basic() {
     // Part 1: Uncontested mutex lock/unlock (C++: fast CAS path)
     let mutex = Arc::new(SyncMutex::new());
     // Lock and unlock without contention — should succeed immediately
-    crate::test_runtime::block_on(mutex.lock());
+    mutex.lock().await;
     mutex.unlock();
 
     // Part 2: 3 condvar threads + broadcast (C++: cond_threads)

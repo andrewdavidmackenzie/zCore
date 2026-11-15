@@ -215,8 +215,8 @@ fn wrong_object_type_failure_case() {
 }
 /// C++: TEST(ChannelCallEtcTest, NullArgsReturnsInvalidArgs)
 /// channel_call_etc with null args pointer returns ZX_ERR_INVALID_ARGS.
-#[test]
-fn null_args_returns_invalid_args() {
+#[async_std::test]
+async fn null_args_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -228,21 +228,23 @@ fn null_args_returns_invalid_args() {
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
     // C++: zx_channel_call_etc(handle, 0, infinite, nullptr, &ab, &ah)
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
-        ch_handle,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(0usize), // null args pointer
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_etc_noretry(
+            ch_handle,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(0usize), // null args pointer
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(ChannelCallEtcTest, BadArgsPointerReturnsInvalidArgs)
 /// channel_call_etc with args pointer = 1 (bad pointer) returns ZX_ERR_INVALID_ARGS.
-#[test]
-fn bad_args_pointer_returns_invalid_args() {
+#[async_std::test]
+async fn bad_args_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -254,14 +256,16 @@ fn bad_args_pointer_returns_invalid_args() {
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
     // C++: zx_channel_call_etc(handle, 0, infinite, reinterpret_cast<...*>(1), &ab, &ah)
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
-        ch_handle,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(1usize), // bad pointer
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_etc_noretry(
+            ch_handle,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(1usize), // bad pointer
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
@@ -271,8 +275,8 @@ fn bad_args_pointer_returns_invalid_args() {
 /// In the C++ test, a server thread is spawned so the call completes and
 /// the null pointer is hit at write-back time. In zCore, actual_bytes is
 /// written after the blocking call completes.
-#[test]
-fn null_actual_bytes_returns_invalid_args() {
+#[async_std::test]
+async fn null_actual_bytes_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -307,14 +311,16 @@ fn null_actual_bytes_returns_invalid_args() {
 
     let mut actual_handles: u32 = 0;
     // C++: zx_channel_call_etc(handle, 0, infinite, &args, nullptr, &ah)
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
-        ch_handle,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(0usize), // null actual_bytes
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_etc_noretry(
+            ch_handle,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(0usize), // null actual_bytes
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     // zCore validates actual_bytes after blocking wait completes;
     // with no server + immediate deadline, the call times out first.
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
@@ -325,8 +331,8 @@ fn null_actual_bytes_returns_invalid_args() {
 ///
 /// Same as NullActualBytes — zCore validates after blocking wait, so
 /// without a server the call times out first.
-#[test]
-fn null_actual_handles_returns_invalid_args() {
+#[async_std::test]
+async fn null_actual_handles_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -361,14 +367,16 @@ fn null_actual_handles_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     // C++: zx_channel_call_etc(handle, 0, infinite, &args, &ab, nullptr)
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
-        ch_handle,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(0usize), // null actual_handles
-    ));
+    let result = sc
+        .sys_channel_call_etc_noretry(
+            ch_handle,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(0usize), // null actual_handles
+        )
+        .await;
     // zCore validates actual_handles after blocking wait completes;
     // with no server + immediate deadline, the call times out first.
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
@@ -376,8 +384,8 @@ fn null_actual_handles_returns_invalid_args() {
 
 /// C++: TEST(ChannelCallEtcTest, InvalidOptionsReturnsInvalidArgs)
 /// channel_call_etc with options=0xff returns ZX_ERR_INVALID_ARGS.
-#[test]
-fn invalid_options_returns_invalid_args() {
+#[async_std::test]
+async fn invalid_options_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -413,14 +421,16 @@ fn invalid_options_returns_invalid_args() {
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
     // C++: client_end.call_etc(0xff, infinite, &args, ...) == ZX_ERR_INVALID_ARGS
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
-        ch_handle,
-        0xff, // invalid options
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_etc_noretry(
+            ch_handle,
+            0xff, // invalid options
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 /// C++: TEST(ChannelCallEtcTest, WithDuplicateOpHandleSucceeds)

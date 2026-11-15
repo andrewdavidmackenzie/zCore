@@ -103,8 +103,8 @@ fn set_negative_slack() {
 ///
 /// Set deadline to past, wait_one returns immediately with SIGNALED.
 /// Verify get_info before and after wait_one.
-#[test]
-fn already_passed_deadline_on_wait_one() {
+#[async_std::test]
+async fn already_passed_deadline_on_wait_one() {
     use hal_impl::user::UserOutPtr;
 
     let ctx = TestContext::new();
@@ -122,12 +122,14 @@ fn already_passed_deadline_on_wait_one() {
     // wait_one with zero timeout — already SIGNALED, should succeed.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::SIGNALED.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        out,
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::SIGNALED.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out,
+        )
+        .await;
     assert!(result.is_ok());
     assert!(observed.contains(Signal::SIGNALED));
 
@@ -141,8 +143,8 @@ fn already_passed_deadline_on_wait_one() {
 /// to verify ZX_ERR_TIMED_OUT and pending==0, then loops 3 times with
 /// 10ms future deadlines and calls wait_one. In libos mode we test
 /// with past deadlines (fire immediately) and use syscall-layer wait_one.
-#[test]
-fn basic() {
+#[async_std::test]
+async fn basic() {
     use hal_impl::user::UserOutPtr;
 
     let ctx = TestContext::new();
@@ -155,12 +157,14 @@ fn basic() {
     // Initially not signaled — wait_one with zero timeout returns TIMED_OUT.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::SIGNALED.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        out,
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::SIGNALED.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out,
+        )
+        .await;
     assert_eq!(result, Err(zircon_object::ZxError::TIMED_OUT));
     assert_eq!(observed, Signal::empty());
 
@@ -171,12 +175,14 @@ fn basic() {
         // wait_one should succeed immediately (already SIGNALED).
         let mut observed = Signal::empty();
         let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-        let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-            h,
-            Signal::SIGNALED.bits(),
-            zircon_syscall::Deadline::from(0usize),
-            out,
-        ));
+        let result = sc
+            .sys_object_wait_one(
+                h,
+                Signal::SIGNALED.bits(),
+                zircon_syscall::Deadline::from(0usize),
+                out,
+            )
+            .await;
         assert!(result.is_ok(), "wait_one should succeed for fired timer");
         assert!(observed.contains(Signal::SIGNALED));
 
@@ -288,8 +294,8 @@ fn restart_race() {
 /// If the timer is already due when set, SIGNALED is asserted
 /// immediately. Canceling deasserts it immediately. Verify via
 /// wait_one with zero timeout.
-#[test]
-fn signals_asserted_immediately() {
+#[async_std::test]
+async fn signals_asserted_immediately() {
     use hal_impl::user::UserOutPtr;
 
     let ctx = TestContext::new();
@@ -305,12 +311,14 @@ fn signals_asserted_immediately() {
         // wait_one should succeed immediately.
         let mut observed = Signal::empty();
         let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-        let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-            h,
-            Signal::SIGNALED.bits(),
-            zircon_syscall::Deadline::from(0usize),
-            out,
-        ));
+        let result = sc
+            .sys_object_wait_one(
+                h,
+                Signal::SIGNALED.bits(),
+                zircon_syscall::Deadline::from(0usize),
+                out,
+            )
+            .await;
         assert!(result.is_ok());
         assert!(observed.contains(Signal::SIGNALED));
 
@@ -319,12 +327,14 @@ fn signals_asserted_immediately() {
         // After cancel, wait_one should time out.
         let mut observed2 = Signal::empty();
         let out2 = UserOutPtr::from(&mut observed2 as *mut _ as usize);
-        let result2 = crate::test_runtime::block_on(sc.sys_object_wait_one(
-            h,
-            Signal::SIGNALED.bits(),
-            zircon_syscall::Deadline::from(0usize),
-            out2,
-        ));
+        let result2 = sc
+            .sys_object_wait_one(
+                h,
+                Signal::SIGNALED.bits(),
+                zircon_syscall::Deadline::from(0usize),
+                out2,
+            )
+            .await;
         assert_eq!(result2, Err(zircon_object::ZxError::TIMED_OUT));
     }
 }
@@ -366,8 +376,8 @@ fn boot_timers_elapse_during_suspend() {
 ///
 /// User signals can be asserted and cleared on a timer via syscall layer,
 /// independent of the SIGNALED timer signal. C++ also verifies via wait_one.
-#[test]
-fn user_signal() {
+#[async_std::test]
+async fn user_signal() {
     use hal_impl::user::UserOutPtr;
 
     let ctx = TestContext::new();
@@ -384,12 +394,14 @@ fn user_signal() {
     // wait_one should succeed immediately with USER_SIGNAL_0.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        out,
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out,
+        )
+        .await;
     assert!(result.is_ok());
     assert!(observed.contains(Signal::USER_SIGNAL_0));
 
@@ -400,12 +412,14 @@ fn user_signal() {
     // wait_one should now time out.
     let mut observed2 = Signal::empty();
     let out2 = UserOutPtr::from(&mut observed2 as *mut _ as usize);
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        out2,
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out2,
+        )
+        .await;
     assert_eq!(result, Err(zircon_object::ZxError::TIMED_OUT));
 }
 

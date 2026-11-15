@@ -162,8 +162,8 @@ fn try_mutexes() {
 ///
 /// At kernel level: sync_mutex_timedlock calls futex_wait with a deadline.
 /// In single-threaded mode, we test the value-mismatch fast path.
-#[test]
-fn timeout_elapsed() {
+#[async_std::test]
+async fn timeout_elapsed() {
     let _ctx = TestContext::new();
     // Mutex is "locked" (non-zero value, simulating another thread holding it)
     let mutex = Box::new(AtomicI32::new(1));
@@ -174,7 +174,7 @@ fn timeout_elapsed() {
     // At kernel level: futex_wait(expected=0, deadline) but value is 1
     // → immediate BAD_STATE (value mismatch)
     for _i in 0..5 {
-        let result = crate::test_runtime::block_on(futex.wait(0));
+        let result = futex.wait(0).await;
         assert_eq!(
             result.unwrap_err(),
             zircon_object::ZxError::BAD_STATE,

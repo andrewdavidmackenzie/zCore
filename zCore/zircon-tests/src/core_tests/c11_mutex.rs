@@ -184,8 +184,8 @@ fn static_initalizer_same_bytes_as_auto() {
 /// In single-threaded mode: we can test that futex_wait on a locked
 /// mutex (value mismatch) returns BAD_STATE immediately.
 /// The full timeout test requires concurrent threads.
-#[test]
-fn timeout_elapsed() {
+#[async_std::test]
+async fn timeout_elapsed() {
     let _ctx = TestContext::new();
     // Mutex is "locked" (value = 1)
     let mutex = Box::new(AtomicI32::new(1));
@@ -197,7 +197,7 @@ fn timeout_elapsed() {
     // (In a real scenario, the expected value would match and the thread
     // would block until the deadline, but we can only test the fast path.)
     for _i in 0..5 {
-        let result = crate::test_runtime::block_on(futex.wait(0));
+        let result = futex.wait(0).await;
         assert_eq!(
             result.unwrap_err(),
             zircon_object::ZxError::BAD_STATE,

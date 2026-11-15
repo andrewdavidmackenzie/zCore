@@ -66,8 +66,8 @@ fn wait() {
 ///
 /// infinite_past means the deadline has already passed, so it times out
 /// immediately. At kernel level: futex_wait with a deadline in the past.
-#[test]
-fn wait_duration_timeout() {
+#[async_std::test]
+async fn wait_duration_timeout() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
     let futex = Futex::new(Box::as_ref(&completion) as *const AtomicI32 as usize);
@@ -82,7 +82,7 @@ fn wait_duration_timeout() {
         "wait with past deadline on unsignaled completion should time out"
     );
     // Verify futex_wait would fail (value mismatch path)
-    let result = crate::test_runtime::block_on(futex.wait(99));
+    let result = futex.wait(99).await;
     assert_eq!(
         result.unwrap_err(),
         zircon_object::ZxError::BAD_STATE,

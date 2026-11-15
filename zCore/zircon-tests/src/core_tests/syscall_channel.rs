@@ -1245,8 +1245,8 @@ struct TestChannelCallArgs {
 
 /// C++: TEST(ChannelTest, CallFromWrongObjectTypeReturnsWrongType) — syscall level
 /// Passing an event handle to channel_call should return WRONG_TYPE.
-#[test]
-fn call_from_wrong_object_type_returns_wrong_type() {
+#[async_std::test]
+async fn call_from_wrong_object_type_returns_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -1275,21 +1275,23 @@ fn call_from_wrong_object_type_returns_wrong_type() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        event_handle,
-        0,
-        zircon_syscall::Deadline::from(0usize), // immediate deadline
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            event_handle,
+            0,
+            zircon_syscall::Deadline::from(0usize), // immediate deadline
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
 }
 
 /// C++: TEST(ChannelTest, CallInvalidOptionsReturnsInvalidArgs) — syscall level
 /// Non-zero invalid options should return INVALID_ARGS.
-#[test]
-fn call_invalid_options_returns_invalid_args() {
+#[async_std::test]
+async fn call_invalid_options_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -1310,21 +1312,23 @@ fn call_invalid_options_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0xFFFF, // invalid options
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0xFFFF, // invalid options
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(ChannelTest, CallWithoutWriteRightReturnsAccessDenied) — syscall level
 /// Channel handle without WRITE right should return ACCESS_DENIED.
-#[test]
-fn call_without_write_right_returns_access_denied() {
+#[async_std::test]
+async fn call_without_write_right_returns_access_denied() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -1351,21 +1355,23 @@ fn call_without_write_right_returns_access_denied() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        h0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            h0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
 /// C++: TEST(ChannelTest, CallWithoutReadRightReturnsAccessDenied) — syscall level
 /// Channel handle without READ right should return ACCESS_DENIED.
-#[test]
-fn call_without_read_right_returns_access_denied() {
+#[async_std::test]
+async fn call_without_read_right_returns_access_denied() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -1392,21 +1398,23 @@ fn call_without_read_right_returns_access_denied() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        h0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            h0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
 /// C++: TEST(ChannelTest, CallPayloadTooSmallReturnsInvalidArgs) — syscall level
 /// wr_num_bytes < 4 (txid header) should return INVALID_ARGS.
-#[test]
-fn call_payload_too_small_returns_invalid_args() {
+#[async_std::test]
+async fn call_payload_too_small_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -1427,22 +1435,24 @@ fn call_payload_too_small_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(ChannelTest, CallNullptrNumBytesIsInvalidArgs) — syscall level
 /// rd_num_bytes < 4 should return INVALID_ARGS (read buffer too small
 /// for the mandatory txid header).
-#[test]
-fn call_nullptr_num_bytes_is_invalid_args() {
+#[async_std::test]
+async fn call_nullptr_num_bytes_is_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -1463,14 +1473,16 @@ fn call_nullptr_num_bytes_is_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
@@ -1479,8 +1491,8 @@ fn call_nullptr_num_bytes_is_invalid_args() {
 /// INVALID_ARGS. In zCore, rd_num_bytes < 4 is checked first and
 /// returns INVALID_ARGS before any pointer validation. We test the
 /// same code path: rd_num_bytes = 0 → INVALID_ARGS.
-#[test]
-fn call_nullptr_num_handles_invalid_args() {
+#[async_std::test]
+async fn call_nullptr_num_handles_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -1501,44 +1513,48 @@ fn call_nullptr_num_handles_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(ChannelTest, CallInvalidArgsPointerReturnsInvalidArgs) — syscall level
 /// Null args pointer should return INVALID_ARGS when trying to read
 /// the ChannelCallArgs struct.
-#[test]
-fn call_invalid_args_pointer_returns_invalid_args() {
+#[async_std::test]
+async fn call_invalid_args_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(0usize), // null args pointer
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(0usize), // null args pointer
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(ChannelTest, CallWrittenBytesSmallerThanZxTxIdReturnsInvalidArgs) — syscall level
 /// wr_num_bytes = 3 (less than sizeof(zx_txid_t) = 4) should return
 /// INVALID_ARGS.
-#[test]
-fn call_written_bytes_smaller_than_zx_tx_id_returns_invalid_args() {
+#[async_std::test]
+async fn call_written_bytes_smaller_than_zx_tx_id_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -1559,14 +1575,16 @@ fn call_written_bytes_smaller_than_zx_tx_id_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
@@ -1574,8 +1592,8 @@ fn call_written_bytes_smaller_than_zx_tx_id_returns_invalid_args() {
 /// When the peer is closed before channel_call, the call should
 /// return PEER_CLOSED (since the write succeeds but there is nobody
 /// to read/reply, and the peer-closed signal is already set).
-#[test]
-fn call_notified_on_peer_closed() {
+#[async_std::test]
+async fn call_notified_on_peer_closed() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, ch1) = syscall_channel_create(&ctx);
@@ -1599,14 +1617,16 @@ fn call_notified_on_peer_closed() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize), // immediate deadline
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize), // immediate deadline
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
 }
 
@@ -2041,22 +2061,24 @@ struct TestChannelCallEtcArgs {
 
 /// C++: TEST(ChannelCallEtcTest, CallEtcInvalidArgs) — syscall level
 /// Null args pointer to channel_call_etc returns INVALID_ARGS.
-#[test]
-fn call_etc_invalid_args() {
+#[async_std::test]
+async fn call_etc_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize), // immediate deadline
-        UserInPtr::from(0usize),                // null args pointer
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_etc_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize), // immediate deadline
+            UserInPtr::from(0usize),                // null args pointer
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
@@ -2064,8 +2086,8 @@ fn call_etc_invalid_args() {
 /// A successful channel_call_etc requires an async responder thread.
 /// Since libos mode is single-threaded, the call will time out waiting
 /// for a reply.
-#[test]
-fn call_etc_success() {
+#[async_std::test]
+async fn call_etc_success() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -2086,14 +2108,16 @@ fn call_etc_success() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_etc_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     // Peer is open but no responder → TIMED_OUT on immediate deadline
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
@@ -2101,8 +2125,8 @@ fn call_etc_success() {
 /// C++: TEST(ChannelTest, CallConsumesHandlesOnError) — syscall level
 /// channel_call with a closed peer should consume (close) the write
 /// handles even though the call fails with PEER_CLOSED.
-#[test]
-fn call_consumes_handles_on_error() {
+#[async_std::test]
+async fn call_consumes_handles_on_error() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, ch1) = syscall_channel_create(&ctx);
@@ -2134,14 +2158,16 @@ fn call_consumes_handles_on_error() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
 
     // The event handle should have been consumed from the process table
@@ -2155,8 +2181,8 @@ fn call_consumes_handles_on_error() {
 /// A successful call would transfer the handles. Since we can't complete
 /// the call in libos mode (no async responder), this verifies the write
 /// side consumed the handles before timing out.
-#[test]
-fn call_consumes_handles_on_success() {
+#[async_std::test]
+async fn call_consumes_handles_on_success() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -2184,14 +2210,16 @@ fn call_consumes_handles_on_success() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     // No responder → times out
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
@@ -2199,8 +2227,8 @@ fn call_consumes_handles_on_success() {
 /// C++: TEST(ChannelTest, CallDeadlineExceededReturnsTimedOut) — syscall level
 /// An immediate deadline (0) with an open but unresponsive peer should
 /// return TIMED_OUT.
-#[test]
-fn call_deadline_exceeded_returns_timed_out() {
+#[async_std::test]
+async fn call_deadline_exceeded_returns_timed_out() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -2221,14 +2249,16 @@ fn call_deadline_exceeded_returns_timed_out() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize), // immediate deadline
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize), // immediate deadline
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 
@@ -2236,8 +2266,8 @@ fn call_deadline_exceeded_returns_timed_out() {
 /// The write side must have at least 4 bytes for the txid. This test
 /// verifies that exactly 4 bytes is accepted (the call will time out
 /// waiting for a reply, which is expected).
-#[test]
-fn call_bytes_fit_is_ok() {
+#[async_std::test]
+async fn call_bytes_fit_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -2258,14 +2288,16 @@ fn call_bytes_fit_is_ok() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     // Write succeeds but no reply → TIMED_OUT
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
@@ -2273,8 +2305,8 @@ fn call_bytes_fit_is_ok() {
 /// C++: TEST(ChannelTest, CallHandlesFitIsOk) — syscall level
 /// channel_call with handles should succeed on the write side.
 /// Times out waiting for reply.
-#[test]
-fn call_handles_fit_is_ok() {
+#[async_std::test]
+async fn call_handles_fit_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -2302,21 +2334,23 @@ fn call_handles_fit_is_ok() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 
 /// C++: TEST(ChannelTest, CallHandleAndBytesFitsIsOk) — syscall level
 /// channel_call with both data and handles should succeed on write side.
-#[test]
-fn call_handle_and_bytes_fits_is_ok() {
+#[async_std::test]
+async fn call_handle_and_bytes_fits_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -2344,14 +2378,16 @@ fn call_handle_and_bytes_fits_is_ok() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 
@@ -2359,8 +2395,8 @@ fn call_handle_and_bytes_fits_is_ok() {
 /// When a reply arrives with the wrong txid, it should be queued as a
 /// regular message rather than consumed as a reply. Since we can't
 /// create a proper responder, this test verifies the call times out.
-#[test]
-fn call_mismatched_txid_queues_regular_message() {
+#[async_std::test]
+async fn call_mismatched_txid_queues_regular_message() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -2381,22 +2417,24 @@ fn call_mismatched_txid_queues_regular_message() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 
 /// C++: TEST(ChannelTest, CallBadReadBufferReturnsInvalidArgs) — syscall level
 /// channel_call with null rd_bytes pointer and non-zero rd_num_bytes
 /// should return INVALID_ARGS.
-#[test]
-fn call_bad_read_buffer_returns_invalid_args() {
+#[async_std::test]
+async fn call_bad_read_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -2416,14 +2454,16 @@ fn call_bad_read_buffer_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     // null rd_bytes with non-zero rd_num_bytes triggers INVALID_ARGS
     // (or TIMED_OUT if the null pointer check doesn't happen before waiting)
     assert!(
@@ -2434,8 +2474,8 @@ fn call_bad_read_buffer_returns_invalid_args() {
 /// C++: TEST(ChannelTest, CallBadReadHandlesReturnsInvalidArgs) — syscall level
 /// channel_call with null rd_handles pointer and non-zero rd_num_handles
 /// should return INVALID_ARGS.
-#[test]
-fn call_bad_read_handles_returns_invalid_args() {
+#[async_std::test]
+async fn call_bad_read_handles_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -2455,14 +2495,16 @@ fn call_bad_read_handles_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     // null rd_handles with non-zero rd_num_handles triggers INVALID_ARGS
     // (or TIMED_OUT if the null pointer check doesn't happen before waiting)
     assert!(
@@ -2647,8 +2689,8 @@ fn write_etc_mixed_move_and_duplicate_on_failure_preserves_duplicate_handles() {
 /// When a reply arrives but is larger than rd_num_bytes, the call should
 /// return BUFFER_TOO_SMALL. Since we can't create a proper responder,
 /// this test verifies the call times out.
-#[test]
-fn call_response_bigger_than_rd_num_bytes_returns_buffer_too_small() {
+#[async_std::test]
+async fn call_response_bigger_than_rd_num_bytes_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -2669,14 +2711,16 @@ fn call_response_bigger_than_rd_num_bytes_returns_buffer_too_small() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     // No reply arrives → TIMED_OUT (the buffer-too-small path
     // would only trigger if a reply was received)
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
@@ -2686,8 +2730,8 @@ fn call_response_bigger_than_rd_num_bytes_returns_buffer_too_small() {
 /// When wr_num_bytes < sizeof(zx_txid_t) and the write pointer is bad,
 /// channel_call should still return INVALID_ARGS (the txid size check
 /// happens even if reading the message data would fail).
-#[test]
-fn call_written_bytes_smaller_than_zx_tx_id_with_bad_pointer_returns_invalid_args() {
+#[async_std::test]
+async fn call_written_bytes_smaller_than_zx_tx_id_with_bad_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -2707,14 +2751,16 @@ fn call_written_bytes_smaller_than_zx_tx_id_with_bad_pointer_returns_invalid_arg
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
@@ -3919,7 +3965,7 @@ fn add_vmo(
 
 /// Helper: invoke sys_channel_call_etc_noretry with the given args and
 /// an immediate deadline. Returns the ZxResult.
-fn do_call_etc(
+async fn do_call_etc(
     ctx: &TestContext,
     handle: HandleValue,
     options: u32,
@@ -3928,14 +3974,15 @@ fn do_call_etc(
     actual_handles: &mut u32,
 ) -> Result<(), ZxError> {
     let sc = ctx.syscall();
-    crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
+    sc.sys_channel_call_etc_noretry(
         handle,
         options,
         zircon_syscall::Deadline::from(0usize),
         UserInPtr::from(args as *const _ as usize),
         UserOutPtr::from(actual_bytes as *mut _ as usize),
         UserOutPtr::from(actual_handles as *mut _ as usize),
-    ))
+    )
+    .await
 }
 
 /// C++: TEST(ChannelCallEtcTest, BadActualBytesPointerReturnsInvalidArgs)
@@ -3946,8 +3993,8 @@ fn do_call_etc(
 /// actual_bytes write happens after the response is received,
 /// so the bad pointer isn't checked before the call blocks.
 /// Without a response thread the call times out.
-#[test]
-fn call_etc_bad_actual_bytes_pointer_returns_invalid_args() {
+#[async_std::test]
+async fn call_etc_bad_actual_bytes_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -3966,14 +4013,16 @@ fn call_etc_bad_actual_bytes_pointer_returns_invalid_args() {
     };
 
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(1usize), // bad pointer
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_etc_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(1usize), // bad pointer
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 
@@ -3981,8 +4030,8 @@ fn call_etc_bad_actual_bytes_pointer_returns_invalid_args() {
 /// Passing a bad pointer for actual_handles returns INVALID_ARGS.
 /// Same situation as BadActualBytesPointer — write happens after
 /// response, so without a response thread the call times out.
-#[test]
-fn call_etc_bad_actual_handles_pointer_returns_invalid_args() {
+#[async_std::test]
+async fn call_etc_bad_actual_handles_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -4001,21 +4050,23 @@ fn call_etc_bad_actual_handles_pointer_returns_invalid_args() {
     };
 
     let mut actual_bytes: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
-        ch0,
-        0,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(1usize), // bad pointer
-    ));
+    let result = sc
+        .sys_channel_call_etc_noretry(
+            ch0,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(1usize), // bad pointer
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 /// C++: TEST(ChannelCallEtcTest, BadChannelFailureCase)
 /// Calling channel_call_etc on an invalid (default/zero) handle returns
 /// BAD_HANDLE.
-#[test]
-fn call_etc_bad_channel_failure_case() {
+#[async_std::test]
+async fn call_etc_bad_channel_failure_case() {
     let ctx = TestContext::new();
 
     let wr_data = [0u8; 4];
@@ -4033,7 +4084,7 @@ fn call_etc_bad_channel_failure_case() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = do_call_etc(&ctx, 0, 0, &args, &mut actual_bytes, &mut actual_handles);
+    let result = do_call_etc(&ctx, 0, 0, &args, &mut actual_bytes, &mut actual_handles).await;
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
@@ -4042,8 +4093,8 @@ fn call_etc_bad_channel_failure_case() {
 /// INVALID_ARGS. Since zCore validates the buffer after receiving
 /// a response (which requires a responder thread), without one the
 /// call times out.
-#[test]
-fn call_etc_bad_rd_bytes_buffer_returns_invalid_args() {
+#[async_std::test]
+async fn call_etc_bad_rd_bytes_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
 
@@ -4061,7 +4112,7 @@ fn call_etc_bad_rd_bytes_buffer_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles);
+    let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles).await;
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 
@@ -4069,8 +4120,8 @@ fn call_etc_bad_rd_bytes_buffer_returns_invalid_args() {
 /// Bad rd_handles buffer (non-null but invalid pointer) should return
 /// INVALID_ARGS. Needs a response thread to trigger the validation
 /// on the read side, so without one the call times out.
-#[test]
-fn call_etc_bad_rd_handles_buffer_returns_invalid_args() {
+#[async_std::test]
+async fn call_etc_bad_rd_handles_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
 
@@ -4089,13 +4140,13 @@ fn call_etc_bad_rd_handles_buffer_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles);
+    let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles).await;
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 /// C++: TEST(ChannelCallEtcTest, FromWrongObjectTypeReturnsWrongType)
 /// Using a VMO handle instead of a channel handle returns WRONG_TYPE.
-#[test]
-fn call_etc_from_wrong_object_type_returns_wrong_type() {
+#[async_std::test]
+async fn call_etc_from_wrong_object_type_returns_wrong_type() {
     let ctx = TestContext::new();
     let (vmo_h, _vmo) = add_vmo(&ctx, PAGE_SIZE as u64);
 
@@ -4121,14 +4172,15 @@ fn call_etc_from_wrong_object_type_returns_wrong_type() {
         &args,
         &mut actual_bytes,
         &mut actual_handles,
-    );
+    )
+    .await;
     assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
 }
 /// C++: TEST(ChannelCallEtcTest, IovecSuccessCase)
 /// Sending iovec data via call_etc requires a response thread.
 /// Times out without one.
-#[test]
-fn call_etc_iovec_success_case() {
+#[async_std::test]
+async fn call_etc_iovec_success_case() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
 
@@ -4158,14 +4210,14 @@ fn call_etc_iovec_success_case() {
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
     // ZX_CHANNEL_WRITE_USE_IOVEC = 2
-    let result = do_call_etc(&ctx, ch0, 2, &args, &mut actual_bytes, &mut actual_handles);
+    let result = do_call_etc(&ctx, ch0, 2, &args, &mut actual_bytes, &mut actual_handles).await;
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 
 /// C++: TEST(ChannelCallEtcTest, IovecTotalCapacityLessThanTxidSizeReturnsInvalidArgs)
 /// When iovec total capacity < sizeof(zx_txid_t) = 4, returns INVALID_ARGS.
-#[test]
-fn call_etc_iovec_total_capacity_less_than_txid_size_returns_invalid_args() {
+#[async_std::test]
+async fn call_etc_iovec_total_capacity_less_than_txid_size_returns_invalid_args() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
 
@@ -4190,14 +4242,14 @@ fn call_etc_iovec_total_capacity_less_than_txid_size_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = do_call_etc(&ctx, ch0, 2, &args, &mut actual_bytes, &mut actual_handles);
+    let result = do_call_etc(&ctx, ch0, 2, &args, &mut actual_bytes, &mut actual_handles).await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 /// C++: TEST(ChannelCallEtcTest, SelfHandleTransferReturnsNotSupported)
 /// Attempting to transfer the channel's own handle via DUP returns
 /// NOT_SUPPORTED.
-#[test]
-fn call_etc_self_handle_transfer_returns_not_supported() {
+#[async_std::test]
+async fn call_etc_self_handle_transfer_returns_not_supported() {
     let ctx = TestContext::new();
 
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -4235,7 +4287,8 @@ fn call_etc_self_handle_transfer_returns_not_supported() {
         &args,
         &mut actual_bytes,
         &mut actual_handles,
-    );
+    )
+    .await;
     assert_eq!(result.unwrap_err(), ZxError::NOT_SUPPORTED);
 
     // The disposition result field should be set to NOT_SUPPORTED
@@ -4251,8 +4304,8 @@ fn call_etc_self_handle_transfer_returns_not_supported() {
 }
 /// C++: TEST(ChannelCallEtcTest, WithoutReadRightReturnsAccessDenied)
 /// Channel handle without READ right returns ACCESS_DENIED.
-#[test]
-fn call_etc_without_read_right_returns_access_denied() {
+#[async_std::test]
+async fn call_etc_without_read_right_returns_access_denied() {
     let ctx = TestContext::new();
 
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -4283,14 +4336,15 @@ fn call_etc_without_read_right_returns_access_denied() {
         &args,
         &mut actual_bytes,
         &mut actual_handles,
-    );
+    )
+    .await;
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
 /// C++: TEST(ChannelCallEtcTest, WithoutWriteRightReturnsAccessDenied)
 /// Channel handle without WRITE right returns ACCESS_DENIED.
-#[test]
-fn call_etc_without_write_right_returns_access_denied() {
+#[async_std::test]
+async fn call_etc_without_write_right_returns_access_denied() {
     let ctx = TestContext::new();
 
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -4321,7 +4375,8 @@ fn call_etc_without_write_right_returns_access_denied() {
         &args,
         &mut actual_bytes,
         &mut actual_handles,
-    );
+    )
+    .await;
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 /// C++: TEST(ChannelTest, WriteIovecUnboundedNonZeroReservedReturnsInvalidArgs)

@@ -5,8 +5,8 @@ use zircon_object::signal::Futex;
 
 /// C++: TEST(FutexTest, WaitValueMismatch)
 /// futex_wait with wrong expected value returns BAD_STATE immediately.
-#[test]
-fn wait_value_mismatch() {
+#[async_std::test]
+async fn wait_value_mismatch() {
     use core::sync::atomic::AtomicI32;
 
     let _ctx = TestContext::new();
@@ -14,7 +14,7 @@ fn wait_value_mismatch() {
     let futex = Futex::new(Box::as_ref(&value) as *const AtomicI32 as usize);
 
     // Pass a mismatched expected value — should fail immediately
-    let result = crate::test_runtime::block_on(futex.wait(99));
+    let result = futex.wait(99).await;
     assert_eq!(result.unwrap_err(), zircon_object::ZxError::BAD_STATE);
 }
 

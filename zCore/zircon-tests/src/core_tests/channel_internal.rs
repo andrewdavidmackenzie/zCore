@@ -214,8 +214,8 @@ fn transfer_channel_with_pending_call() {
 ///    This exercises the same kernel invariant: calling call_finish
 ///    when the thread is not in BlockedChannel state must return
 ///    BAD_STATE without panicking.
-#[test]
-fn channel_call_finish_after_failed_call() {
+#[async_std::test]
+async fn channel_call_finish_after_failed_call() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::ZxError;
 
@@ -254,14 +254,16 @@ fn channel_call_finish_after_failed_call() {
         let mut actual_handles: u32 = 0;
 
         // Attempt channel_call — should fail because peer is closed.
-        let call_result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-            local_handle,
-            0,
-            zircon_syscall::Deadline::from(0usize),
-            UserInPtr::from(&args as *const _ as usize),
-            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-        ));
+        let call_result = sc
+            .sys_channel_call_noretry(
+                local_handle,
+                0,
+                zircon_syscall::Deadline::from(0usize),
+                UserInPtr::from(&args as *const _ as usize),
+                UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+                UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+            )
+            .await;
         assert!(
             call_result.is_err(),
             "channel_call should fail with peer closed"

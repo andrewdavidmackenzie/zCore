@@ -392,8 +392,8 @@ struct TestChannelCallArgs {
 
 /// C++: TEST(IOVecTest, CallIovecBytesLessThanTxidSize)
 /// Call with iovec total bytes < sizeof(zx_txid_t) (4) should return INVALID_ARGS.
-#[test]
-fn call_iovec_bytes_less_than_txid_size() {
+#[async_std::test]
+async fn call_iovec_bytes_less_than_txid_size() {
     let ctx = TestContext::new();
     let (client_h, _server_h) = syscall_channel_create(&ctx);
     let sc = ctx.syscall();
@@ -419,14 +419,16 @@ fn call_iovec_bytes_less_than_txid_size() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        client_h,
-        USE_IOVEC,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            client_h,
+            USE_IOVEC,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
@@ -576,7 +578,7 @@ async fn call_etc_with_handle() {
 }
 
 /// Helper: check that call with too many iovecs or too many bytes returns OUT_OF_RANGE.
-fn check_for_out_of_range_call<const N: usize, const M: usize>(ctx: &TestContext) {
+async fn check_for_out_of_range_call<const N: usize, const M: usize>(ctx: &TestContext) {
     let sc = ctx.syscall();
     let (ch0, ch1) = zircon_object::ipc::Channel::create();
     let client_h = ctx.proc.add_handle(zircon_object::object::Handle::new(
@@ -611,34 +613,36 @@ fn check_for_out_of_range_call<const N: usize, const M: usize>(ctx: &TestContext
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
-        client_h,
-        USE_IOVEC,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_etc_noretry(
+            client_h,
+            USE_IOVEC,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 
 /// C++: TEST(IOVecTest, CallTooManyIovecs)
-#[test]
-fn call_too_many_iovecs() {
+#[async_std::test]
+async fn call_too_many_iovecs() {
     let ctx = TestContext::new();
-    check_for_out_of_range_call::<9000, 1>(&ctx);
+    check_for_out_of_range_call::<9000, 1>(&ctx).await;
 }
 
 /// C++: TEST(IOVecTest, CallTooManyBytes)
-#[test]
-fn call_too_many_bytes() {
+#[async_std::test]
+async fn call_too_many_bytes() {
     let ctx = TestContext::new();
-    check_for_out_of_range_call::<1000, 100>(&ctx);
+    check_for_out_of_range_call::<1000, 100>(&ctx).await;
 }
 
 /// C++: TEST(IOVecTest, CallNonZeroReservedIovec)
-#[test]
-fn call_non_zero_reserved_iovec() {
+#[async_std::test]
+async fn call_non_zero_reserved_iovec() {
     let ctx = TestContext::new();
     let (client_h, _server_h) = syscall_channel_create(&ctx);
     let sc = ctx.syscall();
@@ -663,20 +667,22 @@ fn call_non_zero_reserved_iovec() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        client_h,
-        USE_IOVEC,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            client_h,
+            USE_IOVEC,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(IOVecTest, CallNullBufferNonnullSize)
-#[test]
-fn call_null_buffer_nonnull_size() {
+#[async_std::test]
+async fn call_null_buffer_nonnull_size() {
     let ctx = TestContext::new();
     let (client_h, _server_h) = syscall_channel_create(&ctx);
     let sc = ctx.syscall();
@@ -700,13 +706,15 @@ fn call_null_buffer_nonnull_size() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
-        client_h,
-        USE_IOVEC,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            client_h,
+            USE_IOVEC,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }

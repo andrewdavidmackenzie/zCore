@@ -10,8 +10,8 @@ use zircon_object::signal::{PayloadRepr, Port, PortPacket, PortPacketRepr};
 
 ///
 /// Queue many packets to a port and dequeue them all.
-#[test]
-fn queue_many() {
+#[async_std::test]
+async fn queue_many() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -26,7 +26,7 @@ fn queue_many() {
 
     // Dequeue all
     for i in 0u64..100 {
-        let pkt = crate::test_runtime::block_on(port.wait());
+        let pkt = port.wait().await;
         let repr = PortPacketRepr::from(&pkt);
         assert_eq!(repr.key, i);
     }
@@ -65,8 +65,8 @@ fn queue_and_cancel() {
 ///
 /// Multiple objects observed on the same port. Each signal generates
 /// the correct packet. Sequential: signal each event, then drain.
-#[test]
-fn multiple_observers() {
+#[async_std::test]
+async fn multiple_observers() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -92,7 +92,7 @@ fn multiple_observers() {
     // Drain the port — should get one packet per event.
     let mut keys = alloc::vec::Vec::new();
     for _ in 0..3 {
-        let pkt = crate::test_runtime::block_on(port.wait());
+        let pkt = port.wait().await;
         keys.push(PortPacketRepr::from(&pkt).key);
     }
     keys.sort();
@@ -101,8 +101,8 @@ fn multiple_observers() {
 
 ///
 /// Packets should be dequeued in FIFO order.
-#[test]
-fn port_fifo_order() {
+#[async_std::test]
+async fn port_fifo_order() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -116,7 +116,7 @@ fn port_fifo_order() {
     }
 
     for i in 0u64..10 {
-        let pkt = crate::test_runtime::block_on(port.wait());
+        let pkt = port.wait().await;
         let repr = PortPacketRepr::from(&pkt);
         assert_eq!(repr.key, i * 100);
     }
@@ -124,8 +124,8 @@ fn port_fifo_order() {
 
 ///
 /// Queue up to the port packet limit (4096). Verify all are dequeueable.
-#[test]
-fn port_queue_limit() {
+#[async_std::test]
+async fn port_queue_limit() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -138,14 +138,14 @@ fn port_queue_limit() {
         port.push_user(PortPacket::from(packet)).unwrap();
     }
 
-    let first = crate::test_runtime::block_on(port.wait());
+    let first = port.wait().await;
     assert_eq!(PortPacketRepr::from(&first).key, 0);
 }
 
 ///
 /// Queue N packets, drain all, verify port is empty.
-#[test]
-fn port_drain_all() {
+#[async_std::test]
+async fn port_drain_all() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -159,7 +159,7 @@ fn port_drain_all() {
     }
 
     for _ in 0..5 {
-        let _ = crate::test_runtime::block_on(port.wait());
+        let _ = port.wait().await;
     }
 
     use zircon_object::object::Signal;
@@ -169,8 +169,8 @@ fn port_drain_all() {
 ///
 /// Drain a port, then queue more packets. The new packets should
 /// be dequeueable.
-#[test]
-fn port_queue_after_drain() {
+#[async_std::test]
+async fn port_queue_after_drain() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -180,7 +180,7 @@ fn port_queue_after_drain() {
         data: PayloadRepr::User([0; 32]),
     };
     port.push_user(PortPacket::from(packet)).unwrap();
-    let _ = crate::test_runtime::block_on(port.wait());
+    let _ = port.wait().await;
 
     let packet = PortPacketRepr {
         key: 2,
@@ -188,7 +188,7 @@ fn port_queue_after_drain() {
         data: PayloadRepr::User([0; 32]),
     };
     port.push_user(PortPacket::from(packet)).unwrap();
-    let pkt = crate::test_runtime::block_on(port.wait());
+    let pkt = port.wait().await;
     assert_eq!(PortPacketRepr::from(&pkt).key, 2);
 }
 
@@ -211,8 +211,8 @@ fn port_multiple_creation() {
 ///
 /// Queue a packet with specific payload data and verify it is
 /// preserved on dequeue.
-#[test]
-fn port_packet_payload() {
+#[async_std::test]
+async fn port_packet_payload() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -223,7 +223,7 @@ fn port_packet_payload() {
     };
     port.push_user(PortPacket::from(packet)).unwrap();
 
-    let pkt = crate::test_runtime::block_on(port.wait());
+    let pkt = port.wait().await;
     let repr = PortPacketRepr::from(&pkt);
     assert_eq!(repr.key, 42);
     // status field is ZxError type — verified by type system
@@ -232,8 +232,8 @@ fn port_packet_payload() {
 ///
 /// Interleave queue and dequeue operations. Each dequeue should
 /// return the oldest packet.
-#[test]
-fn port_interleave_queue_dequeue() {
+#[async_std::test]
+async fn port_interleave_queue_dequeue() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -244,7 +244,7 @@ fn port_interleave_queue_dequeue() {
             data: PayloadRepr::User([0; 32]),
         };
         port.push_user(PortPacket::from(packet)).unwrap();
-        let pkt = crate::test_runtime::block_on(port.wait());
+        let pkt = port.wait().await;
         assert_eq!(PortPacketRepr::from(&pkt).key, i);
     }
 }

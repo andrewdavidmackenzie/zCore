@@ -270,8 +270,8 @@ fn signal_peer_access_denied_missing_signal_peer_right() {
 /// C++: TEST(EventPairTest, WaitAccessDeniedMissingWaitRight)
 ///
 /// Duplicate handle without WAIT right, verify wait returns ACCESS_DENIED.
-#[test]
-fn wait_access_denied_missing_wait_right() {
+#[async_std::test]
+async fn wait_access_denied_missing_wait_right() {
     use hal_impl::user::UserOutPtr;
 
     let ctx = TestContext::new();
@@ -285,12 +285,14 @@ fn wait_access_denied_missing_wait_right() {
     // sys_object_wait_one should fail with ACCESS_DENIED.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        out,
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out,
+        )
+        .await;
     assert_eq!(result, Err(zircon_object::ZxError::ACCESS_DENIED));
 }
 

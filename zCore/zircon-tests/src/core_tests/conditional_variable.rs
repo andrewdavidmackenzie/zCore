@@ -175,8 +175,8 @@ async fn signal_thread_wait() {
 /// on return.
 ///
 /// In single-threaded mode, we can test the futex_wait value mismatch path.
-#[test]
-fn conditional_variables_timeout() {
+#[async_std::test]
+async fn conditional_variables_timeout() {
     let _ctx = TestContext::new();
 
     // C++: cnd_t cond = CND_INIT — condvar futex word, initially 0
@@ -196,7 +196,7 @@ fn conditional_variables_timeout() {
     // Since no one signals the condvar, this times out.
     // In single-threaded mode: futex_wait with value mismatch → BAD_STATE
     mutex.store(0, Ordering::Release); // mtx_unlock before futex_wait
-    let result = crate::test_runtime::block_on(futex.wait(99)); // value mismatch
+    let result = futex.wait(99).await; // value mismatch
     assert_eq!(
         result.unwrap_err(),
         zircon_object::ZxError::BAD_STATE,

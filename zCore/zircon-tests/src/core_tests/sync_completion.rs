@@ -111,8 +111,8 @@ async fn multi_wait() {
 ///
 /// C++ source: zircon/system/utest/core/sync-completion/completion.cc
 ///   sync_completion_wait_deadline(&completion, deadline) → ZX_ERR_TIMED_OUT
-#[test]
-fn timeout_single_wait() {
+#[async_std::test]
+async fn timeout_single_wait() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -126,12 +126,14 @@ fn timeout_single_wait() {
     // Wait with an immediate (past) deadline for USER_SIGNAL_0.
     // Since the Event is never signaled, this should return TIMED_OUT.
     let mut observed: u32 = 0;
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-        event_handle,
-        zircon_object::object::Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize), // immediate deadline
-        hal_impl::user::UserOutPtr::from(&mut observed as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            event_handle,
+            zircon_object::object::Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize), // immediate deadline
+            hal_impl::user::UserOutPtr::from(&mut observed as *mut _ as usize),
+        )
+        .await;
     assert_eq!(
         result.unwrap_err(),
         zircon_object::ZxError::TIMED_OUT,
@@ -149,8 +151,8 @@ fn timeout_single_wait() {
 /// C++ source: zircon/system/utest/core/sync-completion/completion.cc
 ///   sync_completion_wait_deadline(&completion, deadline) → ZX_ERR_TIMED_OUT
 ///   (for each of 16 threads)
-#[test]
-fn timeout_multi_wait() {
+#[async_std::test]
+async fn timeout_multi_wait() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -184,11 +186,13 @@ fn timeout_multi_wait() {
         })
         .collect();
 
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_many(
-        hal_impl::user::UserInOutPtr::from(items.as_mut_ptr() as usize),
-        items.len() as u32,
-        zircon_syscall::Deadline::from(0usize), // immediate deadline
-    ));
+    let result = sc
+        .sys_object_wait_many(
+            hal_impl::user::UserInOutPtr::from(items.as_mut_ptr() as usize),
+            items.len() as u32,
+            zircon_syscall::Deadline::from(0usize), // immediate deadline
+        )
+        .await;
     assert_eq!(
         result.unwrap_err(),
         zircon_object::ZxError::TIMED_OUT,

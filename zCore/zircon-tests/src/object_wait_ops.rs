@@ -80,8 +80,8 @@ fn socket_wait_readable() {
 ///
 /// Set up a wait_async on a port for an event signal. When the
 /// signal fires, the port should receive a packet.
-#[test]
-fn wait_async_port() {
+#[async_std::test]
+async fn wait_async_port() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
     let event = Event::new();
@@ -93,7 +93,7 @@ fn wait_async_port() {
 
     event.signal_set(Signal::USER_SIGNAL_0);
 
-    let pkt = crate::test_runtime::block_on(port.wait());
+    let pkt = port.wait().await;
     let repr = zircon_object::signal::PortPacketRepr::from(&pkt);
     assert_eq!(repr.key, 42);
 }
@@ -177,8 +177,8 @@ fn wait_on_fifo() {
 ///
 /// Set up wait_async with ONCE flag. After the signal fires and the
 /// packet is delivered, re-signaling should not deliver another packet.
-#[test]
-fn wait_async_once_repeated() {
+#[async_std::test]
+async fn wait_async_once_repeated() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
     let event = Event::new();
@@ -189,7 +189,7 @@ fn wait_async_once_repeated() {
         .unwrap();
 
     event.signal_set(Signal::USER_SIGNAL_0);
-    let _pkt = crate::test_runtime::block_on(port.wait());
+    let _pkt = port.wait().await;
 
     // Clear and re-signal
     event.signal_clear(Signal::USER_SIGNAL_0);

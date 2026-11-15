@@ -105,8 +105,8 @@ async fn condition_test() {
 /// At kernel level: timedwait calls futex_wait with a deadline.
 /// In single-threaded mode, we can test the futex_wait value
 /// mismatch path (no actual timeout needed).
-#[test]
-fn timeout_test() {
+#[async_std::test]
+async fn timeout_test() {
     let _ctx = TestContext::new();
 
     // sync_condition_timedwait internally:
@@ -130,7 +130,7 @@ fn timeout_test() {
     // futex_wait with value that doesn't match → immediate return
     // (In real code, the value would match and the thread would sleep
     // until the deadline expires, returning TIMED_OUT.)
-    let result = crate::test_runtime::block_on(futex.wait(99));
+    let result = futex.wait(99).await;
     assert_eq!(
         result.unwrap_err(),
         zircon_object::ZxError::BAD_STATE,

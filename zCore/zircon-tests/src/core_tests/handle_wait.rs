@@ -13,8 +13,8 @@ extern crate alloc;
 /// C++: TEST(HandleWaitTest, HandleWaitTest)
 /// Wait on a single handle via port async. Signal the event and
 /// verify the port receives the packet.
-#[test]
-fn handle_wait_test() {
+#[async_std::test]
+async fn handle_wait_test() {
     let _ctx = TestContext::new();
     let event = Event::new();
     let port = Port::new(0).unwrap();
@@ -29,7 +29,7 @@ fn handle_wait_test() {
     event.signal_set(Signal::USER_SIGNAL_0);
 
     // Port should receive the packet.
-    let pkt = crate::test_runtime::block_on(port.wait());
+    let pkt = port.wait().await;
     let repr = PortPacketRepr::from(&pkt);
     assert_eq!(repr.key, 42);
 }
@@ -37,8 +37,8 @@ fn handle_wait_test() {
 /// C++: TEST(HandleWaitTest, HandleWaitMultipleThreads)
 /// Wait on multiple handles simultaneously via port async.
 /// Each event signals independently and delivers a unique packet.
-#[test]
-fn handle_wait_multiple_threads() {
+#[async_std::test]
+async fn handle_wait_multiple_threads() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -59,7 +59,7 @@ fn handle_wait_multiple_threads() {
     // Receive all packets and verify keys.
     let mut keys = alloc::vec::Vec::new();
     for _ in 0..4 {
-        let pkt = crate::test_runtime::block_on(port.wait());
+        let pkt = port.wait().await;
         keys.push(PortPacketRepr::from(&pkt).key);
     }
     keys.sort();
@@ -75,20 +75,22 @@ fn handle_wait_multiple_threads() {
 /// C++: TEST(ObjectWaitManyTest, InvalidHandle)
 /// Waiting on a non-existent object is rejected. We test by attempting
 /// to wait_signal on a dropped event, which returns immediately.
-#[test]
-fn invalid_handle() {
+#[async_std::test]
+async fn invalid_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     use hal_impl::user::UserOutPtr;
 
     // Use wait_one with an invalid handle value
     let mut observed = Signal::empty();
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-        0xDEAD_BEEFu32,
-        Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        UserOutPtr::from(&mut observed as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            0xDEAD_BEEFu32,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            UserOutPtr::from(&mut observed as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result, Err(ZxError::BAD_HANDLE));
 }
 
@@ -97,8 +99,8 @@ fn invalid_handle() {
 /// We test via kernel-level wait: creating >32 wait futures is the
 /// equivalent check, but the syscall limit is tested here via the
 /// wait_one path with an invalid handle to verify error propagation.
-#[test]
-fn too_many_objects() {
+#[async_std::test]
+async fn too_many_objects() {
     let _ctx = TestContext::new();
     // The limit is MAX_WAIT_MANY_ITEMS = 32 in zircon-syscall.
     // We verify by checking the constant exists and is reasonable.
@@ -110,14 +112,15 @@ fn too_many_objects() {
     // Each event can be individually waited on with a past deadline
     for event in &events {
         let ko = event.clone() as alloc::sync::Arc<dyn KernelObject>;
-        let result = crate::test_runtime::block_on(async {
+        let result = async {
             use core::time::Duration;
             let timeout = crate::test_runtime::timeout(
                 Duration::from_millis(1),
                 ko.wait_signal(Signal::USER_SIGNAL_0),
             );
             timeout.await
-        });
+        }
+        .await;
         // Should time out (not signaled)
         assert!(result.is_err());
     }
@@ -125,8 +128,8 @@ fn too_many_objects() {
 
 /// C++: TEST(ObjectWaitManyTest, WaitForEventsSignaled)
 /// Signal events before waiting — should return immediately.
-#[test]
-fn wait_for_events_signaled() {
+#[async_std::test]
+async fn wait_for_events_signaled() {
     let _ctx = TestContext::new();
     let e1 = Event::new();
     let e2 = Event::new();
@@ -140,7 +143,7 @@ fn wait_for_events_signaled() {
 
     // wait_signal should return immediately for a pre-signaled event
     let ko1 = e1.clone() as alloc::sync::Arc<dyn KernelObject>;
-    let result = crate::test_runtime::block_on(ko1.wait_signal(Signal::USER_SIGNAL_0));
+    let result = ko1.wait_signal(Signal::USER_SIGNAL_0).await;
     assert!(result.contains(Signal::USER_SIGNAL_0));
 }
 
@@ -161,8 +164,8 @@ async fn wait_for_events_then_signal() {
 
 /// C++: TEST(ObjectWaitManyTest, WaitOnZeroThings)
 /// Calling wait with no items and a past deadline returns TIMED_OUT.
-#[test]
-fn wait_on_zero_things() {
+#[async_std::test]
+async fn wait_on_zero_things() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     use hal_impl::user::UserOutPtr;
@@ -172,12 +175,14 @@ fn wait_on_zero_things() {
     sc.sys_event_create(0, UserOutPtr::from(&mut h as *mut _ as usize))
         .unwrap();
     let mut observed = Signal::empty();
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        UserOutPtr::from(&mut observed as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            UserOutPtr::from(&mut observed as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result, Err(ZxError::TIMED_OUT));
 }
 
@@ -185,8 +190,8 @@ fn wait_on_zero_things() {
 
 /// C++: TEST(ObjectWaitOneTest, EmptySignalSet)
 /// Waiting for an empty signal set with a past deadline returns TIMED_OUT.
-#[test]
-fn empty_signal_set() {
+#[async_std::test]
+async fn empty_signal_set() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     use hal_impl::user::UserOutPtr;
@@ -196,19 +201,21 @@ fn empty_signal_set() {
         .unwrap();
 
     let mut observed = Signal::empty();
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-        h,
-        0, // empty signal set
-        zircon_syscall::Deadline::from(0usize),
-        UserOutPtr::from(&mut observed as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            0, // empty signal set
+            zircon_syscall::Deadline::from(0usize),
+            UserOutPtr::from(&mut observed as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result, Err(ZxError::TIMED_OUT));
 }
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventSignaled)
 /// Signal an event before wait_one — should return immediately.
-#[test]
-fn wait_for_event_signaled() {
+#[async_std::test]
+async fn wait_for_event_signaled() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     use hal_impl::user::UserOutPtr;
@@ -221,12 +228,13 @@ fn wait_for_event_signaled() {
         .unwrap();
 
     let mut observed = Signal::empty();
-    crate::test_runtime::block_on(sc.sys_object_wait_one(
+    sc.sys_object_wait_one(
         h,
         Signal::USER_SIGNAL_0.bits(),
         zircon_syscall::Deadline::from(0usize),
         UserOutPtr::from(&mut observed as *mut _ as usize),
-    ))
+    )
+    .await
     .unwrap();
 
     assert!(observed.contains(Signal::USER_SIGNAL_0));
@@ -262,8 +270,8 @@ async fn wait_for_event_then_signal() {
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventTimeout)
 /// Wait on an unsignaled event with a past deadline — TIMED_OUT.
-#[test]
-fn wait_for_event_timeout() {
+#[async_std::test]
+async fn wait_for_event_timeout() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     use hal_impl::user::UserOutPtr;
@@ -273,19 +281,21 @@ fn wait_for_event_timeout() {
         .unwrap();
 
     let mut observed = Signal::empty();
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        UserOutPtr::from(&mut observed as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            UserOutPtr::from(&mut observed as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result, Err(ZxError::TIMED_OUT));
 }
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventTimeoutPreSignalClear)
 /// Signal an event, clear the signal, then wait — should TIMED_OUT.
-#[test]
-fn wait_for_event_timeout_pre_signal_clear() {
+#[async_std::test]
+async fn wait_for_event_timeout_pre_signal_clear() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     use hal_impl::user::UserOutPtr;
@@ -301,12 +311,14 @@ fn wait_for_event_timeout_pre_signal_clear() {
         .unwrap();
 
     let mut observed = Signal::empty();
-    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        UserOutPtr::from(&mut observed as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            UserOutPtr::from(&mut observed as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result, Err(ZxError::TIMED_OUT));
     assert!(!observed.contains(Signal::USER_SIGNAL_0));
 }

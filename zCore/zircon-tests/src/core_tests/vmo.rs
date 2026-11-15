@@ -29,8 +29,8 @@ use zircon_object::ZxError;
 ///
 /// The Rust test verifies the CORRECT behavior (OUT_OF_RANGE).
 /// The C++ test documents the QEMU-path bug.
-#[test]
-fn vmo_read_write_bad_len() {
+#[async_std::test]
+async fn vmo_read_write_bad_len() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
 
     let ctx = TestContext::new();
@@ -49,12 +49,9 @@ fn vmo_read_write_bad_len() {
     let mut buf = vec![0u8; len];
     for i in 1..=2usize {
         let bad_len = usize::MAX - (PAGE_SIZE / i);
-        let result = crate::test_runtime::block_on(sc.sys_vmo_read(
-            h,
-            UserOutPtr::from(buf.as_mut_ptr() as usize),
-            0,
-            bad_len,
-        ));
+        let result = sc
+            .sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, bad_len)
+            .await;
         assert_eq!(
             result,
             Err(ZxError::OUT_OF_RANGE),
@@ -62,12 +59,9 @@ fn vmo_read_write_bad_len() {
              [C++ FAILS on QEMU: gets INVALID_ARGS (-10)]",
             i
         );
-        let result = crate::test_runtime::block_on(sc.sys_vmo_write(
-            h,
-            UserInPtr::from(buf.as_ptr() as usize),
-            0,
-            bad_len,
-        ));
+        let result = sc
+            .sys_vmo_write(h, UserInPtr::from(buf.as_ptr() as usize), 0, bad_len)
+            .await;
         assert_eq!(
             result,
             Err(ZxError::OUT_OF_RANGE),
@@ -78,19 +72,13 @@ fn vmo_read_write_bad_len() {
     }
 
     // Exact size read/write succeeds (C++: EXPECT_OK).
-    let result = crate::test_runtime::block_on(sc.sys_vmo_read(
-        h,
-        UserOutPtr::from(buf.as_mut_ptr() as usize),
-        0,
-        len,
-    ));
+    let result = sc
+        .sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, len)
+        .await;
     assert!(result.is_ok(), "exact-size read should succeed");
-    let result = crate::test_runtime::block_on(sc.sys_vmo_write(
-        h,
-        UserInPtr::from(buf.as_ptr() as usize),
-        0,
-        len,
-    ));
+    let result = sc
+        .sys_vmo_write(h, UserInPtr::from(buf.as_ptr() as usize), 0, len)
+        .await;
     assert!(result.is_ok(), "exact-size write should succeed");
 }
 /// C++: TEST(VmoTestCase, SizeAlign)
