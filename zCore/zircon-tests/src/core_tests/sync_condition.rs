@@ -61,8 +61,8 @@ async fn condition_test() {
     }
 
     // Wait for threads to block
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(100)).await;
 
     // C++: set predicate, broadcast
     predicate.store(true, Ordering::Release);
@@ -75,7 +75,7 @@ async fn condition_test() {
             std::time::Instant::now() < deadline,
             "condvar threads timed out"
         );
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert_eq!(woken_counter.load(Ordering::SeqCst), 3);
 
@@ -89,7 +89,7 @@ async fn condition_test() {
             if std::time::Instant::now() >= deadline {
                 break;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 }
@@ -130,7 +130,7 @@ fn timeout_test() {
     // futex_wait with value that doesn't match → immediate return
     // (In real code, the value would match and the thread would sleep
     // until the deadline expires, returning TIMED_OUT.)
-    let result = async_std::task::block_on(futex.wait(99));
+    let result = crate::test_runtime::block_on(futex.wait(99));
     assert_eq!(
         result.unwrap_err(),
         zircon_object::ZxError::BAD_STATE,

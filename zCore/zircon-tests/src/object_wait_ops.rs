@@ -93,7 +93,7 @@ fn wait_async_port() {
 
     event.signal_set(Signal::USER_SIGNAL_0);
 
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = crate::test_runtime::block_on(port.wait());
     let repr = zircon_object::signal::PortPacketRepr::from(&pkt);
     assert_eq!(repr.key, 42);
 }
@@ -189,7 +189,7 @@ fn wait_async_once_repeated() {
         .unwrap();
 
     event.signal_set(Signal::USER_SIGNAL_0);
-    let _pkt = async_std::task::block_on(port.wait());
+    let _pkt = crate::test_runtime::block_on(port.wait());
 
     // Clear and re-signal
     event.signal_clear(Signal::USER_SIGNAL_0);

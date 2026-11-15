@@ -83,7 +83,7 @@ fn port_bound_single_wake_source() {
     event.signal_set(Signal::USER_SIGNAL_0);
 
     // First report: source is signaled, not previously reported.
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = crate::test_runtime::block_on(port.wait());
     let repr = PortPacketRepr::from(&pkt);
     assert_eq!(repr.key, 1);
 
@@ -92,7 +92,7 @@ fn port_bound_single_wake_source() {
     event_obj
         .send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 2, false)
         .unwrap();
-    let pkt2 = async_std::task::block_on(port.wait());
+    let pkt2 = crate::test_runtime::block_on(port.wait());
     assert_eq!(PortPacketRepr::from(&pkt2).key, 2);
 }
 
@@ -122,7 +122,7 @@ fn port_bound_multi_wake_source() {
     // Read all packets — one per source.
     let mut keys = alloc::vec::Vec::new();
     for _ in 0..INTERRUPT_WAKE_SOURCE_COUNT {
-        let pkt = async_std::task::block_on(port.wait());
+        let pkt = crate::test_runtime::block_on(port.wait());
         keys.push(PortPacketRepr::from(&pkt).key);
     }
     keys.sort();
@@ -148,7 +148,7 @@ fn port_bound_acked() {
         obj.send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, i, false)
             .unwrap();
         event.signal_set(Signal::USER_SIGNAL_0);
-        let pkt = async_std::task::block_on(port.wait());
+        let pkt = crate::test_runtime::block_on(port.wait());
         assert_eq!(PortPacketRepr::from(&pkt).key, i);
 
         // Clear signal to simulate ack.
@@ -174,7 +174,7 @@ fn port_bound_acked_still_pending() {
         obj.send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, i, false)
             .unwrap();
         event.signal_set(Signal::USER_SIGNAL_0);
-        let _pkt = async_std::task::block_on(port.wait());
+        let _pkt = crate::test_runtime::block_on(port.wait());
         event.signal_clear(Signal::USER_SIGNAL_0);
     }
 
@@ -183,7 +183,7 @@ fn port_bound_acked_still_pending() {
     obj.send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 100, false)
         .unwrap();
     event.signal_set(Signal::USER_SIGNAL_0);
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = crate::test_runtime::block_on(port.wait());
     assert_eq!(PortPacketRepr::from(&pkt).key, 100);
 
     // Event is still signaled (not acked).
@@ -212,7 +212,7 @@ fn port_bound_discard() {
 
     // Read all packets.
     for _ in 0..INTERRUPT_WAKE_SOURCE_COUNT {
-        let _pkt = async_std::task::block_on(port.wait());
+        let _pkt = crate::test_runtime::block_on(port.wait());
     }
 
     // "Ack" even-indexed sources (clear their signals).
@@ -258,7 +258,7 @@ fn port_bound_destruction_no_ack() {
         .unwrap();
     event.signal_set(Signal::USER_SIGNAL_0);
 
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = crate::test_runtime::block_on(port.wait());
     // The packet should have been delivered with the observed signals.
     let repr = PortPacketRepr::from(&pkt);
     if let PayloadRepr::Signal(sig) = repr.data {
@@ -297,7 +297,7 @@ fn port_bound_destruction_yes_ack() {
         .unwrap();
     event.signal_set(Signal::USER_SIGNAL_0);
 
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = crate::test_runtime::block_on(port.wait());
     // The packet should have been delivered with the observed signals.
     let repr = PortPacketRepr::from(&pkt);
     if let PayloadRepr::Signal(sig) = repr.data {
@@ -347,7 +347,7 @@ fn port_bound_report_only() {
     // BadReportRequests test). Passing out_header=0 with REPORT_ONLY
     // should return INVALID_ARGS.
     let mut actual_entries: u32 = 0xFFFF;
-    let result = async_std::task::block_on(sc.sys_system_suspend_enter(
+    let result = crate::test_runtime::block_on(sc.sys_system_suspend_enter(
         root_resource,
         0,   // deadline (irrelevant for REPORT_ONLY)
         0x2, // ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY
@@ -364,7 +364,7 @@ fn port_bound_report_only() {
 
     // With a header buffer, REPORT_ONLY should succeed.
     let mut header = [0u8; 24];
-    let result = async_std::task::block_on(sc.sys_system_suspend_enter(
+    let result = crate::test_runtime::block_on(sc.sys_system_suspend_enter(
         root_resource,
         0,                            // deadline
         0x2,                          // ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY
@@ -414,7 +414,7 @@ fn port_bound_multiple_signals() {
     obj.send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 1, false)
         .unwrap();
     event.signal_set(Signal::USER_SIGNAL_0);
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = crate::test_runtime::block_on(port.wait());
     assert_eq!(PortPacketRepr::from(&pkt).key, 1);
 
     // Second and third triggers while first is unacked.
@@ -426,7 +426,7 @@ fn port_bound_multiple_signals() {
     let obj2 = event.clone() as alloc::sync::Arc<dyn KernelObject>;
     obj2.send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 2, false)
         .unwrap();
-    let pkt2 = async_std::task::block_on(port.wait());
+    let pkt2 = crate::test_runtime::block_on(port.wait());
     assert_eq!(PortPacketRepr::from(&pkt2).key, 2);
 
     // Ack second.

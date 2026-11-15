@@ -29,7 +29,7 @@ fn handle_wait_test() {
     event.signal_set(Signal::USER_SIGNAL_0);
 
     // Port should receive the packet.
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = crate::test_runtime::block_on(port.wait());
     let repr = PortPacketRepr::from(&pkt);
     assert_eq!(repr.key, 42);
 }
@@ -59,7 +59,7 @@ fn handle_wait_multiple_threads() {
     // Receive all packets and verify keys.
     let mut keys = alloc::vec::Vec::new();
     for _ in 0..4 {
-        let pkt = async_std::task::block_on(port.wait());
+        let pkt = crate::test_runtime::block_on(port.wait());
         keys.push(PortPacketRepr::from(&pkt).key);
     }
     keys.sort();
@@ -83,7 +83,7 @@ fn invalid_handle() {
 
     // Use wait_one with an invalid handle value
     let mut observed = Signal::empty();
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
         0xDEAD_BEEFu32,
         Signal::USER_SIGNAL_0.bits(),
         zircon_syscall::Deadline::from(0usize),
@@ -110,9 +110,9 @@ fn too_many_objects() {
     // Each event can be individually waited on with a past deadline
     for event in &events {
         let ko = event.clone() as alloc::sync::Arc<dyn KernelObject>;
-        let result = async_std::task::block_on(async {
+        let result = crate::test_runtime::block_on(async {
             use core::time::Duration;
-            let timeout = async_std::future::timeout(
+            let timeout = crate::test_runtime::timeout(
                 Duration::from_millis(1),
                 ko.wait_signal(Signal::USER_SIGNAL_0),
             );
@@ -140,7 +140,7 @@ fn wait_for_events_signaled() {
 
     // wait_signal should return immediately for a pre-signaled event
     let ko1 = e1.clone() as alloc::sync::Arc<dyn KernelObject>;
-    let result = async_std::task::block_on(ko1.wait_signal(Signal::USER_SIGNAL_0));
+    let result = crate::test_runtime::block_on(ko1.wait_signal(Signal::USER_SIGNAL_0));
     assert!(result.contains(Signal::USER_SIGNAL_0));
 }
 
@@ -172,7 +172,7 @@ fn wait_on_zero_things() {
     sc.sys_event_create(0, UserOutPtr::from(&mut h as *mut _ as usize))
         .unwrap();
     let mut observed = Signal::empty();
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
         h,
         Signal::USER_SIGNAL_0.bits(),
         zircon_syscall::Deadline::from(0usize),
@@ -196,7 +196,7 @@ fn empty_signal_set() {
         .unwrap();
 
     let mut observed = Signal::empty();
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
         h,
         0, // empty signal set
         zircon_syscall::Deadline::from(0usize),
@@ -221,7 +221,7 @@ fn wait_for_event_signaled() {
         .unwrap();
 
     let mut observed = Signal::empty();
-    async_std::task::block_on(sc.sys_object_wait_one(
+    crate::test_runtime::block_on(sc.sys_object_wait_one(
         h,
         Signal::USER_SIGNAL_0.bits(),
         zircon_syscall::Deadline::from(0usize),
@@ -273,7 +273,7 @@ fn wait_for_event_timeout() {
         .unwrap();
 
     let mut observed = Signal::empty();
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
         h,
         Signal::USER_SIGNAL_0.bits(),
         zircon_syscall::Deadline::from(0usize),
@@ -301,7 +301,7 @@ fn wait_for_event_timeout_pre_signal_clear() {
         .unwrap();
 
     let mut observed = Signal::empty();
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
         h,
         Signal::USER_SIGNAL_0.bits(),
         zircon_syscall::Deadline::from(0usize),

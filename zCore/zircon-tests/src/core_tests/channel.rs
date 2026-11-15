@@ -897,7 +897,7 @@ async fn concurrent_reads_consume_unique_elements() {
                     Err(_) => {
                         // Other reader consumed it, or channel is empty.
                         // Yield and retry.
-                        async_std::task::yield_now().await;
+                        crate::test_runtime::yield_now().await;
                     }
                 }
             }
@@ -918,7 +918,7 @@ async fn concurrent_reads_consume_unique_elements() {
         if std::time::Instant::now() >= deadline {
             panic!("readers didn't finish in time");
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
 
     // Verify: all 2000 values consumed, no duplicates, monotonic per reader.
@@ -1034,7 +1034,7 @@ async fn wait_many_is_signaled_on_any_element_write() {
         if std::time::Instant::now() >= deadline {
             panic!("worker didn't finish");
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
 
     assert_eq!(state.bytes_from_1.load(Ordering::Acquire), 10);
@@ -1055,8 +1055,8 @@ async fn call_etc_suspended_thread_resumes_and_succeeds() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     let data = vec![0u8; 64];
     let reply = echo
@@ -1085,8 +1085,8 @@ async fn call_pending_transactions_use_different_ids() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // Issue first call
     let mut data1 = vec![0u8; 32];
@@ -1173,8 +1173,8 @@ async fn call_suspended_thread_resumes_and_succeeds() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     let data = vec![0u8; 128];
     let reply = echo

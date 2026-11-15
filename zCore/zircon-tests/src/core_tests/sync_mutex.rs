@@ -60,7 +60,7 @@ async fn mutexes() {
                 std::time::Instant::now() < deadline,
                 "mutex contender thread timed out"
             );
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 
@@ -74,7 +74,7 @@ async fn mutexes() {
             if std::time::Instant::now() >= deadline {
                 break;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 
@@ -174,7 +174,7 @@ fn timeout_elapsed() {
     // At kernel level: futex_wait(expected=0, deadline) but value is 1
     // → immediate BAD_STATE (value mismatch)
     for _i in 0..5 {
-        let result = async_std::task::block_on(futex.wait(0));
+        let result = crate::test_runtime::block_on(futex.wait(0));
         assert_eq!(
             result.unwrap_err(),
             zircon_object::ZxError::BAD_STATE,

@@ -1275,7 +1275,7 @@ fn call_from_wrong_object_type_returns_wrong_type() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         event_handle,
         0,
         zircon_syscall::Deadline::from(0usize), // immediate deadline
@@ -1310,7 +1310,7 @@ fn call_invalid_options_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0xFFFF, // invalid options
         zircon_syscall::Deadline::from(0usize),
@@ -1351,7 +1351,7 @@ fn call_without_write_right_returns_access_denied() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         h0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -1392,7 +1392,7 @@ fn call_without_read_right_returns_access_denied() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         h0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -1427,7 +1427,7 @@ fn call_payload_too_small_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -1463,7 +1463,7 @@ fn call_nullptr_num_bytes_is_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -1501,7 +1501,7 @@ fn call_nullptr_num_handles_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -1523,7 +1523,7 @@ fn call_invalid_args_pointer_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -1559,7 +1559,7 @@ fn call_written_bytes_smaller_than_zx_tx_id_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -1599,7 +1599,7 @@ fn call_notified_on_peer_closed() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize), // immediate deadline
@@ -2049,7 +2049,7 @@ fn call_etc_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_etc_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize), // immediate deadline
@@ -2086,7 +2086,7 @@ fn call_etc_success() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_etc_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -2134,7 +2134,7 @@ fn call_consumes_handles_on_error() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -2184,7 +2184,7 @@ fn call_consumes_handles_on_success() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -2221,7 +2221,7 @@ fn call_deadline_exceeded_returns_timed_out() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize), // immediate deadline
@@ -2258,7 +2258,7 @@ fn call_bytes_fit_is_ok() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -2302,7 +2302,7 @@ fn call_handles_fit_is_ok() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -2344,7 +2344,7 @@ fn call_handle_and_bytes_fits_is_ok() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -2381,7 +2381,7 @@ fn call_mismatched_txid_queues_regular_message() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -2416,7 +2416,7 @@ fn call_bad_read_buffer_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -2455,7 +2455,7 @@ fn call_bad_read_handles_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -2669,7 +2669,7 @@ fn call_response_bigger_than_rd_num_bytes_returns_buffer_too_small() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -2707,7 +2707,7 @@ fn call_written_bytes_smaller_than_zx_tx_id_with_bad_pointer_returns_invalid_arg
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -3928,7 +3928,7 @@ fn do_call_etc(
     actual_handles: &mut u32,
 ) -> Result<(), ZxError> {
     let sc = ctx.syscall();
-    async_std::task::block_on(sc.sys_channel_call_etc_noretry(
+    crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
         handle,
         options,
         zircon_syscall::Deadline::from(0usize),
@@ -3966,7 +3966,7 @@ fn call_etc_bad_actual_bytes_pointer_returns_invalid_args() {
     };
 
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_etc_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -4001,7 +4001,7 @@ fn call_etc_bad_actual_handles_pointer_returns_invalid_args() {
     };
 
     let mut actual_bytes: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_etc_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
         ch0,
         0,
         zircon_syscall::Deadline::from(0usize),

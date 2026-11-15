@@ -30,7 +30,7 @@ async fn kill_suspended_immediately() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // Suspend and immediately kill — don't wait for SUSPENDED
     thread.suspend();
@@ -53,8 +53,8 @@ async fn kill_suspended_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -85,7 +85,7 @@ async fn kill_waiting_thread() {
         if sleeper.thread.state() == ThreadState::BlockedSleeping {
             break;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
 
     // Kill while blocked
@@ -113,7 +113,7 @@ async fn exit_busy() {
         Box::pin(async move {
             let ctx = thread.wait_for_run().await;
             // Brief "work"
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
             thread.put_context(ctx);
             // Return → thread exits
         })
@@ -169,8 +169,8 @@ async fn suspend_running_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     assert!(thread.signal().contains(Signal::THREAD_RUNNING));
 
@@ -239,8 +239,8 @@ async fn suspend_multiple_wait_async() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // Double suspend
     thread.suspend();
@@ -267,7 +267,7 @@ async fn suspend_multiple_wait_async() {
         .await;
 
     // Port should have received the RUNNING signal
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = crate::test_runtime::block_on(port.wait());
     let repr = PortPacketRepr::from(&pkt);
     assert_eq!(repr.key, 99);
 
@@ -289,8 +289,8 @@ async fn suspend_resume_from_multiple_threads() {
     let thread = Thread::create(&proc, "target").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // Simulate two independent suspenders by calling suspend twice
     // (in libos, all calls come from the same async context, but the
@@ -330,7 +330,7 @@ async fn suspend_stopped_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.kill();
     as_kobject(&thread)
@@ -360,7 +360,7 @@ async fn suspend_stopped_and_blocked_thread() {
         if sleeper.thread.state() == ThreadState::BlockedSleeping {
             break;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
 
     // Suspend while blocked
@@ -392,7 +392,7 @@ async fn suspend_stopped_and_blocked_thread2() {
         if sleeper.thread.state() == ThreadState::BlockedSleeping {
             break;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
 
     // Kill while blocked (reverse order of variant 1)

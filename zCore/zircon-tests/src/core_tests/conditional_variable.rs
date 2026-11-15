@@ -58,8 +58,8 @@ async fn broadcast_signal_thread_wait() {
         threads.push((thread, state));
     }
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(100)).await;
 
     predicate.store(true, Ordering::Release);
     cond.broadcast();
@@ -67,7 +67,7 @@ async fn broadcast_signal_thread_wait() {
     let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
     while woken_counter.load(Ordering::SeqCst) < 3 {
         assert!(std::time::Instant::now() < deadline, "timed out");
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert_eq!(woken_counter.load(Ordering::SeqCst), 3);
 
@@ -80,7 +80,7 @@ async fn broadcast_signal_thread_wait() {
             if std::time::Instant::now() >= dl {
                 break;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 }
@@ -126,8 +126,8 @@ async fn signal_thread_wait() {
         threads.push((thread, state));
     }
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(100)).await;
 
     // Signal one at a time
     predicate.store(true, Ordering::Release);
@@ -140,7 +140,7 @@ async fn signal_thread_wait() {
                 "timed out waiting for thread {}",
                 i
             );
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
         // The signaled thread sets predicate=false and increments woken.
         // For the next iteration, we set it back to true.
@@ -157,7 +157,7 @@ async fn signal_thread_wait() {
             if std::time::Instant::now() >= dl {
                 break;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 }
@@ -196,7 +196,7 @@ fn conditional_variables_timeout() {
     // Since no one signals the condvar, this times out.
     // In single-threaded mode: futex_wait with value mismatch → BAD_STATE
     mutex.store(0, Ordering::Release); // mtx_unlock before futex_wait
-    let result = async_std::task::block_on(futex.wait(99)); // value mismatch
+    let result = crate::test_runtime::block_on(futex.wait(99)); // value mismatch
     assert_eq!(
         result.unwrap_err(),
         zircon_object::ZxError::BAD_STATE,

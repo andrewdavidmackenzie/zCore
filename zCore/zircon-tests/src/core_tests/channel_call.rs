@@ -28,8 +28,8 @@ async fn bytes_only_success_case() {
     let echo = EchoServer::start(&ctx.proc);
 
     // Let server start
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // C++: Fill 512 bytes with i % 256
     let mut data = vec![0u8; 512];
@@ -76,8 +76,8 @@ async fn handles_success_case() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // Create an event and send it
     let event = Event::new();
@@ -113,8 +113,8 @@ async fn reduced_rights_success_case() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // Create event with reduced rights
     let event = Event::new();
@@ -228,7 +228,7 @@ fn null_args_returns_invalid_args() {
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
     // C++: zx_channel_call_etc(handle, 0, infinite, nullptr, &ab, &ah)
-    let result = async_std::task::block_on(sc.sys_channel_call_etc_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
         ch_handle,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -254,7 +254,7 @@ fn bad_args_pointer_returns_invalid_args() {
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
     // C++: zx_channel_call_etc(handle, 0, infinite, reinterpret_cast<...*>(1), &ab, &ah)
-    let result = async_std::task::block_on(sc.sys_channel_call_etc_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
         ch_handle,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -307,7 +307,7 @@ fn null_actual_bytes_returns_invalid_args() {
 
     let mut actual_handles: u32 = 0;
     // C++: zx_channel_call_etc(handle, 0, infinite, &args, nullptr, &ah)
-    let result = async_std::task::block_on(sc.sys_channel_call_etc_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
         ch_handle,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -361,7 +361,7 @@ fn null_actual_handles_returns_invalid_args() {
 
     let mut actual_bytes: u32 = 0;
     // C++: zx_channel_call_etc(handle, 0, infinite, &args, &ab, nullptr)
-    let result = async_std::task::block_on(sc.sys_channel_call_etc_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
         ch_handle,
         0,
         zircon_syscall::Deadline::from(0usize),
@@ -413,7 +413,7 @@ fn invalid_options_returns_invalid_args() {
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
     // C++: client_end.call_etc(0xff, infinite, &args, ...) == ZX_ERR_INVALID_ARGS
-    let result = async_std::task::block_on(sc.sys_channel_call_etc_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
         ch_handle,
         0xff, // invalid options
         zircon_syscall::Deadline::from(0usize),
@@ -436,8 +436,8 @@ async fn with_duplicate_op_handle_succeeds() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // C++ test uses DUPLICATE op, which is syscall-layer. Here we
     // test that handle transfer through channel_call works.
@@ -734,8 +734,8 @@ async fn handles_info_validation() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // Create 3 different kernel objects
     let event = Event::new();

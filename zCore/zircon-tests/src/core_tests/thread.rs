@@ -181,7 +181,7 @@ async fn basics() {
     assert_eq!(thread.related_koid(), proc.id());
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     assert_eq!(thread.state(), ThreadState::Running);
     assert!(thread.signal().contains(Signal::THREAD_RUNNING));
@@ -487,8 +487,8 @@ async fn get_info_runtime() {
 
     // Start the thread, let it accumulate some runtime
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // Accumulate synthetic runtime (the cooperative executor doesn't
     // track real CPU time, so we add it explicitly)
@@ -538,7 +538,7 @@ async fn get_info_runtime_v1() {
 
     // Start and accumulate runtime
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.time_add(10000);
     assert_eq!(thread.get_time(), 10000);
@@ -579,8 +579,8 @@ async fn get_last_scheduled_cpu() {
 
     // Start the thread, let it run briefly, then check again
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // After running, the thread should have a valid state
     assert_eq!(thread.state(), ThreadState::Running);
@@ -840,13 +840,13 @@ async fn process_start_on_second_thread() {
 
     // Start first thread
     t1.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // Start second thread — zx_thread_start on additional threads succeeds
     let result = t2.start(helpers::test_loop_thread_fn);
     assert!(result.is_ok(), "second thread start should succeed");
 
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // Both should be running
     assert!(t1.signal().contains(Signal::THREAD_RUNNING));
@@ -868,8 +868,8 @@ async fn reading_fp_register_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -941,8 +941,8 @@ async fn reading_general_register_state() {
         .unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -1003,8 +1003,8 @@ async fn reading_vector_register_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -1057,8 +1057,8 @@ async fn resume_suspended() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // Cycle 1: Suspend
     thread.suspend();
@@ -1196,8 +1196,8 @@ async fn start_regs_suspended() {
 
     // Start
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     as_kobject(&thread)
         .wait_signal(Signal::THREAD_SUSPENDED)
@@ -1241,8 +1241,8 @@ async fn start_suspended_and_resumed_thread() {
 
     thread.suspend();
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     as_kobject(&thread)
         .wait_signal(Signal::THREAD_SUSPENDED)
@@ -1271,8 +1271,8 @@ async fn start_suspended_thread() {
 
     thread.suspend();
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     as_kobject(&thread)
         .wait_signal(Signal::THREAD_SUSPENDED)
@@ -1301,7 +1301,7 @@ async fn suspend_after_death() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.kill();
     as_kobject(&thread)
@@ -1350,7 +1350,7 @@ async fn suspend_channel_call() {
         if cct.thread.state() == ThreadState::BlockedChannel {
             break;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert_eq!(
         cct.thread.state(),
@@ -1388,7 +1388,7 @@ async fn suspend_channel_call() {
         if cct.thread.state() == ThreadState::Dead {
             break;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert_eq!(
         cct.thread.state(),
@@ -1457,8 +1457,8 @@ async fn suspend_multiple() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.suspend();
     thread.suspend();
@@ -1499,7 +1499,7 @@ async fn suspend_port_call() {
         if pwt.thread.state() == ThreadState::BlockedPort {
             break;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert_eq!(
         pwt.thread.state(),
@@ -1538,7 +1538,7 @@ async fn suspend_port_call() {
         if pwt.thread.state() == ThreadState::Dead {
             break;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert_eq!(
         pwt.thread.state(),
@@ -1578,7 +1578,7 @@ async fn suspend_single_wait_async_signal_delivery() {
         if ewt.thread.state() == ThreadState::BlockedWaitOne {
             break;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert_eq!(
         ewt.thread.state(),
@@ -1608,7 +1608,7 @@ async fn suspend_single_wait_async_signal_delivery() {
         if ewt.thread.state() == ThreadState::BlockedWaitOne {
             break;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert_eq!(
         ewt.thread.state(),
@@ -1633,7 +1633,7 @@ async fn suspend_single_wait_async_signal_delivery() {
         if ewt.thread.state() == ThreadState::BlockedWaitOne {
             break;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert_eq!(
         ewt.thread.state(),
@@ -1653,7 +1653,7 @@ async fn suspend_single_wait_async_signal_delivery() {
         if ewt.thread.state() == ThreadState::Dead {
             break;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert_eq!(
         ewt.thread.state(),
@@ -1691,7 +1691,7 @@ async fn suspend_sleeping() {
             proc.exit(0);
             return;
         }
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert!(reached_blocked, "timed out waiting for BlockedSleeping");
 
@@ -1736,8 +1736,8 @@ async fn suspend_stops_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     assert!(thread.signal().contains(Signal::THREAD_RUNNING));
 
@@ -1846,8 +1846,8 @@ async fn syscall_suspended_register_state() {
         .unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -1997,7 +1997,7 @@ async fn thread_start_on_initial_thread() {
     thread
         .start_with_entry(0x1000, 0x8000, 0, 0, helpers::test_loop_thread_fn)
         .unwrap();
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     assert!(thread.signal().contains(Signal::THREAD_RUNNING));
 
@@ -2048,7 +2048,7 @@ async fn thread_start_with_zero_instruction_pointer() {
     // actually cause a page fault but the thread lifecycle should
     // work correctly.
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // Thread should be running (or may have already died from the
     // "fault" depending on the executor implementation)
@@ -2192,8 +2192,8 @@ async fn writing_fp_register_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -2259,8 +2259,8 @@ async fn writing_general_register_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -2374,8 +2374,8 @@ async fn writing_vector_register_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)

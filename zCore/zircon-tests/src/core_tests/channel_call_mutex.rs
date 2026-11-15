@@ -36,8 +36,8 @@ async fn mutex_held_across_call_chain() {
         .unwrap();
 
     // Wait for the echo server to process and echo back.
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // Read the echoed response.
     let response = echo.client.read().unwrap();

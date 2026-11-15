@@ -419,7 +419,7 @@ fn call_iovec_bytes_less_than_txid_size() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         client_h,
         USE_IOVEC,
         zircon_syscall::Deadline::from(0usize),
@@ -447,8 +447,8 @@ async fn call_few_large_iovecs() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // C++: 3 iovecs of 8000 bytes = 24000 bytes total
     // At kernel-object level, simulate as a single 24000-byte message
@@ -483,8 +483,8 @@ async fn call_many_small_iovecs() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     let total = 1000 * 10;
     let mut data = vec![0u8; total];
@@ -519,8 +519,8 @@ async fn call_with_handle() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     let event = Event::new();
     let handle = Handle::new(event, zircon_object::object::Rights::DEFAULT_EVENT);
@@ -553,8 +553,8 @@ async fn call_etc_with_handle() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     let event = Event::new();
     let handle = Handle::new(event, zircon_object::object::Rights::DEFAULT_EVENT);
@@ -611,7 +611,7 @@ fn check_for_out_of_range_call<const N: usize, const M: usize>(ctx: &TestContext
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_etc_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_etc_noretry(
         client_h,
         USE_IOVEC,
         zircon_syscall::Deadline::from(0usize),
@@ -663,7 +663,7 @@ fn call_non_zero_reserved_iovec() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         client_h,
         USE_IOVEC,
         zircon_syscall::Deadline::from(0usize),
@@ -700,7 +700,7 @@ fn call_null_buffer_nonnull_size() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+    let result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
         client_h,
         USE_IOVEC,
         zircon_syscall::Deadline::from(0usize),

@@ -26,7 +26,7 @@ fn queue_many() {
 
     // Dequeue all
     for i in 0u64..100 {
-        let pkt = async_std::task::block_on(port.wait());
+        let pkt = crate::test_runtime::block_on(port.wait());
         let repr = PortPacketRepr::from(&pkt);
         assert_eq!(repr.key, i);
     }
@@ -92,7 +92,7 @@ fn multiple_observers() {
     // Drain the port — should get one packet per event.
     let mut keys = alloc::vec::Vec::new();
     for _ in 0..3 {
-        let pkt = async_std::task::block_on(port.wait());
+        let pkt = crate::test_runtime::block_on(port.wait());
         keys.push(PortPacketRepr::from(&pkt).key);
     }
     keys.sort();
@@ -116,7 +116,7 @@ fn port_fifo_order() {
     }
 
     for i in 0u64..10 {
-        let pkt = async_std::task::block_on(port.wait());
+        let pkt = crate::test_runtime::block_on(port.wait());
         let repr = PortPacketRepr::from(&pkt);
         assert_eq!(repr.key, i * 100);
     }
@@ -138,7 +138,7 @@ fn port_queue_limit() {
         port.push_user(PortPacket::from(packet)).unwrap();
     }
 
-    let first = async_std::task::block_on(port.wait());
+    let first = crate::test_runtime::block_on(port.wait());
     assert_eq!(PortPacketRepr::from(&first).key, 0);
 }
 
@@ -159,7 +159,7 @@ fn port_drain_all() {
     }
 
     for _ in 0..5 {
-        let _ = async_std::task::block_on(port.wait());
+        let _ = crate::test_runtime::block_on(port.wait());
     }
 
     use zircon_object::object::Signal;
@@ -180,7 +180,7 @@ fn port_queue_after_drain() {
         data: PayloadRepr::User([0; 32]),
     };
     port.push_user(PortPacket::from(packet)).unwrap();
-    let _ = async_std::task::block_on(port.wait());
+    let _ = crate::test_runtime::block_on(port.wait());
 
     let packet = PortPacketRepr {
         key: 2,
@@ -188,7 +188,7 @@ fn port_queue_after_drain() {
         data: PayloadRepr::User([0; 32]),
     };
     port.push_user(PortPacket::from(packet)).unwrap();
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = crate::test_runtime::block_on(port.wait());
     assert_eq!(PortPacketRepr::from(&pkt).key, 2);
 }
 
@@ -223,7 +223,7 @@ fn port_packet_payload() {
     };
     port.push_user(PortPacket::from(packet)).unwrap();
 
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = crate::test_runtime::block_on(port.wait());
     let repr = PortPacketRepr::from(&pkt);
     assert_eq!(repr.key, 42);
     // status field is ZxError type — verified by type system
@@ -244,7 +244,7 @@ fn port_interleave_queue_dequeue() {
             data: PayloadRepr::User([0; 32]),
         };
         port.push_user(PortPacket::from(packet)).unwrap();
-        let pkt = async_std::task::block_on(port.wait());
+        let pkt = crate::test_runtime::block_on(port.wait());
         assert_eq!(PortPacketRepr::from(&pkt).key, i);
     }
 }

@@ -52,7 +52,7 @@ async fn basic() {
     // Part 1: Uncontested mutex lock/unlock (C++: fast CAS path)
     let mutex = Arc::new(SyncMutex::new());
     // Lock and unlock without contention — should succeed immediately
-    async_std::task::block_on(mutex.lock());
+    crate::test_runtime::block_on(mutex.lock());
     mutex.unlock();
 
     // Part 2: 3 condvar threads + broadcast (C++: cond_threads)
@@ -73,8 +73,8 @@ async fn basic() {
         cond_threads.push((thread, state));
     }
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(100)).await;
 
     predicate.store(true, Ordering::Release);
     cond.broadcast();
@@ -82,7 +82,7 @@ async fn basic() {
     let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
     while woken_counter.load(Ordering::SeqCst) < 3 {
         assert!(std::time::Instant::now() < deadline, "condvar timed out");
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
 
     for (thread, _) in &cond_threads {
@@ -94,7 +94,7 @@ async fn basic() {
             if std::time::Instant::now() >= dl {
                 break;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 
@@ -114,7 +114,7 @@ async fn basic() {
     for (_, state) in &mutex_threads {
         while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
             assert!(std::time::Instant::now() < deadline, "mutex timed out");
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 
@@ -129,7 +129,7 @@ async fn basic() {
             if std::time::Instant::now() >= dl {
                 break;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 }
@@ -187,7 +187,7 @@ async fn big_stack_size() {
         .expect("pthread_create should succeed (thread start)");
 
     // Yield to let thread run
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // Kill and wait for termination (simulates pthread_join)
     thread.kill();
@@ -243,7 +243,7 @@ async fn getstack_other_thread() {
 
     // Start the thread (pthread_create)
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // Kill and join (pthread_join)
     thread.kill();
@@ -268,7 +268,7 @@ async fn getstack_other_thread_explicit_size() {
 
     // Start the thread (pthread_create with explicit attr)
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    crate::test_runtime::yield_now().await;
 
     // Kill and join (pthread_join)
     thread.kill();

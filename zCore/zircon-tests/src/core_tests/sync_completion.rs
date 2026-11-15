@@ -56,8 +56,8 @@ async fn single_wait() {
     let t = CompletionTestThread::start(&proc, &completion);
 
     // C++: WaitForAllBlockedOnFutex(threads)
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // C++: sync_completion_signal(&completion)
     completion.signal();
@@ -84,8 +84,8 @@ async fn multi_wait() {
         .map(|_| CompletionTestThread::start(&proc, &completion))
         .collect();
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     completion.signal();
 
@@ -126,7 +126,7 @@ fn timeout_single_wait() {
     // Wait with an immediate (past) deadline for USER_SIGNAL_0.
     // Since the Event is never signaled, this should return TIMED_OUT.
     let mut observed: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
         event_handle,
         zircon_object::object::Signal::USER_SIGNAL_0.bits(),
         zircon_syscall::Deadline::from(0usize), // immediate deadline
@@ -184,7 +184,7 @@ fn timeout_multi_wait() {
         })
         .collect();
 
-    let result = async_std::task::block_on(sc.sys_object_wait_many(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_many(
         hal_impl::user::UserInOutPtr::from(items.as_mut_ptr() as usize),
         items.len() as u32,
         zircon_syscall::Deadline::from(0usize), // immediate deadline
@@ -323,8 +323,8 @@ async fn signal_requeue() {
         .map(|_| CompletionTestThread::start(&proc, &completion))
         .collect();
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // C++: zx_futex_t futex = 0; sync_completion_signal_requeue(&completion, &futex, ...)
     let requeue_value = std::sync::Arc::new(AtomicI32::new(0));
@@ -333,7 +333,7 @@ async fn signal_requeue() {
     completion.signal_requeue(&requeue_futex);
 
     // C++: zx_nanosleep(ZX_MSEC(100)) — verify threads still blocked
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
     for t in &threads {
         assert!(
             !t.has_wait_returned(),
@@ -368,8 +368,8 @@ async fn spurious_wakeup_handled() {
 
     let t = CompletionTestThread::start(&proc, &completion);
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    crate::test_runtime::yield_now().await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // C++: zx_futex_wake(&completion.futex, UINT32_MAX) — spurious wake
     // The thread should re-check the signaled flag, see it's still
@@ -377,7 +377,7 @@ async fn spurious_wakeup_handled() {
     completion.futex.wake(usize::MAX);
 
     // C++: zx_nanosleep(ZX_MSEC(100)); ASSERT_FALSE(thread.exited())
-    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(100)).await;
     assert!(
         !t.has_wait_returned(),
         "thread should NOT have exited after spurious wake"

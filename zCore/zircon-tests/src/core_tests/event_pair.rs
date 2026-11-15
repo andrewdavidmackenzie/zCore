@@ -285,7 +285,7 @@ fn wait_access_denied_missing_wait_right() {
     // sys_object_wait_one should fail with ACCESS_DENIED.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
         h,
         Signal::USER_SIGNAL_0.bits(),
         zircon_syscall::Deadline::from(0usize),

@@ -254,7 +254,7 @@ fn channel_call_finish_after_failed_call() {
         let mut actual_handles: u32 = 0;
 
         // Attempt channel_call — should fail because peer is closed.
-        let call_result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        let call_result = crate::test_runtime::block_on(sc.sys_channel_call_noretry(
             local_handle,
             0,
             zircon_syscall::Deadline::from(0usize),

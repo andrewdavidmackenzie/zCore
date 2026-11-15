@@ -122,7 +122,7 @@ fn already_passed_deadline_on_wait_one() {
     // wait_one with zero timeout — already SIGNALED, should succeed.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
         h,
         Signal::SIGNALED.bits(),
         zircon_syscall::Deadline::from(0usize),
@@ -155,7 +155,7 @@ fn basic() {
     // Initially not signaled — wait_one with zero timeout returns TIMED_OUT.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
         h,
         Signal::SIGNALED.bits(),
         zircon_syscall::Deadline::from(0usize),
@@ -171,7 +171,7 @@ fn basic() {
         // wait_one should succeed immediately (already SIGNALED).
         let mut observed = Signal::empty();
         let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-        let result = async_std::task::block_on(sc.sys_object_wait_one(
+        let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
             h,
             Signal::SIGNALED.bits(),
             zircon_syscall::Deadline::from(0usize),
@@ -305,7 +305,7 @@ fn signals_asserted_immediately() {
         // wait_one should succeed immediately.
         let mut observed = Signal::empty();
         let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-        let result = async_std::task::block_on(sc.sys_object_wait_one(
+        let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
             h,
             Signal::SIGNALED.bits(),
             zircon_syscall::Deadline::from(0usize),
@@ -319,7 +319,7 @@ fn signals_asserted_immediately() {
         // After cancel, wait_one should time out.
         let mut observed2 = Signal::empty();
         let out2 = UserOutPtr::from(&mut observed2 as *mut _ as usize);
-        let result2 = async_std::task::block_on(sc.sys_object_wait_one(
+        let result2 = crate::test_runtime::block_on(sc.sys_object_wait_one(
             h,
             Signal::SIGNALED.bits(),
             zircon_syscall::Deadline::from(0usize),
@@ -384,7 +384,7 @@ fn user_signal() {
     // wait_one should succeed immediately with USER_SIGNAL_0.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
         h,
         Signal::USER_SIGNAL_0.bits(),
         zircon_syscall::Deadline::from(0usize),
@@ -400,7 +400,7 @@ fn user_signal() {
     // wait_one should now time out.
     let mut observed2 = Signal::empty();
     let out2 = UserOutPtr::from(&mut observed2 as *mut _ as usize);
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
+    let result = crate::test_runtime::block_on(sc.sys_object_wait_one(
         h,
         Signal::USER_SIGNAL_0.bits(),
         zircon_syscall::Deadline::from(0usize),

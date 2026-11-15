@@ -55,7 +55,7 @@ async fn multi_threaded_contention() {
     for (_, state) in &threads {
         while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
             assert!(std::time::Instant::now() < deadline, "timed out");
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 
@@ -68,7 +68,7 @@ async fn multi_threaded_contention() {
             if std::time::Instant::now() >= dl {
                 break;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 
@@ -197,7 +197,7 @@ fn timeout_elapsed() {
     // (In a real scenario, the expected value would match and the thread
     // would block until the deadline, but we can only test the fast path.)
     for _i in 0..5 {
-        let result = async_std::task::block_on(futex.wait(0));
+        let result = crate::test_runtime::block_on(futex.wait(0));
         assert_eq!(
             result.unwrap_err(),
             zircon_object::ZxError::BAD_STATE,

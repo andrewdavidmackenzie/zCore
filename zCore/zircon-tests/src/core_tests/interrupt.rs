@@ -328,8 +328,8 @@ async fn untriggered_signal_interrupt_wait() {
     //    This exercises the blocking wait → trigger → wake path.
     let int_clone = interrupt.clone();
     let ts2: i64 = 67890;
-    async_std::task::spawn(async move {
-        async_std::task::sleep(core::time::Duration::from_millis(10)).await;
+    crate::test_runtime::spawn(async move {
+        crate::test_runtime::sleep(core::time::Duration::from_millis(10)).await;
         int_clone.trigger(ts2).unwrap();
     });
     let result2 = interrupt.wait().await.unwrap();
@@ -489,10 +489,10 @@ async fn wait_thread_functions_after_suspend_resume() {
 
     // Basic trigger → wait cycle (simplified from C++ test).
     let int_clone = interrupt.clone();
-    let handle = async_std::task::spawn(async move { int_clone.wait().await.unwrap() });
+    let handle = crate::test_runtime::spawn(async move { int_clone.wait().await.unwrap() });
 
     // Small delay to let the wait task block.
-    async_std::task::sleep(core::time::Duration::from_millis(10)).await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(10)).await;
 
     // Trigger wakes the waiter.
     interrupt.trigger(42).unwrap();

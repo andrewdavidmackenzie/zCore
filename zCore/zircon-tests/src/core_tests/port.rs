@@ -1047,7 +1047,7 @@ fn port_timeout() {
     let port_h = create_port(&ctx);
 
     let mut packet: zircon_object::signal::PortPacket = unsafe { core::mem::zeroed() };
-    let result = async_std::task::block_on(sc.sys_port_wait(
+    let result = crate::test_runtime::block_on(sc.sys_port_wait(
         port_h,
         zircon_syscall::Deadline::from(0usize), // past deadline
         hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),
@@ -1072,7 +1072,7 @@ fn wait_access_denied() {
         .add_handle(Handle::new(port, Rights::WRITE | Rights::TRANSFER));
 
     let mut packet: zircon_object::signal::PortPacket = unsafe { core::mem::zeroed() };
-    let result = async_std::task::block_on(sc.sys_port_wait(
+    let result = crate::test_runtime::block_on(sc.sys_port_wait(
         write_only_h,
         zircon_syscall::Deadline::from(0usize),
         hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),
@@ -1093,7 +1093,7 @@ fn wait_null_packet() {
     queue_packet(&ctx, port_h, &pkt);
 
     // Null output pointer
-    let result = async_std::task::block_on(sc.sys_port_wait(
+    let result = crate::test_runtime::block_on(sc.sys_port_wait(
         port_h,
         zircon_syscall::Deadline::from(0usize),
         hal_impl::user::UserOutPtr::from(0usize),
@@ -1111,7 +1111,7 @@ fn wait_wrong_type() {
     let event_h = create_event(&ctx);
 
     let mut packet: zircon_object::signal::PortPacket = unsafe { core::mem::zeroed() };
-    let result = async_std::task::block_on(sc.sys_port_wait(
+    let result = crate::test_runtime::block_on(sc.sys_port_wait(
         event_h,
         zircon_syscall::Deadline::from(0usize),
         hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),

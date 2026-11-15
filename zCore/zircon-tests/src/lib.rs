@@ -24,6 +24,8 @@
 
 #[cfg(test)]
 mod helpers;
+#[cfg(test)]
+mod test_runtime;
 
 // ── 1:1 C++ core-test ports ────────────────────────────────────────
 #[cfg(test)]

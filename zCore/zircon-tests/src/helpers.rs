@@ -53,7 +53,7 @@ pub fn test_loop_thread_fn(
                 break;
             }
             // Simulate brief "execution" then yield back to the scheduler.
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
             thread.put_context(ctx);
         }
         // CurrentThread drop calls terminate() → state becomes Dead,
@@ -218,7 +218,7 @@ impl FutexTestThread {
                 "FutexTestThread: timed out waiting for thread to wake"
             );
             // Yield to let the waiter thread make progress
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 
@@ -245,7 +245,7 @@ impl FutexTestThread {
                 // the thread's task yet.
                 break;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 }
@@ -272,13 +272,13 @@ pub async fn assert_woke_thread_count(threads: &[FutexTestThread], target: usize
             target,
             count_woken(threads)
         );
-        async_std::task::yield_now().await;
+        crate::test_runtime::yield_now().await;
     }
     assert_eq!(count_woken(threads), target);
 
     // C++: zx::nanosleep(zx::deadline_after(zx::msec(300)));
     // Wait to verify no spurious wakeups
-    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+    crate::test_runtime::sleep(core::time::Duration::from_millis(100)).await;
     assert_eq!(
         count_woken(threads),
         target,
@@ -489,7 +489,7 @@ impl CompletionTestThread {
                 std::time::Instant::now() < deadline,
                 "CompletionTestThread: timed out waiting for thread to wake"
             );
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 
@@ -505,7 +505,7 @@ impl CompletionTestThread {
             if std::time::Instant::now() >= deadline {
                 break;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 }
@@ -661,7 +661,7 @@ pub fn mutex_contender_thread_fn(
             contender.counter.fetch_add(1, Ordering::SeqCst);
             contender.mutex.unlock();
             // Small yield to let other threads contend
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
 
         contender
@@ -834,7 +834,7 @@ impl EchoServer {
             if std::time::Instant::now() >= deadline {
                 break;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
     }
 }
@@ -1584,7 +1584,7 @@ impl PagerProcessTestThread {
             if st >= PAGER_STATE_READ_RETURNED {
                 return;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
         panic!("PagerProcessTestThread: timed out waiting for thread to enter BlockedPager");
     }
@@ -1600,7 +1600,7 @@ impl PagerProcessTestThread {
             if self.thread.state() == ThreadState::Dead {
                 return;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
         panic!("PagerProcessTestThread: timed out waiting for thread to terminate");
     }
@@ -1701,7 +1701,7 @@ impl ExceptionTestThread {
             if st == ThreadState::Dying || st == ThreadState::Dead {
                 return;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
         panic!("ExceptionTestThread: timed out waiting for BlockedException state");
     }
@@ -1712,7 +1712,7 @@ impl ExceptionTestThread {
             if self.thread.state() == ThreadState::Dead {
                 return;
             }
-            async_std::task::yield_now().await;
+            crate::test_runtime::yield_now().await;
         }
         panic!("ExceptionTestThread: timed out waiting for thread to terminate");
     }

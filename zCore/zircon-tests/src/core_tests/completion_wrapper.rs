@@ -82,7 +82,7 @@ fn wait_duration_timeout() {
         "wait with past deadline on unsignaled completion should time out"
     );
     // Verify futex_wait would fail (value mismatch path)
-    let result = async_std::task::block_on(futex.wait(99));
+    let result = crate::test_runtime::block_on(futex.wait(99));
     assert_eq!(
         result.unwrap_err(),
         zircon_object::ZxError::BAD_STATE,
