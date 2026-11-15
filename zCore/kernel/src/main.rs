@@ -15,6 +15,7 @@ extern crate log;
 
 mod logging;
 
+#[cfg(not(feature = "baremetal-test"))]
 mod fs;
 mod handler;
 #[cfg(all(feature = "libos", feature = "linux"))]
@@ -38,25 +39,23 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) {
     hal_impl::memory::init();
     hal_impl::primary_init_early(config, &handler::ZcoreKernelHandler);
 
-    let options = boot_options();
-    info!("Boot options: {:#?}", options);
     hal_impl::memory::insert_regions(&hal_impl::mem::free_pmem_regions());
     hal_impl::primary_init();
 
-    // Run built-in Rust test suite if requested via ROOTPROC=__test__.
     #[cfg(feature = "baremetal-test")]
-    if options.root_proc.starts_with("__test__") {
+    {
         STARTED.store(true, Ordering::SeqCst);
         run_builtin_tests()
     }
 
-    let proc = boot_init(options);
-    // Release secondary cores AFTER the init process is created.
-    // If released earlier, idle APs enter the executor loop and
-    // steal the BSP's init task via work-stealing before the BSP
-    // can run it.
-    STARTED.store(true, Ordering::SeqCst);
-    wait_for_exit(Some(proc))
+    #[cfg(not(feature = "baremetal-test"))]
+    {
+        let options = boot_options();
+        info!("Boot options: {:#?}", options);
+        let proc = boot_init(options);
+        STARTED.store(true, Ordering::SeqCst);
+        wait_for_exit(Some(proc))
+    }
 }
 
 /// Start the init process specified by ROOTPROC.
@@ -65,6 +64,7 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) {
 /// - ELFOSABI_ZIRCON (0xFC) → Zircon process (petal)
 /// - Anything else → Linux process (if `linux` feature compiled in)
 /// - Falls back to Zircon userboot if no rootfs is available
+#[cfg(not(feature = "baremetal-test"))]
 fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Process> {
     // Register the Zircon spawn config globally so cross-flavour
     // exec can spawn Zircon processes from Linux context.
@@ -168,6 +168,7 @@ fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Proc
 ///
 /// In libOS mode, reads the ZBI file path from the first command-line argument.
 /// On bare-metal, returns the ZBI embedded at compile time by `zircon-loader`.
+#[cfg(not(feature = "baremetal-test"))]
 fn load_zbi() -> impl AsRef<[u8]> {
     #[cfg(feature = "libos")]
     {
@@ -265,6 +266,7 @@ fn run_builtin_tests() -> ! {
 // ── Boot options ─────────────────────────────────────────────────────
 
 #[derive(Debug)]
+#[cfg(not(feature = "baremetal-test"))]
 struct BootOptions {
     cmdline: alloc::string::String,
     /// Root process path (e.g. "/bin/busybox?sh" or "/bin/hello").
@@ -275,6 +277,7 @@ struct BootOptions {
 ///
 /// Extracts `ROOTPROC=<path>` from the cmdline provided by hal-impl.
 /// Defaults to `/bin/busybox?sh` in Linux mode or `/bin/hello` otherwise.
+#[cfg(not(feature = "baremetal-test"))]
 fn boot_options() -> BootOptions {
     use alloc::string::ToString;
     let cmdline = hal_impl::boot::cmdline();
@@ -289,6 +292,7 @@ fn boot_options() -> BootOptions {
 }
 
 /// Extract a value from a "KEY=VALUE KEY2=VALUE2" cmdline string.
+#[cfg(not(feature = "baremetal-test"))]
 fn parse_cmdline_value<'a>(cmdline: &'a str, key: &str) -> Option<&'a str> {
     for token in cmdline.split_whitespace() {
         let mut iter = token.splitn(2, '=');

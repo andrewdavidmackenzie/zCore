@@ -49,8 +49,11 @@ fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
         let trimmed = lines[i].trim();
 
         // Detect test attributes: #[test], #[async_std::test], #[tokio::test]
-        let is_test_attr =
-            trimmed == "#[test]" || trimmed == "#[async_std::test]" || trimmed == "#[tokio::test]";
+        let is_test_attr = trimmed == "#[test]"
+            || trimmed == "#[async_std::test]"
+            || trimmed == "#[tokio::test]"
+            || trimmed == "#[cfg_attr(test, test)]"
+            || trimmed == "#[cfg_attr(test, async_std::test)]";
 
         if !is_test_attr {
             i += 1;

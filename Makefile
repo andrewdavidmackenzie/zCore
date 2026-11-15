@@ -597,6 +597,20 @@ core-tests: core-tests-build
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
 test: boot-test libc-test
 
+# ── Bare-metal Rust zircon-tests ─────────────────────────────────────
+# Build and run the Rust zircon-tests suite inside QEMU on bare-metal.
+# Usage: make rust-tests ARCH=aarch64
+RUST_TESTS_ARCH ?= aarch64
+
+.PHONY: rust-tests-build rust-tests
+rust-tests-build:
+	@echo "==> Building kernel with baremetal-test for $(RUST_TESTS_ARCH)..."
+	@cargo clean -p kernel 2>/dev/null || true
+	cargo zcore-build -m qemu-$(RUST_TESTS_ARCH) --flavour "" --extra-features baremetal-test
+
+rust-tests: rust-tests-build
+	@tools/scripts/rust-tests-qemu.sh $(RUST_TESTS_ARCH)
+
 # Boot smoke test: start QEMU, wait for the "/ # " shell prompt, exit.
 # Proves: boot assembly, MMU, HAL, VirtIO, filesystem, ELF loader, and
 # busybox shell all work end-to-end. Timeout is 60 seconds.
