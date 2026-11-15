@@ -1131,7 +1131,9 @@ impl Syscall<'_> {
                     return e as isize;
                 }
                 let proc = self.thread.proc();
-                let result = self.sys_vmo_write(a0 as _, a1.into(), a2 as _, write_len as _);
+                let result = self
+                    .sys_vmo_write(a0 as _, a1.into(), a2 as _, write_len as _)
+                    .await;
                 // After a successful write to a pager-backed VMO (or a slice
                 // of one), set modified and mark pages dirty on the parent.
                 // Note: for partial SOURCE failures (unmappable source buffer),

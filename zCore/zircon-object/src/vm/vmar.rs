@@ -2592,18 +2592,27 @@ impl VmMapping {
                 }
             }
         }
-        let mut pg_table = self.page_table.lock();
-        let mut res = pg_table.map(
-            Page::new_aligned(vaddr, PageSize::default_page()),
-            paddr,
-            flags,
-        );
-        if let Err(PagingError::AlreadyMapped) = res {
-            res = pg_table.update(vaddr, Some(paddr), Some(flags)).map(|_| ());
+        {
+            let mut pg_table = self.page_table.lock();
+            let mut res = pg_table.map(
+                Page::new_aligned(vaddr, PageSize::default_page()),
+                paddr,
+                flags,
+            );
+            if let Err(PagingError::AlreadyMapped) = res {
+                res = pg_table.update(vaddr, Some(paddr), Some(flags)).map(|_| ());
+            }
+            res.map_err(|_| ZxError::ACCESS_DENIED)?;
+            // pg_table lock (L4) is released here before acquiring VMO
+            // inner lock (L1) below. This prevents an ABBA deadlock:
+            //   handle_page_fault:       L4 → L1
+            //   invalidate_mappings:     L1 → L4 (via range_change)
+            // See #711.
         }
-        res.map_err(|_| ZxError::ACCESS_DENIED)?;
         // After successful WRITE mapping on a pager-backed VMO (or a
         // slice of one), update dirty tracking and modified flag.
+        // The page_table lock is NOT held here — only VMO metadata
+        // locks are acquired.
         if access_flags.contains(MMUFlags::WRITE) {
             if self.vmo.is_pager_backed() {
                 if self.vmo.is_trap_dirty() {

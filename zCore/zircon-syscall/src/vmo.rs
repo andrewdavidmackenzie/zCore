@@ -184,10 +184,11 @@ impl Syscall<'_> {
                 ) == 0
                     && !pager_vmo.has_zero_marker(page_idx + root_page_off)
                 {
-                    // Page not committed — find the run of consecutive
-                    // missing pages and send ONE batched request. Stop
-                    // the run at the first committed page (in clone or
-                    // root), matching Fuchsia's LookupCursor batching.
+                    let rp = page_idx + root_page_off; // root-space page index
+                                                       // Page not committed — find the run of consecutive
+                                                       // missing pages and send ONE batched request. Stop
+                                                       // the run at the first committed page (in clone or
+                                                       // root), matching Fuchsia's LookupCursor batching.
                     {
                         let mut run_end = page_idx + 1;
                         while run_end < end_page
@@ -201,12 +202,10 @@ impl Syscall<'_> {
                         {
                             run_end += 1;
                         }
-                        let req_offset = (page_idx + root_page_off) * PAGE_SIZE;
+                        let req_offset = rp * PAGE_SIZE;
                         let req_length = (run_end - page_idx) * PAGE_SIZE;
                         let _ = pager_vmo.request_pages(req_offset, req_length);
                     }
-                    let mut fail_retries = 0;
-                    let rp = page_idx + root_page_off; // root-space page index
                     loop {
                         // Check if page was supplied in the meantime
                         // (or forked in the clone while we waited).
@@ -217,11 +216,10 @@ impl Syscall<'_> {
                         {
                             break;
                         }
-                        if let Some(err) = pager_vmo.get_failed_page(rp) {
-                            if fail_retries >= 1 {
-                                return Err(err);
-                            }
-                            fail_retries += 1;
+                        if pager_vmo.get_failed_page(rp).is_some() {
+                            // Page was failed by OP_FAIL. Clear the marker
+                            // and re-request so the pager gets a fresh
+                            // chance to supply.
                             pager_vmo.clear_failed_page(rp);
                             let _ = pager_vmo.request_pages(rp * PAGE_SIZE, PAGE_SIZE);
                         }
@@ -322,7 +320,7 @@ impl Syscall<'_> {
     }
 
     /// Write bytes to a VMO.
-    pub fn sys_vmo_write(
+    pub async fn sys_vmo_write(
         &self,
         handle_value: HandleValue,
         buf: UserInPtr<u8>,
@@ -352,6 +350,130 @@ impl Syscall<'_> {
             None => return Err(ZxError::NOT_FOUND),
             _ => {}
         }
+        // For clones in a pager tree, writing triggers COW resolution
+        // which may need to demand-page parent pages from the pager.
+        // Pre-commit those pages before the synchronous write.
+        if !vmo.is_pager_backed() && vmo.is_in_pager_tree() && buf_size > 0 {
+            use zircon_object::task::ThreadState;
+            use zircon_object::vm::PAGE_SIZE;
+            let (pager_vmo, clone_to_root_offset) = match vmo.find_root_pager_vmo_with_offset() {
+                Some((root, off)) => (root, off),
+                None => {
+                    // Pager detached — fall through to synchronous
+                    // write which will fail with BAD_STATE.
+                    return self.sys_vmo_write_sync(&vmo, buf, offset, buf_size).await;
+                }
+            };
+            let start = offset as usize;
+            let end = start + buf_size;
+            let start_page = start / PAGE_SIZE;
+            let end_page = end.div_ceil(PAGE_SIZE);
+            let root_page_off = clone_to_root_offset / PAGE_SIZE;
+
+            // Send a batched request for all missing parent pages,
+            // then wait for each page individually. This matches
+            // Fuchsia's behavior where the kernel sends one batched
+            // READ request covering the entire write range.
+            {
+                let mut run_start: Option<usize> = None;
+                for page_idx in start_page..=end_page {
+                    let needs_page = page_idx < end_page
+                        && vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
+                        && !vmo.has_zero_marker(page_idx)
+                        && pager_vmo.committed_pages_in_range(
+                            page_idx + root_page_off,
+                            page_idx + root_page_off + 1,
+                        ) == 0
+                        && !pager_vmo.has_zero_marker(page_idx + root_page_off);
+                    if needs_page && run_start.is_none() {
+                        run_start = Some(page_idx);
+                    }
+                    if !needs_page {
+                        if let Some(rs) = run_start.take() {
+                            let rp_start = rs + root_page_off;
+                            let run_len = page_idx - rs;
+                            let _ =
+                                pager_vmo.request_pages(rp_start * PAGE_SIZE, run_len * PAGE_SIZE);
+                        }
+                    }
+                }
+            }
+
+            // Wait for each parent page individually.
+            for page_idx in start_page..end_page {
+                // Skip if clone already has a local page or zero marker.
+                if vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                    || vmo.has_zero_marker(page_idx)
+                {
+                    continue;
+                }
+                let rp = page_idx + root_page_off;
+                // Skip if root already has the page committed.
+                if pager_vmo.committed_pages_in_range(rp, rp + 1) > 0
+                    || pager_vmo.has_zero_marker(rp)
+                {
+                    continue;
+                }
+                loop {
+                    if pager_vmo.committed_pages_in_range(rp, rp + 1) > 0
+                        || pager_vmo.has_zero_marker(rp)
+                        || vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                        || vmo.has_zero_marker(page_idx)
+                    {
+                        break;
+                    }
+                    if pager_vmo.get_failed_page(rp).is_some() {
+                        pager_vmo.clear_failed_page(rp);
+                        let _ = pager_vmo.request_pages(rp * PAGE_SIZE, PAGE_SIZE);
+                    }
+                    let future = pager_vmo.wait_for_page(rp * PAGE_SIZE);
+                    pin_mut!(future);
+                    self.thread.set_blocking_state(ThreadState::BlockedPager);
+                    let result = self
+                        .thread
+                        .blocking_run_suspendable(
+                            future,
+                            ThreadState::BlockedPager,
+                            Duration::from_nanos(u64::MAX),
+                        )
+                        .await;
+                    match result {
+                        Ok(()) => break,
+                        Err(ZxError::STOP) => return Err(ZxError::STOP),
+                        Err(ZxError::BAD_STATE) => return Err(ZxError::BAD_STATE),
+                        Err(ZxError::SHOULD_WAIT) => {
+                            let _ = pager_vmo.request_pages(rp * PAGE_SIZE, PAGE_SIZE);
+                            continue;
+                        }
+                        Err(ZxError::CANCELED) => {
+                            self.thread.wait_for_resume().await;
+                            if self.thread.state() == ThreadState::Dying {
+                                return Err(ZxError::STOP);
+                            }
+                            if pager_vmo.committed_pages_in_range(rp, rp + 1) > 0 {
+                                break;
+                            }
+                            pager_vmo
+                                .cancel_outstanding_requests_in_range(rp * PAGE_SIZE, PAGE_SIZE);
+                            let _ = pager_vmo.request_pages(rp * PAGE_SIZE, PAGE_SIZE);
+                            continue;
+                        }
+                        Err(e) => return Err(e),
+                    }
+                }
+            }
+        }
+        self.sys_vmo_write_sync(&vmo, buf, offset, buf_size).await
+    }
+
+    /// Synchronous VMO write helper (after pager pages are committed).
+    async fn sys_vmo_write_sync(
+        &self,
+        vmo: &Arc<VmObject>,
+        buf: UserInPtr<u8>,
+        offset: u64,
+        buf_size: usize,
+    ) -> ZxResult {
         // Chunked VMO write: copy user data in page-sized chunks and
         // write each chunk to the VMO, avoiding a single huge kernel
         // allocation for the entire write.

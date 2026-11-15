@@ -20,6 +20,7 @@ doc = false
 colorless-log = []
 thead-maee = ["hal-impl/thead-maee"]
 baremetal-test = ["executor/baremetal-test"]
+lockdep = ["zircon-object/lockdep"]
 
 # --- Flavour ---
 # Zircon is the base flavour (always enabled).

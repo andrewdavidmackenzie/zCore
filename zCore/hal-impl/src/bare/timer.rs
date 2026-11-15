@@ -11,6 +11,11 @@
 //! races between task-context `timer_set` and interrupt-context
 //! `timer_tick` on the same CPU. This matches Fuchsia's
 //! `Guard<MonitoredSpinLock, IrqSave>` pattern.
+//!
+//! Timer callbacks (e.g., `signal_set`) acquire `KObjectBase::inner`
+//! which is an InterruptSpinLock, so they are safe to call from IRQ
+//! context. Other kernel object locks (KernelMutex) must NOT be
+//! acquired from timer callbacks.
 
 use alloc::boxed::Box;
 use core::time::Duration;

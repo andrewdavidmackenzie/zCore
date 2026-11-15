@@ -8,9 +8,14 @@ edition = "2021"
 [features]
 default = ["ticket"]
 ticket = ["spin/use_ticket_mutex"]
+# Enable runtime lock ordering checks and spin-timeout deadlock
+# detection. Adds overhead to every lock/unlock call. Enable for
+# debugging; disable for production/CI.
+lockdep = []
 
 [dependencies]
 cfg-if = "1.0.0"
+log = "0.4"
 
 # Bare-metal mode on x86_64
 [target.'cfg(target_arch = "x86_64")'.dependencies]

@@ -33,6 +33,7 @@ async fn op_range_zero() {
     // Write data
     let data = b"test data for zeroing";
     sc.sys_vmo_write(h, UserInPtr::from(data.as_ptr() as usize), 0, data.len())
+        .await
         .unwrap();
 
     // ZERO (op=10)
@@ -65,8 +66,8 @@ async fn read_without_read_right() {
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
-#[test]
-fn write_without_write_right() {
+#[async_std::test]
+async fn write_without_write_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -76,7 +77,9 @@ fn write_without_write_right() {
         zircon_object::object::Rights::READ, // no WRITE
     ));
 
-    let result = sc.sys_vmo_write(h, UserInPtr::from(b"test".as_ptr() as usize), 0, 4);
+    let result = sc
+        .sys_vmo_write(h, UserInPtr::from(b"test".as_ptr() as usize), 0, 4)
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 

@@ -233,7 +233,13 @@ impl ThreadInner {
 
     /// Change state and update signal.
     fn change_state(&mut self, state: ThreadState, base: &KObjectBase) {
+        let old = self.state;
         self.state = state;
+        // Log thread lifecycle transitions to Dying/Dead for debugging
+        // hangs where threads die unexpectedly.
+        if matches!(state, ThreadState::Dying | ThreadState::Dead) {
+            warn!("thread state: {} {:?} -> {:?}", base.id, old, state,);
+        }
         match self.state() {
             ThreadState::Dead => base.signal_change(
                 Signal::THREAD_RUNNING | Signal::THREAD_SUSPENDED,

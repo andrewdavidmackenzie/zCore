@@ -105,6 +105,10 @@ use {
         task::{Context, Poll},
     },
     downcast_rs::{impl_downcast, DowncastSync},
+    // KObjectBase::inner uses InterruptSpinLock (not KernelMutex)
+    // because signal_set/signal_change are called from timer interrupt
+    // callbacks. Using KernelMutex here would deadlock if the
+    // interrupted thread holds the same lock.
     lock::Mutex,
 };
 

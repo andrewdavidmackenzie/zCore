@@ -62,7 +62,12 @@ fn vmo_read_write_bad_len() {
              [C++ FAILS on QEMU: gets INVALID_ARGS (-10)]",
             i
         );
-        let result = sc.sys_vmo_write(h, UserInPtr::from(buf.as_ptr() as usize), 0, bad_len);
+        let result = async_std::task::block_on(sc.sys_vmo_write(
+            h,
+            UserInPtr::from(buf.as_ptr() as usize),
+            0,
+            bad_len,
+        ));
         assert_eq!(
             result,
             Err(ZxError::OUT_OF_RANGE),
@@ -80,7 +85,12 @@ fn vmo_read_write_bad_len() {
         len,
     ));
     assert!(result.is_ok(), "exact-size read should succeed");
-    let result = sc.sys_vmo_write(h, UserInPtr::from(buf.as_ptr() as usize), 0, len);
+    let result = async_std::task::block_on(sc.sys_vmo_write(
+        h,
+        UserInPtr::from(buf.as_ptr() as usize),
+        0,
+        len,
+    ));
     assert!(result.is_ok(), "exact-size write should succeed");
 }
 /// C++: TEST(VmoTestCase, SizeAlign)
@@ -1764,7 +1774,9 @@ async fn read_write_invalid_kernel_buffer() {
         .await;
     assert_eq!(result, Err(ZxError::NOT_FOUND));
 
-    let result = sc.sys_vmo_write(h, UserInPtr::from(kernel_addr), 0, 8);
+    let result = sc
+        .sys_vmo_write(h, UserInPtr::from(kernel_addr), 0, 8)
+        .await;
     assert_eq!(result, Err(ZxError::NOT_FOUND));
 }
 
