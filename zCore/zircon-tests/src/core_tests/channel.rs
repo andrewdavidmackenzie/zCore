@@ -3,6 +3,9 @@
 //! 1:1 ports of Fuchsia's zircon/system/utest/core/channel/channel.cc.
 //! Test names match the C++ originals exactly.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};

@@ -8,6 +8,9 @@
 //! `VdsoConstants::set_version_string()`. We access it through the
 //! HAL's `vdso_constants()` function.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 
 /// Helper: get the version string from VdsoConstants via the HAL.

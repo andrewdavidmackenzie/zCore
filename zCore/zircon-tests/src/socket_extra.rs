@@ -3,6 +3,9 @@
 //! These are NOT 1:1 ports of C++ core-tests. They exercise
 //! kernel-object-level APIs and zCore-specific behavior.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::ipc::Socket;
 use zircon_object::object::{KernelObject, Signal};

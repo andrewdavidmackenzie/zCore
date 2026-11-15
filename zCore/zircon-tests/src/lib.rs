@@ -24,9 +24,11 @@
 
 #![cfg_attr(not(feature = "libos"), no_std)]
 
+#[macro_use]
 extern crate alloc;
 #[cfg(any(test, feature = "baremetal-test"))]
 mod helpers;
+mod prelude;
 #[cfg(any(test, feature = "baremetal-test"))]
 mod test_runtime;
 

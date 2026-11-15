@@ -7,6 +7,9 @@
 //! pthread barriers and FSGSBASE instructions. This is x86-specific
 //! hardware functionality not available in libos mode.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use zircon_object::object::KernelObject;
 
 /// C++: TEST(RegisterStateTest, ContextSwitchOfGsBase)

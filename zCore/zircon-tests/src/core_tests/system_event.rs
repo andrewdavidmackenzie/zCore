@@ -14,6 +14,9 @@
 
 extern crate alloc;
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::Event;

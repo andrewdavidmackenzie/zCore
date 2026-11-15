@@ -5,6 +5,7 @@
 //! core-tests pattern.
 
 use crate::helpers::TestContext;
+use crate::prelude::*;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::object::{Handle, HandleValue, KernelObject, Rights, Signal};
 use zircon_object::task::{Job, Process};

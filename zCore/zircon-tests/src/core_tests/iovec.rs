@@ -3,6 +3,9 @@
 //! 1:1 ports of Fuchsia's zircon/system/utest/core/channel-iovec/iovec.cc.
 //! Tests verify iovec-based channel write and call with various edge cases.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::ipc::MessagePacket;

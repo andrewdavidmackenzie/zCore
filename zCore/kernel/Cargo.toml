@@ -19,7 +19,7 @@ doc = false
 # Print colorless logs
 colorless-log = []
 thead-maee = ["hal-impl/thead-maee"]
-baremetal-test = ["executor/baremetal-test"]
+baremetal-test = ["executor/baremetal-test", "dep:zircon-tests", "zircon-tests/baremetal-test"]
 lockdep = ["zircon-object/lockdep"]
 
 # --- Flavour ---
@@ -82,6 +82,7 @@ lock = { path = "../lock" }
 executor = { path = "../executor" }
 zcore-fs = { path = "../vfs/zcore-fs" }
 zcore-sfs = { path = "../vfs/zcore-sfs" }
+zircon-tests = { path = "../zircon-tests", default-features = false, optional = true }
 
 # LibOS mode
 [target.'cfg(not(target_os = "none"))'.dependencies]

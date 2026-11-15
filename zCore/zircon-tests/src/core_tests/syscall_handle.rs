@@ -5,6 +5,7 @@
 //! operations and rights enforcement.
 
 use crate::helpers::TestContext;
+use crate::prelude::*;
 use hal_impl::user::UserOutPtr;
 use zircon_object::object::{Handle, HandleValue, Rights};
 use zircon_object::ZxError;

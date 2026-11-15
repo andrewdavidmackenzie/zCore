@@ -5,6 +5,9 @@
 //! lifecycle edge cases (kill, suspend, TLS) that complement the
 //! 1:1 tests in core_tests/thread.rs.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::{self, TestContext};
 use hal_impl::user::UserOutPtr;
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};

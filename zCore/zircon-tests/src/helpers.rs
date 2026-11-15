@@ -3,6 +3,9 @@
 
 #![allow(dead_code)]
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::future::Future;
@@ -16,8 +19,11 @@ extern crate alloc;
 type HandleValue = u32;
 
 /// One-time HAL initialization for libos mode.
+/// On bare-metal, the kernel already initializes the HAL.
+#[cfg(feature = "libos")]
 static INIT: spin::Once<()> = spin::Once::new();
 
+#[cfg(feature = "libos")]
 pub fn ensure_hal_init() {
     INIT.call_once(|| {
         hal_impl::init();
@@ -25,6 +31,11 @@ pub fn ensure_hal_init() {
         // pages are handled by the Zircon kernel's page fault handler.
         hal_impl::libos_cow::register_cow_callback(zircon_object::vm::vmar::cow_fault_callback);
     });
+}
+
+#[cfg(not(feature = "libos"))]
+pub fn ensure_hal_init() {
+    // On bare-metal, HAL is already initialized by the kernel.
 }
 
 /// Thread function placeholder for the Syscall struct.

@@ -2,6 +2,9 @@
 //!
 //! Mirrors tests from zircon/system/utest/core/vmo/.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};
 use zircon_object::task::{Job, Process};

@@ -3,6 +3,9 @@
 //! Tests for IPC object limits: maximum message sizes, handle counts,
 //! and queue depths.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::ipc::{Channel, Fifo, MessagePacket, Socket};
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};

@@ -4,6 +4,9 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 extern crate alloc;
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::core_tests::pager::create_pager_and_port;
 use crate::helpers::TestContext;
 use zircon_object::object::KernelObject;

@@ -8,6 +8,9 @@
 
 extern crate alloc;
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::object::{HandleValue, KernelObject};

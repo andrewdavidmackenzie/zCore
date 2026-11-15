@@ -3,6 +3,9 @@
 //! All tests use the syscall layer (Syscall struct) rather than
 //! direct kernel object methods, matching the C++ core-tests pattern.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::object::{HandleValue, KernelObject, Rights, Signal};

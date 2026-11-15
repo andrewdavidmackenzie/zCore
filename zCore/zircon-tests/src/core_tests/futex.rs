@@ -1,5 +1,8 @@
 //! Futex syscall tests.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::signal::Futex;
 

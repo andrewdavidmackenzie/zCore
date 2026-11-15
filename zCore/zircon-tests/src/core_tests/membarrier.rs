@@ -5,6 +5,9 @@
 //! zCore has no membarrier syscall. These tests verify that
 //! basic memory ordering via volatile reads/writes is correct.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::vm::VmObject;
 

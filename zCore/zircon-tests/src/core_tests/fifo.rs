@@ -1,5 +1,8 @@
 //! FIFO syscall tests.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::ipc::Fifo;
 use zircon_object::object::{KernelObject, Signal};

@@ -653,13 +653,19 @@ pub fn run_all() {
     register_fs_non_thread();
     register_fs_nonuser();
     register_fs_other_thread();
-    register_fs_too_small();
+    #[cfg(target_arch = "x86_64")]
+    {
+        register_fs_too_small();
+    }
     register_gs();
     register_gs_fault();
     register_gs_non_thread();
     register_gs_nonuser();
     register_gs_other_thread();
-    register_gs_too_small();
+    #[cfg(target_arch = "x86_64")]
+    {
+        register_gs_too_small();
+    }
     socket_buffer();
     thread_name();
     vmo_name();

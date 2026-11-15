@@ -12,6 +12,7 @@
 //! running these tests on hardware without TBI support.
 
 use crate::helpers::TestContext;
+use crate::prelude::*;
 use zircon_object::task::{Job, Process, Thread};
 use zircon_object::vm::{MMUFlags, VmObject, VmarFlags, VmarOpType, PAGE_SIZE};
 use zircon_object::ZxError;

@@ -1,6 +1,7 @@
 //! Handle syscall tests.
 
 use crate::helpers::TestContext;
+use crate::prelude::*;
 use zircon_object::ipc::Channel;
 use zircon_object::object::{Handle, KernelObject, Rights};
 use zircon_object::ZxError;

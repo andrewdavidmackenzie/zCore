@@ -3,6 +3,9 @@
 //! Tests for the DebugLog kernel object: creation, write, read,
 //! and invalid options handling.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 
 use zircon_object::debuglog::{DebugLog, Severity, DLOG_MAX_LEN};

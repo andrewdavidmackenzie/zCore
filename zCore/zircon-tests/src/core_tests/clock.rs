@@ -3,6 +3,9 @@
 //! Tests for the monotonic clock (vDSO path) and clock kernel objects
 //! (sys_clock_create / sys_clock_read / sys_clock_update / sys_clock_get_details).
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 
 use hal_impl::user::{UserInPtr, UserOutPtr};

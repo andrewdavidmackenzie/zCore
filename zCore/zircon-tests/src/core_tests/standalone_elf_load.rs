@@ -15,6 +15,9 @@
 //!   prebuilt/zircon-test/x86_64/standalone-elf-load-test-module.so
 //!   prebuilt/zircon-test/aarch64/standalone-elf-load-test-module.so
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use xmas_elf::symbol_table::Entry;
 use zircon_object::task::{Job, Process};

@@ -15,6 +15,9 @@
 //!
 //! C++ source: zircon/system/utest/core/sync-completion/completion.cc
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use core::sync::atomic::{AtomicI32, Ordering};
 use zircon_object::signal::Futex;

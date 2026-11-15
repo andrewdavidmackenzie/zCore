@@ -2550,10 +2550,19 @@ pub async fn run_all() {
     bad_syscall_caller().await;
     bad_syscall_number().await;
     basics().await;
-    debug_registers_dr6_correct_after_breakpoint_removal();
-    debug_registers_dr6_reset_on_debug_exception();
+    #[cfg(target_arch = "x86_64")]
+    {
+        debug_registers_dr6_correct_after_breakpoint_removal();
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        debug_registers_dr6_reset_on_debug_exception();
+    }
     debug_registers_validation();
-    debug_registers_watchpoint_syscall_panic_repro();
+    #[cfg(target_arch = "x86_64")]
+    {
+        debug_registers_watchpoint_syscall_panic_repro();
+    }
     empty_name_succeeds();
     exit_via_exception().await;
     get_affinity();
@@ -2564,8 +2573,14 @@ pub async fn run_all() {
     info_thread_stats_fails();
     invalid_rights();
     long_name_succeeds();
-    noncanonical_rip_address_iretq();
-    noncanonical_rip_address_syscall();
+    #[cfg(target_arch = "x86_64")]
+    {
+        noncanonical_rip_address_iretq();
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        noncanonical_rip_address_syscall();
+    }
     nonstarted_thread();
     process_start_on_second_thread().await;
     reading_fp_register_state().await;
@@ -2573,7 +2588,10 @@ pub async fn run_all() {
     reading_vector_register_state().await;
     resume_suspended().await;
     start_regs();
-    start_regs_noncanonical_tp();
+    #[cfg(target_arch = "x86_64")]
+    {
+        start_regs_noncanonical_tp();
+    }
     start_regs_suspended().await;
     start_suspended_and_resumed_thread().await;
     start_suspended_thread().await;
@@ -2591,15 +2609,24 @@ pub async fn run_all() {
     thread_start_invalid_entry();
     thread_start_on_initial_thread().await;
     thread_start_with_zero_instruction_pointer().await;
-    watchpoint_syscall_panic();
+    #[cfg(target_arch = "x86_64")]
+    {
+        watchpoint_syscall_panic();
+    }
     write_read_debug_register_state();
-    write_thread_state_with_invalid_mxcsr_is_invalid_args();
+    #[cfg(target_arch = "x86_64")]
+    {
+        write_thread_state_with_invalid_mxcsr_is_invalid_args();
+    }
     writing_fp_register_state().await;
     writing_general_register_state().await;
     writing_single_step_state();
     writing_vector_register_state().await;
     writing_vector_register_state_unsupported_fields_ignored();
-    x86_ac_flag_user_copy();
+    #[cfg(target_arch = "x86_64")]
+    {
+        x86_ac_flag_user_copy();
+    }
     yield_with_non_zero_option_is_invalid_args().await;
     yield_with_zero_option_is_ok().await;
 }

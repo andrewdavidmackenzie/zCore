@@ -43,6 +43,13 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) {
     hal_impl::memory::insert_regions(&hal_impl::mem::free_pmem_regions());
     hal_impl::primary_init();
 
+    // Run built-in Rust test suite if requested via ROOTPROC=__test__.
+    #[cfg(feature = "baremetal-test")]
+    if options.root_proc.starts_with("__test__") {
+        STARTED.store(true, Ordering::SeqCst);
+        run_builtin_tests()
+    }
+
     let proc = boot_init(options);
     // Release secondary cores AFTER the init process is created.
     // If released earlier, idle APs enter the executor loop and
@@ -238,6 +245,21 @@ fn check_exit_code(proc: Arc<Process>) -> i32 {
         )
     }
     code as i32
+}
+
+// ── Built-in test runner ─────────────────────────────────────────────
+
+#[cfg(feature = "baremetal-test")]
+fn run_builtin_tests() -> ! {
+    info!("=== Running built-in Rust zircon-tests ===");
+    let future = async {
+        zircon_tests::run_all().await;
+        info!("=== All tests passed ===");
+        0i32
+    };
+    let exit_code = hal_impl::run_executor(future);
+    info!("test runner exiting with code {}", exit_code);
+    hal_impl::cpu::reset()
 }
 
 // ── Boot options ─────────────────────────────────────────────────────

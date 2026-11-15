@@ -4,6 +4,9 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 extern crate alloc;
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::object::KernelObject;
 use zircon_object::signal::{PayloadRepr, Port, PortPacket, PortPacketRepr};
