@@ -32,7 +32,7 @@ fn main_thread_stack() {
     let heap_addr = &*heap_var as *const i32 as usize;
 
     thread_local! {
-        static TLS_VAR: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
+        static TLS_VAR: core::cell::Cell<i32> = const { core::cell::Cell::new(0) };
     }
     let tls_addr = TLS_VAR.with(|v| v as *const _ as usize);
 

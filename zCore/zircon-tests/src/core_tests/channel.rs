@@ -794,7 +794,7 @@ fn no_spurious_readable_signal_when_racing() {
     const ITERATIONS: usize = 100;
 
     let (a, b) = Channel::create();
-    let _a_obj: std::sync::Arc<dyn KernelObject> = a.clone();
+    let _a_obj: alloc::sync::Arc<dyn KernelObject> = a.clone();
 
     for _ in 0..ITERATIONS {
         // Write one message.
@@ -830,9 +830,10 @@ fn no_spurious_readable_signal_when_racing() {
 ///   - Each reader's values are monotonically increasing
 #[async_std::test]
 async fn concurrent_reads_consume_unique_elements() {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex};
-    use std::vec::Vec;
+    use alloc::sync::Arc;
+    use alloc::vec::Vec;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use lock::KernelMutex as Mutex;
     use zircon_object::task::{CurrentThread, Job, Process, Thread};
 
     let _ctx = TestContext::new();
@@ -901,7 +902,7 @@ async fn concurrent_reads_consume_unique_elements() {
                     }
                 }
             }
-            reader_state.values.lock().unwrap()[reader_idx] = my_values;
+            reader_state.values.lock()[reader_idx] = my_values;
             reader_state.done_count.fetch_add(1, Ordering::Release);
         })
     }
@@ -913,16 +914,16 @@ async fn concurrent_reads_consume_unique_elements() {
     t2.start(reader_fn).unwrap();
 
     // Wait for both to finish.
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
     while state.done_count.load(Ordering::Acquire) < 2 {
-        if std::time::Instant::now() >= deadline {
+        if hal_impl::timer::timer_now() >= deadline {
             panic!("readers didn't finish in time");
         }
         crate::test_runtime::yield_now().await;
     }
 
     // Verify: all 2000 values consumed, no duplicates, monotonic per reader.
-    let values = state.values.lock().unwrap();
+    let values = state.values.lock();
     let mut all: Vec<u64> = values[0].iter().chain(values[1].iter()).copied().collect();
     all.sort();
     all.dedup();
@@ -953,8 +954,8 @@ async fn concurrent_reads_consume_unique_elements() {
 /// written channel becomes READABLE while the other stays empty.
 #[async_std::test]
 async fn wait_many_is_signaled_on_any_element_write() {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
+    use alloc::sync::Arc;
+    use core::sync::atomic::{AtomicBool, Ordering};
     use zircon_object::task::{CurrentThread, Job, Process, Thread};
 
     let _ctx = TestContext::new();
@@ -970,8 +971,8 @@ async fn wait_many_is_signaled_on_any_element_write() {
         remote_1: Arc<Channel>,
         remote_2: Arc<Channel>,
         event: Arc<Event>,
-        bytes_from_1: std::sync::atomic::AtomicU32,
-        bytes_from_2: std::sync::atomic::AtomicU32,
+        bytes_from_1: core::sync::atomic::AtomicU32,
+        bytes_from_2: core::sync::atomic::AtomicU32,
         done: AtomicBool,
     }
 
@@ -979,8 +980,8 @@ async fn wait_many_is_signaled_on_any_element_write() {
         remote_1: remote_1.clone(),
         remote_2: remote_2.clone(),
         event: event.clone(),
-        bytes_from_1: std::sync::atomic::AtomicU32::new(0),
-        bytes_from_2: std::sync::atomic::AtomicU32::new(0),
+        bytes_from_1: core::sync::atomic::AtomicU32::new(0),
+        bytes_from_2: core::sync::atomic::AtomicU32::new(0),
         done: AtomicBool::new(false),
     });
 
@@ -1029,9 +1030,9 @@ async fn wait_many_is_signaled_on_any_element_write() {
         .unwrap();
 
     // Wait for worker to finish.
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
     while !state.done.load(Ordering::Acquire) {
-        if std::time::Instant::now() >= deadline {
+        if hal_impl::timer::timer_now() >= deadline {
             panic!("worker didn't finish");
         }
         crate::test_runtime::yield_now().await;

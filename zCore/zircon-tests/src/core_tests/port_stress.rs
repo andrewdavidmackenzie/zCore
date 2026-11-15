@@ -14,9 +14,9 @@ use zircon_object::signal::{Event, PayloadRepr, Port, PortPacket, PortPacketRepr
 extern crate alloc;
 use alloc::sync::Arc;
 use alloc::vec;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use core::time::Duration;
 use std::thread;
-use std::time::Duration;
 
 /// Try to dequeue one packet from the port. Returns `Some(packet)` if
 /// a packet was available, `None` otherwise.
@@ -767,7 +767,7 @@ fn cancel_key_close_race() {
             }
             // Variable-length spin to spread out timing (like C++ asm volatile loop).
             for _ in 0..(t * 100) {
-                std::hint::spin_loop();
+                core::hint::spin_loop();
             }
             // Close the event (take and drop).
             let _ = slot.lock().unwrap().take();

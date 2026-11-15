@@ -33,12 +33,12 @@ async fn process_get_info_runtime() {
 
     // Kill and wait
     thread.kill();
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
     loop {
         if thread.state() == ThreadState::Dead {
             break;
         }
-        if std::time::Instant::now() >= deadline {
+        if hal_impl::timer::timer_now() >= deadline {
             break;
         }
         crate::test_runtime::yield_now().await;
@@ -64,12 +64,12 @@ async fn process_get_info_runtime_v1() {
     let _time = thread.get_time();
 
     thread.kill();
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
     loop {
         if thread.state() == ThreadState::Dead {
             break;
         }
-        if std::time::Instant::now() >= deadline {
+        if hal_impl::timer::timer_now() >= deadline {
             break;
         }
         crate::test_runtime::yield_now().await;

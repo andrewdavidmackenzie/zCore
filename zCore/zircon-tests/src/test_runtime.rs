@@ -1,13 +1,14 @@
 //! Test runtime abstraction layer.
 //!
-//! Provides `block_on`, `yield_now`, `sleep`, and `spawn` functions
-//! that delegate to `async_std` in libos mode and will use the kernel
-//! executor in bare-metal (QEMU) mode.
+//! Provides `block_on`, `yield_now`, `sleep`, `spawn`, and `timeout`
+//! that delegate to `async_std` in libos mode. When compiled for
+//! bare-metal (QEMU), these will use the kernel executor instead.
 //!
 //! All test code should use `crate::test_runtime::*` instead of
-//! `async_std::task::*` directly, enabling future bare-metal execution.
+//! `async_std::task::*` directly.
 
 /// Run a future to completion synchronously.
+/// Only used in port_stress.rs inside std::thread closures.
 pub fn block_on<F: core::future::Future>(future: F) -> F::Output {
     async_std::task::block_on(future)
 }

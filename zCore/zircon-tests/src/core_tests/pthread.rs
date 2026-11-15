@@ -43,8 +43,8 @@ async fn basic() {
         condvar_waiter_thread_fn, mutex_contender_thread_fn, CondvarWaiterState,
         MutexContenderState, SyncCondition, SyncMutex,
     };
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicBool;
-    use std::sync::Arc;
 
     let ctx = TestContext::new();
     let proc = ctx.proc.clone();
@@ -60,7 +60,7 @@ async fn basic() {
     let predicate = Arc::new(AtomicBool::new(false));
     let woken_counter = Arc::new(core::sync::atomic::AtomicI32::new(0));
 
-    let mut cond_threads = std::vec::Vec::new();
+    let mut cond_threads = alloc::vec::Vec::new();
     for _ in 0..3 {
         let state = CondvarWaiterState::new(
             mutex.clone(),
@@ -79,19 +79,19 @@ async fn basic() {
     predicate.store(true, Ordering::Release);
     cond.broadcast();
 
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     while woken_counter.load(Ordering::SeqCst) < 3 {
-        assert!(std::time::Instant::now() < deadline, "condvar timed out");
+        assert!(hal_impl::timer::timer_now() < deadline, "condvar timed out");
         crate::test_runtime::yield_now().await;
     }
 
     for (thread, _) in &cond_threads {
-        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let dl = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= dl {
+            if hal_impl::timer::timer_now() >= dl {
                 break;
             }
             crate::test_runtime::yield_now().await;
@@ -102,7 +102,7 @@ async fn basic() {
     let mutex2 = Arc::new(SyncMutex::new());
     let counter = Arc::new(core::sync::atomic::AtomicI32::new(0));
 
-    let mut mutex_threads = std::vec::Vec::new();
+    let mut mutex_threads = alloc::vec::Vec::new();
     for &iters in &[10usize, 5, 3] {
         let state = MutexContenderState::new(mutex2.clone(), counter.clone(), iters);
         let thread = Thread::create_with_ext(&proc, "pthread-mutex", state.clone()).unwrap();
@@ -110,10 +110,10 @@ async fn basic() {
         mutex_threads.push((thread, state));
     }
 
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     for (_, state) in &mutex_threads {
         while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
-            assert!(std::time::Instant::now() < deadline, "mutex timed out");
+            assert!(hal_impl::timer::timer_now() < deadline, "mutex timed out");
             crate::test_runtime::yield_now().await;
         }
     }
@@ -121,12 +121,12 @@ async fn basic() {
     assert_eq!(counter.load(Ordering::SeqCst), 18); // 10+5+3
 
     for (thread, _) in &mutex_threads {
-        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let dl = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= dl {
+            if hal_impl::timer::timer_now() >= dl {
                 break;
             }
             crate::test_runtime::yield_now().await;
@@ -191,7 +191,7 @@ async fn big_stack_size() {
 
     // Kill and wait for termination (simulates pthread_join)
     thread.kill();
-    let thread_obj: std::sync::Arc<dyn KernelObject> = thread.clone();
+    let thread_obj: alloc::sync::Arc<dyn KernelObject> = thread.clone();
     thread_obj.wait_signal(Signal::THREAD_TERMINATED).await;
 
     assert!(
@@ -247,7 +247,7 @@ async fn getstack_other_thread() {
 
     // Kill and join (pthread_join)
     thread.kill();
-    let thread_obj: std::sync::Arc<dyn KernelObject> = thread.clone();
+    let thread_obj: alloc::sync::Arc<dyn KernelObject> = thread.clone();
     thread_obj.wait_signal(Signal::THREAD_TERMINATED).await;
 }
 
@@ -272,6 +272,6 @@ async fn getstack_other_thread_explicit_size() {
 
     // Kill and join (pthread_join)
     thread.kill();
-    let thread_obj: std::sync::Arc<dyn KernelObject> = thread.clone();
+    let thread_obj: alloc::sync::Arc<dyn KernelObject> = thread.clone();
     thread_obj.wait_signal(Signal::THREAD_TERMINATED).await;
 }

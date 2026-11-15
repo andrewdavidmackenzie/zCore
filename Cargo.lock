@@ -2668,6 +2668,8 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "hal-impl",
+ "lock",
+ "spin 0.9.4",
  "xmas-elf",
  "zircon-object",
  "zircon-syscall",

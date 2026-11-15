@@ -33,7 +33,7 @@ extern crate alloc;
 #[async_std::test]
 async fn mutexes() {
     use crate::helpers::{mutex_contender_thread_fn, MutexContenderState, SyncMutex};
-    use std::sync::Arc;
+    use alloc::sync::Arc;
     use zircon_object::task::Thread;
 
     let ctx = TestContext::new();
@@ -44,7 +44,7 @@ async fn mutexes() {
 
     // C++: 3 threads with 300, 150, 100 iterations — scale down for speed
     let iterations = [30, 15, 10];
-    let mut threads = std::vec::Vec::new();
+    let mut threads = alloc::vec::Vec::new();
     for &iters in &iterations {
         let state = MutexContenderState::new(mutex.clone(), counter.clone(), iters);
         let thread = Thread::create_with_ext(&proc, "mutex-contender", state.clone()).unwrap();
@@ -53,11 +53,11 @@ async fn mutexes() {
     }
 
     // Wait for all threads to finish
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     for (_, state) in &threads {
         while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
             assert!(
-                std::time::Instant::now() < deadline,
+                hal_impl::timer::timer_now() < deadline,
                 "mutex contender thread timed out"
             );
             crate::test_runtime::yield_now().await;
@@ -66,12 +66,12 @@ async fn mutexes() {
 
     // Wait for threads to terminate
     for (thread, _) in &threads {
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= deadline {
+            if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
             crate::test_runtime::yield_now().await;

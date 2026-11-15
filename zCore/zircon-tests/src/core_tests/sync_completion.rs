@@ -49,7 +49,7 @@ async fn single_wait() {
     use crate::helpers::{CompletionTestThread, SyncCompletion};
 
     let _ctx = TestContext::new();
-    let completion = std::sync::Arc::new(SyncCompletion::new());
+    let completion = alloc::sync::Arc::new(SyncCompletion::new());
     let proc = _ctx.proc.clone();
 
     // C++: thread.StartAndBlock("TestWait", &completion)
@@ -76,7 +76,7 @@ async fn multi_wait() {
     use crate::helpers::{CompletionTestThread, SyncCompletion};
 
     let _ctx = TestContext::new();
-    let completion = std::sync::Arc::new(SyncCompletion::new());
+    let completion = alloc::sync::Arc::new(SyncCompletion::new());
     let proc = _ctx.proc.clone();
 
     // C++: kMultiWaitThreadCount = 16 — use 4 to keep test fast
@@ -319,7 +319,7 @@ async fn signal_requeue() {
     use core::sync::atomic::AtomicI32;
 
     let _ctx = TestContext::new();
-    let completion = std::sync::Arc::new(SyncCompletion::new());
+    let completion = alloc::sync::Arc::new(SyncCompletion::new());
     let proc = _ctx.proc.clone();
 
     // C++: 16 threads — use 4 to keep test fast
@@ -331,9 +331,9 @@ async fn signal_requeue() {
     crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
 
     // C++: zx_futex_t futex = 0; sync_completion_signal_requeue(&completion, &futex, ...)
-    let requeue_value = std::sync::Arc::new(AtomicI32::new(0));
+    let requeue_value = alloc::sync::Arc::new(AtomicI32::new(0));
     let requeue_futex =
-        Futex::new(std::sync::Arc::as_ptr(&requeue_value) as *const AtomicI32 as usize);
+        Futex::new(alloc::sync::Arc::as_ptr(&requeue_value) as *const AtomicI32 as usize);
     completion.signal_requeue(&requeue_futex);
 
     // C++: zx_nanosleep(ZX_MSEC(100)) — verify threads still blocked
@@ -367,7 +367,7 @@ async fn spurious_wakeup_handled() {
     use crate::helpers::{CompletionTestThread, SyncCompletion};
 
     let _ctx = TestContext::new();
-    let completion = std::sync::Arc::new(SyncCompletion::new());
+    let completion = alloc::sync::Arc::new(SyncCompletion::new());
     let proc = _ctx.proc.clone();
 
     let t = CompletionTestThread::start(&proc, &completion);

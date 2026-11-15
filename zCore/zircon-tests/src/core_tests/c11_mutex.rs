@@ -32,7 +32,7 @@ use zircon_object::signal::Futex;
 #[async_std::test]
 async fn multi_threaded_contention() {
     use crate::helpers::{mutex_contender_thread_fn, MutexContenderState, SyncMutex};
-    use std::sync::Arc;
+    use alloc::sync::Arc;
     use zircon_object::task::Thread;
 
     let ctx = TestContext::new();
@@ -43,7 +43,7 @@ async fn multi_threaded_contention() {
 
     // C++: 3 threads with 300, 150, 100 iterations — scaled down
     let iterations = [30, 15, 10];
-    let mut threads = std::vec::Vec::new();
+    let mut threads = alloc::vec::Vec::new();
     for &iters in &iterations {
         let state = MutexContenderState::new(mutex.clone(), counter.clone(), iters);
         let thread = Thread::create_with_ext(&proc, "c11-mutex-contender", state.clone()).unwrap();
@@ -51,21 +51,21 @@ async fn multi_threaded_contention() {
         threads.push((thread, state));
     }
 
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     for (_, state) in &threads {
         while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
-            assert!(std::time::Instant::now() < deadline, "timed out");
+            assert!(hal_impl::timer::timer_now() < deadline, "timed out");
             crate::test_runtime::yield_now().await;
         }
     }
 
     for (thread, _) in &threads {
-        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let dl = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= dl {
+            if hal_impl::timer::timer_now() >= dl {
                 break;
             }
             crate::test_runtime::yield_now().await;

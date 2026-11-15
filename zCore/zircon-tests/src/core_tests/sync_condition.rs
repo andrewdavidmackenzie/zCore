@@ -34,8 +34,8 @@ use zircon_object::signal::Futex;
 #[async_std::test]
 async fn condition_test() {
     use crate::helpers::{condvar_waiter_thread_fn, CondvarWaiterState, SyncCondition, SyncMutex};
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicBool;
-    use std::sync::Arc;
     use zircon_object::task::Thread;
 
     let ctx = TestContext::new();
@@ -47,7 +47,7 @@ async fn condition_test() {
     let woken_counter = Arc::new(AtomicI32::new(0));
 
     // C++: 3 threads each do cond.wait → broadcast → verify woken
-    let mut threads = std::vec::Vec::new();
+    let mut threads = alloc::vec::Vec::new();
     for _ in 0..3 {
         let state = CondvarWaiterState::new(
             mutex.clone(),
@@ -69,10 +69,10 @@ async fn condition_test() {
     cond.broadcast();
 
     // Wait for all threads to wake and finish
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     while woken_counter.load(Ordering::SeqCst) < 3 {
         assert!(
-            std::time::Instant::now() < deadline,
+            hal_impl::timer::timer_now() < deadline,
             "condvar threads timed out"
         );
         crate::test_runtime::yield_now().await;
@@ -81,12 +81,12 @@ async fn condition_test() {
 
     // Wait for threads to terminate
     for (thread, _) in &threads {
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= deadline {
+            if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
             crate::test_runtime::yield_now().await;

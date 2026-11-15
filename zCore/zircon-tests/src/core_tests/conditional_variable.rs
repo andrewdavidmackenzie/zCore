@@ -33,8 +33,8 @@ use zircon_object::signal::Futex;
 #[async_std::test]
 async fn broadcast_signal_thread_wait() {
     use crate::helpers::{condvar_waiter_thread_fn, CondvarWaiterState, SyncCondition, SyncMutex};
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicBool;
-    use std::sync::Arc;
     use zircon_object::task::Thread;
 
     let ctx = TestContext::new();
@@ -45,7 +45,7 @@ async fn broadcast_signal_thread_wait() {
     let predicate = Arc::new(AtomicBool::new(false));
     let woken_counter = Arc::new(AtomicI32::new(0));
 
-    let mut threads = std::vec::Vec::new();
+    let mut threads = alloc::vec::Vec::new();
     for _ in 0..3 {
         let state = CondvarWaiterState::new(
             mutex.clone(),
@@ -64,20 +64,20 @@ async fn broadcast_signal_thread_wait() {
     predicate.store(true, Ordering::Release);
     cond.broadcast();
 
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     while woken_counter.load(Ordering::SeqCst) < 3 {
-        assert!(std::time::Instant::now() < deadline, "timed out");
+        assert!(hal_impl::timer::timer_now() < deadline, "timed out");
         crate::test_runtime::yield_now().await;
     }
     assert_eq!(woken_counter.load(Ordering::SeqCst), 3);
 
     for (thread, _) in &threads {
-        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let dl = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= dl {
+            if hal_impl::timer::timer_now() >= dl {
                 break;
             }
             crate::test_runtime::yield_now().await;
@@ -101,8 +101,8 @@ async fn broadcast_signal_thread_wait() {
 #[async_std::test]
 async fn signal_thread_wait() {
     use crate::helpers::{condvar_waiter_thread_fn, CondvarWaiterState, SyncCondition, SyncMutex};
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicBool;
-    use std::sync::Arc;
     use zircon_object::task::Thread;
 
     let ctx = TestContext::new();
@@ -113,7 +113,7 @@ async fn signal_thread_wait() {
     let predicate = Arc::new(AtomicBool::new(false));
     let woken_counter = Arc::new(AtomicI32::new(0));
 
-    let mut threads = std::vec::Vec::new();
+    let mut threads = alloc::vec::Vec::new();
     for _ in 0..3 {
         let state = CondvarWaiterState::new(
             mutex.clone(),
@@ -133,10 +133,10 @@ async fn signal_thread_wait() {
     predicate.store(true, Ordering::Release);
     for i in 1..=3 {
         cond.signal();
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+        let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
         while woken_counter.load(Ordering::SeqCst) < i {
             assert!(
-                std::time::Instant::now() < deadline,
+                hal_impl::timer::timer_now() < deadline,
                 "timed out waiting for thread {}",
                 i
             );
@@ -149,12 +149,12 @@ async fn signal_thread_wait() {
     assert_eq!(woken_counter.load(Ordering::SeqCst), 3);
 
     for (thread, _) in &threads {
-        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let dl = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= dl {
+            if hal_impl::timer::timer_now() >= dl {
                 break;
             }
             crate::test_runtime::yield_now().await;

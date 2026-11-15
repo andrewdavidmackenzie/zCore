@@ -16,7 +16,7 @@ extern crate alloc;
 type HandleValue = u32;
 
 /// One-time HAL initialization for libos mode.
-static INIT: std::sync::Once = std::sync::Once::new();
+static INIT: spin::Once<()> = spin::Once::new();
 
 pub fn ensure_hal_init() {
     INIT.call_once(|| {
@@ -211,10 +211,10 @@ impl FutexTestThread {
     /// Polls in a loop, yielding to the scheduler. Panics if the
     /// thread does not wake within a reasonable time.
     pub async fn wait_until_woken(&self) {
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+        let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
         while !self.has_wait_returned() {
             assert!(
-                std::time::Instant::now() < deadline,
+                hal_impl::timer::timer_now() < deadline,
                 "FutexTestThread: timed out waiting for thread to wake"
             );
             // Yield to let the waiter thread make progress
@@ -234,12 +234,12 @@ impl FutexTestThread {
             self.thread.kill();
         }
         // Give the thread time to finish its cleanup and terminate.
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if self.thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= deadline {
+            if hal_impl::timer::timer_now() >= deadline {
                 // Thread did not terminate — force it.
                 // This can happen if the async runtime hasn't scheduled
                 // the thread's task yet.
@@ -264,10 +264,10 @@ pub async fn assert_woke_thread_count(threads: &[FutexTestThread], target: usize
     assert!(target <= threads.len());
 
     // Wait until the target count is reached
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     while count_woken(threads) < target {
         assert!(
-            std::time::Instant::now() < deadline,
+            hal_impl::timer::timer_now() < deadline,
             "timed out waiting for {} threads to wake (currently {})",
             target,
             count_woken(threads)
@@ -304,15 +304,15 @@ const SYNC_SIGNALED: i32 = 2;
 /// sync_completion in libsync, so the tests exercise the same
 /// kernel futex_wait/futex_wake code paths.
 pub struct SyncCompletion {
-    pub value: std::sync::Arc<core::sync::atomic::AtomicI32>,
+    pub value: alloc::sync::Arc<core::sync::atomic::AtomicI32>,
     pub futex: Arc<Futex>,
 }
 
 impl SyncCompletion {
     pub fn new() -> Self {
-        let value = std::sync::Arc::new(core::sync::atomic::AtomicI32::new(SYNC_UNSIGNALED));
+        let value = alloc::sync::Arc::new(core::sync::atomic::AtomicI32::new(SYNC_UNSIGNALED));
         let futex = Futex::new(
-            std::sync::Arc::as_ptr(&value) as *const core::sync::atomic::AtomicI32 as usize
+            alloc::sync::Arc::as_ptr(&value) as *const core::sync::atomic::AtomicI32 as usize
         );
         SyncCompletion { value, futex }
     }
@@ -354,13 +354,13 @@ impl SyncCompletion {
 
 /// Shared state for a sync_completion waiter thread.
 pub struct CompletionWaiterState {
-    pub completion: std::sync::Arc<SyncCompletion>,
+    pub completion: alloc::sync::Arc<SyncCompletion>,
     pub state: AtomicU32,
     pub wait_result: AtomicU32,
 }
 
 impl CompletionWaiterState {
-    pub fn new(completion: std::sync::Arc<SyncCompletion>) -> Arc<Self> {
+    pub fn new(completion: alloc::sync::Arc<SyncCompletion>) -> Arc<Self> {
         Arc::new(Self {
             completion,
             state: AtomicU32::new(WAITER_STATE_WAITING_TO_START),
@@ -463,7 +463,7 @@ pub struct CompletionTestThread {
 }
 
 impl CompletionTestThread {
-    pub fn start(proc: &Arc<Process>, completion: &std::sync::Arc<SyncCompletion>) -> Self {
+    pub fn start(proc: &Arc<Process>, completion: &alloc::sync::Arc<SyncCompletion>) -> Self {
         let waiter_state = CompletionWaiterState::new(completion.clone());
         let thread =
             Thread::create_with_ext(proc, "completion-waiter", waiter_state.clone()).unwrap();
@@ -483,10 +483,10 @@ impl CompletionTestThread {
     }
 
     pub async fn wait_until_woken(&self) {
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+        let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
         while !self.has_wait_returned() {
             assert!(
-                std::time::Instant::now() < deadline,
+                hal_impl::timer::timer_now() < deadline,
                 "CompletionTestThread: timed out waiting for thread to wake"
             );
             crate::test_runtime::yield_now().await;
@@ -497,12 +497,12 @@ impl CompletionTestThread {
         if !self.has_wait_returned() {
             self.thread.kill();
         }
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if self.thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= deadline {
+            if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
             crate::test_runtime::yield_now().await;
@@ -522,15 +522,15 @@ const MUTEX_LOCKED_WITH_WAITERS: i32 = 2;
 
 /// A sync_mutex_t equivalent built on Futex + AtomicI32.
 pub struct SyncMutex {
-    pub value: std::sync::Arc<core::sync::atomic::AtomicI32>,
+    pub value: alloc::sync::Arc<core::sync::atomic::AtomicI32>,
     pub futex: Arc<Futex>,
 }
 
 impl SyncMutex {
     pub fn new() -> Self {
-        let value = std::sync::Arc::new(core::sync::atomic::AtomicI32::new(MUTEX_UNLOCKED));
+        let value = alloc::sync::Arc::new(core::sync::atomic::AtomicI32::new(MUTEX_UNLOCKED));
         let futex = Futex::new(
-            std::sync::Arc::as_ptr(&value) as *const core::sync::atomic::AtomicI32 as usize
+            alloc::sync::Arc::as_ptr(&value) as *const core::sync::atomic::AtomicI32 as usize
         );
         SyncMutex { value, futex }
     }
@@ -580,15 +580,15 @@ impl SyncMutex {
 
 /// A sync_condition_t equivalent built on Futex + AtomicI32.
 pub struct SyncCondition {
-    pub value: std::sync::Arc<core::sync::atomic::AtomicI32>,
+    pub value: alloc::sync::Arc<core::sync::atomic::AtomicI32>,
     pub futex: Arc<Futex>,
 }
 
 impl SyncCondition {
     pub fn new() -> Self {
-        let value = std::sync::Arc::new(core::sync::atomic::AtomicI32::new(0));
+        let value = alloc::sync::Arc::new(core::sync::atomic::AtomicI32::new(0));
         let futex = Futex::new(
-            std::sync::Arc::as_ptr(&value) as *const core::sync::atomic::AtomicI32 as usize
+            alloc::sync::Arc::as_ptr(&value) as *const core::sync::atomic::AtomicI32 as usize
         );
         SyncCondition { value, futex }
     }
@@ -617,16 +617,16 @@ impl SyncCondition {
 
 /// Shared state for mutex contention waiter threads.
 pub struct MutexContenderState {
-    pub mutex: std::sync::Arc<SyncMutex>,
-    pub counter: std::sync::Arc<core::sync::atomic::AtomicI32>,
+    pub mutex: alloc::sync::Arc<SyncMutex>,
+    pub counter: alloc::sync::Arc<core::sync::atomic::AtomicI32>,
     pub iterations: usize,
     pub state: AtomicU32,
 }
 
 impl MutexContenderState {
     pub fn new(
-        mutex: std::sync::Arc<SyncMutex>,
-        counter: std::sync::Arc<core::sync::atomic::AtomicI32>,
+        mutex: alloc::sync::Arc<SyncMutex>,
+        counter: alloc::sync::Arc<core::sync::atomic::AtomicI32>,
         iterations: usize,
     ) -> Arc<Self> {
         Arc::new(Self {
@@ -672,19 +672,19 @@ pub fn mutex_contender_thread_fn(
 
 /// Shared state for condvar waiter threads.
 pub struct CondvarWaiterState {
-    pub mutex: std::sync::Arc<SyncMutex>,
-    pub cond: std::sync::Arc<SyncCondition>,
-    pub predicate: std::sync::Arc<core::sync::atomic::AtomicBool>,
-    pub woken_counter: std::sync::Arc<core::sync::atomic::AtomicI32>,
+    pub mutex: alloc::sync::Arc<SyncMutex>,
+    pub cond: alloc::sync::Arc<SyncCondition>,
+    pub predicate: alloc::sync::Arc<core::sync::atomic::AtomicBool>,
+    pub woken_counter: alloc::sync::Arc<core::sync::atomic::AtomicI32>,
     pub state: AtomicU32,
 }
 
 impl CondvarWaiterState {
     pub fn new(
-        mutex: std::sync::Arc<SyncMutex>,
-        cond: std::sync::Arc<SyncCondition>,
-        predicate: std::sync::Arc<core::sync::atomic::AtomicBool>,
-        woken_counter: std::sync::Arc<core::sync::atomic::AtomicI32>,
+        mutex: alloc::sync::Arc<SyncMutex>,
+        cond: alloc::sync::Arc<SyncCondition>,
+        predicate: alloc::sync::Arc<core::sync::atomic::AtomicBool>,
+        woken_counter: alloc::sync::Arc<core::sync::atomic::AtomicI32>,
     ) -> Arc<Self> {
         Arc::new(Self {
             mutex,
@@ -826,12 +826,12 @@ impl EchoServer {
     pub async fn shutdown(self) {
         // Drop client to send PEER_CLOSED to server
         drop(self.client);
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if self.thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= deadline {
+            if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
             crate::test_runtime::yield_now().await;

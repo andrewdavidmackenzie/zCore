@@ -59,7 +59,10 @@ fn poll_vmo_populated_bytes(vmo: &Arc<VmObject>, expected: u64) {
         if vmo_populated_bytes(vmo) == expected {
             return;
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        // Yield to let other tasks run (bare-metal compatible).
+        // On libos, this is a cooperative yield; on bare-metal,
+        // the kernel executor schedules other tasks.
+        core::hint::spin_loop();
     }
 }
 
@@ -1091,8 +1094,8 @@ fn disjoint_clone_test2() {
 /// Regression test for https://fxbug.dev/42133843. 1000 iterations:
 /// create parent + child, race destruction on two std::threads using
 /// an atomic barrier.
-#[test]
-fn drop_children_in_parallel() {
+#[async_std::test]
+async fn drop_children_in_parallel() {
     let _ctx = TestContext::new();
 
     for _iter in 0..1000 {
@@ -1101,23 +1104,23 @@ fn drop_children_in_parallel() {
 
         // Use a three step ready protocol to maximize concurrent
         // destruction timing, matching the C++ test.
-        let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let ready = alloc::sync::Arc::new(core::sync::atomic::AtomicBool::new(true));
 
         let child_move = child;
         let ready_clone = ready.clone();
-        let thread = std::thread::spawn(move || {
-            ready_clone.store(false, std::sync::atomic::Ordering::SeqCst);
-            while !ready_clone.load(std::sync::atomic::Ordering::SeqCst) {
-                std::hint::spin_loop();
+        let handle = crate::test_runtime::spawn(async move {
+            ready_clone.store(false, core::sync::atomic::Ordering::SeqCst);
+            while !ready_clone.load(core::sync::atomic::Ordering::SeqCst) {
+                crate::test_runtime::yield_now().await;
             }
             drop(child_move);
         });
-        while ready.load(std::sync::atomic::Ordering::SeqCst) {
-            std::hint::spin_loop();
+        while ready.load(core::sync::atomic::Ordering::SeqCst) {
+            crate::test_runtime::yield_now().await;
         }
-        ready.store(true, std::sync::atomic::Ordering::SeqCst);
+        ready.store(true, core::sync::atomic::Ordering::SeqCst);
         drop(vmo);
-        thread.join().unwrap();
+        handle.await;
     }
 }
 
@@ -1126,8 +1129,8 @@ fn drop_children_in_parallel() {
 /// create a 3-page parent, clone at offset 1 (2 pages), fork a page,
 /// check fractional populated_bytes, race parent drop with attribution
 /// query on another thread, then poll for final attribution.
-#[test]
-fn drop_parent_committed_bytes() {
+#[async_std::test]
+async fn drop_parent_committed_bytes() {
     let _ctx = TestContext::new();
 
     for _iter in 0..1000 {
@@ -1151,14 +1154,14 @@ fn drop_parent_committed_bytes() {
 
         // Use a three step ready protocol to ensure both threads can issue
         // their requests at close to the same time.
-        let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let ready = alloc::sync::Arc::new(core::sync::atomic::AtomicBool::new(true));
 
         let child_clone = child.clone();
         let ready_clone = ready.clone();
-        let thread = std::thread::spawn(move || {
-            ready_clone.store(false, std::sync::atomic::Ordering::SeqCst);
-            while !ready_clone.load(std::sync::atomic::Ordering::SeqCst) {
-                std::hint::spin_loop();
+        let handle = crate::test_runtime::spawn(async move {
+            ready_clone.store(false, core::sync::atomic::Ordering::SeqCst);
+            while !ready_clone.load(core::sync::atomic::Ordering::SeqCst) {
+                crate::test_runtime::yield_now().await;
             }
             let committed = vmo_populated_bytes(&child_clone);
             // Depending on who wins the race, the child will either continue
@@ -1170,13 +1173,13 @@ fn drop_parent_committed_bytes() {
                 committed
             );
         });
-        while ready.load(std::sync::atomic::Ordering::SeqCst) {
-            std::hint::spin_loop();
+        while ready.load(core::sync::atomic::Ordering::SeqCst) {
+            crate::test_runtime::yield_now().await;
         }
-        ready.store(true, std::sync::atomic::Ordering::SeqCst);
+        ready.store(true, core::sync::atomic::Ordering::SeqCst);
         // Drop the parent.
         drop(vmo);
-        thread.join().unwrap();
+        handle.await;
 
         // Check that we don't change the child.
         vmo_check(&child, 2, 0);

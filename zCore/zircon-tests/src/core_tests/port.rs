@@ -1018,7 +1018,7 @@ fn too_many_observers() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
     let event = zircon_object::signal::Event::new();
-    let event_obj: std::sync::Arc<dyn zircon_object::object::KernelObject> = event.clone();
+    let event_obj: alloc::sync::Arc<dyn zircon_object::object::KernelObject> = event.clone();
 
     // Register wait_async in a loop until we hit the observer limit.
     // The kernel should return NO_MEMORY, not panic.

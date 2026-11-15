@@ -150,8 +150,8 @@ fn wait_timeout() {
 #[async_std::test]
 async fn wakeup() {
     use crate::helpers::FutexTestThread;
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicI32;
-    use std::sync::Arc;
 
     let _ctx = TestContext::new();
     // C++: zx_futex_t futex{1};
@@ -185,8 +185,8 @@ async fn wakeup() {
 #[async_std::test]
 async fn wakeup_limit() {
     use crate::helpers::{assert_woke_thread_count, FutexTestThread};
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicI32;
-    use std::sync::Arc;
 
     let _ctx = TestContext::new();
     // C++: zx_futex_t futex{1};
@@ -231,8 +231,8 @@ async fn wakeup_limit() {
 #[async_std::test]
 async fn requeue() {
     use crate::helpers::{assert_woke_thread_count, FutexTestThread};
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicI32;
-    use std::sync::Arc;
 
     let _ctx = TestContext::new();
     // C++: zx_futex_t futex_value1(100); zx_futex_t futex_value2(200);
@@ -341,8 +341,8 @@ fn requeue_same_addr() {
 #[async_std::test]
 async fn requeue_unqueued_on_timeout() {
     use crate::helpers::{assert_woke_thread_count, FutexTestThread};
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicI32;
-    use std::sync::Arc;
 
     let _ctx = TestContext::new();
     let fv1 = Arc::new(AtomicI32::new(100));
@@ -406,8 +406,8 @@ async fn requeue_unqueued_on_timeout() {
 #[async_std::test]
 async fn thread_suspended() {
     use crate::helpers::FutexTestThread;
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicI32;
-    use std::sync::Arc;
 
     let _ctx = TestContext::new();
     let fv = Arc::new(AtomicI32::new(1));
@@ -455,8 +455,8 @@ async fn thread_suspended() {
 #[async_std::test]
 async fn event_signaling() {
     use crate::helpers::{assert_woke_thread_count, FutexTestThread};
+    use alloc::sync::Arc;
     use core::sync::atomic::{AtomicI32, Ordering};
-    use std::sync::Arc;
 
     let _ctx = TestContext::new();
     // C++: Event event; → signaled_ = 0
@@ -498,8 +498,8 @@ async fn event_signaling() {
 #[async_std::test]
 async fn wait_exit_race() {
     use crate::helpers::FutexTestThread;
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicI32;
-    use std::sync::Arc;
 
     let _ctx = TestContext::new();
     let proc = _ctx.proc.clone();
@@ -531,8 +531,8 @@ async fn wait_exit_race() {
 #[async_std::test]
 async fn requeue_cycle_stress_test() {
     use crate::helpers::FutexTestThread;
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicI32;
-    use std::sync::Arc;
 
     let _ctx = TestContext::new();
     let proc = _ctx.proc.clone();
@@ -582,8 +582,8 @@ async fn requeue_cycle_stress_test() {
 #[async_std::test]
 async fn requeue_single_owner() {
     use crate::helpers::{assert_woke_thread_count, FutexTestThread};
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicI32;
-    use std::sync::Arc;
 
     let _ctx = TestContext::new();
     let fv1 = Arc::new(AtomicI32::new(100));
@@ -629,8 +629,8 @@ async fn requeue_single_owner() {
 #[async_std::test]
 async fn wait_invalid_owner() {
     use crate::helpers::FutexTestThread;
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicI32;
-    use std::sync::Arc;
 
     let _ctx = TestContext::new();
     let fv = Arc::new(AtomicI32::new(42));
@@ -672,8 +672,8 @@ async fn wait_invalid_owner() {
 #[async_std::test]
 async fn requeue_invalid_owner() {
     use crate::helpers::FutexTestThread;
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicI32;
-    use std::sync::Arc;
 
     let _ctx = TestContext::new();
     let fv1 = Arc::new(AtomicI32::new(100));
