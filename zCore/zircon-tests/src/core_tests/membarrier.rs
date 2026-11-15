@@ -11,7 +11,7 @@ use zircon_object::vm::VmObject;
 /// C++: TEST(MembarrierSyncProcessData, Basic)
 /// Verify that data written to a VMO is visible when read back
 /// (simulating data-side memory barrier semantics).
-#[test]
+#[cfg_attr(test, test)]
 fn membarrier_data_basic() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -36,7 +36,7 @@ fn membarrier_data_basic() {
 /// Verify that instruction-side memory barrier semantics work.
 /// In libos mode, instruction barriers are no-ops but we verify
 /// VMO data consistency after write-then-read patterns.
-#[test]
+#[cfg_attr(test, test)]
 fn membarrier_insn_basic() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -49,4 +49,11 @@ fn membarrier_insn_basic() {
     let mut buf = vec![0u8; 256];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf, insn_data, "instruction data should be consistent");
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    membarrier_data_basic();
+    membarrier_insn_basic();
 }

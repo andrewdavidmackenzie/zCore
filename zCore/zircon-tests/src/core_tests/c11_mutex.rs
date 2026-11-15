@@ -29,7 +29,7 @@ use zircon_object::signal::Futex;
 /// mutex waits (futex_wait).
 /// 3 threads concurrently lock/unlock a C11 mutex (futex-based).
 /// Each increments a shared counter. Total must match.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn multi_threaded_contention() {
     use crate::helpers::{mutex_contender_thread_fn, MutexContenderState, SyncMutex};
     use alloc::sync::Arc;
@@ -91,7 +91,7 @@ async fn multi_threaded_contention() {
 /// No futex_wait is involved in trylock.
 ///
 /// In single-threaded mode, we can faithfully test the CAS semantics.
-#[test]
+#[cfg_attr(test, test)]
 fn try_mutex_multi_threaded_contention() {
     let _ctx = TestContext::new();
     let mutex = AtomicI32::new(0);
@@ -133,7 +133,7 @@ fn try_mutex_multi_threaded_contention() {
 /// and initialized.
 ///
 /// At the kernel level, a mutex is just an AtomicI32 initialized to 0.
-#[test]
+#[cfg_attr(test, test)]
 fn initalize_local_mutex() {
     let _ctx = TestContext::new();
     // C++: mtx_init(&auto_mutex, mtx_timed) → thrd_success
@@ -153,7 +153,7 @@ fn initalize_local_mutex() {
 /// has the same byte representation as one initialized with mtx_init.
 ///
 /// At kernel level: both should be zero-initialized AtomicI32.
-#[test]
+#[cfg_attr(test, test)]
 fn static_initalizer_same_bytes_as_auto() {
     let _ctx = TestContext::new();
     // C++: static mtx_t static_mutex = MTX_INIT
@@ -184,7 +184,7 @@ fn static_initalizer_same_bytes_as_auto() {
 /// In single-threaded mode: we can test that futex_wait on a locked
 /// mutex (value mismatch) returns BAD_STATE immediately.
 /// The full timeout test requires concurrent threads.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn timeout_elapsed() {
     let _ctx = TestContext::new();
     // Mutex is "locked" (value = 1)
@@ -204,4 +204,14 @@ async fn timeout_elapsed() {
             "futex_wait with wrong expected value should fail"
         );
     }
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    multi_threaded_contention().await;
+    try_mutex_multi_threaded_contention();
+    initalize_local_mutex();
+    static_initalizer_same_bytes_as_auto();
+    timeout_elapsed().await;
 }

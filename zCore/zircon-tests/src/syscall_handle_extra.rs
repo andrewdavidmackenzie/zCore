@@ -9,7 +9,7 @@ use zircon_object::ipc::Channel;
 use zircon_object::object::{Handle, HandleValue, KernelObject, Rights};
 use zircon_object::ZxError;
 
-#[test]
+#[cfg_attr(test, test)]
 fn close_via_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -27,7 +27,7 @@ fn close_via_syscall() {
 }
 
 /// Closing handle 0 (INVALID_HANDLE) is OK in Fuchsia.
-#[test]
+#[cfg_attr(test, test)]
 fn close_invalid_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -36,7 +36,7 @@ fn close_invalid_handle() {
     sc.sys_handle_close(0).unwrap();
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn duplicate_via_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -65,7 +65,7 @@ fn duplicate_via_syscall() {
     assert_eq!(obj1.id(), obj2.id());
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn duplicate_reduced_rights() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -91,7 +91,7 @@ fn duplicate_reduced_rights() {
     assert_eq!(rights, Rights::READ);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn replace_via_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -122,7 +122,7 @@ fn replace_via_syscall() {
 }
 
 /// Cannot escalate rights via duplicate.
-#[test]
+#[cfg_attr(test, test)]
 fn duplicate_expanded_rights_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -142,7 +142,7 @@ fn duplicate_expanded_rights_fails() {
 }
 
 /// Handle must have DUPLICATE right to be duplicated.
-#[test]
+#[cfg_attr(test, test)]
 fn duplicate_requires_duplicate_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -164,7 +164,7 @@ fn duplicate_requires_duplicate_right() {
 }
 
 /// Closing a non-existent (but non-zero) handle fails.
-#[test]
+#[cfg_attr(test, test)]
 fn close_bad_handle_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -175,7 +175,7 @@ fn close_bad_handle_syscall() {
 }
 
 /// Duplicating a non-existent handle fails.
-#[test]
+#[cfg_attr(test, test)]
 fn duplicate_invalid_handle_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -191,7 +191,7 @@ fn duplicate_invalid_handle_syscall() {
 }
 
 /// Duplicating with SAME_RIGHTS preserves the original rights.
-#[test]
+#[cfg_attr(test, test)]
 fn duplicate_same_rights_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -215,7 +215,7 @@ fn duplicate_same_rights_syscall() {
 }
 
 /// Replacing a non-existent handle fails.
-#[test]
+#[cfg_attr(test, test)]
 fn replace_bad_handle_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -230,7 +230,7 @@ fn replace_bad_handle_syscall() {
 }
 
 /// Replace with rights that exceed the original handle's rights fails.
-#[test]
+#[cfg_attr(test, test)]
 fn replace_invalid_rights_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -246,4 +246,21 @@ fn replace_invalid_rights_syscall() {
         UserOutPtr::from(&mut h2 as *mut _ as usize),
     );
     assert!(result.is_err());
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    close_via_syscall();
+    close_invalid_handle();
+    duplicate_via_syscall();
+    duplicate_reduced_rights();
+    replace_via_syscall();
+    duplicate_expanded_rights_fails();
+    duplicate_requires_duplicate_right();
+    close_bad_handle_syscall();
+    duplicate_invalid_handle_syscall();
+    duplicate_same_rights_syscall();
+    replace_bad_handle_syscall();
+    replace_invalid_rights_syscall();
 }

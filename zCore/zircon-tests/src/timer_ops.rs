@@ -10,7 +10,7 @@ use zircon_object::signal::Timer;
 
 ///
 /// Create a timer and verify it has a valid KOID.
-#[test]
+#[cfg_attr(test, test)]
 fn create_timer() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -19,7 +19,7 @@ fn create_timer() {
 
 ///
 /// Set and get the name of a timer.
-#[test]
+#[cfg_attr(test, test)]
 fn timer_name() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -29,7 +29,7 @@ fn timer_name() {
 
 ///
 /// A newly created timer should not be signaled.
-#[test]
+#[cfg_attr(test, test)]
 fn timer_not_signaled_initially() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -39,7 +39,7 @@ fn timer_not_signaled_initially() {
 ///
 /// Set a deadline on a timer. If the deadline is in the past, the
 /// timer should signal immediately.
-#[test]
+#[cfg_attr(test, test)]
 fn timer_set_deadline() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -49,7 +49,7 @@ fn timer_set_deadline() {
 ///
 /// Set a deadline then cancel the timer. The timer should not be
 /// signaled after cancellation.
-#[test]
+#[cfg_attr(test, test)]
 fn timer_cancel() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -61,7 +61,7 @@ fn timer_cancel() {
 ///
 /// Set a timer, then set it again with a different deadline. The
 /// new deadline should replace the old one.
-#[test]
+#[cfg_attr(test, test)]
 fn timer_set_then_reset() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -71,7 +71,7 @@ fn timer_set_then_reset() {
 
 ///
 /// Create multiple timers. Each should have a unique KOID.
-#[test]
+#[cfg_attr(test, test)]
 fn timer_multiple_creation() {
     let _ctx = TestContext::new();
     let t1 = Timer::new();
@@ -83,7 +83,7 @@ fn timer_multiple_creation() {
 
 ///
 /// Create timers with different slack modes (Center, Early, Late).
-#[test]
+#[cfg_attr(test, test)]
 fn timer_slack_modes() {
     use zircon_object::signal::Slack;
     let _ctx = TestContext::new();
@@ -94,7 +94,7 @@ fn timer_slack_modes() {
 
 ///
 /// Cancel a timer that has never been set. Should be a no-op.
-#[test]
+#[cfg_attr(test, test)]
 fn timer_cancel_when_not_set() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -104,7 +104,7 @@ fn timer_cancel_when_not_set() {
 
 ///
 /// Cancel a timer twice. Second cancel should be a no-op.
-#[test]
+#[cfg_attr(test, test)]
 fn timer_double_cancel_safe() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -112,4 +112,19 @@ fn timer_double_cancel_safe() {
     timer.cancel();
     timer.cancel();
     assert!(!timer.signal().contains(Signal::SIGNALED));
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    create_timer();
+    timer_name();
+    timer_not_signaled_initially();
+    timer_set_deadline();
+    timer_cancel();
+    timer_set_then_reset();
+    timer_multiple_creation();
+    timer_slack_modes();
+    timer_cancel_when_not_set();
+    timer_double_cancel_safe();
 }

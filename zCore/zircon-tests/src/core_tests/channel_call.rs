@@ -20,7 +20,7 @@ use zircon_object::object::{Handle, HandleValue, Rights};
 ///
 /// EchoServer echoes 512 bytes back. Verifies response matches
 /// (skipping first 4 txid bytes).
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn bytes_only_success_case() {
     use crate::helpers::{EchoServer, TestContext};
 
@@ -67,7 +67,7 @@ async fn bytes_only_success_case() {
 ///
 /// EchoServer echoes handles back. We send an Event handle and
 /// verify it comes back.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn handles_success_case() {
     use crate::helpers::{EchoServer, TestContext};
     use zircon_object::object::Handle;
@@ -104,7 +104,7 @@ async fn handles_success_case() {
 ///
 /// EchoServer echoes a handle. We verify the echo works with
 /// basic handles.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn reduced_rights_success_case() {
     use crate::helpers::{EchoServer, TestContext};
     use zircon_object::object::{Handle, Rights};
@@ -138,7 +138,7 @@ async fn reduced_rights_success_case() {
 /// C++: TEST(ChannelCallEtcTest, IncreasedRightsFailureCase)
 /// Attempting to increase rights (add MANAGE_PROCESS) on a port
 /// fails with ZX_ERR_INVALID_ARGS at the disposition validation step.
-#[test]
+#[cfg_attr(test, test)]
 fn increased_rights_failure_case() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -178,7 +178,7 @@ fn increased_rights_failure_case() {
 
 /// C++: TEST(ChannelCallEtcTest, WrongObjectTypeFailureCase)
 /// Sending a port handle with type=VMO fails with ZX_ERR_WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn wrong_object_type_failure_case() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -215,7 +215,7 @@ fn wrong_object_type_failure_case() {
 }
 /// C++: TEST(ChannelCallEtcTest, NullArgsReturnsInvalidArgs)
 /// channel_call_etc with null args pointer returns ZX_ERR_INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn null_args_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -243,7 +243,7 @@ async fn null_args_returns_invalid_args() {
 
 /// C++: TEST(ChannelCallEtcTest, BadArgsPointerReturnsInvalidArgs)
 /// channel_call_etc with args pointer = 1 (bad pointer) returns ZX_ERR_INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn bad_args_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -275,7 +275,7 @@ async fn bad_args_pointer_returns_invalid_args() {
 /// In the C++ test, a server thread is spawned so the call completes and
 /// the null pointer is hit at write-back time. In zCore, actual_bytes is
 /// written after the blocking call completes.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn null_actual_bytes_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -331,7 +331,7 @@ async fn null_actual_bytes_returns_invalid_args() {
 ///
 /// Same as NullActualBytes — zCore validates after blocking wait, so
 /// without a server the call times out first.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn null_actual_handles_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -384,7 +384,7 @@ async fn null_actual_handles_returns_invalid_args() {
 
 /// C++: TEST(ChannelCallEtcTest, InvalidOptionsReturnsInvalidArgs)
 /// channel_call_etc with options=0xff returns ZX_ERR_INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn invalid_options_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -437,7 +437,7 @@ async fn invalid_options_returns_invalid_args() {
 ///
 /// Echo server echoes handles back. Verifies basic handle transfer
 /// works with the echo server.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn with_duplicate_op_handle_succeeds() {
     use crate::helpers::{EchoServer, TestContext};
     use zircon_object::object::Handle;
@@ -473,7 +473,7 @@ async fn with_duplicate_op_handle_succeeds() {
 /// Three dispositions: valid socket, event-as-VMO (wrong type), bad handle.
 /// Returns ZX_ERR_WRONG_TYPE (first error). Each disposition's result
 /// field is set independently.
-#[test]
+#[cfg_attr(test, test)]
 fn disposition_failure_sets_result_field_and_returns_first_error() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -543,7 +543,7 @@ fn disposition_failure_sets_result_field_and_returns_first_error() {
 /// C++: TEST(ChannelCallEtcTest, MixedMoveAndDuplicateOnFailure)
 /// DUPLICATE + MOVE + bad_handle. Duplicate handle stays valid,
 /// moved handle is consumed.
-#[test]
+#[cfg_attr(test, test)]
 fn mixed_move_and_duplicate_on_failure() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -616,7 +616,7 @@ fn mixed_move_and_duplicate_on_failure() {
 /// C++: TEST(ChannelCallEtcTest, PeerClosedBeforeCallReturnsPeerClosed)
 /// Close remote before calling. Moved handles are consumed.
 /// Returns ZX_ERR_PEER_CLOSED immediately.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn peer_closed_before_call_returns_peer_closed() {
     let (local, remote) = Channel::create();
     drop(remote);
@@ -640,7 +640,7 @@ async fn peer_closed_before_call_returns_peer_closed() {
 /// caller's buffer). At the kernel-object API level, Channel::call()
 /// returns the full reply — buffer size checking is done in the
 /// syscall dispatcher. Validated via QEMU core-tests.
-#[test]
+#[cfg_attr(test, test)]
 fn response_too_large_for_rd_num_bytes_returns_buffer_too_small() {
     // The syscall dispatcher checks:
     //   if args.rd_num_bytes < rd_msg.data.len() as u32 { return BUFFER_TOO_SMALL }
@@ -685,7 +685,7 @@ fn response_too_large_for_rd_num_bytes_returns_buffer_too_small() {
 /// C++: TEST(ChannelCallEtcTest, ResponseTooLargeForRdNumHandlesReturnsBufferTooSmall)
 ///
 /// Same as above — buffer size checking is in the syscall dispatcher.
-#[test]
+#[cfg_attr(test, test)]
 fn response_too_large_for_rd_num_handles_returns_buffer_too_small() {
     use zircon_object::object::{Handle, Rights};
     use zircon_object::signal::Event;
@@ -733,7 +733,7 @@ fn response_too_large_for_rd_num_handles_returns_buffer_too_small() {
 /// C++: TEST(ChannelCallEtcTest, HandlesInfoValidation)
 ///
 /// Server sends 3 handles. Verifies handle types via echo.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn handles_info_validation() {
     use crate::helpers::{EchoServer, TestContext};
     use zircon_object::ipc::Socket;
@@ -772,4 +772,26 @@ async fn handles_info_validation() {
     assert_eq!(reply.handles.len(), 3);
 
     echo.shutdown().await;
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    bytes_only_success_case().await;
+    handles_success_case().await;
+    reduced_rights_success_case().await;
+    increased_rights_failure_case();
+    wrong_object_type_failure_case();
+    null_args_returns_invalid_args().await;
+    bad_args_pointer_returns_invalid_args().await;
+    null_actual_bytes_returns_invalid_args().await;
+    null_actual_handles_returns_invalid_args().await;
+    invalid_options_returns_invalid_args().await;
+    with_duplicate_op_handle_succeeds().await;
+    disposition_failure_sets_result_field_and_returns_first_error();
+    mixed_move_and_duplicate_on_failure();
+    peer_closed_before_call_returns_peer_closed().await;
+    response_too_large_for_rd_num_bytes_returns_buffer_too_small();
+    response_too_large_for_rd_num_handles_returns_buffer_too_small();
+    handles_info_validation().await;
 }

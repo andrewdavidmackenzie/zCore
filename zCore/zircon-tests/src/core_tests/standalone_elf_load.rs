@@ -47,7 +47,7 @@ const TEST_MODULE_BYTES: &[u8] = &[];
 ///   Steps: parse ELF → ehdr.Loadable() → load segments via
 ///   LocalVmarLoader → decode PT_DYNAMIC → look up "kTestRoData"
 ///   → assert *ptr == kTestRoDataValue (42)
-#[test]
+#[cfg_attr(test, test)]
 fn load() {
     let _ctx = TestContext::new();
 
@@ -124,4 +124,10 @@ fn load() {
     // The kTestRoData lookup above exercises the full ELF loading
     // pipeline (parse → map → symbol lookup → read), which is the
     // core functionality being tested.
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    load();
 }

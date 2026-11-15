@@ -8,14 +8,14 @@ use zircon_object::ipc::Socket;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::ZxError;
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_create_stream() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
     assert_ne!(s0.id(), s1.id());
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_write_read() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -29,7 +29,7 @@ fn socket_write_read() {
     assert_eq!(&buf[..5], b"hello");
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_read_empty() {
     let _ctx = TestContext::new();
     let (_s0, s1) = Socket::create(0).unwrap();
@@ -39,7 +39,7 @@ fn socket_read_empty() {
     assert_eq!(err, ZxError::SHOULD_WAIT);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_peer_closed() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -49,7 +49,7 @@ fn socket_peer_closed() {
     assert_eq!(err, ZxError::PEER_CLOSED);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_peek() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -68,7 +68,7 @@ fn socket_peek() {
     assert_eq!(&buf[..9], b"peek-test");
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_datagram() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(1).unwrap(); // DATAGRAM mode
@@ -87,13 +87,13 @@ fn socket_datagram() {
     assert_eq!(&buf[..8], b"message2");
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_create_invalid_options() {
     let _ctx = TestContext::new();
     assert_eq!(Socket::create(0xFF).unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_is_writable_by_default() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -101,7 +101,7 @@ fn socket_is_writable_by_default() {
     assert!(s1.signal().contains(Signal::WRITABLE));
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_write_causes_readable() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -111,7 +111,7 @@ fn socket_write_causes_readable() {
     assert!(!s0.signal().contains(Signal::READABLE));
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_read_clears_readable() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -124,7 +124,7 @@ fn socket_read_clears_readable() {
     assert!(!s1.signal().contains(Signal::READABLE));
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_peer_closed_signal() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -135,7 +135,7 @@ fn socket_peer_closed_signal() {
     assert!(!s0.signal().contains(Signal::WRITABLE));
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_read_after_peer_closed_with_data() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -153,7 +153,7 @@ fn socket_read_after_peer_closed_with_data() {
     assert_eq!(s1.read(false, &mut buf).unwrap_err(), ZxError::PEER_CLOSED);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_bidirectional() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -169,7 +169,7 @@ fn socket_bidirectional() {
     assert_eq!(&buf[..n], b"world");
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_stream_partial_read() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -189,7 +189,7 @@ fn socket_stream_partial_read() {
     assert_eq!(&buf[..5], b"defgh");
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_stream_multiple_writes() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -205,7 +205,7 @@ fn socket_stream_multiple_writes() {
     assert_eq!(&buf[..9], b"aaabbbccc");
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_datagram_boundary_preserved() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(1).unwrap(); // DATAGRAM
@@ -225,7 +225,7 @@ fn socket_datagram_boundary_preserved() {
 }
 
 /// In datagram mode, if the read buffer is too small, extra bytes are discarded.
-#[test]
+#[cfg_attr(test, test)]
 fn socket_datagram_truncation() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(1).unwrap(); // DATAGRAM
@@ -243,7 +243,7 @@ fn socket_datagram_truncation() {
     assert_eq!(s1.read(false, &mut buf).unwrap_err(), ZxError::SHOULD_WAIT);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_datagram_empty_write() {
     let _ctx = TestContext::new();
     let (s0, _s1) = Socket::create(1).unwrap(); // DATAGRAM
@@ -251,7 +251,7 @@ fn socket_datagram_empty_write() {
     assert_eq!(s0.write(b"").unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_shutdown_write() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -268,7 +268,7 @@ fn socket_shutdown_write() {
     assert_eq!(&buf[..n], b"from_s1");
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_shutdown_read() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -286,7 +286,7 @@ fn socket_shutdown_read() {
     assert_eq!(s0.read(false, &mut buf).unwrap_err(), ZxError::BAD_STATE);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn socket_related_koid() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -302,7 +302,7 @@ fn socket_related_koid() {
 ///
 /// Write multiple datagrams and verify each is preserved as a
 /// separate message on read (datagram boundary semantics).
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_multiple_messages() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(1).unwrap(); // DATAGRAM
@@ -323,7 +323,7 @@ fn datagram_multiple_messages() {
 ///
 /// Write and read a large block of data through a stream socket.
 /// Verifies data integrity for larger transfers.
-#[test]
+#[cfg_attr(test, test)]
 fn stream_large_transfer() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap(); // STREAM
@@ -340,7 +340,7 @@ fn stream_large_transfer() {
 ///
 /// Shut down both read and write directions. Neither side should
 /// be able to read or write after both shutdowns.
-#[test]
+#[cfg_attr(test, test)]
 fn shutdown_both_directions() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -358,7 +358,7 @@ fn shutdown_both_directions() {
 ///
 /// After shutting down the write direction, existing data in the
 /// buffer should still be readable.
-#[test]
+#[cfg_attr(test, test)]
 fn read_after_shutdown_write() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -374,7 +374,7 @@ fn read_after_shutdown_write() {
 ///
 /// Peek at data without consuming it. Subsequent read should
 /// return the same data.
-#[test]
+#[cfg_attr(test, test)]
 fn peek_does_not_consume() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -393,7 +393,7 @@ fn peek_does_not_consume() {
 ///
 /// Multiple small writes to a stream socket, then one large read
 /// should concatenate all data.
-#[test]
+#[cfg_attr(test, test)]
 fn multiple_writes_single_read() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -410,7 +410,7 @@ fn multiple_writes_single_read() {
 ///
 /// After closing the peer, the remaining socket should report
 /// PEER_CLOSED in its signal set.
-#[test]
+#[cfg_attr(test, test)]
 fn socket_info_after_peer_close() {
     use zircon_object::object::{KernelObject, Signal};
     let _ctx = TestContext::new();
@@ -422,7 +422,7 @@ fn socket_info_after_peer_close() {
 ///
 /// Read from a datagram socket with a buffer smaller than the
 /// message. Should truncate the message and discard the rest.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_read_too_small_buffer() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(1).unwrap(); // DATAGRAM
@@ -438,7 +438,7 @@ fn datagram_read_too_small_buffer() {
 ///
 /// Both endpoints write and read data simultaneously. Verify data
 /// integrity in both directions.
-#[test]
+#[cfg_attr(test, test)]
 fn bidirectional_stream_verify() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -451,4 +451,39 @@ fn bidirectional_stream_verify() {
     assert_eq!(&buf[..n], b"L->R data");
     let n = local.read(false, &mut buf).unwrap();
     assert_eq!(&buf[..n], b"R->L data");
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    socket_create_stream();
+    socket_write_read();
+    socket_read_empty();
+    socket_peer_closed();
+    socket_peek();
+    socket_datagram();
+    socket_create_invalid_options();
+    socket_is_writable_by_default();
+    socket_write_causes_readable();
+    socket_read_clears_readable();
+    socket_peer_closed_signal();
+    socket_read_after_peer_closed_with_data();
+    socket_bidirectional();
+    socket_stream_partial_read();
+    socket_stream_multiple_writes();
+    socket_datagram_boundary_preserved();
+    socket_datagram_truncation();
+    socket_datagram_empty_write();
+    socket_shutdown_write();
+    socket_shutdown_read();
+    socket_related_koid();
+    datagram_multiple_messages();
+    stream_large_transfer();
+    shutdown_both_directions();
+    read_after_shutdown_write();
+    peek_does_not_consume();
+    multiple_writes_single_read();
+    socket_info_after_peer_close();
+    datagram_read_too_small_buffer();
+    bidirectional_stream_verify();
 }

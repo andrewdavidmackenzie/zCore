@@ -16,7 +16,7 @@ const ZX_CACHE_FLUSH_INSN: u32 = 1 << 2;
 ///
 /// Flush the data cache for a range of memory. In libos mode this
 /// is a no-op fence but should succeed for valid arguments.
-#[test]
+#[cfg_attr(test, test)]
 fn flush_data_cache() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -30,7 +30,7 @@ fn flush_data_cache() {
 ///
 /// Flush the instruction cache for a range. In libos mode this is
 /// a no-op fence but should succeed for valid arguments.
-#[test]
+#[cfg_attr(test, test)]
 fn flush_instruction_cache() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -43,7 +43,7 @@ fn flush_instruction_cache() {
 ///
 /// Synchronize data and instruction caches (DATA | INSN). In libos
 /// mode this is a no-op fence but should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn sync_caches() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -61,7 +61,7 @@ fn sync_caches() {
 /// Flush cache with a null address but non-zero size. The syscall
 /// implementation doesn't validate the address itself — it just does
 /// a fence. Should succeed (no-op).
-#[test]
+#[cfg_attr(test, test)]
 fn flush_null_address() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -73,7 +73,7 @@ fn flush_null_address() {
 
 ///
 /// Flush cache with zero length — should be a no-op and succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn flush_zero_length() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -84,7 +84,7 @@ fn flush_zero_length() {
 
 ///
 /// Flush with DATA | INVALIDATE — should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn flush_with_invalidate() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -101,7 +101,7 @@ fn flush_with_invalidate() {
 ///
 /// Flush cache for a large contiguous range. Should succeed in libos
 /// mode (fence only).
-#[test]
+#[cfg_attr(test, test)]
 fn flush_large_range() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -114,7 +114,7 @@ fn flush_large_range() {
 ///
 /// Call zx_cache_flush with an invalid operation code (0). Should
 /// return INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn invalid_operation() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -127,4 +127,17 @@ fn invalid_operation() {
     // High bits set — should also be invalid.
     let result = sc.sys_cache_flush(buf.as_ptr() as usize, buf.len(), 0x80);
     assert_eq!(result, Err(ZxError::INVALID_ARGS));
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    flush_data_cache();
+    flush_instruction_cache();
+    sync_caches();
+    flush_null_address();
+    flush_zero_length();
+    flush_with_invalidate();
+    flush_large_range();
+    invalid_operation();
 }

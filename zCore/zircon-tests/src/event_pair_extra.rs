@@ -9,7 +9,7 @@ use zircon_object::signal::EventPair;
 
 ///
 /// Create an event pair and verify both endpoints have valid KOIDs.
-#[test]
+#[cfg_attr(test, test)]
 fn create() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -20,7 +20,7 @@ fn create() {
 
 ///
 /// Drop one endpoint and verify PEER_CLOSED is set on the other.
-#[test]
+#[cfg_attr(test, test)]
 fn peer_closed() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -30,7 +30,7 @@ fn peer_closed() {
 
 ///
 /// Signal the peer, then clear the signal on the peer.
-#[test]
+#[cfg_attr(test, test)]
 fn signal_peer_clear() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -42,7 +42,7 @@ fn signal_peer_clear() {
 
 ///
 /// Both endpoints signal each other simultaneously.
-#[test]
+#[cfg_attr(test, test)]
 fn bidirectional_signaling() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -54,7 +54,7 @@ fn bidirectional_signaling() {
 
 ///
 /// Set multiple signals on the peer and verify all are visible.
-#[test]
+#[cfg_attr(test, test)]
 fn multiple_signals() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -69,7 +69,7 @@ fn multiple_signals() {
 ///
 /// Try to signal the peer after it has been closed. peer() returns
 /// Err when the peer is dropped.
-#[test]
+#[cfg_attr(test, test)]
 fn signal_peer_after_close() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -84,7 +84,7 @@ fn signal_peer_after_close() {
 
 ///
 /// Set and get the name of an event pair endpoint.
-#[test]
+#[cfg_attr(test, test)]
 fn name() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = EventPair::create();
@@ -94,10 +94,23 @@ fn name() {
 
 ///
 /// Each endpoint's related_koid should be the other's koid.
-#[test]
+#[cfg_attr(test, test)]
 fn related_koid() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
     assert_eq!(ep0.related_koid(), ep1.id());
     assert_eq!(ep1.related_koid(), ep0.id());
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    create();
+    peer_closed();
+    signal_peer_clear();
+    bidirectional_signaling();
+    multiple_signals();
+    signal_peer_after_close();
+    name();
+    related_koid();
 }

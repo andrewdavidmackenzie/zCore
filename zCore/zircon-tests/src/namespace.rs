@@ -24,7 +24,7 @@ use zircon_object::object::KernelObject;
 /// Channel pair creation — the building block for namespace handles.
 /// A namespace entry is represented by a channel handle in the process's
 /// handle table. This test verifies basic channel pair creation.
-#[test]
+#[cfg_attr(test, test)]
 fn channel_pair_creation() {
     let _ctx = TestContext::new();
     let (ch0, ch1) = Channel::create();
@@ -35,7 +35,7 @@ fn channel_pair_creation() {
 
 /// Channel message round-trip — namespace lookups use channel messages.
 /// The client writes a request, the server reads it.
-#[test]
+#[cfg_attr(test, test)]
 fn channel_message_round_trip() {
     let _ctx = TestContext::new();
     let (client, server) = Channel::create();
@@ -54,7 +54,7 @@ fn channel_message_round_trip() {
 
 /// Multiple messages on one channel — namespace enumerations send
 /// multiple directory entries.
-#[test]
+#[cfg_attr(test, test)]
 fn multiple_messages() {
     let _ctx = TestContext::new();
     let (ch0, ch1) = Channel::create();
@@ -82,7 +82,7 @@ fn multiple_messages() {
 
 /// Channel handle transfer — namespace handles are transferred
 /// to child processes via channel writes containing handles.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_transfer() {
     use zircon_object::object::{Handle, Rights};
 
@@ -108,7 +108,7 @@ fn handle_transfer() {
 
 /// Channel close — dropping a channel endpoint closes it.
 /// The peer should see PEER_CLOSED signal.
-#[test]
+#[cfg_attr(test, test)]
 fn channel_close() {
     let _ctx = TestContext::new();
     let (ch0, ch1) = Channel::create();
@@ -125,7 +125,7 @@ fn channel_close() {
 
 /// Read from closed channel — reading after peer close should return
 /// PEER_CLOSED (once the buffer is drained).
-#[test]
+#[cfg_attr(test, test)]
 fn read_after_peer_close() {
     let _ctx = TestContext::new();
     let (ch0, ch1) = Channel::create();
@@ -153,7 +153,7 @@ fn read_after_peer_close() {
 }
 
 /// Empty message — channels accept zero-length messages.
-#[test]
+#[cfg_attr(test, test)]
 fn empty_message() {
     let _ctx = TestContext::new();
     let (ch0, ch1) = Channel::create();
@@ -171,7 +171,7 @@ fn empty_message() {
 
 /// Channel with multiple handle transfers — namespaces transfer
 /// multiple capability handles at once.
-#[test]
+#[cfg_attr(test, test)]
 fn multiple_handle_transfer() {
     use zircon_object::object::{Handle, Rights};
     use zircon_object::signal::Event;
@@ -203,7 +203,7 @@ fn multiple_handle_transfer() {
 }
 
 /// Channel ordering — messages are delivered in FIFO order.
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_ordering() {
     let _ctx = TestContext::new();
     let (ch0, ch1) = Channel::create();
@@ -222,4 +222,18 @@ fn fifo_ordering() {
         let val = u32::from_ne_bytes(msg.data.try_into().unwrap());
         assert_eq!(val, i, "messages should be in FIFO order");
     }
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    channel_pair_creation();
+    channel_message_round_trip();
+    multiple_messages();
+    handle_transfer();
+    channel_close();
+    read_after_peer_close();
+    empty_message();
+    multiple_handle_transfer();
+    fifo_ordering();
 }

@@ -9,7 +9,7 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 
 /// C++: TEST(ProtectTestCase, CreateCowClone)
 /// Create a COW clone, map it, protect the mapping, verify reads.
-#[test]
+#[cfg_attr(test, test)]
 fn create_cow_clone() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -39,7 +39,7 @@ fn create_cow_clone() {
 
 /// C++: TEST(ProtectTestCase, MergeMappings)
 /// Protect sub-ranges of a mapping, then re-protect to merge them.
-#[test]
+#[cfg_attr(test, test)]
 fn merge_mappings() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -75,7 +75,7 @@ fn merge_mappings() {
 
 /// C++: TEST(ProtectTestCase, SingleMapping)
 /// Protect a single-page mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn single_mapping() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -107,7 +107,7 @@ fn single_mapping() {
 
 /// C++: TEST(ProtectTestCase, Unmap)
 /// Protect then unmap a mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn unmap() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -135,4 +135,13 @@ fn unmap() {
     // After unmapping, re-protecting the same range should fail.
     let result = vmar.protect(addr, 2 * PAGE_SIZE, MMUFlags::READ);
     assert!(result.is_err(), "protecting an unmapped range should fail");
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    create_cow_clone();
+    merge_mappings();
+    single_mapping();
+    unmap();
 }

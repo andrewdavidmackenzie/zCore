@@ -49,7 +49,7 @@ pub(crate) fn add_thread_handle(ctx: &TestContext) -> HandleValue {
 /// ZX_TASK_RETCODE_EXCEPTION_KILL. This requires spawning a real child
 /// process and triggering a hardware exception, which needs mini-process
 /// infrastructure and preemptive scheduling.
-#[test]
+#[cfg_attr(test, test)]
 fn unhandled_hardware_exception() {
     // Without mini-process, verify that killing a process sets the
     // expected return code (similar to what an unhandled exception would do).
@@ -73,7 +73,7 @@ fn unhandled_hardware_exception() {
 /// C++: TEST(DefaultExceptionHandlerTest, UnhandledPolicyException)
 /// Without mini-process, verify that job policy can be set and
 /// processes within a killed job are terminated.
-#[test]
+#[cfg_attr(test, test)]
 fn unhandled_policy_exception() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -87,4 +87,11 @@ fn unhandled_policy_exception() {
     assert!(proc
         .signal()
         .contains(zircon_object::object::Signal::PROCESS_TERMINATED));
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    unhandled_hardware_exception();
+    unhandled_policy_exception();
 }

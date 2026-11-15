@@ -8,7 +8,7 @@ use zircon_object::ZxError;
 // -- Faithful 1:1 ports from SocketTest (socket.cc) --
 
 /// C++: TEST(SocketTest, EmptySocketShouldWait)
-#[test]
+#[cfg_attr(test, test)]
 fn empty_socket_should_wait() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(0).unwrap();
@@ -21,7 +21,7 @@ fn empty_socket_should_wait() {
 }
 
 /// C++: TEST(SocketTest, WriteReadDataVerify)
-#[test]
+#[cfg_attr(test, test)]
 fn write_read_data_verify() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -42,7 +42,7 @@ fn write_read_data_verify() {
 }
 
 /// C++: TEST(SocketTest, PeerClosedError)
-#[test]
+#[cfg_attr(test, test)]
 fn peer_closed_error() {
     let _ctx = TestContext::new();
     let local;
@@ -55,7 +55,7 @@ fn peer_closed_error() {
 }
 
 /// C++: TEST(SocketTest, PeekingLeavesData)
-#[test]
+#[cfg_attr(test, test)]
 fn peeking_leaves_data() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -81,7 +81,7 @@ fn peeking_leaves_data() {
 }
 
 /// C++: TEST(SocketTest, PeekingIntoEmpty)
-#[test]
+#[cfg_attr(test, test)]
 fn peeking_into_empty() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(0).unwrap();
@@ -94,7 +94,7 @@ fn peeking_into_empty() {
 }
 
 /// C++: TEST(SocketTest, Signals)
-#[test]
+#[cfg_attr(test, test)]
 fn signals() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -122,7 +122,7 @@ fn signals() {
 }
 
 /// C++: TEST(SocketTest, SignalClosedPeer)
-#[test]
+#[cfg_attr(test, test)]
 fn signal_closed_peer() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -136,7 +136,7 @@ fn signal_closed_peer() {
 }
 
 /// C++: TEST(SocketTest, SetDispositionInvalidArgs)
-#[test]
+#[cfg_attr(test, test)]
 fn set_disposition_invalid_args() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(0).unwrap();
@@ -153,14 +153,14 @@ fn set_disposition_invalid_args() {
 }
 
 /// C++: TEST(SocketTest, CreateInvalidArgs)
-#[test]
+#[cfg_attr(test, test)]
 fn create_invalid_args() {
     let _ctx = TestContext::new();
     assert_eq!(Socket::create(0xFF).unwrap_err(), ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(SocketTest, ZeroSize)
-#[test]
+#[cfg_attr(test, test)]
 fn zero_size() {
     let _ctx = TestContext::new();
 
@@ -178,7 +178,7 @@ fn zero_size() {
 }
 
 /// C++: TEST(SocketTest, SetDispositionNoneSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn set_disposition_none_succeeds() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -209,7 +209,7 @@ fn set_disposition_none_succeeds() {
 
 /// C++: TEST(SocketTest, BytesOutstanding)
 /// Verify get_info reports correct rx/tx buffer sizes after writes.
-#[test]
+#[cfg_attr(test, test)]
 fn bytes_outstanding() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -247,7 +247,7 @@ fn bytes_outstanding() {
 
 /// C++: TEST(SocketTest, DefaultRightsAndType)
 /// Create a socket, verify object type via KernelObject trait and default properties.
-#[test]
+#[cfg_attr(test, test)]
 fn default_rights_and_type() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -264,7 +264,7 @@ fn default_rights_and_type() {
 
 /// C++: TEST(SocketTest, GetInfoClosedPeer)
 /// After closing the peer, get_info should still work and show tx_buf_max=0.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_closed_peer() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -290,7 +290,7 @@ fn get_info_closed_peer() {
 
 /// C++: TEST(SocketTest, NonAllowedSignals)
 /// Setting signals outside the allowed mask returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn non_allowed_signals() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(0).unwrap();
@@ -312,7 +312,7 @@ fn non_allowed_signals() {
 /// C++: TEST(SocketTest, PeerClosedSetProperty)
 /// set_property(TX_THRESHOLD) after peer closed returns PEER_CLOSED;
 /// set_property(RX_THRESHOLD) still succeeds.
-#[test]
+#[cfg_attr(test, test)]
 fn peer_closed_set_property() {
     let ctx = TestContext::new();
     let (h0, h1) = super::syscall_socket::syscall_socket_create(&ctx, 0);
@@ -346,7 +346,7 @@ fn peer_closed_set_property() {
 
 /// C++: TEST(SocketTest, SetDispositionWrongType)
 /// Calling set_disposition on a non-socket handle returns WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn set_disposition_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -368,7 +368,7 @@ fn set_disposition_wrong_type() {
 /// At the object level, Socket::set_disposition has no rights checks.
 /// Rights are enforced at the syscall layer. We verify that disposition
 /// operations work at the object level regardless.
-#[test]
+#[cfg_attr(test, test)]
 fn set_disposition_handle_without_right() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(0).unwrap();
@@ -381,7 +381,7 @@ fn set_disposition_handle_without_right() {
 /// C++: TEST(SocketTest, SetDispositionNoOpAndClosedPeer)
 /// No-op disposition succeeds even after peer is closed.
 /// Non-zero disposition_peer fails with PEER_CLOSED.
-#[test]
+#[cfg_attr(test, test)]
 fn set_disposition_noop_and_closed_peer() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -404,7 +404,7 @@ fn set_disposition_noop_and_closed_peer() {
 
 /// C++: TEST(SocketTest, SetThreshholdsProp)
 /// Set rx and tx threshold properties, then read them back.
-#[test]
+#[cfg_attr(test, test)]
 fn set_threshholds_prop() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(0).unwrap();
@@ -441,7 +441,7 @@ fn set_threshholds_prop() {
 /// Faithfully mirrors the ~150-line C++ test: sets rx threshold on `local`,
 /// tx threshold on `remote`, verifies signal transitions through writes
 /// and reads, tests threshold bumps up/down. Uses syscall-level APIs.
-#[test]
+#[cfg_attr(test, test)]
 fn set_threshholds_and_check_signals() {
     let ctx = TestContext::new();
     let (h0, h1) = super::syscall_socket::syscall_socket_create(&ctx, 0);
@@ -687,7 +687,7 @@ fn set_threshholds_and_check_signals() {
 /// C++: TEST(SocketTest, GetInfoSocketBufferTooSmallReturnsBufferTooSmall)
 /// Passing a buffer smaller than sizeof(zx_info_socket_t) to
 /// zx_object_get_info(ZX_INFO_SOCKET) returns BUFFER_TOO_SMALL.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_socket_buffer_too_small() {
     let ctx = TestContext::new();
     let (h0, _h1) = super::syscall_socket::syscall_socket_create(&ctx, 0);
@@ -709,7 +709,7 @@ fn get_info_socket_buffer_too_small() {
 /// C++: TEST(SocketTest, GetInfoSocketWithoutInspectRightReturnsAccessDenied)
 /// zx_object_get_info(ZX_INFO_SOCKET) without INSPECT right returns
 /// ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_socket_without_inspect_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -738,7 +738,7 @@ fn get_info_socket_without_inspect_right() {
 /// C++: TEST(SocketTest, GetInfoSocketWrongTypeReturnsWrongType)
 /// Wrong-type checking happens at the syscall layer.
 /// At the object level this is not applicable — we just verify get_info works.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_socket_wrong_type() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(0).unwrap();
@@ -751,7 +751,7 @@ fn get_info_socket_wrong_type() {
 /// C++: TEST(SocketTest, WriteAndReadSizeOverflow)
 /// Passing a size that overflows u32 to sys_socket_write / sys_socket_read
 /// returns INVALID_ARGS (matching the Fuchsia kernel's check).
-#[test]
+#[cfg_attr(test, test)]
 fn write_and_read_size_overflow() {
     let ctx = TestContext::new();
     let (h0, h1) = super::syscall_socket::syscall_socket_create(&ctx, 0);
@@ -809,7 +809,7 @@ fn write_and_read_size_overflow() {
 
 /// C++: TEST(SocketTest, ReadInvalidOptions)
 /// Passing invalid options to sys_socket_read returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn read_invalid_options() {
     let ctx = TestContext::new();
     let (h0, h1) = super::syscall_socket::syscall_socket_create(&ctx, 0);
@@ -843,7 +843,7 @@ fn read_invalid_options() {
 /// At the object level, Socket::write has no options parameter.
 /// Invalid options are checked at the syscall layer (see syscall_socket.rs).
 /// Here we verify basic write error paths.
-#[test]
+#[cfg_attr(test, test)]
 fn write_invalid_options() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -861,7 +861,7 @@ fn write_invalid_options() {
 /// C++: TEST(SocketTest, WriteZeroBytesNullBuffer)
 ///
 /// Writing zero bytes to a stream socket should succeed (no-op).
-#[test]
+#[cfg_attr(test, test)]
 fn write_zero_bytes() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(0).unwrap();
@@ -874,7 +874,7 @@ fn write_zero_bytes() {
 
 /// C++: TEST(SocketTest, EndpointsAreRelated)
 /// Check that koids of socket endpoints are cross-linked.
-#[test]
+#[cfg_attr(test, test)]
 fn endpoints_are_related() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -891,7 +891,7 @@ fn endpoints_are_related() {
 /// Datagram sockets must not produce short writes. A datagram that
 /// exceeds the buffer capacity fails with OUT_OF_RANGE and does not
 /// modify the written count.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_no_short_write() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(1).unwrap(); // DATAGRAM
@@ -915,7 +915,7 @@ fn datagram_no_short_write() {
 
 /// C++: TEST(SocketTest, DatagramPeek)
 /// Peek at datagram messages without consuming them.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_peek() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(1).unwrap(); // DATAGRAM
@@ -950,7 +950,7 @@ fn datagram_peek() {
 
 /// C++: TEST(SocketTest, DatagramPeekEmpty)
 /// Peeking into an empty datagram socket returns SHOULD_WAIT.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_peek_empty() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(1).unwrap(); // DATAGRAM
@@ -965,7 +965,7 @@ fn datagram_peek_empty() {
 /// Write 3 datagrams (two short + one 4KB multi-mbuf), verify
 /// rx_buf_available reports the first datagram size, read back with
 /// truncation and full-read semantics.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(1).unwrap(); // DATAGRAM
@@ -1068,7 +1068,7 @@ fn datagram() {
 /// C++: TEST(SocketTest, DatagramReadBufferLargerThanPacketReadsFullPacket)
 /// Reading with a buffer larger than the datagram returns exactly the
 /// datagram size, not the buffer size.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_read_buffer_larger_than_packet_reads_full_packet() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(1).unwrap(); // DATAGRAM
@@ -1085,7 +1085,7 @@ fn datagram_read_buffer_larger_than_packet_reads_full_packet() {
 
 /// C++: TEST(SocketTest, DatagramWriteExceedingCapacityReturnsShouldWait)
 /// After filling a datagram socket, additional writes return SHOULD_WAIT.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_write_exceeding_capacity_returns_should_wait() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(1).unwrap(); // DATAGRAM
@@ -1104,7 +1104,7 @@ fn datagram_write_exceeding_capacity_returns_should_wait() {
 
 /// C++: TEST(SocketTest, DisableWriteBoth)
 /// Disable writes on both endpoints via set_disposition.
-#[test]
+#[cfg_attr(test, test)]
 fn disable_write_both() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -1167,7 +1167,7 @@ fn disable_write_both() {
 /// C++: TEST(SocketTest, SetDispositionOfClosedPeerWithBufferedData)
 /// When the peer has been disabled and has buffered data, re-enabling
 /// should fail even after the peer closes.
-#[test]
+#[cfg_attr(test, test)]
 fn set_disposition_of_closed_peer_with_buffered_data() {
     let _ctx = TestContext::new();
     let remote;
@@ -1204,7 +1204,7 @@ fn set_disposition_of_closed_peer_with_buffered_data() {
 
 /// C++: TEST(SocketTest, ShortWrite)
 /// Stream sockets allow short writes when the buffer is nearly full.
-#[test]
+#[cfg_attr(test, test)]
 fn short_write() {
     let _ctx = TestContext::new();
     let (local, _remote) = Socket::create(0).unwrap();
@@ -1226,7 +1226,7 @@ fn short_write() {
 
 /// C++: TEST(SocketTest, ReuseDatagramBuffer)
 /// Verify that datagram buffers are properly reused after truncation.
-#[test]
+#[cfg_attr(test, test)]
 fn reuse_datagram_buffer() {
     let _ctx = TestContext::new();
     let (a, b) = Socket::create(1).unwrap(); // DATAGRAM
@@ -1270,7 +1270,7 @@ fn reuse_datagram_buffer() {
 /// C++: TEST(SocketTest, SetReadThresholdOnClosedPeer)
 /// Setting RX threshold via set_property on local endpoint succeeds
 /// even after peer is closed. Values greater than max return INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn set_read_threshold_on_closed_peer() {
     let ctx = TestContext::new();
     let (h0, h1) = super::syscall_socket::syscall_socket_create(&ctx, 0);
@@ -1331,7 +1331,7 @@ fn set_read_threshold_on_closed_peer() {
 /// Length values exceeding UINT32_MAX return INVALID_ARGS at the
 /// syscall layer. The kernel rejects sizes > UINT32_MAX before
 /// attempting buffer allocation.
-#[test]
+#[cfg_attr(test, test)]
 fn read_write_length_overflow_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, h1) = super::syscall_socket::syscall_socket_create(&ctx, 0);
@@ -1365,7 +1365,7 @@ fn read_write_length_overflow_returns_invalid_args() {
 /// At the object level, buffer validity isn't checked (that's the
 /// syscall layer). We verify that filling and draining a socket works
 /// correctly, matching the C++ test's logic flow.
-#[test]
+#[cfg_attr(test, test)]
 fn stream_read_to_partial_bad_buffer() {
     let _ctx = TestContext::new();
     let (a, b) = Socket::create(0).unwrap();
@@ -1384,4 +1384,51 @@ fn stream_read_to_partial_bad_buffer() {
 
     // The socket should now be writable
     assert!(a.signal().contains(Signal::WRITABLE));
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    empty_socket_should_wait();
+    write_read_data_verify();
+    peer_closed_error();
+    peeking_leaves_data();
+    peeking_into_empty();
+    signals();
+    signal_closed_peer();
+    set_disposition_invalid_args();
+    create_invalid_args();
+    zero_size();
+    set_disposition_none_succeeds();
+    bytes_outstanding();
+    default_rights_and_type();
+    get_info_closed_peer();
+    non_allowed_signals();
+    peer_closed_set_property();
+    set_disposition_wrong_type();
+    set_disposition_handle_without_right();
+    set_disposition_noop_and_closed_peer();
+    set_threshholds_prop();
+    set_threshholds_and_check_signals();
+    get_info_socket_buffer_too_small();
+    get_info_socket_without_inspect_right();
+    get_info_socket_wrong_type();
+    write_and_read_size_overflow();
+    read_invalid_options();
+    write_invalid_options();
+    write_zero_bytes();
+    endpoints_are_related();
+    datagram_no_short_write();
+    datagram_peek();
+    datagram_peek_empty();
+    datagram();
+    datagram_read_buffer_larger_than_packet_reads_full_packet();
+    datagram_write_exceeding_capacity_returns_should_wait();
+    disable_write_both();
+    set_disposition_of_closed_peer_with_buffered_data();
+    short_write();
+    reuse_datagram_buffer();
+    set_read_threshold_on_closed_peer();
+    read_write_length_overflow_returns_invalid_args();
+    stream_read_to_partial_bad_buffer();
 }

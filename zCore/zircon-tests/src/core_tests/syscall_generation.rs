@@ -12,7 +12,7 @@ extern crate alloc;
 
 /// C++: TEST(SyscallGenerationTest, HandleCopyoutFailure)
 /// Handle copyout failure: closing an invalid handle returns BAD_HANDLE.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_copyout_failure() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -23,7 +23,7 @@ fn handle_copyout_failure() {
 
 /// C++: TEST(SyscallGenerationTest, HandleCreateFailure)
 /// Verify that creating with invalid arguments returns errors.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_create_failure() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -41,7 +41,7 @@ fn handle_create_failure() {
 
 /// C++: TEST(SyscallGenerationTest, HandleCreateSuccess)
 /// Verify channel creation returns valid handles.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_create_success() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -61,7 +61,7 @@ fn handle_create_success() {
 
 /// C++: TEST(SyscallGenerationTest, RustHandleSyscall)
 /// Verify handle duplicate syscall works.
-#[test]
+#[cfg_attr(test, test)]
 fn rust_handle_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -85,7 +85,7 @@ fn rust_handle_syscall() {
 
 /// C++: TEST(SyscallGenerationTest, RustPointerSyscalls)
 /// Verify pointer-based syscalls handle null correctly.
-#[test]
+#[cfg_attr(test, test)]
 fn rust_pointer_syscalls() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -101,7 +101,7 @@ fn rust_pointer_syscalls() {
 
 /// C++: TEST(SyscallGenerationTest, RustSyscall)
 /// Verify basic syscall dispatch works.
-#[test]
+#[cfg_attr(test, test)]
 fn rust_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -120,7 +120,7 @@ fn rust_syscall() {
 
 /// C++: TEST(SyscallGenerationTest, RustWrapper)
 /// Verify Rust syscall wrapper error propagation.
-#[test]
+#[cfg_attr(test, test)]
 fn rust_wrapper() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -141,7 +141,7 @@ fn rust_wrapper() {
 
 /// C++: TEST(SyscallGenerationTest, Syscall)
 /// Verify raw syscall dispatch.
-#[test]
+#[cfg_attr(test, test)]
 fn syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -159,7 +159,7 @@ fn syscall() {
 /// C++: TEST(SyscallGenerationTest, WideningSignedNarrow)
 /// Verify signed narrow arguments are handled correctly.
 /// Test with negative values in syscall arguments.
-#[test]
+#[cfg_attr(test, test)]
 fn widening_signed_narrow() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -177,7 +177,7 @@ fn widening_signed_narrow() {
 
 /// C++: TEST(SyscallGenerationTest, WideningSignedWide)
 /// Verify signed wide arguments work.
-#[test]
+#[cfg_attr(test, test)]
 fn widening_signed_wide() {
     let _ctx = TestContext::new();
     // VMO operations use u64 for sizes — verify large values work.
@@ -191,7 +191,7 @@ fn widening_signed_wide() {
 
 /// C++: TEST(SyscallGenerationTest, WideningUnsignedNarrow)
 /// Verify unsigned narrow arguments.
-#[test]
+#[cfg_attr(test, test)]
 fn widening_unsigned_narrow() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -208,7 +208,7 @@ fn widening_unsigned_narrow() {
 
 /// C++: TEST(SyscallGenerationTest, WideningUnsignedWide)
 /// Verify unsigned wide arguments.
-#[test]
+#[cfg_attr(test, test)]
 fn widening_unsigned_wide() {
     let _ctx = TestContext::new();
     // VMO with page count using wide u64 internally.
@@ -218,7 +218,7 @@ fn widening_unsigned_wide() {
 
 /// C++: TEST(SyscallGenerationTest, Wrapper)
 /// Verify syscall wrapper validation.
-#[test]
+#[cfg_attr(test, test)]
 fn wrapper() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -230,4 +230,22 @@ fn wrapper() {
         hal_impl::user::UserOutPtr::from(&mut h as *mut _ as usize),
     );
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    handle_copyout_failure();
+    handle_create_failure();
+    handle_create_success();
+    rust_handle_syscall();
+    rust_pointer_syscalls();
+    rust_syscall();
+    rust_wrapper();
+    syscall();
+    widening_signed_narrow();
+    widening_signed_wide();
+    widening_unsigned_narrow();
+    widening_unsigned_wide();
+    wrapper();
 }

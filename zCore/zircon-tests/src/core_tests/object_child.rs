@@ -10,7 +10,7 @@ use zircon_object::task::{Job, Process, Thread};
 /// C++: TEST(ObjectChildTest, InvalidHandleReturnsBadHandle)
 /// Verify that get_child with a non-existent KOID returns an error,
 /// and that valid KOIDs are found correctly.
-#[test]
+#[cfg_attr(test, test)]
 fn invalid_handle_returns_bad_handle() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -29,4 +29,10 @@ fn invalid_handle_returns_bad_handle() {
     // Another invalid KOID.
     let result = proc.get_child(0);
     assert!(result.is_err(), "KOID 0 should fail");
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    invalid_handle_returns_bad_handle();
 }

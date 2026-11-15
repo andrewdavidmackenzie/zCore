@@ -24,7 +24,7 @@ use crate::helpers::TestContext;
 /// Queries CPU features via VdsoConstants (the kernel-side source of truth
 /// that backs the vDSO `zx_system_get_features` function).
 /// The C++ test is `#ifdef __aarch64__` — guarded here with cfg.
-#[test]
+#[cfg_attr(test, test)]
 fn arm_mops() {
     let _ctx = TestContext::new();
 
@@ -64,7 +64,7 @@ fn arm_mops() {
 /// Tests that corrupting the C flag between MOPS instructions causes a fault.
 /// Cannot safely test in libos mode (ASSERT_DEATH would kill the test process).
 /// The C++ test is `#ifdef __aarch64__` — guarded here with cfg.
-#[test]
+#[cfg_attr(test, test)]
 fn arm_mops_exception() {
     let _ctx = TestContext::new();
 
@@ -88,4 +88,11 @@ fn arm_mops_exception() {
     // 2. Execute SETP, then invert the C flag via MRS/EOR/MSR NZCV
     // 3. Execute SETM — should fault
     // This is inherently destructive and cannot be tested in libos.
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    arm_mops();
+    arm_mops_exception();
 }

@@ -10,7 +10,7 @@ use zircon_object::signal::Port;
 use zircon_object::ZxError;
 
 /// Creating a virtual interrupt object succeeds.
-#[test]
+#[cfg_attr(test, test)]
 fn interrupt_create() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -21,7 +21,7 @@ fn interrupt_create() {
 /// Creating an interrupt with invalid operations should fail.
 /// A virtual interrupt cannot be triggered with a physical trigger,
 /// and ack without a port bound returns BAD_STATE.
-#[test]
+#[cfg_attr(test, test)]
 fn interrupt_create_invalid() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -31,7 +31,7 @@ fn interrupt_create_invalid() {
 
 /// Unbinding a virtual interrupt from a port succeeds after bind.
 /// Unbinding when not bound returns NOT_FOUND.
-#[test]
+#[cfg_attr(test, test)]
 fn interrupt_unbind() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -46,7 +46,7 @@ fn interrupt_unbind() {
 }
 
 /// Acknowledging an interrupt — various error paths.
-#[test]
+#[cfg_attr(test, test)]
 fn interrupt_ack() {
     let _ctx = TestContext::new();
 
@@ -64,7 +64,7 @@ fn interrupt_ack() {
 }
 
 /// Destroying an interrupt object succeeds.
-#[test]
+#[cfg_attr(test, test)]
 fn interrupt_destroy() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -79,7 +79,7 @@ fn interrupt_destroy() {
 }
 
 /// Triggering a virtual interrupt succeeds.
-#[test]
+#[cfg_attr(test, test)]
 fn interrupt_trigger() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -88,8 +88,20 @@ fn interrupt_trigger() {
 }
 
 /// Waiting on a virtual interrupt requires async context. Left as stub.
-#[test]
+#[cfg_attr(test, test)]
 fn interrupt_virtual_interrupt_wait() {
     // Requires async context and real interrupt delivery.
     // This test would block forever waiting for a virtual interrupt.
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    interrupt_create();
+    interrupt_create_invalid();
+    interrupt_unbind();
+    interrupt_ack();
+    interrupt_destroy();
+    interrupt_trigger();
+    interrupt_virtual_interrupt_wait();
 }

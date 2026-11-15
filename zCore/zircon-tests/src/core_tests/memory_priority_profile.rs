@@ -15,7 +15,7 @@ use crate::helpers::TestContext;
 ///
 /// Valid memory priorities are only ZX_PRIORITY_DEFAULT (16) and
 /// ZX_PRIORITY_HIGH (24).
-#[test]
+#[cfg_attr(test, test)]
 fn invalid_priorities() {
     use zircon_object::task::{Profile, ProfileInfo, ProfileInfoFlags};
 
@@ -49,7 +49,7 @@ fn invalid_priorities() {
 /// C++: TEST(MemoryPriorityProfile, MemoryOrThread)
 /// Memory priority flag is mutually exclusive with scheduling flags
 /// (PRIORITY, CPU_MASK, DEADLINE).
-#[test]
+#[cfg_attr(test, test)]
 fn memory_or_thread() {
     use zircon_object::task::{Profile, ProfileInfo, ProfileInfoFlags};
 
@@ -85,7 +85,7 @@ fn memory_or_thread() {
 /// the profile creation and application paths work correctly.
 /// We create both HIGH and DEFAULT profiles and apply them to the
 /// root VMAR via sys_object_set_profile.
-#[test]
+#[cfg_attr(test, test)]
 fn apply_profile() {
     use zircon_object::task::{ProfileInfo, ProfileInfoFlags};
 
@@ -152,7 +152,7 @@ fn apply_profile() {
 /// handle must have the VMAR rights that allow the operation. We test
 /// that a VMAR handle with full rights succeeds, while one with no
 /// rights fails with ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn rights() {
     use zircon_object::task::{ProfileInfo, ProfileInfoFlags};
 
@@ -198,4 +198,13 @@ fn rights() {
         zircon_object::ZxError::ACCESS_DENIED,
         "VMAR with no rights should fail"
     );
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    invalid_priorities();
+    memory_or_thread();
+    apply_profile();
+    rights();
 }

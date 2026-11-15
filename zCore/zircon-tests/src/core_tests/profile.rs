@@ -41,7 +41,7 @@ pub(crate) fn make_deadline_info(
 }
 /// C++: TEST(ProfileTest, ApplySchedulingProfileToVmarIsOk)
 /// Apply a scheduling profile to a VMAR — should succeed (no-op).
-#[test]
+#[cfg_attr(test, test)]
 fn profile_test_apply_scheduling_profile_to_vmar_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -67,7 +67,7 @@ fn profile_test_apply_scheduling_profile_to_vmar_is_ok() {
 
 /// C++: TEST(ProfileTest, CreateProfileWithDefaultInitializedProfileInfoIsError)
 /// Default-initialized ProfileInfo has flags_raw=0, which is invalid.
-#[test]
+#[cfg_attr(test, test)]
 fn profile_test_create_profile_with_default_initialized_profile_info_is_error() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::default();
@@ -80,7 +80,7 @@ fn profile_test_create_profile_with_default_initialized_profile_info_is_error() 
 
 /// C++: TEST(ProfileTest, CreateProfileWithInvalidHandleIsBadHandle)
 /// At the syscall layer, using an invalid resource handle returns BAD_HANDLE.
-#[test]
+#[cfg_attr(test, test)]
 fn profile_test_create_profile_with_invalid_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -100,7 +100,7 @@ fn profile_test_create_profile_with_invalid_handle_is_bad_handle() {
 
 /// C++: TEST(ProfileTest, CreateProfileWithMutuallyExclusiveFlagsIsInvalidArgs)
 /// PRIORITY + DEADLINE is mutually exclusive.
-#[test]
+#[cfg_attr(test, test)]
 fn profile_test_create_profile_with_mutually_exclusive_flags_is_invalid_args() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(
@@ -116,7 +116,7 @@ fn profile_test_create_profile_with_mutually_exclusive_flags_is_invalid_args() {
 
 /// C++: TEST(ProfileTest, CreateProfileWithNoProfileInfoIsInvalidArgs)
 /// Flags = 0 (no scheduling discipline) is invalid.
-#[test]
+#[cfg_attr(test, test)]
 fn profile_test_create_profile_with_no_profile_info_is_invalid_args() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::default();
@@ -125,7 +125,7 @@ fn profile_test_create_profile_with_no_profile_info_is_invalid_args() {
 
 /// C++: TEST(SchedulerProfileTest, CreateFairProfileWithNoInheritIsOk)
 /// PRIORITY + NO_INHERIT should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_fair_profile_with_no_inherit_is_ok() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(
@@ -140,7 +140,7 @@ fn sched_profile_create_fair_profile_with_no_inherit_is_ok() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileOnNonProfileResourceIsAccessDenied)
 /// Using a non-root/non-SYSTEM resource should fail with ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_on_non_profile_resource_is_access_denied() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -174,7 +174,7 @@ fn sched_profile_create_profile_on_non_profile_resource_is_access_denied() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithCriticalDeadlineIsOk)
 /// DEADLINE + CRITICAL should succeed with valid params.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_critical_deadline_is_ok() {
     let _ctx = TestContext::new();
     let info = make_deadline_info(ProfileInfoFlags::CRITICAL, 1_000_000, 5_000_000, 10_000_000);
@@ -187,7 +187,7 @@ fn sched_profile_create_profile_with_critical_deadline_is_ok() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithCriticalWithoutDeadlineIsInvalidArgs)
 /// CRITICAL requires DEADLINE — PRIORITY + CRITICAL should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_critical_without_deadline_is_invalid_args() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(
@@ -199,7 +199,7 @@ fn sched_profile_create_profile_with_critical_without_deadline_is_invalid_args()
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithDeadlineAndNoInheritIsInvalidArgs)
 /// DEADLINE + NO_INHERIT is invalid.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_deadline_and_no_inherit_is_invalid_args() {
     let _ctx = TestContext::new();
     let info = make_deadline_info(
@@ -213,7 +213,7 @@ fn sched_profile_create_profile_with_deadline_and_no_inherit_is_invalid_args() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithDeadlineBelowCapacityIsInvalidArgs)
 /// relative_deadline < capacity is invalid.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_deadline_below_capacity_is_invalid_args() {
     let _ctx = TestContext::new();
     // capacity=5M > relative_deadline=1M → invalid
@@ -223,7 +223,7 @@ fn sched_profile_create_profile_with_deadline_below_capacity_is_invalid_args() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithDeadlineCapacityOutOfRangeIsOutOfRange)
 /// capacity > INT32_MAX nanos is out of range.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_deadline_capacity_out_of_range_is_out_of_range() {
     let _ctx = TestContext::new();
     let big = i64::from(i32::MAX) + 1;
@@ -233,7 +233,7 @@ fn sched_profile_create_profile_with_deadline_capacity_out_of_range_is_out_of_ra
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithDeadlineIsOk)
 /// Valid deadline params should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_deadline_is_ok() {
     let _ctx = TestContext::new();
     let info = make_deadline_info(ProfileInfoFlags::empty(), 1_000_000, 5_000_000, 10_000_000);
@@ -247,7 +247,7 @@ fn sched_profile_create_profile_with_deadline_is_ok() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithDeadlinePeriodOutOfRangeIsOutOfRange)
 /// period > INT32_MAX nanos is out of range.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_deadline_period_out_of_range_is_out_of_range() {
     let _ctx = TestContext::new();
     let big = i64::from(i32::MAX) + 1;
@@ -258,7 +258,7 @@ fn sched_profile_create_profile_with_deadline_period_out_of_range_is_out_of_rang
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithDeadlineRelativeDeadlineOutOfRangeIsOutOfRange)
 /// relative_deadline > INT32_MAX nanos is out of range.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_deadline_relative_deadline_out_of_range_is_out_of_range() {
     let _ctx = TestContext::new();
     let big = i64::from(i32::MAX) + 1;
@@ -268,7 +268,7 @@ fn sched_profile_create_profile_with_deadline_relative_deadline_out_of_range_is_
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithDefaultPriorityIsOk)
 /// Default priority (16) should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_default_priority_is_ok() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 16);
@@ -278,7 +278,7 @@ fn sched_profile_create_profile_with_default_priority_is_ok() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithHighPriorityIsOk)
 /// Priority 24 should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_high_priority_is_ok() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 24);
@@ -288,7 +288,7 @@ fn sched_profile_create_profile_with_high_priority_is_ok() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithHighestPriorityIsOk)
 /// Priority 31 (HIGHEST_PRIORITY) should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_highest_priority_is_ok() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 31);
@@ -298,7 +298,7 @@ fn sched_profile_create_profile_with_highest_priority_is_ok() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithLowPriorityIsOk)
 /// Priority 1 should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_low_priority_is_ok() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 1);
@@ -308,7 +308,7 @@ fn sched_profile_create_profile_with_low_priority_is_ok() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithLowestPriorityIsOk)
 /// Priority 0 (LOWEST_PRIORITY) should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_lowest_priority_is_ok() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 0);
@@ -318,7 +318,7 @@ fn sched_profile_create_profile_with_lowest_priority_is_ok() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithNonZeroOptionsIsInvalidArgs)
 /// sys_profile_create with options != 0 should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_non_zero_options_is_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -337,7 +337,7 @@ fn sched_profile_create_profile_with_non_zero_options_is_invalid_args() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithPeriodBelowDeadlineIsInvalidArgs)
 /// period < relative_deadline is invalid.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_period_below_deadline_is_invalid_args() {
     let _ctx = TestContext::new();
     // capacity=1M, relative_deadline=10M, period=5M → period < deadline
@@ -347,7 +347,7 @@ fn sched_profile_create_profile_with_period_below_deadline_is_invalid_args() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithPriorityBelowLowestIsInvalidArgs)
 /// Priority -1 (below LOWEST_PRIORITY=0) should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_priority_below_lowest_is_invalid_args() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), -1);
@@ -356,7 +356,7 @@ fn sched_profile_create_profile_with_priority_below_lowest_is_invalid_args() {
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithPriorityExceedingHighestIsInvalidArgs)
 /// Priority 32 (above HIGHEST_PRIORITY=31) should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_priority_exceeding_highest_is_invalid_args() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 32);
@@ -365,7 +365,7 @@ fn sched_profile_create_profile_with_priority_exceeding_highest_is_invalid_args(
 
 /// C++: TEST(SchedulerProfileTest, CreateProfileWithZeroCapacityIsInvalidArgs)
 /// Deadline with capacity=0 is invalid.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_create_profile_with_zero_capacity_is_invalid_args() {
     let _ctx = TestContext::new();
     let info = make_deadline_info(ProfileInfoFlags::empty(), 0, 5_000_000, 10_000_000);
@@ -374,7 +374,7 @@ fn sched_profile_create_profile_with_zero_capacity_is_invalid_args() {
 
 /// C++: TEST(SchedulerProfileTest, CreatedProfileHasDefaultRights)
 /// A profile created via sys_profile_create should have DEFAULT_PROFILE rights.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_created_profile_has_default_rights() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -418,7 +418,7 @@ fn sched_profile_created_profile_has_default_rights() {
 /// Create a deadline profile with specific params that previously
 /// triggered a panic in PI utilization tracking. Verifies creation
 /// succeeds without panic.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_deadline_pi_utilization_panic_repro() {
     let _ctx = TestContext::new();
     // These specific params triggered a utilization calculation bug
@@ -438,7 +438,7 @@ fn sched_profile_deadline_pi_utilization_panic_repro() {
 
 /// C++: TEST(SchedulerProfileTest, SetProfileWithNonZeroOptionsIsInvalidArgs)
 /// sys_object_set_profile with options != 0 should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_set_profile_with_non_zero_options_is_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -467,7 +467,7 @@ fn sched_profile_set_profile_with_non_zero_options_is_invalid_args() {
 
 /// C++: TEST(SchedulerProfileTest, SetThreadPriorityIsOk)
 /// Apply a priority profile to a thread via syscall — should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn sched_profile_set_thread_priority_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -495,4 +495,38 @@ fn sched_profile_set_thread_priority_is_ok() {
             result
         );
     }
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    profile_test_apply_scheduling_profile_to_vmar_is_ok();
+    profile_test_create_profile_with_default_initialized_profile_info_is_error();
+    profile_test_create_profile_with_invalid_handle_is_bad_handle();
+    profile_test_create_profile_with_mutually_exclusive_flags_is_invalid_args();
+    profile_test_create_profile_with_no_profile_info_is_invalid_args();
+    sched_profile_create_fair_profile_with_no_inherit_is_ok();
+    sched_profile_create_profile_on_non_profile_resource_is_access_denied();
+    sched_profile_create_profile_with_critical_deadline_is_ok();
+    sched_profile_create_profile_with_critical_without_deadline_is_invalid_args();
+    sched_profile_create_profile_with_deadline_and_no_inherit_is_invalid_args();
+    sched_profile_create_profile_with_deadline_below_capacity_is_invalid_args();
+    sched_profile_create_profile_with_deadline_capacity_out_of_range_is_out_of_range();
+    sched_profile_create_profile_with_deadline_is_ok();
+    sched_profile_create_profile_with_deadline_period_out_of_range_is_out_of_range();
+    sched_profile_create_profile_with_deadline_relative_deadline_out_of_range_is_out_of_range();
+    sched_profile_create_profile_with_default_priority_is_ok();
+    sched_profile_create_profile_with_high_priority_is_ok();
+    sched_profile_create_profile_with_highest_priority_is_ok();
+    sched_profile_create_profile_with_low_priority_is_ok();
+    sched_profile_create_profile_with_lowest_priority_is_ok();
+    sched_profile_create_profile_with_non_zero_options_is_invalid_args();
+    sched_profile_create_profile_with_period_below_deadline_is_invalid_args();
+    sched_profile_create_profile_with_priority_below_lowest_is_invalid_args();
+    sched_profile_create_profile_with_priority_exceeding_highest_is_invalid_args();
+    sched_profile_create_profile_with_zero_capacity_is_invalid_args();
+    sched_profile_created_profile_has_default_rights();
+    sched_profile_deadline_pi_utilization_panic_repro();
+    sched_profile_set_profile_with_non_zero_options_is_invalid_args();
+    sched_profile_set_thread_priority_is_ok();
 }

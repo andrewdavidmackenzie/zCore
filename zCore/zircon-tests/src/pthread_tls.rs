@@ -24,7 +24,7 @@ use zircon_object::task::{Job, Process, Thread};
 /// register (set via zx_thread_write_state) to index into a
 /// per-thread TLS area. The kernel primitive is: each thread has
 /// distinct register state including the TLS base pointer.
-#[test]
+#[cfg_attr(test, test)]
 fn thread_identity_for_tls() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -43,4 +43,10 @@ fn thread_identity_for_tls() {
     assert_eq!(t1.related_koid(), proc.id());
     assert_eq!(t2.related_koid(), proc.id());
     assert_eq!(t3.related_koid(), proc.id());
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    thread_identity_for_tls();
 }

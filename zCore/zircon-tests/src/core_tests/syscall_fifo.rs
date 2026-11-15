@@ -25,7 +25,7 @@ pub(crate) fn syscall_fifo_create(
     (h0, h1)
 }
 /// C++: TEST(FifoTest, InvalidParametersReturnOutOfRange) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn invalid_parameters() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -53,7 +53,7 @@ fn invalid_parameters() {
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 /// C++: TEST(FifoTest, WriteNoWriteRights) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn write_no_write_rights() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -77,7 +77,7 @@ fn write_no_write_rights() {
 }
 
 /// C++: TEST(FifoTest, ReadNoReadRights) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn read_no_read_rights() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -103,7 +103,7 @@ fn read_no_read_rights() {
 // ── Batch-ported FifoTest tests from fifo.cc ──
 
 /// C++: TEST(FifoTest, ReadAndWriteValidatesSizeAndElementCount)
-#[test]
+#[cfg_attr(test, test)]
 fn read_and_write_validates_size_and_element_count() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_fifo_create(&ctx, 8, 8);
@@ -163,7 +163,7 @@ fn read_and_write_validates_size_and_element_count() {
 }
 /// C++: TEST(FifoTest, ReadWriteNullActualCount)
 /// Null actual_count pointer should be accepted (not written to).
-#[test]
+#[cfg_attr(test, test)]
 fn read_write_null_actual_count() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_fifo_create(&ctx, 8, 8);
@@ -191,7 +191,7 @@ fn read_write_null_actual_count() {
     assert_eq!(u64::from_ne_bytes(buf), 1234);
 }
 /// C++: TEST(FifoTest, WriteToClosedPeerReturnsPeerClosed)
-#[test]
+#[cfg_attr(test, test)]
 fn write_to_closed_peer_returns_peer_closed() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_fifo_create(&ctx, 8, 8);
@@ -213,4 +213,15 @@ fn write_to_closed_peer_returns_peer_closed() {
         .unwrap_err(),
         ZxError::PEER_CLOSED
     );
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    invalid_parameters();
+    write_no_write_rights();
+    read_no_read_rights();
+    read_and_write_validates_size_and_element_count();
+    read_write_null_actual_count();
+    write_to_closed_peer_returns_peer_closed();
 }

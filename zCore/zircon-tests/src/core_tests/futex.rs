@@ -5,7 +5,7 @@ use zircon_object::signal::Futex;
 
 /// C++: TEST(FutexTest, WaitValueMismatch)
 /// futex_wait with wrong expected value returns BAD_STATE immediately.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn wait_value_mismatch() {
     use core::sync::atomic::AtomicI32;
 
@@ -23,7 +23,7 @@ async fn wait_value_mismatch() {
 /// At the object level, Futex::new accepts any usize — validation is in
 /// sys_futex_wait/sys_futex_wake (null check, alignment check, mapping check).
 /// We verify via sys_futex_wake which validates identically but is synchronous.
-#[test]
+#[cfg_attr(test, test)]
 fn wait_bad_address() {
     use core::sync::atomic::AtomicI32;
 
@@ -40,7 +40,7 @@ fn wait_bad_address() {
 
 /// C++: TEST(FutexTest, MisalignedFutextAddr)
 /// Misaligned futex address returns INVALID_ARGS at syscall level.
-#[test]
+#[cfg_attr(test, test)]
 fn misaligned_futex_addr() {
     use core::sync::atomic::AtomicI32;
 
@@ -57,7 +57,7 @@ fn misaligned_futex_addr() {
 
 /// C++: TEST(FutexTest, WakeWithWakeCountZero)
 /// Waking with count=0 succeeds and wakes nobody.
-#[test]
+#[cfg_attr(test, test)]
 fn wake_with_wake_count_zero() {
     let _ctx = TestContext::new();
     let futex = Futex::new(0);
@@ -67,7 +67,7 @@ fn wake_with_wake_count_zero() {
 
 /// C++: TEST(FutexTest, WakeupAddress)
 /// Wake on a futex with no waiters returns 0.
-#[test]
+#[cfg_attr(test, test)]
 fn wakeup_address() {
     use core::sync::atomic::AtomicI32;
 
@@ -82,7 +82,7 @@ fn wakeup_address() {
 
 /// C++: TEST(FutexTest, GetOwner)
 /// Get the futex owner thread koid. Ownership is set via wake_single_owner.
-#[test]
+#[cfg_attr(test, test)]
 fn get_owner() {
     use core::sync::atomic::AtomicI32;
 
@@ -105,7 +105,7 @@ fn get_owner() {
 /// C++: TEST(FutexTest, WaitTimeout)
 /// Wait with immediate timeout (value matches) — the future stays pending
 /// and if dropped (simulating timeout), the waiter is removed.
-#[test]
+#[cfg_attr(test, test)]
 fn wait_timeout() {
     use core::future::Future;
     use core::sync::atomic::AtomicI32;
@@ -147,7 +147,7 @@ fn wait_timeout() {
 ///
 /// One thread waits on a futex, main thread wakes it.
 /// Thread's wait_result should be Ok (0).
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn wakeup() {
     use crate::helpers::FutexTestThread;
     use alloc::sync::Arc;
@@ -182,7 +182,7 @@ async fn wakeup() {
 ///
 /// 4 threads wait on a futex. Wake with count=2 — exactly 2 should
 /// wake. Then wake the remaining 2.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn wakeup_limit() {
     use crate::helpers::{assert_woke_thread_count, FutexTestThread};
     use alloc::sync::Arc;
@@ -228,7 +228,7 @@ async fn wakeup_limit() {
 ///
 /// 6 threads wait on futex1. Requeue: wake 3, move 2 to futex2,
 /// leave 1 on futex1. Then wake futex2 → 2 more wake. Wake futex1 → last 1.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn requeue() {
     use crate::helpers::{assert_woke_thread_count, FutexTestThread};
     use alloc::sync::Arc;
@@ -285,7 +285,7 @@ async fn requeue() {
 ///
 /// Requeue with a mismatched expected value on the wake futex.
 /// Should return BAD_STATE immediately — no waiters needed.
-#[test]
+#[cfg_attr(test, test)]
 fn requeue_value_mismatch() {
     use core::sync::atomic::AtomicI32;
 
@@ -308,7 +308,7 @@ fn requeue_value_mismatch() {
 ///
 /// Requeue from a futex to itself. The syscall layer rejects this
 /// with INVALID_ARGS (same source and target address).
-#[test]
+#[cfg_attr(test, test)]
 fn requeue_same_addr() {
     use core::sync::atomic::AtomicI32;
 
@@ -338,7 +338,7 @@ fn requeue_same_addr() {
 /// we exercise the requeue mechanics and verify the waiter count is
 /// correct by checking that wake(1) on futex2 wakes exactly one thread
 /// after the requeue.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn requeue_unqueued_on_timeout() {
     use crate::helpers::{assert_woke_thread_count, FutexTestThread};
     use alloc::sync::Arc;
@@ -403,7 +403,7 @@ async fn requeue_unqueued_on_timeout() {
 /// restart mechanism (bare-metal only). We exercise the parts that
 /// work in libos mode: create a waiter thread on a futex, verify it
 /// blocks, then wake it and verify it completes normally.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn thread_suspended() {
     use crate::helpers::FutexTestThread;
     use alloc::sync::Arc;
@@ -452,7 +452,7 @@ async fn thread_suspended() {
 ///
 /// The C++ Event class: Wait() checks signaled_ then futex_wait;
 /// Signal() stores 1 then futex_wake(UINT_MAX).
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn event_signaling() {
     use crate::helpers::{assert_woke_thread_count, FutexTestThread};
     use alloc::sync::Arc;
@@ -495,7 +495,7 @@ async fn event_signaling() {
 /// calls zx_futex_wait with t2 as the owner. We exercise a similar
 /// pattern: start waiter threads, wake them, shut them down quickly.
 /// The test passes if no panic occurs.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn wait_exit_race() {
     use crate::helpers::FutexTestThread;
     use alloc::sync::Arc;
@@ -528,7 +528,7 @@ async fn wait_exit_race() {
 ///
 /// The C++ test uses 20 threads, 20 futexes, 100 requeue iterations
 /// with 10ms timeout per wait. We scale down for the Rust port.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn requeue_cycle_stress_test() {
     use crate::helpers::FutexTestThread;
     use alloc::sync::Arc;
@@ -579,7 +579,7 @@ async fn requeue_cycle_stress_test() {
 ///
 /// 3 threads wait on futex1. Requeue: wake 1, requeue 2 to futex2.
 /// Then wake futex2 → all 3 done.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn requeue_single_owner() {
     use crate::helpers::{assert_woke_thread_count, FutexTestThread};
     use alloc::sync::Arc;
@@ -626,7 +626,7 @@ async fn requeue_single_owner() {
 /// those cases are tested synchronously elsewhere.
 ///
 /// Case 4: proposed owner is already waiting on this futex → INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn wait_invalid_owner() {
     use crate::helpers::FutexTestThread;
     use alloc::sync::Arc;
@@ -669,7 +669,7 @@ async fn wait_invalid_owner() {
 /// or requeue futex as proposed owner returns INVALID_ARGS.
 ///
 /// Case 3: proposed owner is waiting on wake futex or requeue futex.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn requeue_invalid_owner() {
     use crate::helpers::FutexTestThread;
     use alloc::sync::Arc;
@@ -731,7 +731,7 @@ async fn requeue_invalid_owner() {
 /// C++: TEST(FutexTest, FutexRequeueTbiReturnsInvalidArgs)
 /// TBI (Top Byte Ignore) — futex addresses with non-zero top byte
 /// should be rejected. Test at the syscall level.
-#[test]
+#[cfg_attr(test, test)]
 fn futex_requeue_tbi_returns_invalid_args() {
     use core::sync::atomic::AtomicI32;
 
@@ -763,7 +763,7 @@ fn futex_requeue_tbi_returns_invalid_args() {
 /// C++: TEST(FutexTest, RequeueWithWakeCountZero)
 /// Requeue with wake_count=0 — only requeues, doesn't wake anyone.
 /// No waiters means result is 0.
-#[test]
+#[cfg_attr(test, test)]
 fn requeue_with_wake_count_zero() {
     use core::sync::atomic::AtomicI32;
 
@@ -780,7 +780,7 @@ fn requeue_with_wake_count_zero() {
 
 /// C++: TEST(FutexTest, UnmappedAddress)
 /// Unmapped/null address at the syscall level is rejected.
-#[test]
+#[cfg_attr(test, test)]
 fn unmapped_address() {
     use core::sync::atomic::AtomicI32;
 
@@ -795,7 +795,7 @@ fn unmapped_address() {
 
 /// C++: TEST(FutexTest, WaitTimeoutElapsed)
 /// Wait with value match — the future goes Pending. Dropping simulates timeout.
-#[test]
+#[cfg_attr(test, test)]
 fn wait_timeout_elapsed() {
     use core::future::Future;
     use core::sync::atomic::AtomicI32;
@@ -829,4 +829,33 @@ fn wait_timeout_elapsed() {
 
     // No dangling waiters
     assert_eq!(futex.wake(1), 0);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    wait_value_mismatch().await;
+    wait_bad_address();
+    misaligned_futex_addr();
+    wake_with_wake_count_zero();
+    wakeup_address();
+    get_owner();
+    wait_timeout();
+    wakeup().await;
+    wakeup_limit().await;
+    requeue().await;
+    requeue_value_mismatch();
+    requeue_same_addr();
+    requeue_unqueued_on_timeout().await;
+    thread_suspended().await;
+    event_signaling().await;
+    wait_exit_race().await;
+    requeue_cycle_stress_test().await;
+    requeue_single_owner().await;
+    wait_invalid_owner().await;
+    requeue_invalid_owner().await;
+    futex_requeue_tbi_returns_invalid_args();
+    requeue_with_wake_count_zero();
+    unmapped_address();
+    wait_timeout_elapsed();
 }

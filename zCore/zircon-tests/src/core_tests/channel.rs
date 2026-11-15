@@ -13,7 +13,7 @@ use zircon_object::ZxError;
 // -- ChannelTest --
 
 /// C++: TEST(ChannelTest, CreateIsOkAndEndpointsAreRelated)
-#[test]
+#[cfg_attr(test, test)]
 fn create_is_ok_and_endpoints_are_related() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -25,7 +25,7 @@ fn create_is_ok_and_endpoints_are_related() {
 }
 
 /// C++: TEST(ChannelTest, IsWriteableByDefault)
-#[test]
+#[cfg_attr(test, test)]
 fn is_writeable_by_default() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -35,7 +35,7 @@ fn is_writeable_by_default() {
 }
 
 /// C++: TEST(ChannelTest, WriteToEndpointCausesOtherToBecomeReadable)
-#[test]
+#[cfg_attr(test, test)]
 fn write_to_endpoint_causes_other_to_become_readable() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -57,7 +57,7 @@ fn write_to_endpoint_causes_other_to_become_readable() {
 
 /// C++: TEST(ChannelTest, WriteConsumesAllHandles)
 /// Fuchsia expects ZX_ERR_OUT_OF_RANGE for > ZX_CHANNEL_MAX_MSG_HANDLES (64).
-#[test]
+#[cfg_attr(test, test)]
 fn write_consumes_all_handles() {
     let _ctx = TestContext::new();
     let (local, _remote) = Channel::create();
@@ -80,7 +80,7 @@ fn write_consumes_all_handles() {
 }
 
 /// C++: TEST(ChannelTest, ReadWhenEmptyReturnsShouldWait)
-#[test]
+#[cfg_attr(test, test)]
 fn read_when_empty_returns_should_wait() {
     let _ctx = TestContext::new();
     let (local, _remote) = Channel::create();
@@ -90,7 +90,7 @@ fn read_when_empty_returns_should_wait() {
 }
 
 /// C++: TEST(ChannelTest, ReadWhenEmptyAndClosedReturnsPeerClosed)
-#[test]
+#[cfg_attr(test, test)]
 fn read_when_empty_and_closed_returns_peer_closed() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -103,7 +103,7 @@ fn read_when_empty_and_closed_returns_peer_closed() {
 /// C++: TEST(ChannelTest, ReadRemainingMessagesWhenPeerIsClosed)
 /// C++ writes kMessageCount=4 messages, closes peer, checks READABLE|PEER_CLOSED
 /// signal, reads all 4, verifies channel is no longer READABLE.
-#[test]
+#[cfg_attr(test, test)]
 fn read_remaining_messages_when_peer_is_closed() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -151,7 +151,7 @@ fn read_remaining_messages_when_peer_is_closed() {
 }
 
 /// C++: TEST(ChannelTest, CloseSignalsPeerClosed)
-#[test]
+#[cfg_attr(test, test)]
 fn close_signals_peer_closed() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -162,7 +162,7 @@ fn close_signals_peer_closed() {
 }
 
 /// C++: TEST(ChannelTest, CloseClearsSignalsWriteable)
-#[test]
+#[cfg_attr(test, test)]
 fn close_clears_signals_writeable() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -177,7 +177,7 @@ fn close_clears_signals_writeable() {
 /// C++ calls `remote.signal_peer(0, ZX_USER_SIGNAL_0)` after `local.reset()`
 /// and expects ZX_ERR_PEER_CLOSED. We use the syscall to attempt peer
 /// signaling and verify it returns PEER_CLOSED.
-#[test]
+#[cfg_attr(test, test)]
 fn close_signals_peer_returns_peer_closed() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -195,7 +195,7 @@ fn close_signals_peer_returns_peer_closed() {
 /// C++: TEST(ChannelTest, ReadAndWriteWithMultipleSizes)
 /// C++ tests 1000 random sizes in [0, ZX_CHANNEL_MAX_MSG_BYTES).
 /// We test 100 sizes covering 0, 1, small, PAGE_SIZE boundary, and MAX_MSG_BYTES.
-#[test]
+#[cfg_attr(test, test)]
 fn read_and_write_with_multiple_sizes() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -264,7 +264,7 @@ fn read_and_write_with_multiple_sizes() {
 /// C++: TEST(ChannelTest, CreateInvalidOptionsReturnsInvalidArgs)
 /// In the C++ test, passing non-zero options to zx_channel_create fails
 /// with ZX_ERR_INVALID_ARGS. Exercise the syscall layer validation.
-#[test]
+#[cfg_attr(test, test)]
 fn create_invalid_options_returns_invalid_args() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -298,7 +298,7 @@ fn create_invalid_options_returns_invalid_args() {
 /// Nest 200 channels, each one in the payload of the previous one. Without
 /// the SafeDeleter in fbl_recycle() this blows the kernel stack when calling
 /// the destructors.
-#[test]
+#[cfg_attr(test, test)]
 fn nesting_is_ok() {
     let _ctx = TestContext::new();
     const NESTED_COUNT: usize = 200;
@@ -349,7 +349,7 @@ fn nesting_is_ok() {
 }
 
 /// C++: TEST(ChannelTest, ReadZeroByteZeroHandleMessageSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn read_zero_byte_zero_handle_message_succeeds() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -371,7 +371,7 @@ fn read_zero_byte_zero_handle_message_succeeds() {
 /// C++ tests 0–3 byte payloads, verifying data and signal state.
 /// We test 0–3 bytes (matching C++) plus also 4–8 for extra coverage,
 /// and verify exact signal masks after each write and read.
-#[test]
+#[cfg_attr(test, test)]
 fn write_short_payloads_succeeds() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -431,7 +431,7 @@ fn write_short_payloads_succeeds() {
 /// C++: TEST(ChannelTest, WriteSelfHandleReturnsNotSupported)
 /// Writing a channel's own handle through itself is rejected by the
 /// syscall layer with NOT_SUPPORTED.
-#[test]
+#[cfg_attr(test, test)]
 fn write_self_handle_returns_not_supported() {
     use crate::core_tests::syscall_channel::syscall_channel_create;
     use hal_impl::user::UserInPtr;
@@ -468,7 +468,7 @@ fn write_self_handle_returns_not_supported() {
 /// still readable on remote, so on_flight_local[0] remains WRITABLE.
 /// Then closing remote drops on_flight_remote[0] → on_flight_local[0]
 /// sees PEER_CLOSED.
-#[test]
+#[cfg_attr(test, test)]
 fn on_flight_handles_signalled_when_peer_is_closed() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -526,7 +526,7 @@ fn on_flight_handles_signalled_when_peer_is_closed() {
 
 /// C++: TEST(ChannelTest, WriteToPeerClosedConsumesMovedHandles)
 /// Writing to a closed channel endpoint should still consume the handles.
-#[test]
+#[cfg_attr(test, test)]
 fn write_to_peer_closed_consumes_moved_handles() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -551,7 +551,7 @@ fn write_to_peer_closed_consumes_moved_handles() {
 
 /// C++: TEST(ChannelTest, WaitManyIsSignaledForBothWrites)
 /// When both endpoints have messages, both should be READABLE.
-#[test]
+#[cfg_attr(test, test)]
 fn wait_many_is_signaled_for_both_writes() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -580,7 +580,7 @@ fn wait_many_is_signaled_for_both_writes() {
 /// C++: TEST(ChannelTest, ReadMayDiscardWithSmallerBufferDiscardHandlesAndDateReturnsBufferTooSmall)
 /// Reading with MAY_DISCARD and a buffer too small discards the message
 /// and returns BUFFER_TOO_SMALL with actual sizes reported.
-#[test]
+#[cfg_attr(test, test)]
 fn read_may_discard_with_smaller_buffer() {
     use crate::core_tests::syscall_channel::syscall_channel_create;
     use hal_impl::user::{UserInPtr, UserOutPtr};
@@ -637,7 +637,7 @@ fn read_may_discard_with_smaller_buffer() {
 /// C++: TEST(ChannelTest, ReadMayDiscardWithNullBufferDiscardHandlesReturnsBufferTooSmall)
 /// Reading with MAY_DISCARD and no handles buffer discards the message
 /// containing handles and returns BUFFER_TOO_SMALL.
-#[test]
+#[cfg_attr(test, test)]
 fn read_may_discard_with_null_buffer_discard_handles_returns_buffer_too_small() {
     use crate::core_tests::syscall_channel::syscall_channel_create;
     use hal_impl::user::{UserInPtr, UserOutPtr};
@@ -686,7 +686,7 @@ fn read_may_discard_with_null_buffer_discard_handles_returns_buffer_too_small() 
 /// C++: TEST(ChannelTest, ReadMayDiscardWithZeroSizeBuffersDiscardHandlesAndDataReturnsBufferTooSmall)
 /// Reading with MAY_DISCARD and zero-size buffers discards a message
 /// with data+handles, returns BUFFER_TOO_SMALL with actual sizes.
-#[test]
+#[cfg_attr(test, test)]
 fn read_may_discard_with_zero_size_buffers() {
     use crate::core_tests::syscall_channel::syscall_channel_create;
     use hal_impl::user::{UserInPtr, UserOutPtr};
@@ -754,7 +754,7 @@ fn read_may_discard_with_zero_size_buffers() {
 /// address for the handles buffer — in libos mode we instead verify
 /// the handle lifecycle is correct by reading normally and confirming
 /// the handle is consumed from the message.
-#[test]
+#[cfg_attr(test, test)]
 fn read_fault_does_not_leak_handles() {
     let _ctx = TestContext::new();
 
@@ -785,7 +785,7 @@ fn read_fault_does_not_leak_handles() {
 ///
 /// Multiple iterations: write to channel, read, verify no spurious
 /// READABLE signal remains after the read completes.
-#[test]
+#[cfg_attr(test, test)]
 fn no_spurious_readable_signal_when_racing() {
     let _ctx = TestContext::new();
 
@@ -828,7 +828,7 @@ fn no_spurious_readable_signal_when_racing() {
 ///   - All 2000 unique values were consumed
 ///   - No duplicates
 ///   - Each reader's values are monotonically increasing
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn concurrent_reads_consume_unique_elements() {
     use alloc::sync::Arc;
     use alloc::vec::Vec;
@@ -952,7 +952,7 @@ async fn concurrent_reads_consume_unique_elements() {
 ///
 /// Creates two channels, writes to only one. Verifies that the
 /// written channel becomes READABLE while the other stays empty.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn wait_many_is_signaled_on_any_element_write() {
     use alloc::sync::Arc;
     use core::sync::atomic::{AtomicBool, Ordering};
@@ -1050,7 +1050,7 @@ async fn wait_many_is_signaled_on_any_element_write() {
 /// replies. We test the equivalent path: start an echo server, issue
 /// a call, and verify the round-trip works (suspend/resume is tested
 /// at the kernel level in ProcessTest.Suspend*).
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_suspended_thread_resumes_and_succeeds() {
     use crate::helpers::{EchoServer, TestContext};
 
@@ -1080,7 +1080,7 @@ async fn call_etc_suspended_thread_resumes_and_succeeds() {
 /// use different transaction IDs so replies are routed correctly.
 /// We verify by issuing two calls to the echo server and confirming
 /// both get the correct response.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_pending_transactions_use_different_ids() {
     use crate::helpers::{EchoServer, TestContext};
 
@@ -1126,7 +1126,7 @@ async fn call_pending_transactions_use_different_ids() {
 /// Channel::call method in zCore does not expose rd_num_handles limits
 /// (it returns all handles), so we test the analogous scenario: the
 /// server replies with handles, and the client receives them.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_response_bigger_than_rd_num_handles_returns_buffer_too_small() {
     use crate::helpers::TestContext;
 
@@ -1168,7 +1168,7 @@ async fn call_response_bigger_than_rd_num_handles_returns_buffer_too_small() {
 /// C++: TEST(ChannelTest, CallSuspendedThreadResumesAndSucceeds)
 /// Same as CallEtcSuspendedThreadResumesAndSucceeds but for the
 /// non-etc variant of channel_call. Verified via echo server round-trip.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_suspended_thread_resumes_and_succeeds() {
     use crate::helpers::{EchoServer, TestContext};
 
@@ -1198,7 +1198,7 @@ async fn call_suspended_thread_resumes_and_succeeds() {
 /// policy exception (ZX_EXCP_POLICY_CODE_CHANNEL_FULL_WRITE). We
 /// fill the channel to capacity and verify the write fails with the
 /// expected error once the limit is reached.
-#[test]
+#[cfg_attr(test, test)]
 fn channel_full_exception() {
     let _ctx = TestContext::new();
     let (a, b) = Channel::create();
@@ -1231,4 +1231,40 @@ fn channel_full_exception() {
     // Drain from the other end to verify messages were queued
     let msg = b.read().unwrap();
     assert_eq!(msg.data.len(), 64);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    create_is_ok_and_endpoints_are_related();
+    is_writeable_by_default();
+    write_to_endpoint_causes_other_to_become_readable();
+    write_consumes_all_handles();
+    read_when_empty_returns_should_wait();
+    read_when_empty_and_closed_returns_peer_closed();
+    read_remaining_messages_when_peer_is_closed();
+    close_signals_peer_closed();
+    close_clears_signals_writeable();
+    close_signals_peer_returns_peer_closed();
+    read_and_write_with_multiple_sizes();
+    create_invalid_options_returns_invalid_args();
+    nesting_is_ok();
+    read_zero_byte_zero_handle_message_succeeds();
+    write_short_payloads_succeeds();
+    write_self_handle_returns_not_supported();
+    on_flight_handles_signalled_when_peer_is_closed();
+    write_to_peer_closed_consumes_moved_handles();
+    wait_many_is_signaled_for_both_writes();
+    read_may_discard_with_smaller_buffer();
+    read_may_discard_with_null_buffer_discard_handles_returns_buffer_too_small();
+    read_may_discard_with_zero_size_buffers();
+    read_fault_does_not_leak_handles();
+    no_spurious_readable_signal_when_racing();
+    concurrent_reads_consume_unique_elements().await;
+    wait_many_is_signaled_on_any_element_write().await;
+    call_etc_suspended_thread_resumes_and_succeeds().await;
+    call_pending_transactions_use_different_ids().await;
+    call_response_bigger_than_rd_num_handles_returns_buffer_too_small().await;
+    call_suspended_thread_resumes_and_succeeds().await;
+    channel_full_exception();
 }

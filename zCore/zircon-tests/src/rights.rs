@@ -13,7 +13,7 @@ extern crate alloc;
 
 ///
 /// A newly created event should have all default rights.
-#[test]
+#[cfg_attr(test, test)]
 fn default_event_rights() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -27,7 +27,7 @@ fn default_event_rights() {
 
 ///
 /// Reducing rights on a handle should remove the specified rights.
-#[test]
+#[cfg_attr(test, test)]
 fn reduce_rights() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -40,7 +40,7 @@ fn reduce_rights() {
 
 ///
 /// Duplicating a handle should preserve the original rights.
-#[test]
+#[cfg_attr(test, test)]
 fn duplicate_preserves_rights() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -54,7 +54,7 @@ fn duplicate_preserves_rights() {
 ///
 /// Duplicate a handle with reduced rights. The duplicate should
 /// have only the requested subset.
-#[test]
+#[cfg_attr(test, test)]
 fn duplicate_reduce_rights() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -68,7 +68,7 @@ fn duplicate_reduce_rights() {
 
 ///
 /// Verify the contains method on Rights works correctly.
-#[test]
+#[cfg_attr(test, test)]
 fn rights_contains() {
     let _ctx = TestContext::new();
     let r = Rights::READ | Rights::WRITE;
@@ -80,7 +80,7 @@ fn rights_contains() {
 
 ///
 /// Channel endpoints should have their default rights set.
-#[test]
+#[cfg_attr(test, test)]
 fn channel_default_rights() {
     let _ctx = TestContext::new();
     let (local, _remote) = Channel::create();
@@ -93,7 +93,7 @@ fn channel_default_rights() {
 
 ///
 /// A handle with no rights should reject all operations.
-#[test]
+#[cfg_attr(test, test)]
 fn no_rights() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -105,7 +105,7 @@ fn no_rights() {
 
 ///
 /// A handle with all rights should pass all rights checks.
-#[test]
+#[cfg_attr(test, test)]
 fn all_rights() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -120,7 +120,7 @@ fn all_rights() {
 ///
 /// Transfer a handle with specific rights through a channel. The
 /// received handle should retain the original rights.
-#[test]
+#[cfg_attr(test, test)]
 fn transfer_rights_via_channel() {
     use zircon_object::ipc::MessagePacket;
     let _ctx = TestContext::new();
@@ -142,7 +142,7 @@ fn transfer_rights_via_channel() {
 
 ///
 /// Verify bitwise operations on rights (union, intersection, difference).
-#[test]
+#[cfg_attr(test, test)]
 fn rights_bit_operations() {
     let _ctx = TestContext::new();
     let a = Rights::READ | Rights::WRITE;
@@ -160,11 +160,27 @@ fn rights_bit_operations() {
 
 ///
 /// Empty rights should contain nothing.
-#[test]
+#[cfg_attr(test, test)]
 fn rights_empty() {
     let _ctx = TestContext::new();
     let empty = Rights::empty();
     assert!(!empty.contains(Rights::READ));
     assert!(!empty.contains(Rights::WRITE));
     assert!(empty.is_empty());
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    default_event_rights();
+    reduce_rights();
+    duplicate_preserves_rights();
+    duplicate_reduce_rights();
+    rights_contains();
+    channel_default_rights();
+    no_rights();
+    all_rights();
+    transfer_rights_via_channel();
+    rights_bit_operations();
+    rights_empty();
 }

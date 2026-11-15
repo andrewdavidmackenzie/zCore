@@ -11,7 +11,7 @@ extern crate alloc;
 
 ///
 /// Set the name of an object and read it back.
-#[test]
+#[cfg_attr(test, test)]
 fn set_name() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -21,7 +21,7 @@ fn set_name() {
 
 ///
 /// A newly created object should have an empty or default name.
-#[test]
+#[cfg_attr(test, test)]
 fn get_default_name() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -33,7 +33,7 @@ fn get_default_name() {
 ///
 /// Set a name longer than ZX_MAX_NAME_LEN. In Fuchsia this truncates,
 /// but zCore stores the full name. Document the difference.
-#[test]
+#[cfg_attr(test, test)]
 fn set_name_truncation() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -47,7 +47,7 @@ fn set_name_truncation() {
 
 ///
 /// Set the name to an empty string. Should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn set_name_empty() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -58,7 +58,7 @@ fn set_name_empty() {
 
 ///
 /// Set the name, then overwrite it with a different name.
-#[test]
+#[cfg_attr(test, test)]
 fn set_name_overwrite() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -70,7 +70,7 @@ fn set_name_overwrite() {
 
 ///
 /// Set and get the name of a channel endpoint.
-#[test]
+#[cfg_attr(test, test)]
 fn channel_name() {
     use zircon_object::ipc::Channel;
     let _ctx = TestContext::new();
@@ -81,7 +81,7 @@ fn channel_name() {
 
 ///
 /// Set and get the name of a VMO.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_name() {
     use zircon_object::vm::VmObject;
     let _ctx = TestContext::new();
@@ -92,7 +92,7 @@ fn vmo_name() {
 
 ///
 /// Set and get the name of a process.
-#[test]
+#[cfg_attr(test, test)]
 fn process_name() {
     use zircon_object::task::Job;
     let _ctx = TestContext::new();
@@ -106,7 +106,7 @@ fn process_name() {
 
 ///
 /// Set and get the name of a thread.
-#[test]
+#[cfg_attr(test, test)]
 fn thread_name() {
     use zircon_object::task::{Job, Process, Thread};
     let _ctx = TestContext::new();
@@ -121,7 +121,7 @@ fn thread_name() {
 
 ///
 /// Set and get the name of a job.
-#[test]
+#[cfg_attr(test, test)]
 fn job_name() {
     use zircon_object::task::Job;
     let _ctx = TestContext::new();
@@ -133,7 +133,7 @@ fn job_name() {
 
 ///
 /// Set and get the name of a socket.
-#[test]
+#[cfg_attr(test, test)]
 fn socket_name() {
     use zircon_object::ipc::Socket;
     let _ctx = TestContext::new();
@@ -144,7 +144,7 @@ fn socket_name() {
 
 ///
 /// Set and get the name of a timer.
-#[test]
+#[cfg_attr(test, test)]
 fn timer_name() {
     use zircon_object::signal::Timer;
     let _ctx = TestContext::new();
@@ -155,7 +155,7 @@ fn timer_name() {
 
 ///
 /// Every kernel object should have a non-zero KOID.
-#[test]
+#[cfg_attr(test, test)]
 fn koid_is_non_zero() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -164,7 +164,7 @@ fn koid_is_non_zero() {
 
 ///
 /// KOIDs should be unique across objects.
-#[test]
+#[cfg_attr(test, test)]
 fn koids_are_unique() {
     let _ctx = TestContext::new();
     let e1 = Event::new();
@@ -173,4 +173,23 @@ fn koids_are_unique() {
     assert_ne!(e1.id(), e2.id());
     assert_ne!(e2.id(), e3.id());
     assert_ne!(e1.id(), e3.id());
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    set_name();
+    get_default_name();
+    set_name_truncation();
+    set_name_empty();
+    set_name_overwrite();
+    channel_name();
+    vmo_name();
+    process_name();
+    thread_name();
+    job_name();
+    socket_name();
+    timer_name();
+    koid_is_non_zero();
+    koids_are_unique();
 }

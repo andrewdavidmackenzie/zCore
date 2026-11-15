@@ -23,7 +23,7 @@ pub(crate) fn syscall_socket_create(ctx: &TestContext, options: u32) -> (HandleV
 }
 /// C++: TEST(SocketTest, WriteRights) — syscall level
 /// Writing without WRITE right returns ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn write_without_write_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -47,7 +47,7 @@ fn write_without_write_right() {
 
 /// C++: TEST(SocketTest, ReadRights) — syscall level
 /// Reading without READ right returns ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn read_without_read_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -71,7 +71,7 @@ fn read_without_read_right() {
 }
 /// C++: TEST(SocketTest, WriteWrongType) — syscall level
 /// Writing to a non-socket handle returns WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn write_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -94,7 +94,7 @@ fn write_wrong_type() {
 }
 
 /// C++: TEST(SocketTest, ReadWrongType) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn read_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -118,7 +118,7 @@ fn read_wrong_type() {
 }
 
 /// C++: TEST(SocketTest, DisableWriteLocal) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn disable_write_local() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_socket_create(&ctx, 0);
@@ -150,7 +150,7 @@ fn disable_write_local() {
 }
 
 /// C++: TEST(SocketTest, DisableWritePeer) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn disable_write_peer() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_socket_create(&ctx, 0);
@@ -181,7 +181,7 @@ fn disable_write_peer() {
     .unwrap();
 }
 /// C++: TEST(SocketTest, InvalidHandles) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn invalid_handles() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -223,7 +223,7 @@ fn invalid_handles() {
 
 /// C++: TEST(SocketTest, StreamReadIntoBadBuffer) — syscall level
 /// Reading into a null pointer with non-zero count returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn stream_read_into_bad_buffer() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_socket_create(&ctx, 0);
@@ -253,7 +253,7 @@ fn stream_read_into_bad_buffer() {
 
 /// C++: TEST(SocketTest, StreamWriteBadBufferIntoExistingBufferReturnsInvalidArgs) — syscall level
 /// Writing from a null pointer with non-zero count returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn stream_write_bad_buffer_into_existing_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 0);
@@ -272,7 +272,7 @@ fn stream_write_bad_buffer_into_existing_buffer_returns_invalid_args() {
 
 /// C++: TEST(SocketTest, WriteFromBadBuffer) — syscall level
 /// Writing from a null pointer with non-zero count returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_from_bad_buffer() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 0);
@@ -291,7 +291,7 @@ fn write_from_bad_buffer() {
 
 /// C++: TEST(SocketTest, WriteFromNullBuffer) — syscall level
 /// Writing from a null pointer with non-zero count returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_from_null_buffer() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 0);
@@ -310,7 +310,7 @@ fn write_from_null_buffer() {
 
 /// C++: TEST(SocketTest, WriteFromPartialBadBuffer) — syscall level
 /// Writing from a null pointer with any non-zero count returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_from_partial_bad_buffer() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 0);
@@ -329,7 +329,7 @@ fn write_from_partial_bad_buffer() {
 
 /// C++: TEST(SocketTest, ReadIntoNullBuffer) — syscall level
 /// Reading into a null buffer with non-zero count returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn read_into_null_buffer() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_socket_create(&ctx, 0);
@@ -361,7 +361,7 @@ fn read_into_null_buffer() {
 /// C++: TEST(SocketTest, DatagramWriteBadBufferReturnsInvalidArgs) — syscall level
 /// Writing from a bad (null) buffer pointer on a datagram socket
 /// returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_write_bad_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 1); // DATAGRAM
@@ -381,7 +381,7 @@ fn datagram_write_bad_buffer_returns_invalid_args() {
 /// C++: TEST(SocketTest, GetPropertyRxThresholdBufferTooSmallReturnsBufferTooSmall) — syscall level
 /// get_property with a buffer smaller than sizeof(size_t) returns
 /// BUFFER_TOO_SMALL.
-#[test]
+#[cfg_attr(test, test)]
 fn get_property_rx_threshold_buffer_too_small_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 0);
@@ -400,7 +400,7 @@ fn get_property_rx_threshold_buffer_too_small_returns_buffer_too_small() {
 }
 
 /// C++: TEST(SocketTest, GetPropertyTxThresholdBufferTooSmallReturnsBufferTooSmall) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn get_property_tx_threshold_buffer_too_small_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 0);
@@ -420,7 +420,7 @@ fn get_property_tx_threshold_buffer_too_small_returns_buffer_too_small() {
 /// C++: TEST(SocketTest, GetPropertyRxThresholdWrongTypeReturnsWrongType) — syscall level
 /// Calling get_property(ZX_PROP_SOCKET_RX_THRESHOLD) on a VMO returns
 /// WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn get_property_rx_threshold_wrong_type_returns_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -442,7 +442,7 @@ fn get_property_rx_threshold_wrong_type_returns_wrong_type() {
 }
 
 /// C++: TEST(SocketTest, GetPropertyTxThresholdWrongTypeReturnsWrongType) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn get_property_tx_threshold_wrong_type_returns_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -464,7 +464,7 @@ fn get_property_tx_threshold_wrong_type_returns_wrong_type() {
 }
 /// C++: TEST(SocketTest, SetPropertyRxThresholdBadBufferReturnsInvalidArgs) — syscall level
 /// set_property with a bad buffer pointer returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn set_property_rx_threshold_bad_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 0);
@@ -481,7 +481,7 @@ fn set_property_rx_threshold_bad_buffer_returns_invalid_args() {
 }
 
 /// C++: TEST(SocketTest, SetPropertyRxThresholdBufferTooSmallReturnsBufferTooSmall) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn set_property_rx_threshold_buffer_too_small_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 0);
@@ -499,7 +499,7 @@ fn set_property_rx_threshold_buffer_too_small_returns_buffer_too_small() {
 }
 
 /// C++: TEST(SocketTest, SetPropertyRxThresholdWrongTypeReturnsWrongType) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn set_property_rx_threshold_wrong_type_returns_wrong_type() {
     let ctx = TestContext::new();
     let mut sc = ctx.syscall();
@@ -521,7 +521,7 @@ fn set_property_rx_threshold_wrong_type_returns_wrong_type() {
 }
 
 /// C++: TEST(SocketTest, SetPropertyTxThresholdBadBufferReturnsInvalidArgs) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn set_property_tx_threshold_bad_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 0);
@@ -538,7 +538,7 @@ fn set_property_tx_threshold_bad_buffer_returns_invalid_args() {
 }
 
 /// C++: TEST(SocketTest, SetPropertyTxThresholdBufferTooSmallReturnsBufferTooSmall) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn set_property_tx_threshold_buffer_too_small_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 0);
@@ -556,7 +556,7 @@ fn set_property_tx_threshold_buffer_too_small_returns_buffer_too_small() {
 }
 
 /// C++: TEST(SocketTest, SetPropertyTxThresholdWrongTypeReturnsWrongType) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn set_property_tx_threshold_wrong_type_returns_wrong_type() {
     let ctx = TestContext::new();
     let mut sc = ctx.syscall();
@@ -580,7 +580,7 @@ fn set_property_tx_threshold_wrong_type_returns_wrong_type() {
 
 /// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/0)
 /// Read from empty datagram socket returns SHOULD_WAIT.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_socket_bad_buffer_test_read_0() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 1); // 1 = DATAGRAM
@@ -600,7 +600,7 @@ fn datagram_socket_bad_buffer_test_read_0() {
 
 /// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/1)
 /// Read from empty datagram socket with zero-length buffer.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_socket_bad_buffer_test_read_1() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_socket_create(&ctx, 1); // DATAGRAM
@@ -619,7 +619,7 @@ fn datagram_socket_bad_buffer_test_read_1() {
 
 /// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/2)
 /// Read from datagram socket with peer closed.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_socket_bad_buffer_test_read_2() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_socket_create(&ctx, 1); // DATAGRAM
@@ -642,7 +642,7 @@ fn datagram_socket_bad_buffer_test_read_2() {
 
 /// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/3)
 /// Read from datagram socket with data available.
-#[test]
+#[cfg_attr(test, test)]
 fn datagram_socket_bad_buffer_test_read_3() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_socket_create(&ctx, 1); // DATAGRAM
@@ -674,4 +674,37 @@ fn datagram_socket_bad_buffer_test_read_3() {
     .unwrap();
     assert_eq!(read_actual, 8);
     assert_eq!(&buf[..8], &data);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    write_without_write_right();
+    read_without_read_right();
+    write_wrong_type();
+    read_wrong_type();
+    disable_write_local();
+    disable_write_peer();
+    invalid_handles();
+    stream_read_into_bad_buffer();
+    stream_write_bad_buffer_into_existing_buffer_returns_invalid_args();
+    write_from_bad_buffer();
+    write_from_null_buffer();
+    write_from_partial_bad_buffer();
+    read_into_null_buffer();
+    datagram_write_bad_buffer_returns_invalid_args();
+    get_property_rx_threshold_buffer_too_small_returns_buffer_too_small();
+    get_property_tx_threshold_buffer_too_small_returns_buffer_too_small();
+    get_property_rx_threshold_wrong_type_returns_wrong_type();
+    get_property_tx_threshold_wrong_type_returns_wrong_type();
+    set_property_rx_threshold_bad_buffer_returns_invalid_args();
+    set_property_rx_threshold_buffer_too_small_returns_buffer_too_small();
+    set_property_rx_threshold_wrong_type_returns_wrong_type();
+    set_property_tx_threshold_bad_buffer_returns_invalid_args();
+    set_property_tx_threshold_buffer_too_small_returns_buffer_too_small();
+    set_property_tx_threshold_wrong_type_returns_wrong_type();
+    datagram_socket_bad_buffer_test_read_0();
+    datagram_socket_bad_buffer_test_read_1();
+    datagram_socket_bad_buffer_test_read_2();
+    datagram_socket_bad_buffer_test_read_3();
 }

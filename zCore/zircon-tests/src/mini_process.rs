@@ -15,7 +15,7 @@ extern crate alloc;
 
 /// Create a mini-process (process + thread + command channel)
 /// and immediately destroy it.
-#[test]
+#[cfg_attr(test, test)]
 fn create_and_destroy() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -33,7 +33,7 @@ fn create_and_destroy() {
 
 /// Send a command to a mini-process via its command channel.
 /// Simulate by writing a message.
-#[test]
+#[cfg_attr(test, test)]
 fn send_command() {
     let _ctx = TestContext::new();
     let (client, server) = Channel::create();
@@ -54,7 +54,7 @@ fn send_command() {
 }
 
 /// Get the KOID of a mini-process.
-#[test]
+#[cfg_attr(test, test)]
 fn get_koid() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -69,7 +69,7 @@ fn get_koid() {
 }
 
 /// Query handle info. Add a handle and verify it can be retrieved.
-#[test]
+#[cfg_attr(test, test)]
 fn get_handle_info() {
     let ctx = TestContext::new();
     let event = zircon_object::signal::Event::new();
@@ -86,7 +86,7 @@ fn get_handle_info() {
 }
 
 /// Duplicate a handle within a process.
-#[test]
+#[cfg_attr(test, test)]
 fn duplicate_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -114,7 +114,7 @@ fn duplicate_handle() {
 }
 
 /// Create a new thread within a process.
-#[test]
+#[cfg_attr(test, test)]
 fn create_thread() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -130,7 +130,7 @@ fn create_thread() {
 
 /// Map a VMO within a process's address space. Verify VMO is
 /// accessible after creation.
-#[test]
+#[cfg_attr(test, test)]
 fn map_vmo() {
     use zircon_object::vm::VmObject;
 
@@ -144,7 +144,7 @@ fn map_vmo() {
 }
 
 /// Bidirectional channel communication with a mini-process.
-#[test]
+#[cfg_attr(test, test)]
 fn channel_communication() {
     let _ctx = TestContext::new();
     let (client, server) = Channel::create();
@@ -177,7 +177,7 @@ fn channel_communication() {
 }
 
 /// Kill a mini-process and verify it terminates.
-#[test]
+#[cfg_attr(test, test)]
 fn kill_process() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -191,7 +191,7 @@ fn kill_process() {
 }
 
 /// Get the return code of a terminated mini-process.
-#[test]
+#[cfg_attr(test, test)]
 fn process_return_code() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -202,4 +202,19 @@ fn process_return_code() {
     proc.exit(zircon_object::task::TASK_RETCODE_SYSCALL_KILL);
     // The return code is set when the process terminates.
     // In libos mode, we verify the process can be killed without panic.
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    create_and_destroy();
+    send_command();
+    get_koid();
+    get_handle_info();
+    duplicate_handle();
+    create_thread();
+    map_vmo();
+    channel_communication();
+    kill_process();
+    process_return_code();
 }

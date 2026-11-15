@@ -1,29 +1,27 @@
 //! Test runtime abstraction layer.
 //!
-//! Provides `block_on`, `yield_now`, `sleep`, `spawn`, and `timeout`
-//! that delegate to `async_std` in libos mode. When compiled for
-//! bare-metal (QEMU), these will use the kernel executor instead.
-//!
-//! All test code should use `crate::test_runtime::*` instead of
-//! `async_std::task::*` directly.
+//! In libos mode (`cfg(test)`), delegates to `async_std`.
+//! In bare-metal mode (`feature = "baremetal-test"`), uses the kernel
+//! executor primitives.
 
-/// Run a future to completion synchronously.
-/// Only used in port_stress.rs inside std::thread closures.
+// ── libos mode: delegate to async_std ──────────────────────────────
+
+#[cfg(test)]
 pub fn block_on<F: core::future::Future>(future: F) -> F::Output {
     async_std::task::block_on(future)
 }
 
-/// Yield to other tasks cooperatively.
+#[cfg(test)]
 pub async fn yield_now() {
     async_std::task::yield_now().await;
 }
 
-/// Sleep for the given duration.
+#[cfg(test)]
 pub async fn sleep(duration: core::time::Duration) {
     async_std::task::sleep(duration).await;
 }
 
-/// Spawn a task on the executor.
+#[cfg(test)]
 pub fn spawn<F>(future: F) -> async_std::task::JoinHandle<F::Output>
 where
     F: core::future::Future + Send + 'static,
@@ -32,10 +30,30 @@ where
     async_std::task::spawn(future)
 }
 
-/// Timeout wrapper for futures.
+#[cfg(test)]
 pub async fn timeout<F: core::future::Future>(
     duration: core::time::Duration,
     future: F,
 ) -> Result<F::Output, async_std::future::TimeoutError> {
     async_std::future::timeout(duration, future).await
+}
+
+// ── bare-metal mode: kernel executor ───────────────────────────────
+
+#[cfg(not(test))]
+pub async fn yield_now() {
+    // On bare-metal, yield to the kernel executor so other tasks
+    // (Zircon threads) can make progress.
+    core::future::poll_fn(|cx| {
+        cx.waker().wake_by_ref();
+        core::task::Poll::Pending
+    })
+    .await;
+}
+
+#[cfg(not(test))]
+pub async fn sleep(_duration: core::time::Duration) {
+    // TODO: implement timer-based sleep using HAL timer.
+    // For now, just yield once.
+    yield_now().await;
 }

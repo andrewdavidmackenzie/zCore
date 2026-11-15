@@ -7,7 +7,7 @@ use crate::helpers::TestContext;
 use zircon_object::vm::{VmObject, PAGE_SIZE};
 
 /// Slice write-through: writes to slice visible in parent.
-#[test]
+#[cfg_attr(test, test)]
 fn slice_write_through() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(4);
@@ -28,7 +28,7 @@ fn slice_write_through() {
 }
 
 /// Nested slices.
-#[test]
+#[cfg_attr(test, test)]
 fn slice_nested() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -48,7 +48,7 @@ fn slice_nested() {
 }
 
 /// Decommit through parent affects slice.
-#[test]
+#[cfg_attr(test, test)]
 fn slice_decommit_parent() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -64,7 +64,7 @@ fn slice_decommit_parent() {
 }
 
 /// Zero-sized slice.
-#[test]
+#[cfg_attr(test, test)]
 fn slice_zero_sized() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -78,7 +78,7 @@ fn slice_zero_sized() {
 }
 
 /// Slice populated_bytes should be zero (attributed to parent).
-#[test]
+#[cfg_attr(test, test)]
 fn slice_attributed_counts() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -94,7 +94,7 @@ fn slice_attributed_counts() {
 }
 
 /// Slice of non-resizable parent.
-#[test]
+#[cfg_attr(test, test)]
 fn slice_non_resizable() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -103,7 +103,7 @@ fn slice_non_resizable() {
 }
 
 /// Slice cannot exceed parent bounds.
-#[test]
+#[cfg_attr(test, test)]
 fn slice_out_of_bounds() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -114,7 +114,7 @@ fn slice_out_of_bounds() {
 }
 
 /// Deep hierarchy of slices.
-#[test]
+#[cfg_attr(test, test)]
 fn slice_deep_hierarchy() {
     let _ctx = TestContext::new();
     let mut current = VmObject::new_paged(1);
@@ -126,4 +126,17 @@ fn slice_deep_hierarchy() {
     let mut buf = [0u8; 1];
     current.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 99);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    slice_write_through();
+    slice_nested();
+    slice_decommit_parent();
+    slice_zero_sized();
+    slice_attributed_counts();
+    slice_non_resizable();
+    slice_out_of_bounds();
+    slice_deep_hierarchy();
 }

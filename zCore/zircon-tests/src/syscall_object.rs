@@ -10,7 +10,7 @@ use zircon_object::object::{Handle, HandleBasicInfo, Rights};
 use zircon_object::ZxError;
 
 /// ZX_INFO_HANDLE_BASIC returns correct type, koid, rights.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_handle_basic() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -38,7 +38,7 @@ fn get_info_handle_basic() {
 }
 
 /// ZX_INFO_HANDLE_BASIC on invalid handle returns BAD_HANDLE.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_bad_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -58,7 +58,7 @@ fn get_info_bad_handle() {
 }
 
 /// ZX_PROP_NAME get/set through syscall.
-#[test]
+#[cfg_attr(test, test)]
 fn set_get_property_name() {
     let ctx = TestContext::new();
     let mut sc = ctx.syscall();
@@ -81,7 +81,7 @@ fn set_get_property_name() {
     assert_eq!(&buf[..12], b"test-channel");
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn object_signal_self() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -99,7 +99,7 @@ fn object_signal_self() {
 }
 
 /// Signaling with non-user bits returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn object_signal_invalid_bits() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -114,7 +114,7 @@ fn object_signal_invalid_bits() {
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn close_many() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -143,7 +143,7 @@ fn close_many() {
     assert!(ctx.proc.get_object::<Channel>(h2).is_err());
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn handle_check_valid() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -173,4 +173,16 @@ fn handle_check_valid() {
         sc.sys_handle_check_valid(0xFFFF_FFFF).unwrap_err(),
         ZxError::NOT_FOUND
     );
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    get_info_handle_basic();
+    get_info_bad_handle();
+    set_get_property_name();
+    object_signal_self();
+    object_signal_invalid_bits();
+    close_many();
+    handle_check_valid();
 }

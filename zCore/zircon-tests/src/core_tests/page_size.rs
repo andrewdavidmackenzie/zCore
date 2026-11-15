@@ -8,7 +8,7 @@ use zircon_object::vm::PAGE_SIZE;
 
 /// C++: TEST(PageSize, NotZero)
 /// PAGE_SIZE should be non-zero.
-#[test]
+#[cfg_attr(test, test)]
 #[allow(clippy::assertions_on_constants)]
 fn page_size_not_zero() {
     let _ctx = TestContext::new();
@@ -17,7 +17,7 @@ fn page_size_not_zero() {
 
 /// C++: TEST(PageSize, Only4K)
 /// PAGE_SIZE should be at least 4096.
-#[test]
+#[cfg_attr(test, test)]
 #[allow(clippy::assertions_on_constants)]
 fn page_size_only_4k() {
     let _ctx = TestContext::new();
@@ -26,7 +26,7 @@ fn page_size_only_4k() {
 
 /// C++: TEST(PageSize, PowerOfTwo)
 /// PAGE_SIZE should be a power of 2.
-#[test]
+#[cfg_attr(test, test)]
 fn page_size_power_of_two() {
     let _ctx = TestContext::new();
     assert!(
@@ -37,7 +37,7 @@ fn page_size_power_of_two() {
 
 /// C++: TEST(PageSize, ArchMinPageSize)
 /// Verify the architecture minimum page size (VMO sizes are page-aligned).
-#[test]
+#[cfg_attr(test, test)]
 fn page_size_alignment() {
     use zircon_object::vm::VmObject;
 
@@ -51,7 +51,7 @@ fn page_size_alignment() {
 
 /// C++: TEST(PageSize, ArchMaxPageSize)
 /// Round-up calculation: (size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1).
-#[test]
+#[cfg_attr(test, test)]
 fn page_size_round_up() {
     let _ctx = TestContext::new();
 
@@ -62,4 +62,14 @@ fn page_size_round_up() {
     assert_eq!(round_up(PAGE_SIZE), PAGE_SIZE);
     assert_eq!(round_up(PAGE_SIZE + 1), 2 * PAGE_SIZE);
     assert_eq!(round_up(2 * PAGE_SIZE), 2 * PAGE_SIZE);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    page_size_not_zero();
+    page_size_only_4k();
+    page_size_power_of_two();
+    page_size_alignment();
+    page_size_round_up();
 }

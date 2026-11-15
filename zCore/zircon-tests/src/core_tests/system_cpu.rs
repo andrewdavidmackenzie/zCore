@@ -65,7 +65,7 @@ fn add_mmio_resource(ctx: &TestContext) -> HandleValue {
 /// Validates argument checking for `zx_system_set_performance_info`.
 /// Tests: BAD_HANDLE, WRONG_TYPE, OUT_OF_RANGE, INVALID_ARGS, and
 /// valid cases.
-#[test]
+#[cfg_attr(test, test)]
 fn set_performance_info_argument_validation() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -201,7 +201,7 @@ fn set_performance_info_argument_validation() {
 /// C++: TEST(SystemCpu, GetPerformanceInfoArgumentValidation)
 ///
 /// Validates argument checking for `zx_system_get_performance_info`.
-#[test]
+#[cfg_attr(test, test)]
 fn get_performance_info_argument_validation() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -317,7 +317,7 @@ fn get_performance_info_argument_validation() {
 /// Successfully queries default perf scale, current perf scale, and
 /// perf limits. Verifies entries are sorted by CPU number and have
 /// non-zero scale values.
-#[test]
+#[cfg_attr(test, test)]
 fn get_performance_info() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -431,7 +431,7 @@ fn get_performance_info() {
 /// Verify that the scheduler's target preemption time is properly updated
 /// when the performance scale changes. This test sets perf scale to 1.0,
 /// then 0.5, and spins.
-#[test]
+#[cfg_attr(test, test)]
 fn target_preemption_time_assert() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -490,7 +490,7 @@ fn target_preemption_time_assert() {
 /// 1. Set performance scale to 0.5 on the test CPU
 /// 2. Run a deadline-scheduled thread with known capacity/period
 /// 3. Measure actual CPU time and verify it scales with the performance scale
-#[test]
+#[cfg_attr(test, test)]
 fn scale_bandwidth() {
     // C++: return; (disabled while flakes are investigated)
     // Faithfully matches upstream: immediate return, no assertions.
@@ -508,7 +508,7 @@ fn scale_bandwidth() {
 ///
 /// Set a performance scale near zero (0.0 + epsilon) to verify no
 /// divide-by-zero crash.
-#[test]
+#[cfg_attr(test, test)]
 fn set_performance_info_near_zero() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -525,4 +525,15 @@ fn set_performance_info_near_zero() {
     );
     // C++: ASSERT_OK — should succeed without crashing
     assert_eq!(result, Ok(()));
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    set_performance_info_argument_validation();
+    get_performance_info_argument_validation();
+    get_performance_info();
+    target_preemption_time_assert();
+    scale_bandwidth();
+    set_performance_info_near_zero();
 }

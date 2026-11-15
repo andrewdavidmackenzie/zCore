@@ -36,7 +36,7 @@ const DEADLINE_WAKE_SOURCE_KOID: u64 = 1; // ZX_KOID_KERNEL
 /// for {entry_buffer, num_entries, actual_entries_ptr} and verifies
 /// they return INVALID_ARGS. Also tests invalid option flags and
 /// REPORT_ONLY without a header buffer.
-#[test]
+#[cfg_attr(test, test)]
 fn port_bound_bad_report_requests() {
     let _ctx = TestContext::new();
 
@@ -68,7 +68,7 @@ fn port_bound_bad_report_requests() {
 /// First attempt: entry reported, unreported=0.
 /// Second attempt: entry reported again with PREVIOUSLY_REPORTED flag.
 /// After ack: nothing to report.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn port_bound_single_wake_source() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -99,7 +99,7 @@ async fn port_bound_single_wake_source() {
 /// C++: TEST_F(WakeReportTestsPortBound, MultiWakeSource)
 /// Signal all 4 interrupt wake sources. Each suspend attempt should
 /// report all still-pending sources. Ack one source per attempt.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn port_bound_multi_wake_source() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -136,7 +136,7 @@ async fn port_bound_multi_wake_source() {
 /// Signal and ack a source multiple times, then request a report.
 /// The entry should show signal_count=4 and be in the acked state.
 /// After that report, nothing left to report.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn port_bound_acked() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -162,7 +162,7 @@ async fn port_bound_acked() {
 /// C++: TEST_F(WakeReportTestsPortBound, AckedStillPending)
 /// Signal and ack multiple times, then signal once more without acking.
 /// The entry should remain in the pending (not acked) state.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn port_bound_acked_still_pending() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -194,7 +194,7 @@ async fn port_bound_acked_still_pending() {
 /// Signal all sources, ack even-indexed ones. Request report with
 /// DISCARD option. Acked entries should be discarded; odd-indexed
 /// entries should be reported.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn port_bound_discard() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -247,7 +247,7 @@ async fn port_bound_discard() {
 /// C++: TriggerWakeSource(0); DestroyWakeSource(0); VerifyNothingToReport();
 /// VerifyNothingToReport calls DoSuspend (which zCore doesn't implement),
 /// so we verify the port-level equivalent: no more packets are queued.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn port_bound_destruction_no_ack() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -286,7 +286,7 @@ async fn port_bound_destruction_no_ack() {
 ///
 /// C++: TriggerWakeSource(0); AckWakeSource(0); DestroyWakeSource(0);
 ///      VerifyNothingToReport();
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn port_bound_destruction_yes_ack() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -323,7 +323,7 @@ async fn port_bound_destruction_yes_ack() {
 /// C++: TEST_F(WakeReportTestsPortBound, AlreadyTimedOut)
 /// Suspend with no asserted wake sources and deadline in past.
 /// Report should contain only the deadline wake source.
-#[test]
+#[cfg_attr(test, test)]
 fn port_bound_already_timed_out() {
     let _ctx = TestContext::new();
     // With no pending wake sources, the system would "suspend" and
@@ -335,7 +335,7 @@ fn port_bound_already_timed_out() {
 /// C++: TEST_F(WakeReportTestsPortBound, ReportOnly)
 /// Call suspend with REPORT_ONLY flag. No actual suspend attempt.
 /// With no pending entries: returns 0 entries.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn port_bound_report_only() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -383,7 +383,7 @@ async fn port_bound_report_only() {
 /// C++: TEST_F(WakeReportTestsPortBound, SmallReportBuffer)
 /// Use a buffer too small to hold all entries. Verify we can
 /// retrieve all entries across multiple REPORT_ONLY calls.
-#[test]
+#[cfg_attr(test, test)]
 fn port_bound_small_report_buffer() {
     let _ctx = TestContext::new();
 
@@ -407,7 +407,7 @@ fn port_bound_small_report_buffer() {
 /// Trigger one source 3 times in a row (edge-triggered). Should
 /// produce at most 2 pending acks. After acking twice, source is
 /// fully acked and disappears from report.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn port_bound_multiple_signals() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -447,7 +447,7 @@ async fn port_bound_multiple_signals() {
 // coordinator. We use Event signal observation as the equivalent.
 
 /// C++: TEST_F(WakeReportTestsThreadBound, BadReportRequests)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_bad_report_requests() {
     let _ctx = TestContext::new();
     // Same validation as port-bound: invalid flag combinations rejected.
@@ -462,7 +462,7 @@ fn thread_bound_bad_report_requests() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, SingleWakeSource)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_single_wake_source() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -477,7 +477,7 @@ fn thread_bound_single_wake_source() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, MultiWakeSource)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_multi_wake_source() {
     let _ctx = TestContext::new();
     let events: alloc::vec::Vec<_> = (0..4).map(|_| Event::new()).collect();
@@ -490,7 +490,7 @@ fn thread_bound_multi_wake_source() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, Acked)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_acked() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -505,7 +505,7 @@ fn thread_bound_acked() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, AckedStillPending)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_acked_still_pending() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -524,7 +524,7 @@ fn thread_bound_acked_still_pending() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, Discard)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_discard() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -534,7 +534,7 @@ fn thread_bound_discard() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, DestructionNoAck)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_destruction_no_ack() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -551,7 +551,7 @@ fn thread_bound_destruction_no_ack() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, DestructionYesAck)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_destruction_yes_ack() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -573,7 +573,7 @@ fn thread_bound_destruction_yes_ack() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, AlreadyTimedOut)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_already_timed_out() {
     let _ctx = TestContext::new();
     // No pending wake sources → deadline immediately fires.
@@ -581,7 +581,7 @@ fn thread_bound_already_timed_out() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, ReportOnly)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_report_only() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -590,7 +590,7 @@ fn thread_bound_report_only() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, SmallReportBuffer)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_small_report_buffer() {
     let _ctx = TestContext::new();
     // Same pattern as port-bound: multiple REPORT_ONLY calls with
@@ -603,7 +603,7 @@ fn thread_bound_small_report_buffer() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, MultipleSignals)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_bound_multiple_signals() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -620,4 +620,33 @@ fn thread_bound_multiple_signals() {
     // Final ack.
     event.signal_clear(Signal::USER_SIGNAL_0);
     assert!(!event.signal().contains(Signal::USER_SIGNAL_0));
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    port_bound_bad_report_requests();
+    port_bound_single_wake_source().await;
+    port_bound_multi_wake_source().await;
+    port_bound_acked().await;
+    port_bound_acked_still_pending().await;
+    port_bound_discard().await;
+    port_bound_destruction_no_ack().await;
+    port_bound_destruction_yes_ack().await;
+    port_bound_already_timed_out();
+    port_bound_report_only().await;
+    port_bound_small_report_buffer();
+    port_bound_multiple_signals().await;
+    thread_bound_bad_report_requests();
+    thread_bound_single_wake_source();
+    thread_bound_multi_wake_source();
+    thread_bound_acked();
+    thread_bound_acked_still_pending();
+    thread_bound_discard();
+    thread_bound_destruction_no_ack();
+    thread_bound_destruction_yes_ack();
+    thread_bound_already_timed_out();
+    thread_bound_report_only();
+    thread_bound_small_report_buffer();
+    thread_bound_multiple_signals();
 }

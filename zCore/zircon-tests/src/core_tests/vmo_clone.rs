@@ -18,7 +18,7 @@ extern crate alloc;
 /// C++: TEST(VmoCloneTestCase, Decommit)
 /// Decommit is not supported on clones or parent VMOs with children.
 /// Once the clone is closed, decommit should work again.
-#[test]
+#[cfg_attr(test, test)]
 fn decommit() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(4);
@@ -44,7 +44,7 @@ fn decommit() {
 
 /// C++: TEST(VmoCloneTestCase, NoResize)
 /// Non-resizable snapshot clone rejects set_size.
-#[test]
+#[cfg_attr(test, test)]
 fn no_resize() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(4);
@@ -69,7 +69,7 @@ fn no_resize() {
 
 /// C++: TEST(VmoCloneTestCase, NameProperty)
 /// Parent name propagates to child clone.
-#[test]
+#[cfg_attr(test, test)]
 fn name_property() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(4);
@@ -88,7 +88,7 @@ fn name_property() {
 
 /// C++: TEST(VmoCloneTestCase, ImmutableClone)
 /// SNAPSHOT + set_immutable creates an immutable child.
-#[test]
+#[cfg_attr(test, test)]
 fn immutable_clone() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(4);
@@ -102,7 +102,7 @@ fn immutable_clone() {
 
 /// C++: TEST(VmoCloneTestCase, NotImmutableMissingNoWrite)
 /// Plain SNAPSHOT (without set_immutable) is not immutable.
-#[test]
+#[cfg_attr(test, test)]
 fn not_immutable_missing_no_write() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(4);
@@ -117,7 +117,7 @@ fn not_immutable_missing_no_write() {
 
 /// C++: TEST(VmoCloneTestCase, Rights)
 /// Snapshot child gets expanded rights and has independent name.
-#[test]
+#[cfg_attr(test, test)]
 fn clone_rights() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -140,7 +140,7 @@ fn clone_rights() {
 
 /// C++: TEST(VmoCloneTestCase, Commit)
 /// Map parent and clone, verify data through mapped pointers.
-#[test]
+#[cfg_attr(test, test)]
 fn clone_commit_via_mapping() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -189,7 +189,7 @@ fn clone_commit_via_mapping() {
 /// because only SNAPSHOT + NO_WRITE produces an immutable child in Fuchsia.
 /// In zCore, slices don't gain immutability even if set_immutable is called
 /// separately — only snapshot children do.
-#[test]
+#[cfg_attr(test, test)]
 fn not_immutable_missing_snapshot() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(4);
@@ -213,7 +213,7 @@ fn not_immutable_missing_snapshot() {
 /// At the kernel-object level, create_child asserts page-aligned
 /// lengths, so we round up before calling (matching what the syscall
 /// layer does with roundup_pages).
-#[test]
+#[cfg_attr(test, test)]
 fn size_align() {
     use zircon_object::vm::roundup_pages;
 
@@ -410,13 +410,29 @@ fn resize_test(resize_child_flag: bool) {
 }
 
 /// C++: TEST_F(VmoCloneResizeTests, ResizeChild)
-#[test]
+#[cfg_attr(test, test)]
 fn resize_child() {
     resize_test(true);
 }
 
 /// C++: TEST_F(VmoCloneResizeTests, ResizeOriginal)
-#[test]
+#[cfg_attr(test, test)]
 fn resize_original() {
     resize_test(false);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    decommit();
+    no_resize();
+    name_property();
+    immutable_clone();
+    not_immutable_missing_no_write();
+    clone_rights();
+    clone_commit_via_mapping();
+    not_immutable_missing_snapshot();
+    size_align();
+    resize_child();
+    resize_original();
 }

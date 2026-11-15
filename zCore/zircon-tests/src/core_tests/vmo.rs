@@ -29,7 +29,7 @@ use zircon_object::ZxError;
 ///
 /// The Rust test verifies the CORRECT behavior (OUT_OF_RANGE).
 /// The C++ test documents the QEMU-path bug.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn vmo_read_write_bad_len() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
 
@@ -83,7 +83,7 @@ async fn vmo_read_write_bad_len() {
 }
 /// C++: TEST(VmoTestCase, SizeAlign)
 /// VMO size rounds up to page boundary.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_size_align() {
     let _ctx = TestContext::new();
 
@@ -104,7 +104,7 @@ fn vmo_size_align() {
 
 /// C++: TEST(VmoTestCase, ResizeAlign)
 /// Resize rounds up to page boundary.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_resize_align() {
     let _ctx = TestContext::new();
 
@@ -129,7 +129,7 @@ fn vmo_resize_align() {
 }
 /// C++: TEST(VmoTestCase, NoResize) — extended
 /// Non-resizable VMO rejects set_size both up and down.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_no_resize_extended() {
     let _ctx = TestContext::new();
 
@@ -150,7 +150,7 @@ fn vmo_no_resize_extended() {
 
 /// C++: TEST(VmoTestCase, Info)
 /// get_info returns correct flags.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_info() {
     let _ctx = TestContext::new();
 
@@ -176,7 +176,7 @@ fn vmo_info() {
 }
 /// C++: TEST(VmoTestCase, Cache)
 /// Set cache policy on clean VMO; clone prevents policy change.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_cache_policy() {
     use zircon_object::vm::CachePolicy;
 
@@ -213,7 +213,7 @@ fn vmo_cache_policy() {
 
 /// C++: TEST(VmoSignalTestCase, SignalSanity)
 /// VMO handles support user signals; initial state has VMO_ZERO_CHILDREN.
-#[test]
+#[cfg_attr(test, test)]
 fn signal_sanity() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -233,7 +233,7 @@ fn signal_sanity() {
 /// C++: TEST(VmoSignalTestCase, ChildSignalClone)
 /// VMO_ZERO_CHILDREN signal tracks clone lifecycle.
 /// Creates snapshot clones in a loop, verifying signal transitions.
-#[test]
+#[cfg_attr(test, test)]
 fn child_signal_clone() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -276,7 +276,7 @@ fn child_signal_clone() {
 /// Basic VMO creation with various page counts. Verify KOID is
 /// non-zero, size is correct, initial content is zero, and
 /// get_info() returns consistent metadata (flags, size, committed).
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_create_basic() {
     let _ctx = TestContext::new();
 
@@ -333,7 +333,7 @@ fn vmo_create_basic() {
 /// Verify data round-trip at page boundaries and mid-page offsets.
 /// Also tests OUT_OF_RANGE for reads/writes past the end, and
 /// zero-length operations at exact boundaries (matching the C++ test).
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_read_write_range_extended() {
     let _ctx = TestContext::new();
 
@@ -414,7 +414,7 @@ fn vmo_read_write_range_extended() {
 ///
 /// Resize a resizable VMO up and down. Verify size changes correctly,
 /// signals are consistent, and ludicrous sizes return OUT_OF_RANGE.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_resize_basic() {
     let _ctx = TestContext::new();
 
@@ -461,7 +461,7 @@ fn vmo_resize_basic() {
 ///
 /// Set and get content_size on a VMO. Content size is independent
 /// of the VMO's actual committed page size.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_content_size_extended() {
     let _ctx = TestContext::new();
 
@@ -498,7 +498,7 @@ fn vmo_content_size_extended() {
 /// C++: TEST(VmoSignalTestCase, ChildSignalMap)
 /// VMAR mapping keeps child VMO alive — ZERO_CHILDREN stays cleared
 /// until unmap, even after child handle is closed.
-#[test]
+#[cfg_attr(test, test)]
 fn child_signal_map() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -543,7 +543,7 @@ fn child_signal_map() {
 // ═══════════════════════════════════════════════════════════════════
 
 /// C++: TEST(VmoTestCase, ZeroPage)
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_zero_page() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -578,7 +578,7 @@ fn vmo_zero_page() {
 /// Ignored in libos: dual-mapping read-through coherence fails when
 /// run in parallel with other tests due to mock_mem anonymous page
 /// aliasing on aarch64 macOS (16K host pages). Passes individually.
-#[test]
+#[cfg_attr(test, test)]
 fn cache_flush() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -632,7 +632,7 @@ fn cache_flush() {
 
 /// C++: TEST(VmoTestCase, CacheOp)
 /// Write data, then verify it persists (cache ops are no-ops in libos).
-#[test]
+#[cfg_attr(test, test)]
 fn cache_op() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -647,7 +647,7 @@ fn cache_op() {
 
 /// C++: TEST(VmoTestCase, CacheOpLargeVmo)
 /// Large VMO (64 pages): write, read back entire contents.
-#[test]
+#[cfg_attr(test, test)]
 fn cache_op_large_vmo() {
     let _ctx = TestContext::new();
     let pages = 64;
@@ -666,7 +666,7 @@ fn cache_op_large_vmo() {
 
 /// C++: TEST(VmoTestCase, CacheOpOutOfRange)
 /// Decommit and zero past VMO end return OUT_OF_RANGE.
-#[test]
+#[cfg_attr(test, test)]
 fn cache_op_out_of_range() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -692,7 +692,7 @@ fn cache_op_out_of_range() {
 
 /// C++: TEST(VmoTestCase, CacheOpPhys)
 /// Physical VMO: create and verify basic properties.
-#[test]
+#[cfg_attr(test, test)]
 fn cache_op_phys() {
     let _ctx = TestContext::new();
     let phys = VmObject::new_physical(PAGE_SIZE, 1);
@@ -707,7 +707,7 @@ fn cache_op_phys() {
 
 /// C++: TEST(VmoTestCase, CachePolicyRace)
 /// Rapidly toggle cache policy on a clean VMO.
-#[test]
+#[cfg_attr(test, test)]
 fn cache_policy_race() {
     use zircon_object::vm::CachePolicy;
     let _ctx = TestContext::new();
@@ -737,7 +737,7 @@ fn cache_policy_race() {
 /// C++: TEST(VmoTestCase, ChildResizeRight)
 /// A non-resizable snapshot child cannot be resized.
 /// A resizable snapshot child CAN be resized.
-#[test]
+#[cfg_attr(test, test)]
 fn child_resize_right() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -759,7 +759,7 @@ fn child_resize_right() {
 
 /// C++: TEST(VmoTestCase, Commit)
 /// Commit pages via commit(), then map and read through the mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn commit() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -805,7 +805,7 @@ fn commit() {
 /// all. The C++ test uses bti.pin() to pin and pmt.unpin() to unpin.
 /// We exercise the same pin+unpin sequence on the contiguous VMO
 /// using the direct pin/unpin API (no BTI).
-#[test]
+#[cfg_attr(test, test)]
 fn compressed_contiguous() {
     let _ctx = TestContext::new();
 
@@ -829,7 +829,7 @@ fn compressed_contiguous() {
 
 /// C++: TEST(VmoTestCase, ContiguousRequireAlignedSize)
 /// Contiguous VMO creation with page-aligned sizes works.
-#[test]
+#[cfg_attr(test, test)]
 fn contiguous_require_aligned_size() {
     let _ctx = TestContext::new();
 
@@ -843,7 +843,7 @@ fn contiguous_require_aligned_size() {
 
 /// C++: TEST(VmoTestCase, ContiguousRequireNonzeroSize)
 /// Contiguous VMO with 0 pages should fail or produce 0-size VMO.
-#[test]
+#[cfg_attr(test, test)]
 fn contiguous_require_nonzero_size() {
     let _ctx = TestContext::new();
 
@@ -867,7 +867,7 @@ fn contiguous_require_nonzero_size() {
 ///   6. Tries SLICE+RESIZABLE → INVALID_ARGS.
 ///
 /// All steps are exercised via the syscall layer.
-#[test]
+#[cfg_attr(test, test)]
 fn create_child_mint_resize() {
     use crate::core_tests::syscall_vmo::syscall_vmo_create;
     use hal_impl::user::UserOutPtr;
@@ -946,7 +946,7 @@ fn create_child_mint_resize() {
 
 /// C++: TEST(VmoTestCase, CreateVmoUnboundedInvalidStreamSize)
 /// Verify content_size can be set to values beyond VMO size.
-#[test]
+#[cfg_attr(test, test)]
 fn create_vmo_unbounded_invalid_stream_size() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged_with_resizable(true, 1);
@@ -962,7 +962,7 @@ fn create_vmo_unbounded_invalid_stream_size() {
 
 /// C++: TEST(VmoTestCase, DecommitChildSliceTests)
 /// Decommit on a slice VMO should fail (slices share parent pages).
-#[test]
+#[cfg_attr(test, test)]
 fn decommit_child_slice_tests() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -989,7 +989,7 @@ fn decommit_child_slice_tests() {
 /// C++: TEST(VmoTestCase, DecommitMisaligned)
 /// Decommit with non-page-aligned offset/size.
 /// zCore's kernel object layer may or may not enforce alignment.
-#[test]
+#[cfg_attr(test, test)]
 fn decommit_misaligned() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -1014,7 +1014,7 @@ fn decommit_misaligned() {
 
 /// C++: TEST(VmoTestCase, Discardable)
 /// Exercise lock_discardable / unlock_discardable API.
-#[test]
+#[cfg_attr(test, test)]
 fn discardable() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1042,7 +1042,7 @@ fn discardable() {
 /// mapping while the VMO-level read past the VMO end is rejected.
 /// Content_size is an advisory property — the VMO-level read/write
 /// does not enforce it, only the stream/pager fault path does.
-#[test]
+#[cfg_attr(test, test)]
 fn fault_beyond_stream_size_no_phys_or_contig() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1101,7 +1101,7 @@ fn fault_beyond_stream_size_no_phys_or_contig() {
 /// The C++ test relies on lazy page faults (MAP without MAP_RANGE) to
 /// access pages beyond the original VMO end after grow. In libos mode
 /// there is no page fault handler, so we unmap and remap after grow.
-#[test]
+#[cfg_attr(test, test)]
 fn grow_mapped_vmo() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1168,7 +1168,7 @@ fn grow_mapped_vmo() {
 
 /// C++: TEST(VmoTestCase, LockUnlock)
 /// Exercise lock/unlock on a VMO. May fail if not discardable.
-#[test]
+#[cfg_attr(test, test)]
 fn lock_unlock() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1193,7 +1193,7 @@ fn lock_unlock() {
 
 /// C++: TEST(VmoTestCase, Map)
 /// Map a VMO with various flag combinations and verify access.
-#[test]
+#[cfg_attr(test, test)]
 fn map() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1231,7 +1231,7 @@ fn map() {
 
 /// C++: TEST(VmoTestCase, MapRead)
 /// Map a 2-page VMO and read from the second page through the mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn map_read() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1265,7 +1265,7 @@ fn map_read() {
 /// second page. In libos mode there is no fault handler, so we map
 /// only the 1-page VMO (with MAP_RANGE) and verify the OUT_OF_RANGE
 /// boundary via VMO-level read.
-#[test]
+#[cfg_attr(test, test)]
 fn mapped_vmo_smaller_than_mapping() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1318,7 +1318,7 @@ fn mapped_vmo_smaller_than_mapping() {
 /// The C++ test creates a 1-page paged VMO, verifies metadata_bytes is 0
 /// before any access, then writes to commit a page and verifies
 /// metadata_bytes becomes non-zero.
-#[test]
+#[cfg_attr(test, test)]
 fn metadata_bytes() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1342,7 +1342,7 @@ fn metadata_bytes() {
 
 /// C++: TEST(VmoTestCase, NoPermMap)
 /// Mapping with no permissions (empty MMUFlags) may fail or succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn no_perm_map() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1375,7 +1375,7 @@ fn no_perm_map() {
 
 /// C++: TEST(VmoTestCase, NoPermProtect)
 /// Protect a mapping to zero permissions.
-#[test]
+#[cfg_attr(test, test)]
 fn no_perm_protect() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1410,7 +1410,7 @@ fn no_perm_protect() {
 
 /// C++: TEST(VmoTestCase, NoWriteResizable)
 /// A resizable VMO mapped read-only: verify no writes through mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn no_write_resizable() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1439,7 +1439,7 @@ fn no_write_resizable() {
 
 /// C++: TEST(VmoTestCase, OpOutOfBounds)
 /// All range operations past VMO end should return OUT_OF_RANGE.
-#[test]
+#[cfg_attr(test, test)]
 fn op_out_of_bounds() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1469,7 +1469,7 @@ fn op_out_of_bounds() {
 /// C++: TEST(VmoTestCase, ParallelRead)
 /// Single-threaded simulation: read from VMO at multiple offsets
 /// in a loop (parallel reads would require real threading).
-#[test]
+#[cfg_attr(test, test)]
 fn parallel_read() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -1489,7 +1489,7 @@ fn parallel_read() {
 
 /// C++: TEST(VmoTestCase, ParallelWriteAndDecommit)
 /// Interleave write and decommit operations on different pages.
-#[test]
+#[cfg_attr(test, test)]
 fn parallel_write_and_decommit() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -1522,7 +1522,7 @@ fn parallel_write_and_decommit() {
 
 /// C++: TEST(VmoTestCase, PhysicalSlice)
 /// Create a slice of a physical VMO.
-#[test]
+#[cfg_attr(test, test)]
 fn physical_slice() {
     let _ctx = TestContext::new();
     let phys = VmObject::new_physical(PAGE_SIZE, 2);
@@ -1546,7 +1546,7 @@ fn physical_slice() {
 ///
 /// We use the root resource (which bypasses MMIO kind check) to test
 /// the size validation in sys_vmo_create_physical.
-#[test]
+#[cfg_attr(test, test)]
 fn physical_vmo_invalid_initial_size() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1584,7 +1584,7 @@ fn physical_vmo_invalid_initial_size() {
 /// works at the kernel level. Full syscall-level testing requires
 /// an MMIO resource and sys_vmo_create_physical, which is only
 /// available on bare metal with test_ram_reserve.
-#[test]
+#[cfg_attr(test, test)]
 fn physical_vmo_oob_mapping() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1606,7 +1606,7 @@ fn physical_vmo_oob_mapping() {
 
 /// C++: TEST(VmoTestCase, PinTests)
 /// Pin/unpin via VMObjectTrait. May fail (NOT_SUPPORTED for paged).
-#[test]
+#[cfg_attr(test, test)]
 fn pin_tests() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1627,7 +1627,7 @@ fn pin_tests() {
 
 /// C++: TEST(VmoTestCase, Prefetch)
 /// Commit pages explicitly (prefetch equivalent) then read.
-#[test]
+#[cfg_attr(test, test)]
 fn prefetch() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -1651,7 +1651,7 @@ fn prefetch() {
 /// mapping (including second page), and verify.
 ///
 /// Faithfully follows ProtectToWriteTestHelper in the C++ source.
-#[test]
+#[cfg_attr(test, test)]
 fn protect_to_write() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1711,7 +1711,7 @@ fn protect_to_write() {
 /// On bare metal, probe_for_write would return ACCESS_DENIED;
 /// in libos mode, mock_mem doesn't enforce write protection on
 /// the host mmap, so we only verify the read path.
-#[test]
+#[cfg_attr(test, test)]
 fn read_only_map() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1745,7 +1745,7 @@ fn read_only_map() {
 /// Kernel-space buffer addresses are rejected by `sys_vmo_read`/`sys_vmo_write`.
 /// The syscall layer checks the buffer address against `KERNEL_ASPACE_BASE` and
 /// returns `NOT_FOUND` for any address at or above it.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn read_write_invalid_kernel_buffer() {
     use crate::core_tests::syscall_vmo::syscall_vmo_create;
     use hal_impl::user::{UserInPtr, UserOutPtr};
@@ -1770,7 +1770,7 @@ async fn read_write_invalid_kernel_buffer() {
 
 /// C++: TEST(VmoTestCase, ReadWriteInvalidNullBuffer)
 /// Read/write with zero-length buffers should succeed (no-op).
-#[test]
+#[cfg_attr(test, test)]
 fn read_write_invalid_null_buffer() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1819,7 +1819,7 @@ fn read_write_invalid_null_buffer() {
 /// host-valid address). We faithfully test what we can:
 /// - OUT_OF_RANGE when reading/writing past the VMO's size.
 /// - Successful read/write within bounds after mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn read_write_invalid_user_buffer() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1868,7 +1868,7 @@ fn read_write_invalid_user_buffer() {
 /// the second page would fault with OUT_OF_RANGE. In libos we verify
 /// through the VMO API that data beyond the new size is gone, and that
 /// the first page data was intact before the shrink.
-#[test]
+#[cfg_attr(test, test)]
 fn resize_hazard() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1905,7 +1905,7 @@ fn resize_hazard() {
 
 /// C++: TEST(VmoTestCase, ResizeRight)
 /// Resizable VMO can resize; non-resizable cannot.
-#[test]
+#[cfg_attr(test, test)]
 fn resize_right() {
     let _ctx = TestContext::new();
 
@@ -1922,7 +1922,7 @@ fn resize_right() {
 
 /// C++: TEST(VmoTestCase, Rights)
 /// Create handles with restricted rights and verify.
-#[test]
+#[cfg_attr(test, test)]
 fn rights() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1940,7 +1940,7 @@ fn rights() {
 
 /// C++: TEST(VmoTestCase, RightsExec)
 /// Create a handle with EXECUTE right.
-#[test]
+#[cfg_attr(test, test)]
 fn rights_exec() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1965,7 +1965,7 @@ fn rights_exec() {
 /// (pin requires committed pages), pin them, reduce content_size
 /// (stream size), verify pinned pages are preserved, unpin, re-pin,
 /// increase content_size back, and unpin.
-#[test]
+#[cfg_attr(test, test)]
 fn set_stream_size_pinned_pages() {
     let _ctx = TestContext::new();
 
@@ -2020,7 +2020,7 @@ fn set_stream_size_pinned_pages() {
 
 /// C++: TEST(VmoTestCase, StreamSizeRights)
 /// content_size get/set works on paged VMOs.
-#[test]
+#[cfg_attr(test, test)]
 fn stream_size_rights() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged_with_resizable(true, 1);
@@ -2044,7 +2044,7 @@ fn stream_size_rights() {
 /// - A larger slice (5 pages) has its own content_size = slice size.
 /// - A REFERENCE child shares the parent's stream size.
 ///   Setting stream size on reference updates parent, and vice versa.
-#[test]
+#[cfg_attr(test, test)]
 fn stream_size_slices_and_references() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -2182,7 +2182,7 @@ fn stream_size_slices_and_references() {
 
 /// C++: TEST(VmoTestCase, UncachedContiguous)
 /// Create a contiguous VMO and set cache policy to uncached.
-#[test]
+#[cfg_attr(test, test)]
 fn uncached_contiguous() {
     use zircon_object::vm::CachePolicy;
     let _ctx = TestContext::new();
@@ -2203,7 +2203,7 @@ fn uncached_contiguous() {
 
 /// C++: TEST(VmoTestCase, UnmapLoanedcontiguousWhileFaulting)
 /// Map and unmap a contiguous VMO — no concurrent faulting in libos.
-#[test]
+#[cfg_attr(test, test)]
 fn unmap_loaned_contiguous_while_faulting() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -2229,7 +2229,7 @@ fn unmap_loaned_contiguous_while_faulting() {
 
 /// C++: TEST(VmoTestCase, V1Info)
 /// Verify basic VmoInfo fields for a paged VMO.
-#[test]
+#[cfg_attr(test, test)]
 fn v1_info() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -2247,7 +2247,7 @@ fn v1_info() {
 
 /// C++: TEST(VmoTestCase, V2Info)
 /// Verify VmoInfo for a child VMO (parent_koid, IS_COW_CLONE flag).
-#[test]
+#[cfg_attr(test, test)]
 fn v2_info() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -2264,7 +2264,7 @@ fn v2_info() {
 
 /// C++: TEST(VmoTestCase, V3Info)
 /// Verify VmoInfo for a resizable VMO with children.
-#[test]
+#[cfg_attr(test, test)]
 fn v3_info() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged_with_resizable(true, 2);
@@ -2294,7 +2294,7 @@ fn v3_info() {
 ///   VMO size is large (rounded up).
 /// - Can't call set_size (returns UNAVAILABLE).
 /// - Can read/write within VMO, can't past end.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_unbounded() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -2367,7 +2367,7 @@ fn vmo_unbounded() {
 
 /// C++: TEST(VmoTestCase, ZeroRangeOnSetStreamSize)
 /// set_content_size_with_zero zeroes data beyond the new content_size.
-#[test]
+#[cfg_attr(test, test)]
 fn zero_range_on_set_stream_size() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged_with_resizable(true, 1);
@@ -2396,7 +2396,7 @@ fn zero_range_on_set_stream_size() {
 
 /// C++: TEST(VmoTestCase, ReadWrite)
 /// Sync version of the VMO read/write test.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_read_write_sync() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -2407,4 +2407,77 @@ fn vmo_read_write_sync() {
     let mut buf = [0u8; 64];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(&buf, &data);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    vmo_read_write_bad_len().await;
+    vmo_size_align();
+    vmo_resize_align();
+    vmo_no_resize_extended();
+    vmo_info();
+    vmo_cache_policy();
+    signal_sanity();
+    child_signal_clone();
+    vmo_create_basic();
+    vmo_read_write_range_extended();
+    vmo_resize_basic();
+    vmo_content_size_extended();
+    child_signal_map();
+    vmo_zero_page();
+    cache_flush();
+    cache_op();
+    cache_op_large_vmo();
+    cache_op_out_of_range();
+    cache_op_phys();
+    cache_policy_race();
+    child_resize_right();
+    commit();
+    compressed_contiguous();
+    contiguous_require_aligned_size();
+    contiguous_require_nonzero_size();
+    create_child_mint_resize();
+    create_vmo_unbounded_invalid_stream_size();
+    decommit_child_slice_tests();
+    decommit_misaligned();
+    discardable();
+    fault_beyond_stream_size_no_phys_or_contig();
+    grow_mapped_vmo();
+    lock_unlock();
+    map();
+    map_read();
+    mapped_vmo_smaller_than_mapping();
+    metadata_bytes();
+    no_perm_map();
+    no_perm_protect();
+    no_write_resizable();
+    op_out_of_bounds();
+    parallel_read();
+    parallel_write_and_decommit();
+    physical_slice();
+    physical_vmo_invalid_initial_size();
+    physical_vmo_oob_mapping();
+    pin_tests();
+    prefetch();
+    protect_to_write();
+    read_only_map();
+    read_write_invalid_kernel_buffer().await;
+    read_write_invalid_null_buffer();
+    read_write_invalid_user_buffer();
+    resize_hazard();
+    resize_right();
+    rights();
+    rights_exec();
+    set_stream_size_pinned_pages();
+    stream_size_rights();
+    stream_size_slices_and_references();
+    uncached_contiguous();
+    unmap_loaned_contiguous_while_faulting();
+    v1_info();
+    v2_info();
+    v3_info();
+    vmo_unbounded();
+    zero_range_on_set_stream_size();
+    vmo_read_write_sync();
 }

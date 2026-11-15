@@ -8,7 +8,7 @@ use zircon_object::signal::{Pager, Port};
 use zircon_object::vm::{VmObject, PAGE_SIZE};
 
 /// Zero pages in a pager-backed VMO (pre-supplied, no faulting).
-#[test]
+#[cfg_attr(test, test)]
 fn hidden_no_content() {
     let _ctx = TestContext::new();
     let pager = Pager::new();
@@ -41,4 +41,10 @@ fn hidden_no_content() {
     // Second page should still have data.
     vmo.read(PAGE_SIZE, &mut buf).unwrap();
     assert_eq!(buf, [0xBB; 8], "second page should be unchanged");
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    hidden_no_content();
 }

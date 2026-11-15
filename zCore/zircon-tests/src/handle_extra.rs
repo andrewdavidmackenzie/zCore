@@ -8,7 +8,7 @@ use zircon_object::ipc::Channel;
 use zircon_object::object::{Handle, KernelObject, Rights};
 use zircon_object::ZxError;
 
-#[test]
+#[cfg_attr(test, test)]
 fn handle_close() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -24,7 +24,7 @@ fn handle_close() {
     );
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn handle_duplicate() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -43,7 +43,7 @@ fn handle_duplicate() {
     assert_eq!(obj1.id(), obj2.id());
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn handle_replace() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -68,7 +68,7 @@ fn handle_replace() {
     assert_eq!(rights, Rights::READ);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn handle_invalid() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -87,7 +87,7 @@ fn handle_invalid() {
 }
 
 /// Closing a handle makes it invalid.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_close_cxx() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -104,7 +104,7 @@ fn handle_close_cxx() {
 }
 
 /// Closing multiple handles at once.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_close_many() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -136,7 +136,7 @@ fn handle_close_many() {
 }
 
 /// Closing an invalid handle returns BAD_HANDLE.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_close_bad_handle() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -149,7 +149,7 @@ fn handle_close_bad_handle() {
 }
 
 /// Duplicating an invalid handle fails.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_duplicate_invalid() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -159,7 +159,7 @@ fn handle_duplicate_invalid() {
 }
 
 /// Duplicating a handle with the same rights preserves them.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_duplicate_same_rights() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -178,7 +178,7 @@ fn handle_duplicate_same_rights() {
 }
 
 /// Duplicating a handle with a subset of rights succeeds.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_duplicate_reduced_rights() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -199,7 +199,7 @@ fn handle_duplicate_reduced_rights() {
 }
 
 /// Duplicating with rights not in the original fails (at the object level).
-#[test]
+#[cfg_attr(test, test)]
 fn handle_duplicate_expanded_rights_fails() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -221,7 +221,7 @@ fn handle_duplicate_expanded_rights_fails() {
 }
 
 /// Replace a handle with new rights.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_replace_cxx() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -249,7 +249,7 @@ fn handle_replace_cxx() {
 }
 
 /// Replacing an invalid handle fails.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_replace_bad_handle() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -259,7 +259,7 @@ fn handle_replace_bad_handle() {
 }
 
 /// Replacing with rights that exceed the original fails.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_replace_invalid_rights() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -278,4 +278,23 @@ fn handle_replace_invalid_rights() {
         }
     });
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    handle_close();
+    handle_duplicate();
+    handle_replace();
+    handle_invalid();
+    handle_close_cxx();
+    handle_close_many();
+    handle_close_bad_handle();
+    handle_duplicate_invalid();
+    handle_duplicate_same_rights();
+    handle_duplicate_reduced_rights();
+    handle_duplicate_expanded_rights_fails();
+    handle_replace_cxx();
+    handle_replace_bad_handle();
+    handle_replace_invalid_rights();
 }

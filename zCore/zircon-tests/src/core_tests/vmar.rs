@@ -20,7 +20,7 @@ use zircon_object::ZxError;
 
 /// C++: TEST(Vmar, AlignmentVmarAllocateTest)
 /// Allocate child VMARs with various alignment requirements.
-#[test]
+#[cfg_attr(test, test)]
 fn alignment_vmar_allocate_test() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -48,7 +48,7 @@ fn alignment_vmar_allocate_test() {
 
 /// C++: TEST(Vmar, AlignmentVmarMapTest)
 /// Map VMOs with various alignment and verify address alignment.
-#[test]
+#[cfg_attr(test, test)]
 fn alignment_vmar_map_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -67,7 +67,7 @@ fn alignment_vmar_map_test() {
 
 /// C++: TEST(Vmar, AllocateAtLowAddressTest)
 /// Allocate at the lowest offset in the VMAR and verify address.
-#[test]
+#[cfg_attr(test, test)]
 fn allocate_at_low_address_test() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -86,7 +86,7 @@ fn allocate_at_low_address_test() {
 
 /// C++: TEST(Vmar, AllocateOobTest)
 /// Allocating at an offset that extends beyond the VMAR should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn allocate_oob_test() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -108,7 +108,7 @@ fn allocate_oob_test() {
 
 /// C++: TEST(Vmar, AllocateUnsatisfiableTest)
 /// Fill a VMAR with allocations until it's exhausted.
-#[test]
+#[cfg_attr(test, test)]
 fn allocate_unsatisfiable_test() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -134,7 +134,7 @@ fn allocate_unsatisfiable_test() {
 /// C++: TEST(Vmar, AllowFaultsTest)
 /// Map a VMO, read through the mapping (may fault in uncommitted
 /// pages). Verify the read returns the correct data.
-#[test]
+#[cfg_attr(test, test)]
 fn allow_faults_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -157,7 +157,7 @@ fn allow_faults_test() {
 
 /// C++: TEST(Vmar, BadRangeOpNestedVmar)
 /// Protect/unmap on a range spanning a child VMAR boundary.
-#[test]
+#[cfg_attr(test, test)]
 fn bad_range_op_nested_vmar() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -182,7 +182,7 @@ fn bad_range_op_nested_vmar() {
 
 /// C++: TEST(Vmar, BasicAllocateTest)
 /// Basic VMAR allocation within a process root VMAR.
-#[test]
+#[cfg_attr(test, test)]
 fn basic_allocate_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -213,7 +213,7 @@ fn basic_allocate_test() {
 
 /// C++: TEST(Vmar, ConcurrentUnmapReadMemory)
 /// Map, use read_memory, unmap, verify read_memory fails after unmap.
-#[test]
+#[cfg_attr(test, test)]
 fn concurrent_unmap_read_memory() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -245,7 +245,7 @@ fn concurrent_unmap_read_memory() {
 /// C++: TEST(Vmar, DestroyTest)
 /// Create a child VMAR, map a VMO in it, destroy the child,
 /// verify mappings are gone.
-#[test]
+#[cfg_attr(test, test)]
 fn destroy_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -272,7 +272,7 @@ fn destroy_test() {
 
 /// C++: TEST(Vmar, DestroyedVmarTest)
 /// Operations on a destroyed VMAR should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn destroyed_vmar_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -297,7 +297,7 @@ fn destroyed_vmar_test() {
 
 /// C++: TEST(Vmar, FaultBeyondReducedStreamSize)
 /// Map VMO, set a smaller content_size, read within and beyond.
-#[test]
+#[cfg_attr(test, test)]
 fn fault_beyond_reduced_stream_size() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -329,7 +329,7 @@ fn fault_beyond_reduced_stream_size() {
 
 /// C++: TEST(Vmar, FaultBeyondStreamSize)
 /// Map VMO with content_size set, verify reads work.
-#[test]
+#[cfg_attr(test, test)]
 fn fault_beyond_stream_size() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -353,7 +353,7 @@ fn fault_beyond_stream_size() {
 
 /// C++: TEST(Vmar, FaultBeyondStreamSizeForceWritable)
 /// Map VMO read+write with content_size, write through mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn fault_beyond_stream_size_force_writable() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -377,7 +377,7 @@ fn fault_beyond_stream_size_force_writable() {
 
 /// C++: TEST(Vmar, FaultBeyondStreamSizeRange)
 /// Map multi-page VMO with content_size, verify range of reads.
-#[test]
+#[cfg_attr(test, test)]
 fn fault_beyond_stream_size_range() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -405,7 +405,7 @@ fn fault_beyond_stream_size_range() {
 
 /// C++: TEST(Vmar, InvalidArgsTest)
 /// Various invalid arguments to VMAR operations.
-#[test]
+#[cfg_attr(test, test)]
 fn invalid_args_test() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -433,7 +433,7 @@ fn invalid_args_test() {
 
 /// C++: TEST(Vmar, MapInCompactTest)
 /// Allocate a VMAR with COMPACT flag, map VMOs in it.
-#[test]
+#[cfg_attr(test, test)]
 fn map_in_compact_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -461,7 +461,7 @@ fn map_in_compact_test() {
 
 /// C++: TEST(Vmar, MapInUpperLimitTest)
 /// Map using allocate_with_upper_limit if available.
-#[test]
+#[cfg_attr(test, test)]
 fn map_in_upper_limit_test() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -484,7 +484,7 @@ fn map_in_upper_limit_test() {
 /// C++: TEST(Vmar, MapOverDestroyedTest)
 /// Mapping over a destroyed child VMAR region should work
 /// (the space is reclaimed).
-#[test]
+#[cfg_attr(test, test)]
 fn map_over_destroyed_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -508,7 +508,7 @@ fn map_over_destroyed_test() {
 
 /// C++: TEST(Vmar, MapRangeResizable)
 /// Map a resizable VMO, then resize it and verify behavior.
-#[test]
+#[cfg_attr(test, test)]
 fn map_range_resizable() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -536,7 +536,7 @@ fn map_range_resizable() {
 
 /// C++: TEST(Vmar, MapRangeStreamSizeWraparound)
 /// Verify content_size does not cause address wraparound.
-#[test]
+#[cfg_attr(test, test)]
 fn map_range_stream_size_wraparound() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged_with_resizable(true, 1);
@@ -560,7 +560,7 @@ fn map_range_stream_size_wraparound() {
 /// the mapping is execute-only and probe_for_read returns ACCESS_DENIED.
 ///
 /// zCore does not support XOM, so the mapping should be readable.
-#[test]
+#[cfg_attr(test, test)]
 fn map_read_if_xom_unsupported() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -589,7 +589,7 @@ fn map_read_if_xom_unsupported() {
 
 /// C++: TEST(Vmar, MapSpecificOverwriteTest)
 /// Map at a specific offset, then try to map over it.
-#[test]
+#[cfg_attr(test, test)]
 fn map_specific_overwrite_test() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -609,7 +609,7 @@ fn map_specific_overwrite_test() {
 
 /// C++: TEST(Vmar, NestedRegionPermsTest)
 /// Child VMAR inherits parent's permission restrictions.
-#[test]
+#[cfg_attr(test, test)]
 fn nested_region_perms_test() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -638,7 +638,7 @@ fn nested_region_perms_test() {
 
 /// C++: TEST(Vmar, ObjectInfoTest)
 /// get_info returns correct fields for VMAR.
-#[test]
+#[cfg_attr(test, test)]
 fn object_info_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -661,7 +661,7 @@ fn object_info_test() {
 /// C++: TEST(Vmar, OpOnRangeWithChildVmarNextToIt)
 /// Map VMO next to a child VMAR, then unmap/protect the mapping
 /// without affecting the child VMAR.
-#[test]
+#[cfg_attr(test, test)]
 fn op_on_range_with_child_vmar_next_to_it() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -687,7 +687,7 @@ fn op_on_range_with_child_vmar_next_to_it() {
 
 /// C++: TEST(Vmar, OpRangeRights)
 /// Map with specific permissions, then protect to verify.
-#[test]
+#[cfg_attr(test, test)]
 fn op_range_rights() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -714,7 +714,7 @@ fn op_range_rights() {
 
 /// C++: TEST(Vmar, OvermappingTest)
 /// Mapping at an address that already has a mapping should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn overmapping_test() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -733,7 +733,7 @@ fn overmapping_test() {
 
 /// C++: TEST(Vmar, PartialUnmapAndRead)
 /// Map 4 pages, unmap the middle 2, verify via read_memory.
-#[test]
+#[cfg_attr(test, test)]
 fn partial_unmap_and_read() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -779,7 +779,7 @@ fn partial_unmap_and_read() {
 
 /// C++: TEST(Vmar, PartialUnmapAndWrite)
 /// Map 4 pages, unmap the middle 2, verify the mapping was split.
-#[test]
+#[cfg_attr(test, test)]
 fn partial_unmap_and_write() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -811,7 +811,7 @@ fn partial_unmap_and_write() {
 
 /// C++: TEST(Vmar, PartialUnmapWithVmarOffset)
 /// Map at a VMO offset, then partially unmap. Verify via read_memory.
-#[test]
+#[cfg_attr(test, test)]
 fn partial_unmap_with_vmar_offset() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -850,7 +850,7 @@ fn partial_unmap_with_vmar_offset() {
 
 /// C++: TEST(Vmar, Prefetch)
 /// Commit pages in a VMO mapped into VMAR (prefetch equivalent).
-#[test]
+#[cfg_attr(test, test)]
 fn prefetch() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -875,7 +875,7 @@ fn prefetch() {
 
 /// C++: TEST(Vmar, ProtectCowWritable)
 /// Map a COW clone read-only, then protect to writable.
-#[test]
+#[cfg_attr(test, test)]
 fn protect_cow_writable() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -921,7 +921,7 @@ fn protect_cow_writable() {
 /// read+write, writes to a few pages, then protects a misaligned sub-range
 /// to read-only. Verifies that pages before the protect base remain writable
 /// and pages within the protected range are read-only.
-#[test]
+#[cfg_attr(test, test)]
 fn protect_large_uncommitted_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -975,7 +975,7 @@ fn protect_large_uncommitted_test() {
 /// 1. Three adjacent mappings, protect a range spanning parts of all three → OK
 /// 2. Same but middle mapping has reduced VMO rights → protect to RW fails ACCESS_DENIED
 /// 3. Protect across a gap (unmapped region) → NOT_FOUND
-#[test]
+#[cfg_attr(test, test)]
 fn protect_multiple_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1070,7 +1070,7 @@ fn protect_multiple_test() {
 
 /// C++: TEST(Vmar, ProtectOverDemandPagedTest)
 /// Map an uncommitted (demand-paged) VMO, protect, access.
-#[test]
+#[cfg_attr(test, test)]
 fn protect_over_demand_paged_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1103,7 +1103,7 @@ fn protect_over_demand_paged_test() {
 /// protects with ZX_VM_PERM_READ_IF_XOM_UNSUPPORTED. If XOM is not
 /// supported (which is the case for zCore), READ permission is
 /// implicitly added, so the mapping remains readable.
-#[test]
+#[cfg_attr(test, test)]
 fn protect_read_if_xom_unsupported() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1140,7 +1140,7 @@ fn protect_read_if_xom_unsupported() {
 /// C++: TEST(Vmar, ProtectSplitTest)
 /// Protect a sub-range of a mapping, splitting it. Verify that all
 /// pages remain mapped (readable via read_memory) after the split.
-#[test]
+#[cfg_attr(test, test)]
 fn protect_split_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1206,7 +1206,7 @@ fn protect_split_test() {
 /// 1. parent.protect(READ) → succeeds (removes write from mapping in child)
 /// 2. parent.protect(READ|WRITE) → fails ACCESS_DENIED (parent lost CAN_MAP_WRITE)
 /// 3. child.protect(READ|WRITE) → succeeds (child still has CAN_MAP_WRITE)
-#[test]
+#[cfg_attr(test, test)]
 fn protect_subregion_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1278,7 +1278,7 @@ fn protect_subregion_test() {
 
 /// C++: TEST(Vmar, ProtectTest)
 /// Map, read, protect to read-only, read again.
-#[test]
+#[cfg_attr(test, test)]
 fn protect_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1311,7 +1311,7 @@ fn protect_test() {
 /// Creates sub-VMARs with gaps, maps VMO + SNAPSHOT clone,
 /// commits pages via op_range, checks populated_bytes, and
 /// verifies ACCESS_DENIED, OUT_OF_RANGE, and BAD_STATE errors.
-#[test]
+#[cfg_attr(test, test)]
 fn range_op_commit() {
     let _ctx = TestContext::new();
     // Create a temporary VMAR to work with.
@@ -1483,7 +1483,7 @@ fn range_op_commit() {
 
 /// C++: TEST(Vmar, RangeOpCommitVmoPages)
 /// Commit VMO pages, write data, map and verify.
-#[test]
+#[cfg_attr(test, test)]
 fn range_op_commit_vmo_pages() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1506,7 +1506,7 @@ fn range_op_commit_vmo_pages() {
 
 /// C++: TEST(Vmar, RangeOpCommitVmoPages2)
 /// Commit multiple pages, verify committed_bytes, decommit some.
-#[test]
+#[cfg_attr(test, test)]
 fn range_op_commit_vmo_pages_2() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -1526,7 +1526,7 @@ fn range_op_commit_vmo_pages_2() {
 
 /// C++: TEST(Vmar, RangeOpMapRange)
 /// Map a VMO and verify all pages are accessible.
-#[test]
+#[cfg_attr(test, test)]
 fn range_op_map_range() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1553,7 +1553,7 @@ fn range_op_map_range() {
 
 /// C++: TEST(Vmar, RangeOpStreamSizeWraparound)
 /// Set content_size near max, verify no wraparound issues.
-#[test]
+#[cfg_attr(test, test)]
 fn range_op_stream_size_wraparound() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged_with_resizable(true, 1);
@@ -1570,7 +1570,7 @@ fn range_op_stream_size_wraparound() {
 
 /// C++: TEST(Vmar, RangeOpSubRegions)
 /// Create nested VMARs with mappings in each, operate on ranges.
-#[test]
+#[cfg_attr(test, test)]
 fn range_op_sub_regions() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1599,7 +1599,7 @@ fn range_op_sub_regions() {
 
 /// C++: TEST(Vmar, RangeOpZero)
 /// Map VMO, zero a range through VMO API, verify through mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn range_op_zero() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1631,7 +1631,7 @@ fn range_op_zero() {
 
 /// C++: TEST(Vmar, RightsDropTest)
 /// Create VMARs with restricted flags and verify.
-#[test]
+#[cfg_attr(test, test)]
 fn rights_drop_test() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -1648,7 +1648,7 @@ fn rights_drop_test() {
 
 /// C++: TEST(Vmar, SpecificOverwriteMergeMappings)
 /// Map, unmap, re-map at same location — verify new mapping works.
-#[test]
+#[cfg_attr(test, test)]
 fn specific_overwrite_merge_mappings() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1677,7 +1677,7 @@ fn specific_overwrite_merge_mappings() {
 
 /// C++: TEST(Vmar, UnalignedLenMapTest)
 /// Map with non-page-aligned size should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn unaligned_len_map_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1694,7 +1694,7 @@ fn unaligned_len_map_test() {
 
 /// C++: TEST(Vmar, UnalignedLenTest)
 /// Unmap/protect with non-page-aligned length should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn unaligned_len_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1723,7 +1723,7 @@ fn unaligned_len_test() {
 /// starting before the mapping (base is not mapped). The unmap should
 /// succeed — Fuchsia allows unmapping ranges that include unmapped pages.
 /// Then verifies the same with a second mapping below.
-#[test]
+#[cfg_attr(test, test)]
 fn unmap_base_not_mapped_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1786,7 +1786,7 @@ fn unmap_base_not_mapped_test() {
 /// maps it read+write, writes to a few pages, then unmaps a misaligned
 /// sub-range. Verifies that pages before the unmap base remain accessible
 /// and pages within the unmapped range are no longer accessible.
-#[test]
+#[cfg_attr(test, test)]
 fn unmap_large_uncommitted_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1859,7 +1859,7 @@ fn unmap_large_uncommitted_test() {
 ///
 /// Scenario 2: Two mappings with a gap. Unmap spanning the left mapping
 /// and part of the right one. Verify remaining pages, then unmap rest.
-#[test]
+#[cfg_attr(test, test)]
 fn unmap_multiple_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1966,7 +1966,7 @@ fn unmap_multiple_test() {
 
 /// C++: TEST(Vmar, UnmapOpChildren)
 /// Map VMO in a child VMAR, unmap from child, verify parent intact.
-#[test]
+#[cfg_attr(test, test)]
 fn unmap_op_children() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1990,7 +1990,7 @@ fn unmap_op_children() {
 
 /// C++: TEST(Vmar, UnmapSplitTest)
 /// Map 4 pages, unmap the middle 2 to split the mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn unmap_split_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -2027,7 +2027,7 @@ fn unmap_split_test() {
 
 /// C++: TEST(Vmar, VmarMapRangeOffsetTest)
 /// Map with a VMO offset, verify correct data through mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_map_range_offset_test() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -2052,7 +2052,7 @@ fn vmar_map_range_offset_test() {
 
 /// C++: TEST(Vmar, WriteReadOnlyMemory)
 /// Map read-only, verify read works. write_memory should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn write_read_only_memory() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -2085,4 +2085,67 @@ fn write_read_only_memory() {
     assert_eq!(buf2[0], 42, "VMO data should be intact");
 
     vmar.unmap(addr, PAGE_SIZE).unwrap();
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    alignment_vmar_allocate_test();
+    alignment_vmar_map_test();
+    allocate_at_low_address_test();
+    allocate_oob_test();
+    allocate_unsatisfiable_test();
+    allow_faults_test();
+    bad_range_op_nested_vmar();
+    basic_allocate_test();
+    concurrent_unmap_read_memory();
+    destroy_test();
+    destroyed_vmar_test();
+    fault_beyond_reduced_stream_size();
+    fault_beyond_stream_size();
+    fault_beyond_stream_size_force_writable();
+    fault_beyond_stream_size_range();
+    invalid_args_test();
+    map_in_compact_test();
+    map_in_upper_limit_test();
+    map_over_destroyed_test();
+    map_range_resizable();
+    map_range_stream_size_wraparound();
+    map_read_if_xom_unsupported();
+    map_specific_overwrite_test();
+    nested_region_perms_test();
+    object_info_test();
+    op_on_range_with_child_vmar_next_to_it();
+    op_range_rights();
+    overmapping_test();
+    partial_unmap_and_read();
+    partial_unmap_and_write();
+    partial_unmap_with_vmar_offset();
+    prefetch();
+    protect_cow_writable();
+    protect_large_uncommitted_test();
+    protect_multiple_test();
+    protect_over_demand_paged_test();
+    protect_read_if_xom_unsupported();
+    protect_split_test();
+    protect_subregion_test();
+    protect_test();
+    range_op_commit();
+    range_op_commit_vmo_pages();
+    range_op_commit_vmo_pages_2();
+    range_op_map_range();
+    range_op_stream_size_wraparound();
+    range_op_sub_regions();
+    range_op_zero();
+    rights_drop_test();
+    specific_overwrite_merge_mappings();
+    unaligned_len_map_test();
+    unaligned_len_test();
+    unmap_base_not_mapped_test();
+    unmap_large_uncommitted_test();
+    unmap_multiple_test();
+    unmap_op_children();
+    unmap_split_test();
+    vmar_map_range_offset_test();
+    write_read_only_memory();
 }

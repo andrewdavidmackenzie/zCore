@@ -30,7 +30,7 @@ use zircon_object::signal::Futex;
 ///
 /// This requires concurrent multi-threaded execution.
 /// 3 threads wait on condvar, main broadcasts → all wake.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn broadcast_signal_thread_wait() {
     use crate::helpers::{condvar_waiter_thread_fn, CondvarWaiterState, SyncCondition, SyncMutex};
     use alloc::sync::Arc;
@@ -98,7 +98,7 @@ async fn broadcast_signal_thread_wait() {
 ///
 /// This requires concurrent multi-threaded execution.
 /// 3 threads wait on condvar, main signals one at a time → each wakes.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn signal_thread_wait() {
     use crate::helpers::{condvar_waiter_thread_fn, CondvarWaiterState, SyncCondition, SyncMutex};
     use alloc::sync::Arc;
@@ -175,7 +175,7 @@ async fn signal_thread_wait() {
 /// on return.
 ///
 /// In single-threaded mode, we can test the futex_wait value mismatch path.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn conditional_variables_timeout() {
     let _ctx = TestContext::new();
 
@@ -209,4 +209,12 @@ async fn conditional_variables_timeout() {
 
     // C++: mtx_unlock(&mutex)
     mutex.store(0, Ordering::Release);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    broadcast_signal_thread_wait().await;
+    signal_thread_wait().await;
+    conditional_variables_timeout().await;
 }

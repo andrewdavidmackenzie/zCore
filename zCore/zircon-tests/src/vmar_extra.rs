@@ -9,7 +9,7 @@ use zircon_object::task::{Job, Process};
 use zircon_object::vm::{MMUFlags, VmObject, VmarFlags, PAGE_SIZE};
 
 /// Process root VMAR exists and has valid properties.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_root_exists() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -20,7 +20,7 @@ fn vmar_root_exists() {
 }
 
 /// Allocate a child VMAR region.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_allocate_child() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -46,7 +46,7 @@ fn vmar_allocate_child() {
 
 /// Map a VMO into a VMAR and verify data can be read/written through the mapping.
 ///
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_map_and_access() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -87,7 +87,7 @@ fn vmar_map_and_access() {
 }
 
 /// Unmap a previously mapped region.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_unmap() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -103,7 +103,7 @@ fn vmar_unmap() {
 }
 
 /// Map multiple pages and verify each page has correct data.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_map_multi_page() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -140,7 +140,7 @@ fn vmar_map_multi_page() {
 }
 
 /// Map a VMO at a specific offset within the VMO.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_map_with_vmo_offset() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -164,7 +164,7 @@ fn vmar_map_with_vmo_offset() {
 }
 
 /// Protect a mapped region — change permissions.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_protect() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -192,7 +192,7 @@ fn vmar_protect() {
 }
 
 /// Destroy a child VMAR.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_destroy_child() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -211,7 +211,7 @@ fn vmar_destroy_child() {
 }
 
 /// Create a child VMAR and destroy it.
-#[test]
+#[cfg_attr(test, test)]
 fn create_destroy() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -229,7 +229,7 @@ fn create_destroy() {
 }
 
 /// Bad size/alignment should fail with INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn create_invalid_args() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -252,7 +252,7 @@ fn create_invalid_args() {
 }
 
 /// Offset + size beyond parent should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn create_out_of_bounds() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -265,7 +265,7 @@ fn create_out_of_bounds() {
 }
 
 /// Destroying an already-destroyed VMAR returns BAD_STATE.
-#[test]
+#[cfg_attr(test, test)]
 fn destroy_twice() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -287,7 +287,7 @@ fn destroy_twice() {
 /// remove itself from, which panics in zCore; the C++ test expects
 /// ACCESS_DENIED). We test the raw root VMAR API instead: destroying
 /// a parentless root should still succeed at the object level.
-#[test]
+#[cfg_attr(test, test)]
 fn destroy_root() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -300,7 +300,7 @@ fn destroy_root() {
 }
 
 /// Nested allocation within a child VMAR.
-#[test]
+#[cfg_attr(test, test)]
 fn allocate_within_child() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -320,7 +320,7 @@ fn allocate_within_child() {
 }
 
 /// Overlapping SPECIFIC allocations fail with ALREADY_EXISTS.
-#[test]
+#[cfg_attr(test, test)]
 fn allocate_overlap() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -339,7 +339,7 @@ fn allocate_overlap() {
 }
 
 /// Allocate at a specific offset within the parent.
-#[test]
+#[cfg_attr(test, test)]
 fn allocate_specific_offset() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -354,7 +354,7 @@ fn allocate_specific_offset() {
 }
 
 /// Alignment requirements are enforced.
-#[test]
+#[cfg_attr(test, test)]
 fn allocate_align() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -370,7 +370,7 @@ fn allocate_align() {
 }
 
 /// Allocating more than the parent's size fails.
-#[test]
+#[cfg_attr(test, test)]
 fn allocate_too_large() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -384,7 +384,7 @@ fn allocate_too_large() {
 }
 
 /// Destroying a parent destroys all children recursively.
-#[test]
+#[cfg_attr(test, test)]
 fn nested_destroy() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -404,7 +404,7 @@ fn nested_destroy() {
 }
 
 /// Mapping with non-page-aligned offset or size fails.
-#[test]
+#[cfg_attr(test, test)]
 fn map_invalid_vmo() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -428,7 +428,7 @@ fn map_invalid_vmo() {
 }
 
 /// Mapping at a non-page-aligned VMO offset fails.
-#[test]
+#[cfg_attr(test, test)]
 fn map_bad_offset() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -443,7 +443,7 @@ fn map_bad_offset() {
 }
 
 /// Mapping with a non-page-aligned size fails.
-#[test]
+#[cfg_attr(test, test)]
 fn map_bad_size() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -460,7 +460,7 @@ fn map_bad_size() {
 }
 
 /// Unmapping a range with no mappings succeeds (no-op).
-#[test]
+#[cfg_attr(test, test)]
 fn unmap_not_mapped() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -471,7 +471,7 @@ fn unmap_not_mapped() {
 }
 
 /// Unmapping part of a mapping splits it.
-#[test]
+#[cfg_attr(test, test)]
 fn unmap_partial() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -487,7 +487,7 @@ fn unmap_partial() {
 }
 
 /// Protecting a range with no mapping fails with NOT_FOUND.
-#[test]
+#[cfg_attr(test, test)]
 fn protect_not_mapped() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -502,7 +502,7 @@ fn protect_not_mapped() {
 }
 
 /// get_info returns correct base and len.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -517,7 +517,7 @@ fn get_info() {
 }
 
 /// Check VMAR flags on creation.
-#[test]
+#[cfg_attr(test, test)]
 fn flags() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -536,7 +536,7 @@ fn flags() {
 }
 
 /// Verify addr/size on a child VMAR match allocation parameters.
-#[test]
+#[cfg_attr(test, test)]
 fn addr_and_size() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -551,4 +551,37 @@ fn addr_and_size() {
     assert_eq!(child.addr(), base + offset);
     let info = child.get_info();
     assert_eq!(info.len, size);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    vmar_root_exists();
+    vmar_allocate_child();
+    vmar_map_and_access();
+    vmar_unmap();
+    vmar_map_multi_page();
+    vmar_map_with_vmo_offset();
+    vmar_protect();
+    vmar_destroy_child();
+    create_destroy();
+    create_invalid_args();
+    create_out_of_bounds();
+    destroy_twice();
+    destroy_root();
+    allocate_within_child();
+    allocate_overlap();
+    allocate_specific_offset();
+    allocate_align();
+    allocate_too_large();
+    nested_destroy();
+    map_invalid_vmo();
+    map_bad_offset();
+    map_bad_size();
+    unmap_not_mapped();
+    unmap_partial();
+    protect_not_mapped();
+    get_info();
+    flags();
+    addr_and_size();
 }

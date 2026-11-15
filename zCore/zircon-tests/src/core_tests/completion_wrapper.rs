@@ -32,7 +32,7 @@ use zircon_object::signal::Futex;
 /// Signal does store(1) + futex_wake(MAX).
 ///
 /// In single-threaded mode, we verify the signal-then-check path.
-#[test]
+#[cfg_attr(test, test)]
 fn wait() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
@@ -66,7 +66,7 @@ fn wait() {
 ///
 /// infinite_past means the deadline has already passed, so it times out
 /// immediately. At kernel level: futex_wait with a deadline in the past.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn wait_duration_timeout() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
@@ -98,7 +98,7 @@ async fn wait_duration_timeout() {
 ///
 /// Even though the deadline is in the past, the completion is already
 /// signaled, so Wait returns immediately with success.
-#[test]
+#[cfg_attr(test, test)]
 fn wait_duration() {
     let _ctx = TestContext::new();
     let completion = AtomicI32::new(0);
@@ -120,7 +120,7 @@ fn wait_duration() {
 ///
 /// Same as WaitDurationTimeout but using zx::time instead of zx::duration.
 /// completion.Wait(zx::time::infinite_past()) → ZX_ERR_TIMED_OUT
-#[test]
+#[cfg_attr(test, test)]
 fn wait_deadline_timeout() {
     let _ctx = TestContext::new();
     let completion = AtomicI32::new(0);
@@ -137,7 +137,7 @@ fn wait_deadline_timeout() {
 ///
 /// completion.Signal() then Wait(zx::time::infinite_past()) → ZX_OK.
 /// Already signaled, so returns immediately regardless of deadline.
-#[test]
+#[cfg_attr(test, test)]
 fn wait_deadline() {
     let _ctx = TestContext::new();
     let completion = AtomicI32::new(0);
@@ -164,7 +164,7 @@ fn wait_deadline() {
 ///
 /// At kernel level: signaled() reads the atomic flag,
 /// Signal() stores 1 + futex_wake, Reset() stores 0.
-#[test]
+#[cfg_attr(test, test)]
 fn signaled() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
@@ -197,4 +197,15 @@ fn signaled() {
         0,
         "should not be signaled after Reset()"
     );
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    wait();
+    wait_duration_timeout().await;
+    wait_duration();
+    wait_deadline_timeout();
+    wait_deadline();
+    signaled();
 }

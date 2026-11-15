@@ -16,7 +16,7 @@ use zircon_object::ipc::MessagePacket;
 /// call round-trip, and verify the response. The mutex holding
 /// pattern requires std::thread + blocking channel_call which needs
 /// preemptive scheduling (not in zCore).
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn mutex_held_across_call_chain() {
     use crate::helpers::EchoServer;
 
@@ -48,4 +48,10 @@ async fn mutex_held_across_call_chain() {
     );
 
     echo.shutdown().await;
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    mutex_held_across_call_chain().await;
 }

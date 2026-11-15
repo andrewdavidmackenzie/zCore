@@ -13,7 +13,7 @@ extern crate alloc;
 ///
 /// Allocate a sub-VMAR within the process root VMAR. The sub-VMAR
 /// should have a valid KOID and be within the parent's range.
-#[test]
+#[cfg_attr(test, test)]
 fn allocate_sub_vmar() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -26,7 +26,7 @@ fn allocate_sub_vmar() {
 ///
 /// Map a VMO into the process VMAR. The mapping should succeed and
 /// return a valid address within the VMAR range.
-#[test]
+#[cfg_attr(test, test)]
 fn map_vmo() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -42,7 +42,7 @@ fn map_vmo() {
 ///
 /// Map then unmap a VMO. After unmapping, the address range should
 /// be free for reuse.
-#[test]
+#[cfg_attr(test, test)]
 fn unmap_vmo() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -61,7 +61,7 @@ fn unmap_vmo() {
 ///
 /// Map multiple VMOs into the same VMAR. All mappings should coexist
 /// at different addresses.
-#[test]
+#[cfg_attr(test, test)]
 fn map_multiple_vmos() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -86,7 +86,7 @@ fn map_multiple_vmos() {
 
 ///
 /// Map a multi-page VMO into the VMAR.
-#[test]
+#[cfg_attr(test, test)]
 fn map_large_vmo() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -101,7 +101,7 @@ fn map_large_vmo() {
 
 ///
 /// Map a VMO at a non-zero offset within the VMO.
-#[test]
+#[cfg_attr(test, test)]
 fn map_with_offset() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -118,7 +118,7 @@ fn map_with_offset() {
 ///
 /// Create and destroy a sub-VMAR. All mappings within should be
 /// unmapped.
-#[test]
+#[cfg_attr(test, test)]
 fn destroy_sub_vmar() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -149,7 +149,7 @@ fn destroy_sub_vmar() {
 
 ///
 /// Change the protection of a mapped range.
-#[test]
+#[cfg_attr(test, test)]
 fn protect_range() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -179,7 +179,7 @@ fn protect_range() {
 ///
 /// Map a VMO over an existing mapping. The new mapping should
 /// fail with ALREADY_EXISTS (no SPECIFIC_OVERWRITE flag support).
-#[test]
+#[cfg_attr(test, test)]
 fn map_overlapping() {
     let _ctx = TestContext::new();
     let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
@@ -197,7 +197,7 @@ fn map_overlapping() {
 
 ///
 /// Query VMAR info and verify the address range.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_info() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -205,4 +205,19 @@ fn vmar_info() {
     let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
     let vmar = proc.vmar();
     assert_ne!(vmar.id(), 0);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    allocate_sub_vmar();
+    map_vmo();
+    unmap_vmo();
+    map_multiple_vmos();
+    map_large_vmo();
+    map_with_offset();
+    destroy_sub_vmar();
+    protect_range();
+    map_overlapping();
+    vmar_info();
 }

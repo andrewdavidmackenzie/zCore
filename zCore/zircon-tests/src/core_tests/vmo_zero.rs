@@ -9,7 +9,7 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE, PAGE_SIZE_LOG2};
 
 /// C++: TEST(VmoZeroTestCase, UnalignedUnCommitted)
 /// Zero across page boundaries on uncommitted pages should not commit pages.
-#[test]
+#[cfg_attr(test, test)]
 fn unaligned_uncommitted() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -24,7 +24,7 @@ fn unaligned_uncommitted() {
 
 /// C++: TEST(VmoZeroTestCase, ContentInParentAndChild)
 /// Zero a COW child page that has forked content; child should read zeros.
-#[test]
+#[cfg_attr(test, test)]
 fn content_in_parent_and_child() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -47,7 +47,7 @@ fn content_in_parent_and_child() {
 
 /// C++: TEST(VmoZeroTestCase, ZeroLengths)
 /// Zero-length zero operations succeed and don't alter existing data.
-#[test]
+#[cfg_attr(test, test)]
 fn zero_lengths() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -72,7 +72,7 @@ fn zero_lengths() {
 
 /// C++: TEST(VmoZeroTestCase, EmptyCowChildren)
 /// Zero a COW child, then zero parent — both see zero pages.
-#[test]
+#[cfg_attr(test, test)]
 fn empty_cow_children() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -110,7 +110,7 @@ fn empty_cow_children() {
 }
 /// C++: TEST(VmoZeroTestCase, ChildZeroThenWrite)
 /// Zero child page, then write to it — write should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn child_zero_then_write() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -141,7 +141,7 @@ fn child_zero_then_write() {
 /// In zCore, the zero op with multiple children may not fully decommit
 /// the parent page (COW semantics differ). We test the invariant that
 /// children are unaffected, and the zero op itself succeeds.
-#[test]
+#[cfg_attr(test, test)]
 fn nested() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -172,7 +172,7 @@ fn nested() {
 /// C++: TEST(VmoZeroTestCase, Contiguous)
 /// Zero on a contiguous VMO should zero page contents in-place
 /// without decommitting (pages must stay allocated for contiguity).
-#[test]
+#[cfg_attr(test, test)]
 fn contiguous() {
     let _ctx = TestContext::new();
 
@@ -214,7 +214,7 @@ fn contiguous() {
 
 /// C++: TEST(VmoZeroTestCase, UnalignedSubPage)
 /// Zero a sub-page range and verify via VMAR mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn unaligned_sub_page() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -255,7 +255,7 @@ fn unaligned_sub_page() {
 
 /// C++: TEST(VmoZeroTestCase, DecommitMiddle)
 /// Zero the middle page of a 3-page VMO, verify via mapping.
-#[test]
+#[cfg_attr(test, test)]
 fn decommit_middle() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -291,7 +291,7 @@ fn decommit_middle() {
 
 /// C++: TEST(VmoZeroTestCase, UnalignedCommitted)
 /// Zero an unaligned range crossing a page boundary on committed pages.
-#[test]
+#[cfg_attr(test, test)]
 fn unaligned_committed() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -340,7 +340,7 @@ fn unaligned_committed() {
 /// previous zero operation, resizing the VMO so that only a sibling
 /// still overlaps the marker range must preserve the marker (sibling
 /// must still see zeros, not the old parent page).
-#[test]
+#[cfg_attr(test, test)]
 fn resize_over_hidden_markers() {
     let _ctx = TestContext::new();
 
@@ -394,7 +394,7 @@ fn resize_over_hidden_markers() {
 /// Zero on a child that has a committed page and COW-shared pages should
 /// correctly handle the freed page potentially being reused to fork a
 /// page into an intermediate.
-#[test]
+#[cfg_attr(test, test)]
 fn zero_frees_and_allocates() {
     let _ctx = TestContext::new();
 
@@ -439,7 +439,7 @@ fn zero_frees_and_allocates() {
 /// We faithfully reproduce this with Pager::create_vmo +
 /// create_child_unidirectional (the kernel-level equivalent of
 /// SNAPSHOT_MODIFIED).
-#[test]
+#[cfg_attr(test, test)]
 fn zero_hidden_no_content() {
     let _ctx = TestContext::new();
 
@@ -479,7 +479,7 @@ fn zero_hidden_no_content() {
 /// Creates parent (3 pages), child1 (SNAPSHOT), zeroes parent page 0,
 /// creates child2 (SNAPSHOT), zeroes child1 page 1, closes child1,
 /// writes to parent and child2, verifies populated_bytes at each step.
-#[test]
+#[cfg_attr(test, test)]
 fn allocate_after_merge_multiple_children() {
     let _ctx = TestContext::new();
     let p = PAGE_SIZE as u64;
@@ -575,7 +575,7 @@ fn allocate_after_merge_multiple_children() {
 /// Creates a 2-page parent VMO, writes to both pages, creates a COW
 /// child, writes to child page 0 (forks it), zeros parent page 0.
 /// Verifies parent.populated_bytes == 1 page.
-#[test]
+#[cfg_attr(test, test)]
 fn write_cow_parent() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -598,7 +598,7 @@ fn write_cow_parent() {
 }
 /// C++: TEST(VmoZeroTestCase, MergeZeroChildren)
 /// Zero all pages, drop children, verify populated_bytes goes to 0.
-#[test]
+#[cfg_attr(test, test)]
 fn merge_zero_children() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -622,7 +622,7 @@ fn merge_zero_children() {
 
 /// C++: TEST(VmoZeroTestCase, AllocateAfterMerge)
 /// Zero parent page, drop child, verify populated_bytes.
-#[test]
+#[cfg_attr(test, test)]
 fn allocate_after_merge() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -641,4 +641,26 @@ fn allocate_after_merge() {
         info.populated_bytes, 0,
         "populated_bytes: should be 0 after zero + child drop"
     );
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    unaligned_uncommitted();
+    content_in_parent_and_child();
+    zero_lengths();
+    empty_cow_children();
+    child_zero_then_write();
+    nested();
+    contiguous();
+    unaligned_sub_page();
+    decommit_middle();
+    unaligned_committed();
+    resize_over_hidden_markers();
+    zero_frees_and_allocates();
+    zero_hidden_no_content();
+    allocate_after_merge_multiple_children();
+    write_cow_parent();
+    merge_zero_children();
+    allocate_after_merge();
 }

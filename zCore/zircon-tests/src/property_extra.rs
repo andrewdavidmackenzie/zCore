@@ -17,7 +17,7 @@ use zircon_object::vm::VmObject;
 
 ///
 /// Set ZX_PROP_NAME on an event and verify it sticks.
-#[test]
+#[cfg_attr(test, test)]
 fn property_set_name() {
     let ctx = TestContext::new();
     let event = zircon_object::signal::Event::new();
@@ -32,7 +32,7 @@ fn property_set_name() {
 
 ///
 /// Set then get ZX_PROP_NAME on an event.
-#[test]
+#[cfg_attr(test, test)]
 fn property_get_name() {
     let ctx = TestContext::new();
     let event = zircon_object::signal::Event::new();
@@ -55,7 +55,7 @@ fn property_get_name() {
 ///
 /// Setting a name longer than ZX_MAX_NAME_LEN should truncate silently.
 /// Fuchsia truncates at MAX_NAME_LEN - 1 characters.
-#[test]
+#[cfg_attr(test, test)]
 fn property_name_too_long() {
     let ctx = TestContext::new();
     let event = zircon_object::signal::Event::new();
@@ -79,7 +79,7 @@ fn property_name_too_long() {
 
 ///
 /// Setting a name on an invalid handle should return BAD_HANDLE.
-#[test]
+#[cfg_attr(test, test)]
 fn property_set_name_invalid_handle() {
     let ctx = TestContext::new();
     let name = b"test\0";
@@ -89,7 +89,7 @@ fn property_set_name_invalid_handle() {
 
 ///
 /// Getting a name on an invalid handle should return BAD_HANDLE.
-#[test]
+#[cfg_attr(test, test)]
 fn property_get_name_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; MAX_NAME_LEN];
@@ -103,7 +103,7 @@ fn property_get_name_invalid_handle() {
 /// names, so this tests with an object that explicitly doesn't.
 /// Currently all zCore kernel objects support naming, so we document
 /// the gap.
-#[test]
+#[cfg_attr(test, test)]
 fn property_set_name_wrong_type() {
     // In Fuchsia, certain objects (like BTI) don't support names.
     // zCore's KernelObject trait provides name support for all objects.
@@ -125,7 +125,7 @@ fn property_set_name_wrong_type() {
 
 ///
 /// Set and get ZX_PROP_PROCESS_DEBUG_ADDR on a process.
-#[test]
+#[cfg_attr(test, test)]
 fn property_process_debug_addr() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -145,7 +145,7 @@ fn property_process_debug_addr() {
 
 ///
 /// Set and get ZX_PROP_PROCESS_BREAK_ON_LOAD on a process.
-#[test]
+#[cfg_attr(test, test)]
 fn property_process_break_on_load() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -167,7 +167,7 @@ fn property_process_break_on_load() {
 /// Get ZX_PROP_PROCESS_VDSO_BASE_ADDRESS on a process. This is
 /// read-only; the value depends on whether the VMAR has a vDSO mapped.
 /// In test mode without a real vDSO, it returns 0.
-#[test]
+#[cfg_attr(test, test)]
 fn property_process_vdso_base() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -184,7 +184,7 @@ fn property_process_vdso_base() {
 
 ///
 /// Set and get ZX_PROP_SOCKET_RX_THRESHOLD.
-#[test]
+#[cfg_attr(test, test)]
 fn property_socket_rx_threshold() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -207,7 +207,7 @@ fn property_socket_rx_threshold() {
 
 ///
 /// Set and get ZX_PROP_SOCKET_TX_THRESHOLD.
-#[test]
+#[cfg_attr(test, test)]
 fn property_socket_tx_threshold() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -230,7 +230,7 @@ fn property_socket_tx_threshold() {
 
 ///
 /// Set and get ZX_PROP_JOB_KILL_ON_OOM on a job.
-#[test]
+#[cfg_attr(test, test)]
 fn property_job_kill_on_oom() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -251,7 +251,7 @@ fn property_job_kill_on_oom() {
 
 ///
 /// Set and get ZX_PROP_VMO_CONTENT_SIZE on a VMO.
-#[test]
+#[cfg_attr(test, test)]
 fn property_vmo_content_size() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -277,7 +277,7 @@ fn property_vmo_content_size() {
 /// Set and get ZX_PROP_EXCEPTION_STRATEGY on an exception channel.
 /// In test mode, we cannot create real exception channels, so this
 /// test documents the gap.
-#[test]
+#[cfg_attr(test, test)]
 fn property_exception_strategy() {
     // Exception strategy (property 18) requires an exception channel.
     // We create an exception channel on a process and verify the
@@ -300,7 +300,7 @@ fn property_exception_strategy() {
 
 ///
 /// Getting/setting an invalid property ID should return INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn property_invalid_property() {
     let ctx = TestContext::new();
     let event = zircon_object::signal::Event::new();
@@ -324,4 +324,24 @@ fn property_invalid_property() {
         zircon_object::ZxError::INVALID_ARGS,
         "invalid property should return INVALID_ARGS"
     );
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    property_set_name();
+    property_get_name();
+    property_name_too_long();
+    property_set_name_invalid_handle();
+    property_get_name_invalid_handle();
+    property_set_name_wrong_type();
+    property_process_debug_addr();
+    property_process_break_on_load();
+    property_process_vdso_base();
+    property_socket_rx_threshold();
+    property_socket_tx_threshold();
+    property_job_kill_on_oom();
+    property_vmo_content_size();
+    property_exception_strategy();
+    property_invalid_property();
 }

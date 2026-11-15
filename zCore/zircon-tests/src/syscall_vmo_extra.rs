@@ -9,7 +9,7 @@ use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::vm::PAGE_SIZE;
 use zircon_object::ZxError;
 
-#[test]
+#[cfg_attr(test, test)]
 fn op_range_commit_decommit() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, (PAGE_SIZE * 2) as u64, 0);
@@ -24,7 +24,7 @@ fn op_range_commit_decommit() {
         .unwrap();
 }
 
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn op_range_zero() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, 0);
@@ -48,7 +48,7 @@ async fn op_range_zero() {
     assert!(buf.iter().all(|&b| b == 0));
 }
 
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn read_without_read_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -66,7 +66,7 @@ async fn read_without_read_right() {
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn write_without_write_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -84,7 +84,7 @@ async fn write_without_write_right() {
 }
 
 /// Op range past VMO end returns OUT_OF_RANGE.
-#[test]
+#[cfg_attr(test, test)]
 fn op_range_out_of_bounds() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, 0);
@@ -103,4 +103,14 @@ fn op_range_out_of_bounds() {
             .unwrap_err(),
         ZxError::OUT_OF_RANGE
     );
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    op_range_commit_decommit();
+    op_range_zero().await;
+    read_without_read_right().await;
+    write_without_write_right().await;
+    op_range_out_of_bounds();
 }

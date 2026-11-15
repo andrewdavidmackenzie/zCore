@@ -8,7 +8,7 @@ use zircon_object::ZxError;
 /// C++: TEST(HandleCloseTest, ManyDuplicateTest)
 /// Duplicate a handle many times, then close all duplicates and the original.
 /// All should become invalid after closing.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_close_many_duplicate_test() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -48,7 +48,7 @@ fn handle_close_many_duplicate_test() {
 /// C++: TEST(HandleCloseTest, ManyInvalidHandlesShouldNotFail)
 /// Closing a batch that includes invalid handles: the valid ones are
 /// closed and the call reports the error for the invalid ones.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_close_many_invalid_handles_should_not_fail() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -71,7 +71,7 @@ fn handle_close_many_invalid_handles_should_not_fail() {
 /// C++: TEST(HandleCloseTest, RegressionTest_479281267)
 /// Closing the same handle twice: the first close succeeds, the second
 /// returns BAD_HANDLE. This is a regression test ensuring no double-free.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_close_regression_test_479281267() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -93,7 +93,7 @@ fn handle_close_regression_test_479281267() {
 
 /// C++: TEST(HandleInfoTest, CheckHandleValid)
 /// Getting info on a valid handle succeeds; on an invalid handle it fails.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_info_check_handle_valid() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -118,7 +118,7 @@ fn handle_info_check_handle_valid() {
 /// C++: TEST(HandleInfoTest, DupAndInfoRights)
 /// Duplicate a handle, get info on both, and verify they have the
 /// expected rights and reference the same object (same koid).
-#[test]
+#[cfg_attr(test, test)]
 fn handle_info_dup_and_info_rights() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -145,7 +145,7 @@ fn handle_info_dup_and_info_rights() {
 /// C++: TEST(HandleInfoTest, DuplicateRights)
 /// Duplicate a handle with reduced rights and verify the new handle
 /// has only the requested rights.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_info_duplicate_rights() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -175,7 +175,7 @@ fn handle_info_duplicate_rights() {
 /// C++: TEST(HandleInfoTest, RelatedKoid)
 /// For a channel pair, each endpoint's related_koid should be the
 /// koid of the other endpoint.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_info_related_koid() {
     use zircon_object::object::KernelObject;
 
@@ -201,7 +201,7 @@ fn handle_info_related_koid() {
 /// C++: TEST(HandleInfoTest, ReplaceRights)
 /// Replace a handle by duplicating with new rights, removing the original,
 /// and verifying the replacement has the new rights.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_info_replace_rights() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -232,7 +232,7 @@ fn handle_info_replace_rights() {
 /// C++: TEST(HandleTransferTest, CancelsWait)
 /// Transferring a handle to another process via a channel should remove
 /// it from the sender's handle table. The handle is moved, not copied.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_transfer_cancels_wait() {
     use zircon_object::ipc::MessagePacket;
     use zircon_object::signal::Event;
@@ -275,7 +275,7 @@ fn handle_transfer_cancels_wait() {
 /// Transfer a handle over a channel, read it on the other side,
 /// and verify the received handle refers to the same object with
 /// the transferred rights.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_transfer_over_channel_then_read() {
     use zircon_object::ipc::MessagePacket;
     use zircon_object::signal::Event;
@@ -317,4 +317,19 @@ fn handle_transfer_over_channel_then_read() {
     let (obj, rights) = proc.get_object_and_rights::<Event>(h2).unwrap();
     assert_eq!(obj.id(), event_id);
     assert_eq!(rights, transfer_rights);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    handle_close_many_duplicate_test();
+    handle_close_many_invalid_handles_should_not_fail();
+    handle_close_regression_test_479281267();
+    handle_info_check_handle_valid();
+    handle_info_dup_and_info_rights();
+    handle_info_duplicate_rights();
+    handle_info_related_koid();
+    handle_info_replace_rights();
+    handle_transfer_cancels_wait();
+    handle_transfer_over_channel_then_read();
 }

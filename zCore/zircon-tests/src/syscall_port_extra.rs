@@ -9,7 +9,7 @@ use zircon_object::object::HandleValue;
 use zircon_object::signal::PortPacket;
 use zircon_object::ZxError;
 
-#[test]
+#[cfg_attr(test, test)]
 fn port_create_bind_to_interrupt() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -20,7 +20,7 @@ fn port_create_bind_to_interrupt() {
     assert_ne!(h, 0);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn port_queue_user_packet() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -36,7 +36,7 @@ fn port_queue_user_packet() {
 }
 
 /// Queueing on an invalid handle returns BAD_HANDLE.
-#[test]
+#[cfg_attr(test, test)]
 fn port_queue_bad_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -47,7 +47,7 @@ fn port_queue_bad_handle() {
 }
 
 /// Waiting on an invalid handle returns BAD_HANDLE.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn port_wait_bad_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -64,7 +64,7 @@ async fn port_wait_bad_handle() {
 }
 
 /// Cancelling with an invalid port handle returns BAD_HANDLE.
-#[test]
+#[cfg_attr(test, test)]
 fn port_cancel_bad_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -80,11 +80,22 @@ fn port_cancel_bad_handle() {
 }
 
 /// port_cancel_key with an invalid handle returns BAD_HANDLE.
-#[test]
+#[cfg_attr(test, test)]
 fn port_cancel_key_bad_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
     let result = sc.sys_port_cancel_key(0xDEAD, 0, 0);
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    port_create_bind_to_interrupt();
+    port_queue_user_packet();
+    port_queue_bad_handle();
+    port_wait_bad_handle().await;
+    port_cancel_bad_handle();
+    port_cancel_key_bad_handle();
 }

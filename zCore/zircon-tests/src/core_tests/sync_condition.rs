@@ -31,7 +31,7 @@ use zircon_object::signal::Futex;
 ///
 /// This requires concurrent multi-threaded execution with blocking
 /// futex waits.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn condition_test() {
     use crate::helpers::{condvar_waiter_thread_fn, CondvarWaiterState, SyncCondition, SyncMutex};
     use alloc::sync::Arc;
@@ -105,7 +105,7 @@ async fn condition_test() {
 /// At kernel level: timedwait calls futex_wait with a deadline.
 /// In single-threaded mode, we can test the futex_wait value
 /// mismatch path (no actual timeout needed).
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn timeout_test() {
     let _ctx = TestContext::new();
 
@@ -144,4 +144,11 @@ async fn timeout_test() {
 
     // Unlock
     mutex.store(0, Ordering::Release);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    condition_test().await;
+    timeout_test().await;
 }

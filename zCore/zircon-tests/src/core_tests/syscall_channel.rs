@@ -28,7 +28,7 @@ pub(crate) fn syscall_channel_create(ctx: &TestContext) -> (HandleValue, HandleV
     (h0, h1)
 }
 /// C++: TEST(ChannelTest, ReadWithoutReadRightReturnsAccessDenied) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn read_without_read_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -67,7 +67,7 @@ fn read_without_read_right() {
 
 /// C++: TEST(ChannelTest, CreatePolicyDeniedReturnsAccessDenied) — syscall level
 /// Set a NEW_CHANNEL deny policy on the job, then channel_create should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn create_policy_denied_returns_access_denied() {
     crate::helpers::ensure_hal_init();
     use zircon_object::task::{CurrentThread, Job, Process, Thread};
@@ -111,7 +111,7 @@ fn create_policy_denied_returns_access_denied() {
 
 /// C++: TEST(ChannelTest, WriteBadBytesPointerReturnsInvalidArgs) — syscall level
 /// Null bytes pointer with non-zero num_bytes should return INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_bad_bytes_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -131,7 +131,7 @@ fn write_bad_bytes_pointer_returns_invalid_args() {
 
 /// C++: TEST(ChannelTest, WriteNullBytesWithNonZeroSizeReturnsInvalidArgs) — syscall level
 /// Same pattern: null bytes with non-zero size.
-#[test]
+#[cfg_attr(test, test)]
 fn write_null_bytes_with_non_zero_size_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -150,7 +150,7 @@ fn write_null_bytes_with_non_zero_size_returns_invalid_args() {
 
 /// C++: TEST(ChannelTest, WriteNullHandlesWithNonZeroCountReturnsInvalidArgs) — syscall level
 /// Null handles pointer with non-zero num_handles should return INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_null_handles_with_non_zero_count_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -170,7 +170,7 @@ fn write_null_handles_with_non_zero_count_returns_invalid_args() {
 
 /// C++: TEST(ChannelTest, WriteInvalidOptionsReturnsInvalidArgs) — syscall level
 /// Non-zero options (other than ZX_CHANNEL_WRITE_USE_IOVEC=2) should return INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_invalid_options_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -191,7 +191,7 @@ fn write_invalid_options_returns_invalid_args() {
 /// C++: TEST(ChannelTest, ReadBadBufferReturnsInvalidArgs) — syscall level
 /// Null output buffer with non-zero num_bytes should return INVALID_ARGS
 /// when a message is available.
-#[test]
+#[cfg_attr(test, test)]
 fn read_bad_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -237,7 +237,7 @@ fn read_bad_buffer_returns_invalid_args() {
 /// never written to (because num_bytes=0 or the data is empty) succeeds.
 /// With non-zero capacity and null pointer, the actual failure path
 /// depends on whether data exceeds capacity.
-#[test]
+#[cfg_attr(test, test)]
 fn read_null_bytes_with_non_zero_size_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -277,7 +277,7 @@ fn read_null_bytes_with_non_zero_size_returns_buffer_too_small() {
 /// C++: TEST(ChannelTest, ReadNullHandlesWithNonZeroCountReturnsInvalidArgs) — syscall level
 /// Read with null handles buffer but non-zero num_handles, when
 /// a message with handles exists and the handle count exceeds capacity.
-#[test]
+#[cfg_attr(test, test)]
 fn read_null_handles_with_non_zero_count_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -321,7 +321,7 @@ fn read_null_handles_with_non_zero_count_returns_buffer_too_small() {
 
 /// C++: TEST(ChannelTest, ReadInvalidOptionsReturnsNotSupported) — syscall level
 /// Options other than 0 or MAY_DISCARD (1) should return NOT_SUPPORTED.
-#[test]
+#[cfg_attr(test, test)]
 fn read_invalid_options_returns_not_supported() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -346,7 +346,7 @@ fn read_invalid_options_returns_not_supported() {
 
 /// C++: TEST(ChannelTest, ReadFromWrongObjectTypeReturnsWrongType) — syscall level
 /// Passing an event handle to sys_channel_read should return WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn read_from_wrong_object_type_returns_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -378,7 +378,7 @@ fn read_from_wrong_object_type_returns_wrong_type() {
 /// C++: TEST(ChannelTest, ReadInvalidActualPointersReturnsInvalidArgs) — syscall level
 /// Misaligned actual_bytes/actual_handles pointers should fail with
 /// INVALID_ARGS when the kernel tries to write the actual sizes.
-#[test]
+#[cfg_attr(test, test)]
 fn read_invalid_actual_pointers_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -418,7 +418,7 @@ fn read_invalid_actual_pointers_returns_invalid_args() {
 /// C++: TEST(ChannelTest, ReadNullActualPointersSucceeds) — syscall level
 /// Null actual_bytes and actual_handles pointers should succeed (the
 /// kernel skips writing to them via write_if_not_null).
-#[test]
+#[cfg_attr(test, test)]
 fn read_null_actual_pointers_succeeds() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -456,7 +456,7 @@ fn read_null_actual_pointers_succeeds() {
 /// C++: TEST(ChannelTest, ReadMayDiscardWithNullBufferDiscardsDataReturnsBufferTooSmall) — syscall level
 /// With MAY_DISCARD option (1), read pops the message even if buffers
 /// are too small, and returns BUFFER_TOO_SMALL.
-#[test]
+#[cfg_attr(test, test)]
 fn read_may_discard_with_null_buffer_discards_data_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -509,7 +509,7 @@ fn read_may_discard_with_null_buffer_discards_data_returns_buffer_too_small() {
 
 /// C++: TEST(ChannelTest, ReadMayDiscardWithNullBuffersReturnsBufferTooSmall) — syscall level
 /// MAY_DISCARD with all-null buffers and a message present.
-#[test]
+#[cfg_attr(test, test)]
 fn read_may_discard_with_null_buffers_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -559,7 +559,7 @@ fn read_may_discard_with_null_buffers_returns_buffer_too_small() {
 /// HandleInfo is repr(C): [handle: u32, obj_type: u32, rights: u32, unused: u32].
 /// Since obj_type/rights are private in zircon-object's HandleInfo, we use
 /// a raw [u32; 4] buffer and interpret the ABI layout directly.
-#[test]
+#[cfg_attr(test, test)]
 fn read_etc_handle_info_validation() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -611,7 +611,7 @@ fn read_etc_handle_info_validation() {
 /// Verify that is_etc read populates handle, type, and rights correctly.
 ///
 /// HandleInfo ABI layout: [handle: u32, obj_type: u32, rights: u32, unused: u32].
-#[test]
+#[cfg_attr(test, test)]
 fn read_etc_populates_all_handle_info_fields_correctly() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -666,7 +666,7 @@ fn read_etc_populates_all_handle_info_fields_correctly() {
 /// C++: TEST(ChannelTest, WriteRepeatedHandlesReturnsBadHandlesAndClosesHandle) — syscall level
 /// Writing the same handle value twice in the handles array should fail
 /// because the first occurrence consumes the handle from the table.
-#[test]
+#[cfg_attr(test, test)]
 fn write_repeated_handles_returns_bad_handle() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -701,7 +701,7 @@ fn write_repeated_handles_returns_bad_handle() {
 
 /// C++: TEST(ChannelTest, WriteNonTransferableHandleReturnsAccessDeniedAndClosesHandle) — syscall level
 /// Writing a handle without the TRANSFER right should return ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn write_non_transferable_handle_returns_access_denied() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -739,7 +739,7 @@ fn write_non_transferable_handle_returns_access_denied() {
 /// C++: TEST(ChannelTest, WriteEtcBadHandlesPointerReturnsInvalidArgs) — syscall level
 /// Null handles pointer with non-zero num_handles in channel_write_etc
 /// should return INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_bad_handles_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -795,7 +795,7 @@ fn channel_pair_via_objects(ctx: &TestContext) -> (HandleValue, HandleValue) {
 
 /// C++: TEST(ChannelWriteEtcTest, MoveSuccess) — syscall level
 /// write_etc with ZX_HANDLE_OP_MOVE transfers a handle to the peer.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_move_success() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -859,7 +859,7 @@ fn write_etc_move_success() {
 
 /// C++: TEST(ChannelWriteEtcTest, DuplicateSuccess) — syscall level
 /// write_etc with ZX_HANDLE_OP_DUPLICATE keeps original and sends copy.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_duplicate_success() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -923,7 +923,7 @@ fn write_etc_duplicate_success() {
 
 /// C++: TEST(ChannelWriteEtcTest, ReducedRightsSuccess) — syscall level
 /// write_etc with MOVE and reduced rights succeeds.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_reduced_rights_success() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -977,7 +977,7 @@ fn write_etc_reduced_rights_success() {
 
 /// C++: TEST(ChannelWriteEtcTest, ExpandedRightsFailure) — syscall level
 /// write_etc requesting rights not in the source handle fails with INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_expanded_rights_failure() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1012,7 +1012,7 @@ fn write_etc_expanded_rights_failure() {
 
 /// C++: TEST(ChannelWriteEtcTest, MissingDuplicateRightFailure) — syscall level
 /// DUP operation on a handle without DUPLICATE right fails with ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_missing_duplicate_right_failure() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1047,7 +1047,7 @@ fn write_etc_missing_duplicate_right_failure() {
 
 /// C++: TEST(ChannelWriteEtcTest, MissingTransferRightFailure) — syscall level
 /// MOVE operation on a handle without TRANSFER right fails with ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_missing_transfer_right_failure() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1080,7 +1080,7 @@ fn write_etc_missing_transfer_right_failure() {
 
 /// C++: TEST(ChannelWriteEtcTest, TransferSelfFailure) — syscall level
 /// Attempting to transfer the channel's own handle returns NOT_SUPPORTED.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_transfer_self_failure() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1113,7 +1113,7 @@ fn write_etc_transfer_self_failure() {
 
 /// C++: TEST(ChannelWriteEtcTest, WrongTypeFailure) — syscall level
 /// Disposition specifies type=Channel but handle is an Event → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_wrong_type_failure() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1147,7 +1147,7 @@ fn write_etc_wrong_type_failure() {
 
 /// C++: TEST(ChannelWriteEtcTest, InvalidOperationFailure) — syscall level
 /// An invalid handle operation (not MOVE=0 or DUP=1) returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_invalid_operation_failure() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1181,7 +1181,7 @@ fn write_etc_invalid_operation_failure() {
 /// C++: TEST(ChannelWriteTest, MoveHandlesWithRightsCheckFailure) — syscall level
 /// channel_write (not write_etc) with a handle that lacks TRANSFER right
 /// fails with ACCESS_DENIED, and the handle is still consumed.
-#[test]
+#[cfg_attr(test, test)]
 fn write_move_handles_with_rights_check_failure() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -1245,7 +1245,7 @@ struct TestChannelCallArgs {
 
 /// C++: TEST(ChannelTest, CallFromWrongObjectTypeReturnsWrongType) — syscall level
 /// Passing an event handle to channel_call should return WRONG_TYPE.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_from_wrong_object_type_returns_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1290,7 +1290,7 @@ async fn call_from_wrong_object_type_returns_wrong_type() {
 
 /// C++: TEST(ChannelTest, CallInvalidOptionsReturnsInvalidArgs) — syscall level
 /// Non-zero invalid options should return INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_invalid_options_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1327,7 +1327,7 @@ async fn call_invalid_options_returns_invalid_args() {
 
 /// C++: TEST(ChannelTest, CallWithoutWriteRightReturnsAccessDenied) — syscall level
 /// Channel handle without WRITE right should return ACCESS_DENIED.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_without_write_right_returns_access_denied() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1370,7 +1370,7 @@ async fn call_without_write_right_returns_access_denied() {
 
 /// C++: TEST(ChannelTest, CallWithoutReadRightReturnsAccessDenied) — syscall level
 /// Channel handle without READ right should return ACCESS_DENIED.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_without_read_right_returns_access_denied() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1413,7 +1413,7 @@ async fn call_without_read_right_returns_access_denied() {
 
 /// C++: TEST(ChannelTest, CallPayloadTooSmallReturnsInvalidArgs) — syscall level
 /// wr_num_bytes < 4 (txid header) should return INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_payload_too_small_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1451,7 +1451,7 @@ async fn call_payload_too_small_returns_invalid_args() {
 /// C++: TEST(ChannelTest, CallNullptrNumBytesIsInvalidArgs) — syscall level
 /// rd_num_bytes < 4 should return INVALID_ARGS (read buffer too small
 /// for the mandatory txid header).
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_nullptr_num_bytes_is_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1491,7 +1491,7 @@ async fn call_nullptr_num_bytes_is_invalid_args() {
 /// INVALID_ARGS. In zCore, rd_num_bytes < 4 is checked first and
 /// returns INVALID_ARGS before any pointer validation. We test the
 /// same code path: rd_num_bytes = 0 → INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_nullptr_num_handles_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1529,7 +1529,7 @@ async fn call_nullptr_num_handles_invalid_args() {
 /// C++: TEST(ChannelTest, CallInvalidArgsPointerReturnsInvalidArgs) — syscall level
 /// Null args pointer should return INVALID_ARGS when trying to read
 /// the ChannelCallArgs struct.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_invalid_args_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1553,7 +1553,7 @@ async fn call_invalid_args_pointer_returns_invalid_args() {
 /// C++: TEST(ChannelTest, CallWrittenBytesSmallerThanZxTxIdReturnsInvalidArgs) — syscall level
 /// wr_num_bytes = 3 (less than sizeof(zx_txid_t) = 4) should return
 /// INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_written_bytes_smaller_than_zx_tx_id_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1592,7 +1592,7 @@ async fn call_written_bytes_smaller_than_zx_tx_id_returns_invalid_args() {
 /// When the peer is closed before channel_call, the call should
 /// return PEER_CLOSED (since the write succeeds but there is nobody
 /// to read/reply, and the peer-closed signal is already set).
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_notified_on_peer_closed() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1637,7 +1637,7 @@ async fn call_notified_on_peer_closed() {
 /// C++: TEST(ChannelTest, ReadEtcMayDiscardDiscardsHandlesAndClosesThemOnBufferTooSmall) — syscall level
 /// With MAY_DISCARD and is_etc=true, when buffers are too small the
 /// message (including handles) is discarded and BUFFER_TOO_SMALL returned.
-#[test]
+#[cfg_attr(test, test)]
 fn read_etc_may_discard_discards_handles_and_closes_them_on_buffer_too_small() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -1700,7 +1700,7 @@ fn read_etc_may_discard_discards_handles_and_closes_them_on_buffer_too_small() {
 /// Reading with is_etc=true, null handles pointer, but message has
 /// handles that fit in num_handles capacity — the null pointer write
 /// fails with INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn read_etc_null_handles_with_non_zero_count_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -1744,7 +1744,7 @@ fn read_etc_null_handles_with_non_zero_count_returns_invalid_args() {
 /// C++: TEST(ChannelTest, ReadEtcReadOnlyHandlesPointerReturnsInvalidArgsAndDoesNotLeakHandles) — syscall level
 /// Reading with is_etc=true into a read-only (or null) handles buffer
 /// should fail without leaking handles into the process table.
-#[test]
+#[cfg_attr(test, test)]
 fn read_etc_read_only_handles_pointer_returns_invalid_args_and_does_not_leak_handles() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -1792,7 +1792,7 @@ fn read_etc_read_only_handles_pointer_returns_invalid_args_and_does_not_leak_han
 
 /// C++: TEST(ChannelTest, WriteIovecTooManyIovecsReturnsOutOfRange) — syscall level
 /// More than ZX_CHANNEL_MAX_MSG_IOVECS (8192) iovecs returns OUT_OF_RANGE.
-#[test]
+#[cfg_attr(test, test)]
 fn write_iovec_too_many_iovecs_returns_out_of_range() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -1820,7 +1820,7 @@ fn write_iovec_too_many_iovecs_returns_out_of_range() {
 /// C++: TEST(ChannelTest, WriteIovecTotalCapacityOverflowReturnsOutOfRange) — syscall level
 /// Iovecs whose total capacity exceeds ZX_CHANNEL_MAX_MSG_BYTES (65536)
 /// returns OUT_OF_RANGE.
-#[test]
+#[cfg_attr(test, test)]
 fn write_iovec_total_capacity_overflow_returns_out_of_range() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -1857,7 +1857,7 @@ fn write_iovec_total_capacity_overflow_returns_out_of_range() {
 /// C++: TEST(ChannelTest, WriteIovecZeroCapacityWithNullBufferSucceeds) — syscall level
 /// A single iovec with capacity=0 and null buffer pointer succeeds
 /// (writes an empty message).
-#[test]
+#[cfg_attr(test, test)]
 fn write_iovec_zero_capacity_with_null_buffer_succeeds() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -1901,7 +1901,7 @@ fn write_iovec_zero_capacity_with_null_buffer_succeeds() {
 
 /// C++: TEST(ChannelTest, WriteIovecUnboundedSuccess) — syscall level
 /// Write data via iovec and read it back successfully.
-#[test]
+#[cfg_attr(test, test)]
 fn write_iovec_unbounded_success() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -1954,7 +1954,7 @@ fn write_iovec_unbounded_success() {
 /// C++: TEST(ChannelTest, WriteIovecBoundedInvalidPointerReturnsInvalidArgs) — syscall level
 /// An iovec with non-zero capacity but null buffer pointer fails with
 /// INVALID_ARGS (reading from a null pointer).
-#[test]
+#[cfg_attr(test, test)]
 fn write_iovec_bounded_invalid_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -1980,7 +1980,7 @@ fn write_iovec_bounded_invalid_pointer_returns_invalid_args() {
 
 /// C++: TEST(ChannelTest, WriteIovecBoundedNonZeroReservedReturnsInvalidArgs) — syscall level
 /// An iovec with non-zero reserved field returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_iovec_bounded_non_zero_reserved_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -2008,7 +2008,7 @@ fn write_iovec_bounded_non_zero_reserved_returns_invalid_args() {
 /// C++: TEST(ChannelTest, WriteIovecUnboundedInvalidPointerReturnsInvalidArgs) — syscall level
 /// Multiple iovecs where one has a null buffer with non-zero capacity
 /// fails with INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_iovec_unbounded_invalid_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -2061,7 +2061,7 @@ struct TestChannelCallEtcArgs {
 
 /// C++: TEST(ChannelCallEtcTest, CallEtcInvalidArgs) — syscall level
 /// Null args pointer to channel_call_etc returns INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2086,7 +2086,7 @@ async fn call_etc_invalid_args() {
 /// A successful channel_call_etc requires an async responder thread.
 /// Since libos mode is single-threaded, the call will time out waiting
 /// for a reply.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_success() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2125,7 +2125,7 @@ async fn call_etc_success() {
 /// C++: TEST(ChannelTest, CallConsumesHandlesOnError) — syscall level
 /// channel_call with a closed peer should consume (close) the write
 /// handles even though the call fails with PEER_CLOSED.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_consumes_handles_on_error() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2181,7 +2181,7 @@ async fn call_consumes_handles_on_error() {
 /// A successful call would transfer the handles. Since we can't complete
 /// the call in libos mode (no async responder), this verifies the write
 /// side consumed the handles before timing out.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_consumes_handles_on_success() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2227,7 +2227,7 @@ async fn call_consumes_handles_on_success() {
 /// C++: TEST(ChannelTest, CallDeadlineExceededReturnsTimedOut) — syscall level
 /// An immediate deadline (0) with an open but unresponsive peer should
 /// return TIMED_OUT.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_deadline_exceeded_returns_timed_out() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2266,7 +2266,7 @@ async fn call_deadline_exceeded_returns_timed_out() {
 /// The write side must have at least 4 bytes for the txid. This test
 /// verifies that exactly 4 bytes is accepted (the call will time out
 /// waiting for a reply, which is expected).
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_bytes_fit_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2305,7 +2305,7 @@ async fn call_bytes_fit_is_ok() {
 /// C++: TEST(ChannelTest, CallHandlesFitIsOk) — syscall level
 /// channel_call with handles should succeed on the write side.
 /// Times out waiting for reply.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_handles_fit_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2349,7 +2349,7 @@ async fn call_handles_fit_is_ok() {
 
 /// C++: TEST(ChannelTest, CallHandleAndBytesFitsIsOk) — syscall level
 /// channel_call with both data and handles should succeed on write side.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_handle_and_bytes_fits_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2395,7 +2395,7 @@ async fn call_handle_and_bytes_fits_is_ok() {
 /// When a reply arrives with the wrong txid, it should be queued as a
 /// regular message rather than consumed as a reply. Since we can't
 /// create a proper responder, this test verifies the call times out.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_mismatched_txid_queues_regular_message() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2433,7 +2433,7 @@ async fn call_mismatched_txid_queues_regular_message() {
 /// C++: TEST(ChannelTest, CallBadReadBufferReturnsInvalidArgs) — syscall level
 /// channel_call with null rd_bytes pointer and non-zero rd_num_bytes
 /// should return INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_bad_read_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2474,7 +2474,7 @@ async fn call_bad_read_buffer_returns_invalid_args() {
 /// C++: TEST(ChannelTest, CallBadReadHandlesReturnsInvalidArgs) — syscall level
 /// channel_call with null rd_handles pointer and non-zero rd_num_handles
 /// should return INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_bad_read_handles_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2514,7 +2514,7 @@ async fn call_bad_read_handles_returns_invalid_args() {
 
 /// C++: TEST(ChannelTest, WriteEtcDuplicateSelfHandleReturnsNotSupported) — syscall level
 /// write_etc with DUP op on the channel's own handle returns NOT_SUPPORTED.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_duplicate_self_handle_returns_not_supported() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2547,7 +2547,7 @@ fn write_etc_duplicate_self_handle_returns_not_supported() {
 /// C++: TEST(ChannelTest, WriteEtcReadOnlyHandleDispositionReturnsInvalidArgs) — syscall level
 /// write_etc with a null/read-only disposition pointer and non-zero count
 /// returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_read_only_handle_disposition_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2572,7 +2572,7 @@ fn write_etc_read_only_handle_disposition_returns_invalid_args() {
 
 /// C++: TEST(ChannelTest, WriteEtcFirstErrorLatchedAndReturned) — syscall level
 /// When multiple dispositions fail, the first error is latched and returned.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_first_error_latched_and_returned() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2627,7 +2627,7 @@ fn write_etc_first_error_latched_and_returned() {
 /// C++: TEST(ChannelTest, WriteEtcMixedMoveAndDuplicateOnFailurePreservesDuplicateHandles) — syscall level
 /// When a mixed MOVE+DUP write_etc fails, MOVE handles are consumed
 /// but DUP handles are preserved. Tests the error recovery path.
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_mixed_move_and_duplicate_on_failure_preserves_duplicate_handles() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2689,7 +2689,7 @@ fn write_etc_mixed_move_and_duplicate_on_failure_preserves_duplicate_handles() {
 /// When a reply arrives but is larger than rd_num_bytes, the call should
 /// return BUFFER_TOO_SMALL. Since we can't create a proper responder,
 /// this test verifies the call times out.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_response_bigger_than_rd_num_bytes_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2730,7 +2730,7 @@ async fn call_response_bigger_than_rd_num_bytes_returns_buffer_too_small() {
 /// When wr_num_bytes < sizeof(zx_txid_t) and the write pointer is bad,
 /// channel_call should still return INVALID_ARGS (the txid size check
 /// happens even if reading the message data would fail).
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_written_bytes_smaller_than_zx_tx_id_with_bad_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2768,7 +2768,7 @@ async fn call_written_bytes_smaller_than_zx_tx_id_with_bad_pointer_returns_inval
 /// Passing a bad pointer for handles to read_etc returns INVALID_ARGS.
 /// The message contains one handle — the kernel should detect the bad
 /// output pointer and reject the read.
-#[test]
+#[cfg_attr(test, test)]
 fn read_etc_invalid_handles_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2904,7 +2904,7 @@ fn do_write_etc(
 }
 
 /// C++: TEST(ChannelWriteEtcTest, MultipleHandlesSomeInvalidResultsReportedCorrectly)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_multiple_handles_some_invalid_results_reported_correctly() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = channel_pair_via_objects(&ctx);
@@ -2952,7 +2952,7 @@ fn write_etc_multiple_handles_some_invalid_results_reported_correctly() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, MoveHandlesWithRightsCheckFailure)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_move_handles_with_rights_check_failure() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = channel_pair_via_objects(&ctx);
@@ -2996,7 +2996,7 @@ fn write_etc_move_handles_with_rights_check_failure() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, InvalidHandleResult)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_invalid_handle_result() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = channel_pair_via_objects(&ctx);
@@ -3017,7 +3017,7 @@ fn write_etc_invalid_handle_result() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, ImproperlyInitalizedResultsArgReportedBackAsOriginallyInitalized)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_improperly_initalized_results_arg_reported_back_as_originally_initalized() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = channel_pair_via_objects(&ctx);
@@ -3043,7 +3043,7 @@ fn write_etc_improperly_initalized_results_arg_reported_back_as_originally_inita
 }
 
 /// C++: TEST(ChannelWriteEtcTest, FailureDoesNotResultInReceivedPacket)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_failure_does_not_result_in_received_packet() {
     let ctx = TestContext::new();
     let (ch0, ch1) = channel_pair_via_objects(&ctx);
@@ -3081,7 +3081,7 @@ fn write_etc_failure_does_not_result_in_received_packet() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, SentHandleReferrsToSameObject)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_sent_handle_referrs_to_same_object() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3189,7 +3189,7 @@ fn write_etc_sent_handle_referrs_to_same_object() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, InvalidOpArgShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_invalid_op_arg_should_fail() {
     let ctx = TestContext::new();
 
@@ -3207,7 +3207,7 @@ fn write_etc_invalid_op_arg_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, HandleArgNotAChannelHandleShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_handle_arg_not_a_channel_handle_should_fail() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3234,7 +3234,7 @@ fn write_etc_handle_arg_not_a_channel_handle_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, ChannelHandleNotValidShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_channel_handle_not_valid_should_fail() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3262,7 +3262,7 @@ fn write_etc_channel_handle_not_valid_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, ChannelHandleWithoutWriteRightShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_channel_handle_without_write_right_should_fail() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3293,7 +3293,7 @@ fn write_etc_channel_handle_without_write_right_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, HandleWithoutTransferRightShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_handle_without_transfer_right_should_fail() {
     let ctx = TestContext::new();
 
@@ -3318,7 +3318,7 @@ fn write_etc_handle_without_transfer_right_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, InvalidHandleInTransferredHandlesShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_invalid_handle_in_transferred_handles_should_fail() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3366,7 +3366,7 @@ fn write_etc_invalid_handle_in_transferred_handles_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, RepeatedHandlesWithOpMoveHandlesShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_repeated_handles_with_op_move_handles_should_fail() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = channel_pair_via_objects(&ctx);
@@ -3394,7 +3394,7 @@ fn write_etc_repeated_handles_with_op_move_handles_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, DuplicateHandlesInTransferredHandlesShouldSucceed)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_duplicate_handles_in_transferred_handles_should_succeed() {
     let ctx = TestContext::new();
 
@@ -3446,7 +3446,7 @@ fn write_etc_duplicate_handles_in_transferred_handles_should_succeed() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, HandleDoesNotMatchTypeShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_handle_does_not_match_type_should_fail() {
     let ctx = TestContext::new();
 
@@ -3479,7 +3479,7 @@ fn write_etc_handle_does_not_match_type_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, OptionsArgNonZeroShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_options_arg_non_zero_should_fail() {
     let ctx = TestContext::new();
 
@@ -3497,7 +3497,7 @@ fn write_etc_options_arg_non_zero_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, ChannelHandleInTransferredHandlesShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_channel_handle_in_transferred_handles_should_fail() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3534,7 +3534,7 @@ fn write_etc_channel_handle_in_transferred_handles_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, OppositeChannelEndClosedShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_opposite_channel_end_closed_should_fail() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3555,7 +3555,7 @@ fn write_etc_opposite_channel_end_closed_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, HandleCountBoundaryChecks)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_handle_count_boundary_checks() {
     let ctx = TestContext::new();
 
@@ -3620,7 +3620,7 @@ fn write_etc_handle_count_boundary_checks() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, HandleCountAndDataCountBothZeroShouldSucceed)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_handle_count_and_data_count_both_zero_should_succeed() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = channel_pair_via_objects(&ctx);
@@ -3631,7 +3631,7 @@ fn write_etc_handle_count_and_data_count_both_zero_should_succeed() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, MaximumNumberHandlesWithZeroCountArrayArgShouldSucceed)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_maximum_number_handles_with_zero_count_array_arg_should_succeed() {
     let ctx = TestContext::new();
 
@@ -3668,7 +3668,7 @@ fn write_etc_maximum_number_handles_with_zero_count_array_arg_should_succeed() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, ByteCountIsMaxShouldSucceed)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_byte_count_is_max_should_succeed() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = channel_pair_via_objects(&ctx);
@@ -3680,7 +3680,7 @@ fn write_etc_byte_count_is_max_should_succeed() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, ByteCountIsMaxPlusOneShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_byte_count_is_max_plus_one_should_fail() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = channel_pair_via_objects(&ctx);
@@ -3692,7 +3692,7 @@ fn write_etc_byte_count_is_max_plus_one_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, NullptrArgWhenSizeNonZeroShouldFail)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_nullptr_arg_when_size_non_zero_should_fail() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3723,7 +3723,7 @@ fn write_etc_nullptr_arg_when_size_non_zero_should_fail() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, RemoveAllHandleRightsShouldSucceed)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_remove_all_handle_rights_should_succeed() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3761,7 +3761,7 @@ fn write_etc_remove_all_handle_rights_should_succeed() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, RemovingSomeHandleRightsShouldSucceed)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_removing_some_handle_rights_should_succeed() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3806,7 +3806,7 @@ fn write_etc_removing_some_handle_rights_should_succeed() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, SameHandleRightsBitsShouldSucceed)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_same_handle_rights_bits_should_succeed() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3851,7 +3851,7 @@ fn write_etc_same_handle_rights_bits_should_succeed() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, SameHandleRightsFlagShouldSucceed)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_same_handle_rights_flag_should_succeed() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -3895,7 +3895,7 @@ fn write_etc_same_handle_rights_flag_should_succeed() {
 }
 
 /// C++: TEST(ChannelWriteEtcTest, HandleWithoutDuplicateRightsMoveOpSucceedsDuplicateOpFails)
-#[test]
+#[cfg_attr(test, test)]
 fn write_etc_handle_without_duplicate_rights_move_op_succeeds_duplicate_op_fails() {
     let ctx = TestContext::new();
 
@@ -3993,7 +3993,7 @@ async fn do_call_etc(
 /// actual_bytes write happens after the response is received,
 /// so the bad pointer isn't checked before the call blocks.
 /// Without a response thread the call times out.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_bad_actual_bytes_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -4030,7 +4030,7 @@ async fn call_etc_bad_actual_bytes_pointer_returns_invalid_args() {
 /// Passing a bad pointer for actual_handles returns INVALID_ARGS.
 /// Same situation as BadActualBytesPointer — write happens after
 /// response, so without a response thread the call times out.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_bad_actual_handles_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -4065,7 +4065,7 @@ async fn call_etc_bad_actual_handles_pointer_returns_invalid_args() {
 /// C++: TEST(ChannelCallEtcTest, BadChannelFailureCase)
 /// Calling channel_call_etc on an invalid (default/zero) handle returns
 /// BAD_HANDLE.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_bad_channel_failure_case() {
     let ctx = TestContext::new();
 
@@ -4093,7 +4093,7 @@ async fn call_etc_bad_channel_failure_case() {
 /// INVALID_ARGS. Since zCore validates the buffer after receiving
 /// a response (which requires a responder thread), without one the
 /// call times out.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_bad_rd_bytes_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -4120,7 +4120,7 @@ async fn call_etc_bad_rd_bytes_buffer_returns_invalid_args() {
 /// Bad rd_handles buffer (non-null but invalid pointer) should return
 /// INVALID_ARGS. Needs a response thread to trigger the validation
 /// on the read side, so without one the call times out.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_bad_rd_handles_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -4145,7 +4145,7 @@ async fn call_etc_bad_rd_handles_buffer_returns_invalid_args() {
 }
 /// C++: TEST(ChannelCallEtcTest, FromWrongObjectTypeReturnsWrongType)
 /// Using a VMO handle instead of a channel handle returns WRONG_TYPE.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_from_wrong_object_type_returns_wrong_type() {
     let ctx = TestContext::new();
     let (vmo_h, _vmo) = add_vmo(&ctx, PAGE_SIZE as u64);
@@ -4179,7 +4179,7 @@ async fn call_etc_from_wrong_object_type_returns_wrong_type() {
 /// C++: TEST(ChannelCallEtcTest, IovecSuccessCase)
 /// Sending iovec data via call_etc requires a response thread.
 /// Times out without one.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_iovec_success_case() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -4216,7 +4216,7 @@ async fn call_etc_iovec_success_case() {
 
 /// C++: TEST(ChannelCallEtcTest, IovecTotalCapacityLessThanTxidSizeReturnsInvalidArgs)
 /// When iovec total capacity < sizeof(zx_txid_t) = 4, returns INVALID_ARGS.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_iovec_total_capacity_less_than_txid_size_returns_invalid_args() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -4248,7 +4248,7 @@ async fn call_etc_iovec_total_capacity_less_than_txid_size_returns_invalid_args(
 /// C++: TEST(ChannelCallEtcTest, SelfHandleTransferReturnsNotSupported)
 /// Attempting to transfer the channel's own handle via DUP returns
 /// NOT_SUPPORTED.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_self_handle_transfer_returns_not_supported() {
     let ctx = TestContext::new();
 
@@ -4304,7 +4304,7 @@ async fn call_etc_self_handle_transfer_returns_not_supported() {
 }
 /// C++: TEST(ChannelCallEtcTest, WithoutReadRightReturnsAccessDenied)
 /// Channel handle without READ right returns ACCESS_DENIED.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_without_read_right_returns_access_denied() {
     let ctx = TestContext::new();
 
@@ -4343,7 +4343,7 @@ async fn call_etc_without_read_right_returns_access_denied() {
 
 /// C++: TEST(ChannelCallEtcTest, WithoutWriteRightReturnsAccessDenied)
 /// Channel handle without WRITE right returns ACCESS_DENIED.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn call_etc_without_write_right_returns_access_denied() {
     let ctx = TestContext::new();
 
@@ -4382,7 +4382,7 @@ async fn call_etc_without_write_right_returns_access_denied() {
 /// C++: TEST(ChannelTest, WriteIovecUnboundedNonZeroReservedReturnsInvalidArgs)
 /// An iovec with a non-zero reserved field (in the "unbounded" range,
 /// i.e. index >= 16) should return INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn write_iovec_unbounded_non_zero_reserved_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -4411,4 +4411,118 @@ fn write_iovec_unbounded_non_zero_reserved_returns_invalid_args() {
         0,
     );
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    read_without_read_right();
+    create_policy_denied_returns_access_denied();
+    write_bad_bytes_pointer_returns_invalid_args();
+    write_null_bytes_with_non_zero_size_returns_invalid_args();
+    write_null_handles_with_non_zero_count_returns_invalid_args();
+    write_invalid_options_returns_invalid_args();
+    read_bad_buffer_returns_invalid_args();
+    read_null_bytes_with_non_zero_size_returns_buffer_too_small();
+    read_null_handles_with_non_zero_count_returns_buffer_too_small();
+    read_invalid_options_returns_not_supported();
+    read_from_wrong_object_type_returns_wrong_type();
+    read_invalid_actual_pointers_returns_invalid_args();
+    read_null_actual_pointers_succeeds();
+    read_may_discard_with_null_buffer_discards_data_returns_buffer_too_small();
+    read_may_discard_with_null_buffers_returns_buffer_too_small();
+    read_etc_handle_info_validation();
+    read_etc_populates_all_handle_info_fields_correctly();
+    write_repeated_handles_returns_bad_handle();
+    write_non_transferable_handle_returns_access_denied();
+    write_etc_bad_handles_pointer_returns_invalid_args();
+    write_etc_move_success();
+    write_etc_duplicate_success();
+    write_etc_reduced_rights_success();
+    write_etc_expanded_rights_failure();
+    write_etc_missing_duplicate_right_failure();
+    write_etc_missing_transfer_right_failure();
+    write_etc_transfer_self_failure();
+    write_etc_wrong_type_failure();
+    write_etc_invalid_operation_failure();
+    write_move_handles_with_rights_check_failure();
+    call_from_wrong_object_type_returns_wrong_type().await;
+    call_invalid_options_returns_invalid_args().await;
+    call_without_write_right_returns_access_denied().await;
+    call_without_read_right_returns_access_denied().await;
+    call_payload_too_small_returns_invalid_args().await;
+    call_nullptr_num_bytes_is_invalid_args().await;
+    call_nullptr_num_handles_invalid_args().await;
+    call_invalid_args_pointer_returns_invalid_args().await;
+    call_written_bytes_smaller_than_zx_tx_id_returns_invalid_args().await;
+    call_notified_on_peer_closed().await;
+    read_etc_may_discard_discards_handles_and_closes_them_on_buffer_too_small();
+    read_etc_null_handles_with_non_zero_count_returns_invalid_args();
+    read_etc_read_only_handles_pointer_returns_invalid_args_and_does_not_leak_handles();
+    write_iovec_too_many_iovecs_returns_out_of_range();
+    write_iovec_total_capacity_overflow_returns_out_of_range();
+    write_iovec_zero_capacity_with_null_buffer_succeeds();
+    write_iovec_unbounded_success();
+    write_iovec_bounded_invalid_pointer_returns_invalid_args();
+    write_iovec_bounded_non_zero_reserved_returns_invalid_args();
+    write_iovec_unbounded_invalid_pointer_returns_invalid_args();
+    call_etc_invalid_args().await;
+    call_etc_success().await;
+    call_consumes_handles_on_error().await;
+    call_consumes_handles_on_success().await;
+    call_deadline_exceeded_returns_timed_out().await;
+    call_bytes_fit_is_ok().await;
+    call_handles_fit_is_ok().await;
+    call_handle_and_bytes_fits_is_ok().await;
+    call_mismatched_txid_queues_regular_message().await;
+    call_bad_read_buffer_returns_invalid_args().await;
+    call_bad_read_handles_returns_invalid_args().await;
+    write_etc_duplicate_self_handle_returns_not_supported();
+    write_etc_read_only_handle_disposition_returns_invalid_args();
+    write_etc_first_error_latched_and_returned();
+    write_etc_mixed_move_and_duplicate_on_failure_preserves_duplicate_handles();
+    call_response_bigger_than_rd_num_bytes_returns_buffer_too_small().await;
+    call_written_bytes_smaller_than_zx_tx_id_with_bad_pointer_returns_invalid_args().await;
+    read_etc_invalid_handles_pointer_returns_invalid_args();
+    write_etc_multiple_handles_some_invalid_results_reported_correctly();
+    write_etc_move_handles_with_rights_check_failure();
+    write_etc_invalid_handle_result();
+    write_etc_improperly_initalized_results_arg_reported_back_as_originally_initalized();
+    write_etc_failure_does_not_result_in_received_packet();
+    write_etc_sent_handle_referrs_to_same_object();
+    write_etc_invalid_op_arg_should_fail();
+    write_etc_handle_arg_not_a_channel_handle_should_fail();
+    write_etc_channel_handle_not_valid_should_fail();
+    write_etc_channel_handle_without_write_right_should_fail();
+    write_etc_handle_without_transfer_right_should_fail();
+    write_etc_invalid_handle_in_transferred_handles_should_fail();
+    write_etc_repeated_handles_with_op_move_handles_should_fail();
+    write_etc_duplicate_handles_in_transferred_handles_should_succeed();
+    write_etc_handle_does_not_match_type_should_fail();
+    write_etc_options_arg_non_zero_should_fail();
+    write_etc_channel_handle_in_transferred_handles_should_fail();
+    write_etc_opposite_channel_end_closed_should_fail();
+    write_etc_handle_count_boundary_checks();
+    write_etc_handle_count_and_data_count_both_zero_should_succeed();
+    write_etc_maximum_number_handles_with_zero_count_array_arg_should_succeed();
+    write_etc_byte_count_is_max_should_succeed();
+    write_etc_byte_count_is_max_plus_one_should_fail();
+    write_etc_nullptr_arg_when_size_non_zero_should_fail();
+    write_etc_remove_all_handle_rights_should_succeed();
+    write_etc_removing_some_handle_rights_should_succeed();
+    write_etc_same_handle_rights_bits_should_succeed();
+    write_etc_same_handle_rights_flag_should_succeed();
+    write_etc_handle_without_duplicate_rights_move_op_succeeds_duplicate_op_fails();
+    call_etc_bad_actual_bytes_pointer_returns_invalid_args().await;
+    call_etc_bad_actual_handles_pointer_returns_invalid_args().await;
+    call_etc_bad_channel_failure_case().await;
+    call_etc_bad_rd_bytes_buffer_returns_invalid_args().await;
+    call_etc_bad_rd_handles_buffer_returns_invalid_args().await;
+    call_etc_from_wrong_object_type_returns_wrong_type().await;
+    call_etc_iovec_success_case().await;
+    call_etc_iovec_total_capacity_less_than_txid_size_returns_invalid_args().await;
+    call_etc_self_handle_transfer_returns_not_supported().await;
+    call_etc_without_read_right_returns_access_denied().await;
+    call_etc_without_write_right_returns_access_denied().await;
+    write_iovec_unbounded_non_zero_reserved_returns_invalid_args();
 }

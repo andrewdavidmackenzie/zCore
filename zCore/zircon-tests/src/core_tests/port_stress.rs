@@ -43,7 +43,7 @@ fn try_dequeue(port: &Arc<Port>) -> Option<PortPacket> {
 /// Thread 2 (main): registers 8 observers per iteration with the same
 ///   key, then cancels by key, then drains any delivered packets.
 ///   2000 iterations.
-#[test]
+#[cfg_attr(test, test)]
 fn cancel_key_active_observer_race() {
     let _ctx = TestContext::new();
 
@@ -98,7 +98,7 @@ fn cancel_key_active_observer_race() {
 ///
 /// Verifies: race_event_packets == race_event_cancel_not_found,
 ///           race_event_canceled + race_event_cancel_not_found == kIters.
-#[test]
+#[cfg_attr(test, test)]
 fn cancel_key_during_match_race() {
     let _ctx = TestContext::new();
 
@@ -232,7 +232,7 @@ fn cancel_key_during_match_race() {
 /// 1000 events share the same key. One thread signals all events while
 /// the main thread cancels by key. Both OK and NOT_FOUND are acceptable.
 /// Must not crash or hang.
-#[test]
+#[cfg_attr(test, test)]
 fn cancel_key_shared_key_race() {
     let _ctx = TestContext::new();
 
@@ -282,7 +282,7 @@ fn cancel_key_shared_key_race() {
 /// Each iteration creates a fresh port, registers an observer, then
 /// both threads sync via barriers. match_thread signals the event
 /// while main thread drops the port.
-#[test]
+#[cfg_attr(test, test)]
 fn match_handle_close_race() {
     let _ctx = TestContext::new();
 
@@ -329,7 +329,7 @@ fn match_handle_close_race() {
 ///   thread A has timed out.
 /// Thread C: reads from ch2 in a loop.
 /// 1000 iterations of the A+B pair.
-#[test]
+#[cfg_attr(test, test)]
 fn channel_call_wait_queue_panic_repro() {
     let _ctx = TestContext::new();
 
@@ -416,7 +416,7 @@ fn channel_call_wait_queue_panic_repro() {
 /// - waiter: registers observer, waits for signal, cancels.
 /// - signaler: toggles signal in a loop with variable-length sleeps.
 ///   20000 iterations.
-#[test]
+#[cfg_attr(test, test)]
 fn wait_signal_cancel() {
     let _ctx = TestContext::new();
     const STRESS_COUNT: u32 = 20000;
@@ -482,7 +482,7 @@ fn wait_signal_cancel() {
 /// Stress test: 4 signaler threads create events, register them
 /// with the port, randomly signal/close them. 4 drainer threads
 /// continuously dequeue packets. Runs for ~100ms.
-#[test]
+#[cfg_attr(test, test)]
 fn signal_close_wait() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -582,7 +582,7 @@ fn signal_close_wait() {
 /// Stress test: one thread repeatedly creates and closes ports,
 /// while 4 waiter threads try to register async waits on the
 /// constantly-changing port. Runs for ~100ms.
-#[test]
+#[cfg_attr(test, test)]
 fn close_wait_race() {
     let _ctx = TestContext::new();
 
@@ -667,7 +667,7 @@ fn close_wait_race() {
 /// - Signaling thread: toggles EVENT_SIGNALED in a loop.
 /// - Canceling thread: cancels by key in a loop.
 /// - Waiting thread: drains packets in a loop.
-#[test]
+#[cfg_attr(test, test)]
 fn cancel_key_during_registration_race() {
     let _ctx = TestContext::new();
 
@@ -728,7 +728,7 @@ fn cancel_key_during_registration_race() {
 /// 10000 dummy events + 1 target event all share the same key.
 /// 10 closer threads race to close the target event while the main
 /// thread cancels by key.
-#[test]
+#[cfg_attr(test, test)]
 fn cancel_key_close_race() {
     let _ctx = TestContext::new();
 
@@ -796,7 +796,7 @@ fn cancel_key_close_race() {
 /// with embedded event handles, then races cancel_by_key against
 /// closing the channel handles. 16 rounds of 64 units each, with
 /// 4 closer threads.
-#[test]
+#[cfg_attr(test, test)]
 fn cancel_key_destructor_reenters_port_lock() {
     let _ctx = TestContext::new();
 
@@ -886,7 +886,7 @@ fn cancel_key_destructor_reenters_port_lock() {
 /// 32 events registered on a port. One thread toggles signals on all
 /// events in a tight loop. Main thread closes the port. 500 iterations.
 /// Tests that signalling after port close doesn't crash.
-#[test]
+#[cfg_attr(test, test)]
 fn queue_packet_after_port_closed_concurrent_race() {
     let _ctx = TestContext::new();
 
@@ -926,4 +926,21 @@ fn queue_packet_after_port_closed_concurrent_race() {
         running.store(false, Ordering::SeqCst);
         signaler.join().unwrap();
     }
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    cancel_key_active_observer_race();
+    cancel_key_during_match_race();
+    cancel_key_shared_key_race();
+    match_handle_close_race();
+    channel_call_wait_queue_panic_repro();
+    wait_signal_cancel();
+    signal_close_wait();
+    close_wait_race();
+    cancel_key_during_registration_race();
+    cancel_key_close_race();
+    cancel_key_destructor_reenters_port_lock();
+    queue_packet_after_port_closed_concurrent_race();
 }

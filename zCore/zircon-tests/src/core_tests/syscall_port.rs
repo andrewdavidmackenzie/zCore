@@ -6,7 +6,7 @@ use zircon_object::object::HandleValue;
 use zircon_object::signal::PortPacket;
 use zircon_object::ZxError;
 /// C++: TEST(PortTest, CreateInvalidOptions) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn port_create_invalid_options() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -16,7 +16,7 @@ fn port_create_invalid_options() {
 }
 
 /// C++: TEST(PortTest, QueueWrongType) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn port_queue_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -34,7 +34,7 @@ fn port_queue_wrong_type() {
 }
 
 /// C++: TEST(PortTest, QueueAccessDenied) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn port_queue_access_denied() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -52,7 +52,7 @@ fn port_queue_access_denied() {
 }
 
 /// C++: TEST(PortTest, CancelBadSourceHandle) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn port_cancel_bad_source() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -67,7 +67,7 @@ fn port_cancel_bad_source() {
 }
 
 /// C++: TEST(PortTest, CancelKeyWrongType) — syscall level
-#[test]
+#[cfg_attr(test, test)]
 fn port_cancel_key_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -85,7 +85,7 @@ fn port_cancel_key_wrong_type() {
 
 /// C++: TEST(PortTest, QueueNullPtrReturnsInvalidArgs)
 /// Queueing with a null packet pointer returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn port_queue_null_ptr() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -98,7 +98,7 @@ fn port_queue_null_ptr() {
 }
 /// C++: TEST(PortTest, AsyncWaitInvalidOption)
 /// wait_async with invalid options returns INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn port_async_wait_invalid_option() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -127,7 +127,7 @@ fn port_async_wait_invalid_option() {
 
 /// C++: TEST(PortTest, CancelWrongType)
 /// port_cancel with a non-port handle (for the port arg) returns WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn port_cancel_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -152,7 +152,7 @@ fn port_cancel_wrong_type() {
 
 /// C++: TEST(PortTest, CancelAccessDenied)
 /// port_cancel without WRITE right on the port returns ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn port_cancel_access_denied() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -180,7 +180,7 @@ fn port_cancel_access_denied() {
 
 /// C++: TEST(PortTest, WaitAsyncPortAccessDenied)
 /// wait_async with a port handle lacking WRITE right returns ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn port_wait_async_port_access_denied() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -211,7 +211,7 @@ fn port_wait_async_port_access_denied() {
 
 /// C++: TEST(PortTest, WaitAsyncPortWrongType)
 /// wait_async with a non-port handle for the port argument returns WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn port_wait_async_port_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -241,7 +241,7 @@ fn port_wait_async_port_wrong_type() {
 
 /// C++: TEST(PortTest, WaitAsyncTargetAccessDenied)
 /// wait_async on a handle without WAIT right returns ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn port_wait_async_target_access_denied() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -265,4 +265,21 @@ fn port_wait_async_target_access_denied() {
         0,
     );
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    port_create_invalid_options();
+    port_queue_wrong_type();
+    port_queue_access_denied();
+    port_cancel_bad_source();
+    port_cancel_key_wrong_type();
+    port_queue_null_ptr();
+    port_async_wait_invalid_option();
+    port_cancel_wrong_type();
+    port_cancel_access_denied();
+    port_wait_async_port_access_denied();
+    port_wait_async_port_wrong_type();
+    port_wait_async_target_access_denied();
 }

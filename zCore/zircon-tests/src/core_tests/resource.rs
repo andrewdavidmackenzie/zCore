@@ -17,7 +17,7 @@ use zircon_object::object::KernelObject;
 /// C++: TEST(Resource, BasicActions)
 /// Create MMIO and IRQ resources, verify info fields, check kind
 /// validation, and confirm KOID uniqueness.
-#[test]
+#[cfg_attr(test, test)]
 fn basic_actions() {
     let _ctx = TestContext::new();
 
@@ -63,7 +63,7 @@ fn basic_actions() {
 /// created (overflow validation is at the syscall layer). But
 /// validate_ranged_resource uses checked_add, so an overflowing
 /// child range is rejected with OUT_OF_RANGE.
-#[test]
+#[cfg_attr(test, test)]
 fn create_arithmetic_overflow() {
     let _ctx = TestContext::new();
 
@@ -89,7 +89,7 @@ fn create_arithmetic_overflow() {
 /// In Fuchsia C++, passing a bad name pointer returns INVALID_ARGS.
 /// In our Rust API, names are &str so invalid pointers are impossible.
 /// Test that empty name is accepted (the kernel doesn't reject it).
-#[test]
+#[cfg_attr(test, test)]
 fn create_bad_name_pointer_returns_invalid_args() {
     let _ctx = TestContext::new();
 
@@ -104,7 +104,7 @@ fn create_bad_name_pointer_returns_invalid_args() {
 /// C++: TEST(Resource, CreateFromRangedRoot)
 /// A root resource can validate any child creation because ROOT
 /// bypasses kind and range checks. Create exclusive child from root.
-#[test]
+#[cfg_attr(test, test)]
 fn create_from_ranged_root() {
     let _ctx = TestContext::new();
     let root = Resource::create("root", ResourceKind::ROOT, 0, 0, ResourceFlags::empty());
@@ -146,7 +146,7 @@ fn create_from_ranged_root() {
 
 /// C++: TEST(Resource, CreateFromRangedRootKinds)
 /// Root resource validates ranged requests for all valid kinds.
-#[test]
+#[cfg_attr(test, test)]
 fn create_from_ranged_root_kinds() {
     let _ctx = TestContext::new();
     let root = Resource::create("root", ResourceKind::ROOT, 0, 0, ResourceFlags::empty());
@@ -187,7 +187,7 @@ fn create_from_ranged_root_kinds() {
 /// At the kernel object level, ResourceFlags::from_bits_truncate
 /// silently ignores unknown bits. Verify that known flags work and
 /// unknown bits are truncated.
-#[test]
+#[cfg_attr(test, test)]
 fn create_invalid_options_and_flags() {
     let _ctx = TestContext::new();
 
@@ -228,7 +228,7 @@ fn create_invalid_options_and_flags() {
 /// doesn't take a parent handle — the parent validation is done at
 /// the syscall layer. We verify that validate() rejects invalid kinds
 /// which is analogous to invalid parent validation.
-#[test]
+#[cfg_attr(test, test)]
 fn create_invalid_parent_returns_bad_handle() {
     let _ctx = TestContext::new();
 
@@ -249,7 +249,7 @@ fn create_invalid_parent_returns_bad_handle() {
 /// C++: TEST(Resource, CreateNameHandlingAndTruncation)
 /// Name is stored in a 32-byte buffer with NUL terminator, so max
 /// 31 visible characters. Longer names are truncated.
-#[test]
+#[cfg_attr(test, test)]
 fn create_name_handling_and_truncation() {
     let _ctx = TestContext::new();
 
@@ -283,7 +283,7 @@ fn create_name_handling_and_truncation() {
 /// can be used as "parents" by testing their validate() behavior:
 /// only ROOT validates for all kinds, others only validate for their
 /// own kind.
-#[test]
+#[cfg_attr(test, test)]
 fn create_parent_handle_validation() {
     let _ctx = TestContext::new();
 
@@ -316,7 +316,7 @@ fn create_parent_handle_validation() {
 /// returns ACCESS_DENIED from zx_resource_create. Here we exercise
 /// the handle rights check by adding a resource with reduced rights
 /// to a process handle table and verifying we can distinguish rights.
-#[test]
+#[cfg_attr(test, test)]
 fn create_parent_missing_write_rights_returns_access_denied() {
     use zircon_object::object::{Handle, Rights};
     let ctx = TestContext::new();
@@ -347,7 +347,7 @@ fn create_parent_missing_write_rights_returns_access_denied() {
 /// C++: TEST(Resource, CreateResourceSlice)
 /// A non-root MMIO resource can validate sub-ranges of its own
 /// range, acting as a "slice". Out-of-range requests are rejected.
-#[test]
+#[cfg_attr(test, test)]
 fn create_resource_slice() {
     let _ctx = TestContext::new();
 
@@ -398,7 +398,7 @@ fn create_resource_slice() {
 
 /// C++: TEST(Resource, CreatedHandlePropertiesAndRights)
 /// Verify that a resource handle in a process has the expected rights.
-#[test]
+#[cfg_attr(test, test)]
 fn created_handle_properties_and_rights() {
     use zircon_object::object::{Handle, Rights};
     let ctx = TestContext::new();
@@ -438,7 +438,7 @@ fn created_handle_properties_and_rights() {
 /// C++: TEST(Resource, ExclusiveRegionReleaseLifecycle)
 /// Register exclusive region, verify overlap is blocked, then
 /// release via on_zero_handles, verify region is available again.
-#[test]
+#[cfg_attr(test, test)]
 fn exclusive_region_release_lifecycle() {
     use zircon_object::object::{Handle, Rights};
     let ctx = TestContext::new();
@@ -509,7 +509,7 @@ fn exclusive_region_release_lifecycle() {
 /// C++ test (line 143):
 ///   1. create exclusive MMIO → OK
 ///   2. create shared MMIO same range → ZX_ERR_NOT_FOUND
-#[test]
+#[cfg_attr(test, test)]
 fn exclusive_shared() {
     use zircon_object::object::{Handle, Rights};
     let ctx = TestContext::new();
@@ -581,7 +581,7 @@ fn exclusive_shared() {
 ///
 /// At the kernel object level we can verify fields directly. For the
 /// rights check, we use the process handle table with reduced rights.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_resource_validation() {
     use zircon_object::object::{Handle, Rights};
     let ctx = TestContext::new();
@@ -671,7 +671,7 @@ fn get_info_resource_validation() {
 ///   5. Multi-tier: parent → child → grandchild → great-grandchild
 ///   6. Off-by-one boundary violations at each tier
 ///   7. Slices completely outside parent → ACCESS_DENIED
-#[test]
+#[cfg_attr(test, test)]
 fn hierarchy_slicing_boundaries() {
     let _ctx = TestContext::new();
 
@@ -815,7 +815,7 @@ fn hierarchy_slicing_boundaries() {
 ///
 /// At the kernel object level, we test validate_ranged_resource for
 /// privilege inversion and overflow, plus from_bits for flag validation.
-#[test]
+#[cfg_attr(test, test)]
 fn invalid_args() {
     let _ctx = TestContext::new();
 
@@ -928,7 +928,7 @@ fn invalid_args() {
 /// In the C++ test, accessing I/O ports without a resource causes a
 /// crash. Here we verify that an IOPORT resource validates correctly
 /// and a non-IOPORT resource rejects IOPORT validation.
-#[test]
+#[cfg_attr(test, test)]
 fn ioport_denied_by_default() {
     let _ctx = TestContext::new();
 
@@ -955,7 +955,7 @@ fn ioport_denied_by_default() {
 /// Verify IOPORT resource creation, info, and range validation.
 /// The actual ioports_request syscall is platform-specific (x86_64),
 /// but the resource object itself works on all platforms.
-#[test]
+#[cfg_attr(test, test)]
 fn ioports() {
     let _ctx = TestContext::new();
 
@@ -993,7 +993,7 @@ fn ioports() {
 /// The C++ test passes a bad ZBI header to zx_system_mexec. The mexec
 /// syscall is not implemented in zCore. We verify the SYSTEM resource
 /// sub-base for MEXEC can be validated.
-#[test]
+#[cfg_attr(test, test)]
 fn mexec_bad_zbi_header_length() {
     let _ctx = TestContext::new();
     use zircon_object::dev::ZX_RSRC_SYSTEM_MEXEC_BASE;
@@ -1012,7 +1012,7 @@ fn mexec_bad_zbi_header_length() {
 
 /// C++: TEST(Resource, MexecEmptyZbi)
 /// Verify MEXEC resource validation.
-#[test]
+#[cfg_attr(test, test)]
 fn mexec_empty_zbi() {
     let _ctx = TestContext::new();
     use zircon_object::dev::ZX_RSRC_SYSTEM_MEXEC_BASE;
@@ -1035,7 +1035,7 @@ fn mexec_empty_zbi() {
 /// times. In zCore, zx_system_mexec is not implemented, so we verify the
 /// MEXEC resource can be created, validated, and dropped repeatedly
 /// without leaking — the closest equivalent.
-#[test]
+#[cfg_attr(test, test)]
 fn mexec_memory_leak_on_failure() {
     let _ctx = TestContext::new();
     use zircon_object::dev::ZX_RSRC_SYSTEM_MEXEC_BASE;
@@ -1059,7 +1059,7 @@ fn mexec_memory_leak_on_failure() {
 
 /// C++: TEST(Resource, MexecPagerPanic)
 /// Verify SYSTEM resource creation and validation.
-#[test]
+#[cfg_attr(test, test)]
 fn mexec_pager_panic() {
     let _ctx = TestContext::new();
     let sys = Resource::create(
@@ -1074,7 +1074,7 @@ fn mexec_pager_panic() {
 
 /// C++: TEST(Resource, MexecPayloadTooSmall)
 /// Verify SYSTEM resource with small range.
-#[test]
+#[cfg_attr(test, test)]
 fn mexec_payload_too_small() {
     let _ctx = TestContext::new();
     let sys = Resource::create("system", ResourceKind::SYSTEM, 0, 1, ResourceFlags::empty());
@@ -1083,7 +1083,7 @@ fn mexec_payload_too_small() {
 
 /// C++: TEST(Resource, MexecZeroSizedVmo)
 /// Verify zero-sized VMO can be created (payload validation path).
-#[test]
+#[cfg_attr(test, test)]
 fn mexec_zero_sized_vmo() {
     let _ctx = TestContext::new();
     let vmo = zircon_object::vm::VmObject::new_paged(0);
@@ -1094,7 +1094,7 @@ fn mexec_zero_sized_vmo() {
 /// Requires x86_64 interrupt vector pool and hardware IRQ support.
 /// We can test that an IRQ resource validates correctly and that
 /// multiple IRQ resources can be created without leaking.
-#[test]
+#[cfg_attr(test, test)]
 fn pc_interrupt_vector_pool_leak() {
     let _ctx = TestContext::new();
 
@@ -1110,7 +1110,7 @@ fn pc_interrupt_vector_pool_leak() {
 /// The C++ test uses zx_vmo_create_physical to probe physical address
 /// space regions. We test that MMIO resources with large ranges can
 /// be created and validated — the "probing" equivalent at object level.
-#[test]
+#[cfg_attr(test, test)]
 fn probe_address_space() {
     let _ctx = TestContext::new();
 
@@ -1149,7 +1149,7 @@ fn probe_address_space() {
 /// C++ test (line 155):
 ///   1. create shared MMIO → OK
 ///   2. create exclusive MMIO same range → ZX_ERR_NOT_FOUND
-#[test]
+#[cfg_attr(test, test)]
 fn shared_exclusive() {
     use zircon_object::object::{Handle, Rights};
     let ctx = TestContext::new();
@@ -1205,7 +1205,7 @@ fn shared_exclusive() {
 ///   3. Child strictly inside [base+0x200, base+0x600) → OK
 ///   4. Non-strict validation in zx_vmo_create_physical allows
 ///      mapping the full page (tested separately at syscall level)
-#[test]
+#[cfg_attr(test, test)]
 fn strict_mmio_range_validation() {
     let _ctx = TestContext::new();
 
@@ -1295,7 +1295,7 @@ fn strict_mmio_range_validation() {
 
 /// C++: TEST(Resource, SystemResourceSubBasesAndSyscallValidation)
 /// Verify that a SYSTEM resource can validate all defined sub-bases.
-#[test]
+#[cfg_attr(test, test)]
 fn system_resource_sub_bases_and_syscall_validation() {
     let _ctx = TestContext::new();
     use zircon_object::dev::*;
@@ -1353,7 +1353,7 @@ fn system_resource_sub_bases_and_syscall_validation() {
 /// C++: TEST(Resource, ValidateRangedResourceWithWrongKindReturnsAccessDenied)
 /// validate_ranged_resource with wrong kind returns WRONG_TYPE
 /// (not OUT_OF_RANGE — kind is checked first).
-#[test]
+#[cfg_attr(test, test)]
 fn validate_ranged_resource_with_wrong_kind_returns_access_denied() {
     let _ctx = TestContext::new();
 
@@ -1391,7 +1391,7 @@ fn validate_ranged_resource_with_wrong_kind_returns_access_denied() {
 /// C++: TEST(Resource, ValidateResourceKindBaseWithWrongTypeOrKindReturnsError)
 /// validate() rejects wrong kind with WRONG_TYPE. ROOT is the only
 /// kind that passes validation for any other kind.
-#[test]
+#[cfg_attr(test, test)]
 fn validate_resource_kind_base_with_wrong_type_or_kind_returns_error() {
     let _ctx = TestContext::new();
 
@@ -1440,7 +1440,7 @@ fn validate_resource_kind_base_with_wrong_type_or_kind_returns_error() {
 /// In the C++ test, an MMIO resource is used to create a physical
 /// VMO via zx_vmo_create_physical. We verify the MMIO resource
 /// validates the range and that VmObject::new_physical can be called.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_creation() {
     let _ctx = TestContext::new();
     use zircon_object::vm::{VmObject, PAGE_SIZE};
@@ -1469,7 +1469,7 @@ fn vmo_creation() {
 /// In the C++ test, an MMIO resource smaller than a page is used.
 /// The physical VMO rounds up to a page. We verify the resource
 /// validates and a 1-page physical VMO can be created.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_creation_smaller() {
     let _ctx = TestContext::new();
     use zircon_object::vm::{VmObject, PAGE_SIZE};
@@ -1497,7 +1497,7 @@ fn vmo_creation_smaller() {
 /// An MMIO resource with an unaligned base. The resource object
 /// itself doesn't enforce alignment — that's the syscall layer's
 /// job. Verify the resource stores and reports the unaligned base.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_creation_unaligned() {
     let _ctx = TestContext::new();
 
@@ -1529,7 +1529,7 @@ fn vmo_creation_unaligned() {
 /// The C++ test uses a VMEX system sub-resource with
 /// zx_vmo_replace_as_executable. That syscall isn't implemented in
 /// zCore. We verify the SYSTEM resource with VMEX base validates.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_replace_as_executable() {
     let _ctx = TestContext::new();
     use zircon_object::dev::ZX_RSRC_SYSTEM_VMEX_BASE;
@@ -1544,4 +1544,45 @@ fn vmo_replace_as_executable() {
     assert!(sys
         .validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_VMEX_BASE, 1)
         .is_ok());
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    basic_actions();
+    create_arithmetic_overflow();
+    create_bad_name_pointer_returns_invalid_args();
+    create_from_ranged_root();
+    create_from_ranged_root_kinds();
+    create_invalid_options_and_flags();
+    create_invalid_parent_returns_bad_handle();
+    create_name_handling_and_truncation();
+    create_parent_handle_validation();
+    create_parent_missing_write_rights_returns_access_denied();
+    create_resource_slice();
+    created_handle_properties_and_rights();
+    exclusive_region_release_lifecycle();
+    exclusive_shared();
+    get_info_resource_validation();
+    hierarchy_slicing_boundaries();
+    invalid_args();
+    ioport_denied_by_default();
+    ioports();
+    mexec_bad_zbi_header_length();
+    mexec_empty_zbi();
+    mexec_memory_leak_on_failure();
+    mexec_pager_panic();
+    mexec_payload_too_small();
+    mexec_zero_sized_vmo();
+    pc_interrupt_vector_pool_leak();
+    probe_address_space();
+    shared_exclusive();
+    strict_mmio_range_validation();
+    system_resource_sub_bases_and_syscall_validation();
+    validate_ranged_resource_with_wrong_kind_returns_access_denied();
+    validate_resource_kind_base_with_wrong_type_or_kind_returns_error();
+    vmo_creation();
+    vmo_creation_smaller();
+    vmo_creation_unaligned();
+    vmo_replace_as_executable();
 }

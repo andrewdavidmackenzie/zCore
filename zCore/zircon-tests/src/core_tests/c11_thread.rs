@@ -27,7 +27,7 @@ extern crate alloc;
 /// At the kernel level, each thread has distinct register state
 /// (including the thread pointer for TLS). We verify distinct KOIDs
 /// and the ability to create/join multiple threads.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn thread_local_errno() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -77,7 +77,7 @@ async fn thread_local_errno() {
 ///
 /// Creates a thread with NULL name and joins it.
 /// At kernel level: Thread::create with empty name should succeed.
-#[test]
+#[cfg_attr(test, test)]
 fn null_name_thread_should_succeed() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -103,7 +103,7 @@ fn null_name_thread_should_succeed() {
 /// 6. Stops the thread and joins, verifies return value
 ///
 /// Kernel primitives: zx_handle_duplicate, zx_handle_close
-#[test]
+#[cfg_attr(test, test)]
 fn create_and_verify_thread_handle() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -146,7 +146,7 @@ fn create_and_verify_thread_handle() {
 /// means the handle is not joined (the thread continues running).
 /// We verify the kernel-level semantics: dropping a thread reference
 /// does not kill it if the process still holds it.
-#[test]
+#[cfg_attr(test, test)]
 fn detached_thread_keeps_running() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -167,7 +167,7 @@ fn detached_thread_keeps_running() {
 ///
 /// Creates a thread with a name longer than ZX_MAX_NAME_LEN (32).
 /// Thread creation should succeed (name is truncated).
-#[test]
+#[cfg_attr(test, test)]
 fn long_name_succeeds() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -200,7 +200,7 @@ fn long_name_succeeds() {
 /// This is a stress test for thread creation and detach. It requires
 /// concurrent execution of 1000 threads. We test the kernel-level
 /// primitive: creating many threads in the same process.
-#[test]
+#[cfg_attr(test, test)]
 fn self_detach_and_free() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -227,4 +227,15 @@ fn self_detach_and_free() {
 
     // Process is still alive after all detached threads
     assert_ne!(proc.id(), 0);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    thread_local_errno().await;
+    null_name_thread_should_succeed();
+    create_and_verify_thread_handle();
+    detached_thread_keeps_running();
+    long_name_succeeds();
+    self_detach_and_free();
 }

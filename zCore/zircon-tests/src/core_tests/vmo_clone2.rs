@@ -97,7 +97,7 @@ fn call_permutations_helper<F: FnMut(&[u32])>(
 
 /// C++: TEST_F(VmoClone2TestCase, Read)
 /// Snapshot child sees parent data at creation time.
-#[test]
+#[cfg_attr(test, test)]
 fn read() {
     let _ctx = TestContext::new();
     let parent = init_page_tagged_vmo(1);
@@ -108,7 +108,7 @@ fn read() {
 
 /// C++: TEST_F(VmoClone2TestCase, CloneVmoWrite)
 /// Write to clone doesn't affect parent.
-#[test]
+#[cfg_attr(test, test)]
 fn clone_vmo_write() {
     let _ctx = TestContext::new();
     let parent = init_page_tagged_vmo(1);
@@ -124,7 +124,7 @@ fn clone_vmo_write() {
 
 /// C++: TEST_F(VmoClone2TestCase, ParentVmoWrite)
 /// Write to parent doesn't affect clone.
-#[test]
+#[cfg_attr(test, test)]
 fn parent_vmo_write() {
     let _ctx = TestContext::new();
     let parent = init_page_tagged_vmo(1);
@@ -140,7 +140,7 @@ fn parent_vmo_write() {
 
 /// C++: TEST_F(VmoClone2TestCase, CloseOriginal)
 /// Clone survives parent close.
-#[test]
+#[cfg_attr(test, test)]
 fn close_original() {
     let _ctx = TestContext::new();
     let parent = init_page_tagged_vmo(1);
@@ -154,7 +154,7 @@ fn close_original() {
 
 /// C++: TEST_F(VmoClone2TestCase, CloseClone)
 /// Parent survives clone close.
-#[test]
+#[cfg_attr(test, test)]
 fn close_clone() {
     let _ctx = TestContext::new();
     let parent = init_page_tagged_vmo(1);
@@ -169,7 +169,7 @@ fn close_clone() {
 /// C++: TEST_F(VmoClone2TestCase, ZeroPageWrite)
 /// 4 VMOs: parent → 2 children → 1 grandchild, all zero. Progressively
 /// write to each and check populated_bytes.
-#[test]
+#[cfg_attr(test, test)]
 fn zero_page_write() {
     let _ctx = TestContext::new();
     let kvmo_size = PAGE_SIZE;
@@ -198,7 +198,7 @@ fn zero_page_write() {
 /// Chain: parent → clone1 → clone2, fork page into both clones.
 /// Close original, check data and populated_bytes. Close clone1,
 /// check clone2 data and populated_bytes.
-#[test]
+#[cfg_attr(test, test)]
 fn split_page_closure() {
     let _ctx = TestContext::new();
     let koriginal_size = PAGE_SIZE;
@@ -237,7 +237,7 @@ fn split_page_closure() {
 /// 4-page parent, offset clone at PAGE_SIZE (3 pages), 2 sub-clones that
 /// fully divide the offset clone. Check data, write, drop offset clone,
 /// check fractional attribution, poll.
-#[test]
+#[cfg_attr(test, test)]
 fn offset_test2() {
     let _ctx = TestContext::new();
     let koriginal_page_count = 4usize;
@@ -295,7 +295,7 @@ fn offset_test2() {
 /// 1-page parent, 2-page clone (overflows parent), clone-of-clone (3 pages,
 /// overflows further). Check data, fractional attribution at each step,
 /// fork all pages, close middle clone, poll.
-#[test]
+#[cfg_attr(test, test)]
 fn overflow() {
     let _ctx = TestContext::new();
     let koriginal_page_count = 1usize;
@@ -382,7 +382,7 @@ fn overflow() {
 /// clone-of-clone (3 pages). Check data (all zeros from clone since it
 /// doesn't overlap parent), check fractional attribution, write, check
 /// again.
-#[test]
+#[cfg_attr(test, test)]
 fn out_of_bounds() {
     let _ctx = TestContext::new();
     let koriginal_page_count = 1usize;
@@ -438,7 +438,7 @@ fn out_of_bounds() {
 /// C++: TEST_F(VmoClone2TestCase, SmallClone)
 /// 3-page parent, 1-page clone at offset 1. Check fractional attribution,
 /// write to out-of-range pages, close parent, poll populated_bytes.
-#[test]
+#[cfg_attr(test, test)]
 fn small_clone() {
     let _ctx = TestContext::new();
     let koriginal_page_count = 3usize;
@@ -477,7 +477,7 @@ fn small_clone() {
 /// C++: TEST_F(VmoClone2TestCase, SmallCloneChild)
 /// 3-page parent, 1-page clone at offset 1, grandchild of clone
 /// (2 pages) — grandchild sees clone page then zero.
-#[test]
+#[cfg_attr(test, test)]
 fn small_clone_child() {
     let _ctx = TestContext::new();
     let vmo = init_page_tagged_vmo(3);
@@ -496,7 +496,7 @@ fn small_clone_child() {
 /// 3-page parent, clone at offset 1 (2 pages), write to clone page 1,
 /// create 2nd clone at offset 0 (1 page). Check fractional attribution,
 /// close original, poll.
-#[test]
+#[cfg_attr(test, test)]
 fn small_clones() {
     let _ctx = TestContext::new();
     let koriginal_page_count = 3usize;
@@ -586,13 +586,13 @@ fn disjoint_clones_test(early_close: bool) {
 }
 
 /// C++: TEST_F(VmoCloneDisjointClonesTests, DisjointCloneEarlyClose)
-#[test]
+#[cfg_attr(test, test)]
 fn disjoint_clone_early_close() {
     disjoint_clones_test(true);
 }
 
 /// C++: TEST_F(VmoCloneDisjointClonesTests, DisjointCloneLateClose)
-#[test]
+#[cfg_attr(test, test)]
 fn disjoint_clone_late_close() {
     disjoint_clones_test(false);
 }
@@ -601,7 +601,7 @@ fn disjoint_clone_late_close() {
 /// 2-page parent, 1-page resizable clone, grow to 2 pages. New page is
 /// zero. Write to parent page 2, verify clone unaffected. Check
 /// fractional attribution.
-#[test]
+#[cfg_attr(test, test)]
 fn resize_grow() {
     let _ctx = TestContext::new();
     let koriginal_page_count = 2usize;
@@ -635,7 +635,7 @@ fn resize_grow() {
 
 /// C++: TEST_F(VmoClone2TestCase, Children)
 /// Multiple children, close in order.
-#[test]
+#[cfg_attr(test, test)]
 fn children() {
     let _ctx = TestContext::new();
     let parent = init_page_tagged_vmo(2);
@@ -658,7 +658,7 @@ fn children() {
 
 /// C++: TEST_F(VmoClone2TestCase, Uncached)
 /// Uncached VMO can't create snapshot children.
-#[test]
+#[cfg_attr(test, test)]
 fn uncached() {
     use zircon_object::vm::CachePolicy;
 
@@ -672,7 +672,7 @@ fn uncached() {
 
 /// C++: TEST_F(VmoClone2TestCase, Info)
 /// Clone info has correct parent_koid and IS_COW_CLONE flag.
-#[test]
+#[cfg_attr(test, test)]
 fn info() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -687,7 +687,7 @@ fn info() {
 
 /// C++: TEST_F(VmoClone2TestCase, NoAccumulatedOverflow)
 /// Offset calculations don't overflow.
-#[test]
+#[cfg_attr(test, test)]
 fn no_accumulated_overflow() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -709,7 +709,7 @@ fn no_accumulated_overflow() {
 /// Regression test for Fuchsia bug 53710. When a COW child is resized,
 /// its `parent_limit_` must be correctly updated even when the resize
 /// crosses a sibling's range. After shrink+grow, new pages must be zero.
-#[test]
+#[cfg_attr(test, test)]
 fn resize_over_sibling_range() {
     let _ctx = TestContext::new();
     // Parent must be resizable since we call set_len on it.
@@ -801,21 +801,21 @@ fn many_children_test_helper(reverse_close: bool) {
 
 /// C++: TEST_F(VmoClone2TestCase, ManyChildren)
 /// Child count tracking with forward close order.
-#[test]
+#[cfg_attr(test, test)]
 fn many_children() {
     many_children_test_helper(false);
 }
 
 /// C++: TEST_F(VmoClone2TestCase, ManyChildrenRevClose)
 /// Child count tracking with reverse close order.
-#[test]
+#[cfg_attr(test, test)]
 fn many_children_rev_close() {
     many_children_test_helper(true);
 }
 
 /// C++: TEST_F(VmoClone2TestCase, ManyCloneOffset)
 /// Clone chain with non-zero offsets, page migration on drop.
-#[test]
+#[cfg_attr(test, test)]
 fn many_clone_offset() {
     let _ctx = TestContext::new();
 
@@ -842,7 +842,7 @@ fn many_clone_offset() {
 /// inserted. When the child holding the marker is dropped, the split bits
 /// on the original page must be cleared so a subsequent clone can fork
 /// the same page again.
-#[test]
+#[cfg_attr(test, test)]
 fn marker_clears_split_bits() {
     let _ctx = TestContext::new();
 
@@ -889,7 +889,7 @@ fn marker_clears_split_bits() {
 /// M: offset 1 in R, length 2
 /// C: offset 0 in M, length 1
 /// H: offset 1 in M, length 1
-#[test]
+#[cfg_attr(test, test)]
 fn parent_start_limit_regression() {
     let _ctx = TestContext::new();
 
@@ -982,7 +982,7 @@ fn vmar_write_test_helper(clone_write: bool) {
 }
 
 /// C++: TEST_F(VmoClone2TestCase, CloneVmarWrite)
-#[test]
+#[cfg_attr(test, test)]
 fn clone_vmar_write() {
     vmar_write_test_helper(true);
 }
@@ -991,7 +991,7 @@ fn clone_vmar_write() {
 /// 6-page parent, main_clone at offset 1 (5 pages), write to page 3,
 /// create 4 sub-clones at various offsets, close all clones, then
 /// create a last_clone and verify parent data survives.
-#[test]
+#[cfg_attr(test, test)]
 fn disjoint_clone_progressive() {
     let _ctx = TestContext::new();
     let vmo = init_page_tagged_vmo(6);
@@ -1043,7 +1043,7 @@ fn disjoint_clone_progressive() {
 /// (2 direct, 2 via intermediate). Drop parent + intermediate. Close
 /// leaves in all 24 permutations, checking data + populated_bytes at
 /// each step.
-#[test]
+#[cfg_attr(test, test)]
 fn disjoint_clone_test2() {
     let _ctx = TestContext::new();
     call_permutations(4, &mut |perm: &[u32]| {
@@ -1094,7 +1094,7 @@ fn disjoint_clone_test2() {
 /// Regression test for https://fxbug.dev/42133843. 1000 iterations:
 /// create parent + child, race destruction on two std::threads using
 /// an atomic barrier.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn drop_children_in_parallel() {
     let _ctx = TestContext::new();
 
@@ -1129,7 +1129,7 @@ async fn drop_children_in_parallel() {
 /// create a 3-page parent, clone at offset 1 (2 pages), fork a page,
 /// check fractional populated_bytes, race parent drop with attribution
 /// query on another thread, then poll for final attribution.
-#[async_std::test]
+#[cfg_attr(test, async_std::test)]
 async fn drop_parent_committed_bytes() {
     let _ctx = TestContext::new();
 
@@ -1192,7 +1192,7 @@ async fn drop_parent_committed_bytes() {
 
 /// C++: TEST(VmoClone2TestCase, ForbidContiguousVmo)
 /// Contiguous VMOs should not allow snapshot children.
-#[test]
+#[cfg_attr(test, test)]
 fn forbid_contiguous_vmo() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_contiguous(1, 12).unwrap();
@@ -1206,7 +1206,7 @@ fn forbid_contiguous_vmo() {
 /// Creates a tree: parent → 2 children → 1 grandchild (4 VMOs total).
 /// Maps all, writes through mappings in every permutation order to verify
 /// no order results in a bad read.
-#[test]
+#[cfg_attr(test, test)]
 fn many_clone_mapping() {
     use zircon_object::task::{Job, Process};
     use zircon_object::vm::MMUFlags;
@@ -1274,7 +1274,7 @@ fn many_clone_mapping() {
 /// 2-page parent, 4 clones: [0]=full, [1]=full, [2]=offset 1 (1 page),
 /// [3]=full. Map first page of each, write to [3] and [1], verify
 /// mappings and populated_bytes.
-#[test]
+#[cfg_attr(test, test)]
 fn many_clone_mapping_offset() {
     use zircon_object::task::{Job, Process};
     use zircon_object::vm::MMUFlags;
@@ -1342,7 +1342,7 @@ fn many_clone_mapping_offset() {
 /// 5-page parent, write non-zero to each page, create clone, map clone
 /// read-only, verify no private pages committed in clone, parent
 /// populated_bytes unchanged.
-#[test]
+#[cfg_attr(test, test)]
 fn map_range_read_only() {
     use zircon_object::task::{Job, Process};
     use zircon_object::vm::MMUFlags;
@@ -1396,7 +1396,7 @@ fn map_range_read_only() {
 
 /// C++: TEST(VmoClone2TestCase, NoPhysical)
 /// A physical VMO cannot be snapshot-cloned.
-#[test]
+#[cfg_attr(test, test)]
 fn no_physical() {
     let _ctx = TestContext::new();
     // Create a physical VMO at address 0 (test-mode only, no real HW backing).
@@ -1410,7 +1410,7 @@ fn no_physical() {
 /// C++: TEST(VmoClone2TestCase, NoSnapshotPager)
 /// A pager-backed VMO (or one in a pager tree) should not allow
 /// SNAPSHOT children. Verify with is_in_pager_tree check.
-#[test]
+#[cfg_attr(test, test)]
 fn no_snapshot_pager() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1426,7 +1426,7 @@ fn no_snapshot_pager() {
 /// C++: TEST_F(VmoClone2TestCase, ObjMemAccounting)
 /// 2-page parent, write both pages, create snapshot, check fractional
 /// attribution after each fork.
-#[test]
+#[cfg_attr(test, test)]
 fn obj_mem_accounting() {
     let _ctx = TestContext::new();
     let koriginal_size = 2 * PAGE_SIZE;
@@ -1481,7 +1481,7 @@ fn obj_mem_accounting() {
 /// 3-page parent, 3-page clone at offset 1.  Check fractional attributed
 /// bytes, zero page at offset 2, drop parent, verify clone data, poll
 /// populated_bytes.
-#[test]
+#[cfg_attr(test, test)]
 fn offset() {
     let _ctx = TestContext::new();
     let koriginal_page_count = 3usize;
@@ -1525,7 +1525,7 @@ fn offset() {
 /// C++: TEST_F(VmoClone2TestCase, OffsetProgressiveWrite)
 /// 2-page parent, 2-page clone at offset 1, then clone-of-clone at offset 1.
 /// Check fractional attribution at each step.
-#[test]
+#[cfg_attr(test, test)]
 fn offset_progressive_write() {
     let _ctx = TestContext::new();
     let koriginal_page_count = 2usize;
@@ -1574,7 +1574,7 @@ fn offset_progressive_write() {
 }
 
 /// C++: TEST_F(VmoClone2TestCase, ParentVmarWrite)
-#[test]
+#[cfg_attr(test, test)]
 fn parent_vmar_write() {
     vmar_write_test_helper(false);
 }
@@ -1582,7 +1582,7 @@ fn parent_vmar_write() {
 /// C++: TEST(VmoClone2TestCase, PinBeforeCreateFailure)
 /// Pinning a VMO prevents snapshot creation (ZX_ERR_BAD_STATE).
 /// After unpinning, snapshot creation succeeds.
-#[test]
+#[cfg_attr(test, test)]
 fn pin_before_create_failure() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1608,7 +1608,7 @@ fn pin_before_create_failure() {
 
 /// C++: TEST(VmoClone2TestCase, PinClonePages)
 /// Create a snapshot, try to pin the clone's pages.
-#[test]
+#[cfg_attr(test, test)]
 fn pin_clone_pages() {
     let _ctx = TestContext::new();
     let parent = init_page_tagged_vmo(2);
@@ -1638,7 +1638,7 @@ fn pin_clone_pages() {
 ///
 /// In zCore, SNAPSHOT_AT_LEAST_ON_WRITE on a pager root → unidirectional
 /// child. On a non-pager VMO (clone1) → bidirectional COW snapshot.
-#[test]
+#[cfg_attr(test, test)]
 fn snapshot_at_least_on_write_slice_in_chain() {
     let _ctx = TestContext::new();
 
@@ -1692,7 +1692,7 @@ fn snapshot_at_least_on_write_slice_in_chain() {
 /// C++: TEST_F(VmoClone2TestCase, ResizeOffsetChild)
 /// 3-page parent, clone at offset 1 (1 page). Resize parent to 0.
 /// Check data and populated_bytes.
-#[test]
+#[cfg_attr(test, test)]
 fn resize_offset_child() {
     let _ctx = TestContext::new();
     let vmo = init_page_tagged_vmo(3);
@@ -1709,7 +1709,7 @@ fn resize_offset_child() {
 /// Runs with all permutations of [0..3). For each permutation: create
 /// 3-page parent, 3 resizable clones (one per page), shrink two clones
 /// and parent to 0, check remaining clone's data and populated_bytes.
-#[test]
+#[cfg_attr(test, test)]
 fn resize_disjoint_child() {
     let _ctx = TestContext::new();
     call_permutations(3, &mut |perm: &[u32]| {
@@ -1753,7 +1753,7 @@ fn resize_disjoint_child() {
 /// C++: TEST_F(VmoClone2TestCase, ResizeMultipleProgressive)
 /// 3-page parent, resizable clone (2 pages), fork pages, create 2nd clone,
 /// resize both, check all data and fractional attribution.
-#[test]
+#[cfg_attr(test, test)]
 fn resize_multiple_progressive() {
     let _ctx = TestContext::new();
     let koriginal_page_count = 3usize;
@@ -1931,13 +1931,67 @@ fn progressive_clone_discard_test(close: bool) {
 }
 
 /// C++: TEST_F(ProgressiveCloneDiscardTests, ProgressiveCloneClose)
-#[test]
+#[cfg_attr(test, test)]
 fn progressive_clone_close() {
     progressive_clone_discard_test(true);
 }
 
 /// C++: TEST_F(ProgressiveCloneDiscardTests, ProgressiveCloneTruncate)
-#[test]
+#[cfg_attr(test, test)]
 fn progressive_clone_truncate() {
     progressive_clone_discard_test(false);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub async fn run_all() {
+    read();
+    clone_vmo_write();
+    parent_vmo_write();
+    close_original();
+    close_clone();
+    zero_page_write();
+    split_page_closure();
+    offset_test2();
+    overflow();
+    out_of_bounds();
+    small_clone();
+    small_clone_child();
+    small_clones();
+    disjoint_clone_early_close();
+    disjoint_clone_late_close();
+    resize_grow();
+    children();
+    uncached();
+    info();
+    no_accumulated_overflow();
+    resize_over_sibling_range();
+    many_children();
+    many_children_rev_close();
+    many_clone_offset();
+    marker_clears_split_bits();
+    parent_start_limit_regression();
+    clone_vmar_write();
+    disjoint_clone_progressive();
+    disjoint_clone_test2();
+    drop_children_in_parallel().await;
+    drop_parent_committed_bytes().await;
+    forbid_contiguous_vmo();
+    many_clone_mapping();
+    many_clone_mapping_offset();
+    map_range_read_only();
+    no_physical();
+    no_snapshot_pager();
+    obj_mem_accounting();
+    offset();
+    offset_progressive_write();
+    parent_vmar_write();
+    pin_before_create_failure();
+    pin_clone_pages();
+    snapshot_at_least_on_write_slice_in_chain();
+    resize_offset_child();
+    resize_disjoint_child();
+    resize_multiple_progressive();
+    progressive_clone_close();
+    progressive_clone_truncate();
 }

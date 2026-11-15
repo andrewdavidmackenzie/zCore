@@ -27,7 +27,7 @@ use zircon_object::signal::Futex;
 /// This tests that the mutex actually blocks the second thread.
 /// The full test requires concurrent execution. In single-threaded
 /// mode, we verify the lock/unlock CAS semantics.
-#[test]
+#[cfg_attr(test, test)]
 fn lock_unlock() {
     let _ctx = TestContext::new();
     let mutex = Box::new(AtomicI32::new(0));
@@ -78,7 +78,7 @@ fn lock_unlock() {
 ///
 /// At kernel level: try_lock is a CAS(0→1). If mutex is already
 /// held (value != 0), it returns immediately without blocking.
-#[test]
+#[cfg_attr(test, test)]
 fn try_lock() {
     let _ctx = TestContext::new();
     let mutex = AtomicI32::new(0);
@@ -112,7 +112,7 @@ fn try_lock() {
 /// This verifies the C++ BasicLockable concept.
 ///
 /// At kernel level: just lock() then unlock(), same as any other usage.
-#[test]
+#[cfg_attr(test, test)]
 fn basic_lockable() {
     let _ctx = TestContext::new();
     let mutex = AtomicI32::new(0);
@@ -144,7 +144,7 @@ fn basic_lockable() {
 ///
 /// This tests that the wrapper and the raw C API operate on the
 /// same underlying futex word.
-#[test]
+#[cfg_attr(test, test)]
 fn get() {
     let _ctx = TestContext::new();
     let mutex = AtomicI32::new(0);
@@ -175,4 +175,13 @@ fn get() {
 
     // C++: mutex.unlock()
     mutex.store(0, Ordering::Release);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    lock_unlock();
+    try_lock();
+    basic_lockable();
+    get();
 }

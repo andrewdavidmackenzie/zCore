@@ -17,7 +17,7 @@ use zircon_object::task::{Job, Process, Thread};
 /// pthread_key_create/pthread_setspecific/pthread_getspecific work
 /// correctly across threads. In zCore, we verify the kernel-level
 /// prerequisite: each thread has a unique KOID.
-#[test]
+#[cfg_attr(test, test)]
 fn pthread_tls() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -31,4 +31,10 @@ fn pthread_tls() {
     assert_ne!(t1.id(), t2.id(), "threads must have distinct KOIDs for TLS");
     assert_eq!(t1.related_koid(), proc.id());
     assert_eq!(t2.related_koid(), proc.id());
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    pthread_tls();
 }

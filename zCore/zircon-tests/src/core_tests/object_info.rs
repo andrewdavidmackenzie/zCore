@@ -58,7 +58,7 @@ pub(crate) fn get_info_err(
 // ── Basic handle info tests ─────────────────────────────────────────
 
 /// C++: TEST(ObjectGetInfoTest, InvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn info_invalid_handle_fails() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -69,7 +69,7 @@ fn info_invalid_handle_fails() {
 }
 
 /// C++: TEST(ObjectGetInfoTest, HandleCountCorrectness)
-#[test]
+#[cfg_attr(test, test)]
 fn info_handle_count() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -100,7 +100,7 @@ fn info_handle_count() {
 // ── Job info tests ──────────────────────────────────────────────────
 
 /// C++: TEST_F(JobGetInfoTest, InfoHandleBasicOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_handle_basic() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -114,7 +114,7 @@ fn job_info_handle_basic() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoHandleBasicInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -125,7 +125,7 @@ fn job_info_handle_basic_invalid_handle() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -142,7 +142,7 @@ const TOPIC_JOB_PROCESSES: u32 = 9;
 const TOPIC_JOB_CHILDREN: u32 = 8;
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobProcessesOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_processes() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -162,7 +162,7 @@ fn job_info_processes() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobChildrenOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_children() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -181,7 +181,7 @@ fn job_info_children() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobProcessesZeroSizedBufferIsOk)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_processes_zero_buffer() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -201,7 +201,7 @@ fn job_info_processes_zero_buffer() {
 const TOPIC_PROCESS: u32 = 3;
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_on_self() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -217,7 +217,7 @@ fn process_info_on_self() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessZeroSizedBufferFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_zero_buffer() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -234,7 +234,7 @@ fn process_info_zero_buffer() {
 pub(crate) const TOPIC_PROCESS_THREADS: u32 = 4;
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessThreadsSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_threads() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -254,7 +254,7 @@ fn process_info_threads() {
 const TOPIC_THREAD: u32 = 10;
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_on_self() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "info-thread").unwrap();
@@ -268,7 +268,7 @@ fn thread_info_on_self() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; 72];
@@ -279,7 +279,7 @@ fn thread_info_invalid_handle() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadZeroSizedBufferFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_zero_buffer() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "info-thread").unwrap();
@@ -299,7 +299,7 @@ pub(crate) const TOPIC_VMO: u32 = 23;
 // ── HANDLE_BASIC on Process (topic 2) ───────────────────────────────
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_basic() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -313,7 +313,7 @@ fn process_info_handle_basic() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -324,7 +324,7 @@ fn process_info_handle_basic_invalid_handle() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicZeroSizedFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -346,7 +346,7 @@ pub(crate) const JOB_INFO_SIZE: usize = 16; // zx_info_job_t
 pub(crate) const TOPIC_HANDLE_VALID: u32 = 1;
 
 /// C++: TEST(ObjectGetInfoTest, OpenValidHandleSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn handle_valid_open_succeeds() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -361,7 +361,7 @@ fn handle_valid_open_succeeds() {
 }
 
 /// C++: TEST(ObjectGetInfoTest, ClosedValidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn handle_valid_closed_fails() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -405,7 +405,7 @@ pub(crate) const TOPIC_HANDLE_COUNT: u32 = 19;
 pub(crate) const HANDLE_COUNT_SIZE: usize = 4; // u32
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleCountOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_count_on_self() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hc-thread").unwrap();
@@ -422,7 +422,7 @@ fn thread_info_handle_count_on_self() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleCountInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_count_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_COUNT_SIZE];
@@ -433,7 +433,7 @@ fn thread_info_handle_count_invalid_handle() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleCountZeroSizedBufferFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_count_zero_buffer() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hc-thread").unwrap();
@@ -452,7 +452,7 @@ const TOPIC_THREAD_STATS: u32 = 15;
 const THREAD_STATS_SIZE: usize = 16; // zx_info_thread_stats_t
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_thread_stats_on_self() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "stats-thread").unwrap();
@@ -465,7 +465,7 @@ fn thread_info_thread_stats_on_self() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_thread_stats_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; THREAD_STATS_SIZE];
@@ -476,7 +476,7 @@ fn thread_info_thread_stats_invalid_handle() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsZeroSizedBufferFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_thread_stats_zero_buffer() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "stats-thread").unwrap();
@@ -493,7 +493,7 @@ const TOPIC_VMAR: u32 = 7;
 const VMAR_INFO_SIZE: usize = 16; // zx_info_vmar_t = { base: usize, len: usize }
 
 /// C++: TEST_F(VmarGetInfoTest, InfoVmarOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_info_on_self() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -506,7 +506,7 @@ fn vmar_info_on_self() {
 }
 
 /// C++: TEST_F(VmarGetInfoTest, InfoVmarInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_info_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; VMAR_INFO_SIZE];
@@ -517,7 +517,7 @@ fn vmar_info_invalid_handle() {
 }
 
 /// C++: TEST_F(VmarGetInfoTest, InfoVmarZeroSizedBufferFails)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_info_zero_buffer() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -536,7 +536,7 @@ const TASK_RUNTIME_V1_SIZE: usize = 16; // cpu_time + queue_time
 /// C++: TEST_F(TaskGetInfoTest, InfoTaskRuntimeWrongType)
 ///
 /// Querying TASK_RUNTIME on a non-task object (Event) returns WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn task_info_runtime_wrong_type() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -552,7 +552,7 @@ fn task_info_runtime_wrong_type() {
 }
 
 /// C++: TEST_F(TaskGetInfoTest, InfoTaskRuntimeInvalidHandle)
-#[test]
+#[cfg_attr(test, test)]
 fn task_info_runtime_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; TASK_RUNTIME_V1_SIZE];
@@ -571,7 +571,7 @@ pub(crate) const PROCESS_HANDLE_STATS_SIZE: usize = 256; // [u32; 64]
 ///
 /// Query handle stats for a process. The process has handles added
 /// by TestContext, so the stats array should be non-trivial.
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_stats() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -599,7 +599,7 @@ pub(crate) const HANDLE_EXTENDED_SIZE: usize = 40; // zx_info_handle_extended_t
 ///
 /// Query the handle table of a process that has at least one handle
 /// (the process handle itself that we just added).
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_table_self() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -620,7 +620,7 @@ fn process_info_handle_table_self() {
 ///
 /// A freshly-created process with no handles added should report
 /// an empty handle table.
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_table_empty() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -640,7 +640,7 @@ fn process_info_handle_table_empty() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_table_invalid_handle() {
     let ctx = TestContext::new();
     let buf_size = 16 * HANDLE_EXTENDED_SIZE;
@@ -713,7 +713,7 @@ impl<const N: usize> AlignedBuf<N> {
 // ── JOB_PROCESSES (topic 9) — missing tests ────────────────────────
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobProcessesInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_processes_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u64; 16];
@@ -724,7 +724,7 @@ fn job_info_processes_invalid_handle() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobProcessesNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_processes_null_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -748,7 +748,7 @@ fn job_info_processes_null_avail() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobProcessesNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_processes_null_actual() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -772,7 +772,7 @@ fn job_info_processes_null_actual() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobProcessesNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_processes_null_actual_and_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -795,7 +795,7 @@ fn job_info_processes_null_actual_and_avail() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobProcessesInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_processes_invalid_buffer() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -819,7 +819,7 @@ fn job_info_processes_invalid_buffer() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobProcessesBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_processes_bad_actual() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -843,7 +843,7 @@ fn job_info_processes_bad_actual() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobProcessesBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_processes_bad_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -869,7 +869,7 @@ fn job_info_processes_bad_avail() {
 // ── JOB_CHILDREN (topic 8) — missing tests ─────────────────────────
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobChildrenInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_children_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u64; 16];
@@ -880,7 +880,7 @@ fn job_info_children_invalid_handle() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobChildrenZeroSizedBufferIsOk)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_children_zero_buffer() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -896,7 +896,7 @@ fn job_info_children_zero_buffer() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobChildrenNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_children_null_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -920,7 +920,7 @@ fn job_info_children_null_avail() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobChildrenNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_children_null_actual() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -944,7 +944,7 @@ fn job_info_children_null_actual() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobChildrenNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_children_null_actual_and_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -967,7 +967,7 @@ fn job_info_children_null_actual_and_avail() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobChildrenInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_children_invalid_buffer() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -991,7 +991,7 @@ fn job_info_children_invalid_buffer() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobChildrenBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_children_bad_actual() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1015,7 +1015,7 @@ fn job_info_children_bad_actual() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoJobChildrenBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_children_bad_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1043,7 +1043,7 @@ fn job_info_children_bad_avail() {
 const PROCESS_INFO_SIZE: usize = 24; // zx_info_process_t
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; PROCESS_INFO_SIZE];
@@ -1054,7 +1054,7 @@ fn process_info_invalid_handle() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_null_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1077,7 +1077,7 @@ fn process_info_null_avail() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_null_actual() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1100,7 +1100,7 @@ fn process_info_null_actual() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_null_actual_and_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1122,7 +1122,7 @@ fn process_info_null_actual_and_avail() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_invalid_buffer() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1146,7 +1146,7 @@ fn process_info_invalid_buffer() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_bad_actual() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1170,7 +1170,7 @@ fn process_info_bad_actual() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_bad_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1196,7 +1196,7 @@ fn process_info_bad_avail() {
 // ── PROCESS_THREADS (topic 4) — missing tests ──────────────────────
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessThreadsInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_threads_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; 128];
@@ -1207,7 +1207,7 @@ fn process_info_threads_invalid_handle() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessThreadsNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_threads_null_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1230,7 +1230,7 @@ fn process_info_threads_null_avail() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessThreadsNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_threads_null_actual() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1253,7 +1253,7 @@ fn process_info_threads_null_actual() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessThreadsNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_threads_null_actual_and_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1275,7 +1275,7 @@ fn process_info_threads_null_actual_and_avail() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessThreadsInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_threads_invalid_buffer() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1299,7 +1299,7 @@ fn process_info_threads_invalid_buffer() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessThreadsBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_threads_bad_actual() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1323,7 +1323,7 @@ fn process_info_threads_bad_actual() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessThreadsBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_threads_bad_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1351,7 +1351,7 @@ fn process_info_threads_bad_avail() {
 const THREAD_INFO_SIZE: usize = 72;
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_null_avail() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "info-thread").unwrap();
@@ -1372,7 +1372,7 @@ fn thread_info_null_avail() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_null_actual() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "info-thread").unwrap();
@@ -1393,7 +1393,7 @@ fn thread_info_null_actual() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_null_actual_and_avail() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "info-thread").unwrap();
@@ -1413,7 +1413,7 @@ fn thread_info_null_actual_and_avail() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_invalid_buffer() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "info-thread").unwrap();
@@ -1435,7 +1435,7 @@ fn thread_info_invalid_buffer() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_bad_actual() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "info-thread").unwrap();
@@ -1457,7 +1457,7 @@ fn thread_info_bad_actual() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_bad_avail() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "info-thread").unwrap();
@@ -1485,7 +1485,7 @@ pub(crate) const VMO_INFO_SIZE: usize = 168;
 // ── VMAR (topic 7) — missing tests ─────────────────────────────────
 
 /// C++: TEST_F(VmarGetInfoTest, InfoVmarNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_info_null_avail() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -1506,7 +1506,7 @@ fn vmar_info_null_avail() {
 }
 
 /// C++: TEST_F(VmarGetInfoTest, InfoVmarNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_info_null_actual() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -1527,7 +1527,7 @@ fn vmar_info_null_actual() {
 }
 
 /// C++: TEST_F(VmarGetInfoTest, InfoVmarNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_info_null_actual_and_avail() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -1547,7 +1547,7 @@ fn vmar_info_null_actual_and_avail() {
 }
 
 /// C++: TEST_F(VmarGetInfoTest, InfoVmarInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_info_invalid_buffer() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -1569,7 +1569,7 @@ fn vmar_info_invalid_buffer() {
 }
 
 /// C++: TEST_F(VmarGetInfoTest, InfoVmarBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_info_bad_actual() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -1591,7 +1591,7 @@ fn vmar_info_bad_actual() {
 }
 
 /// C++: TEST_F(VmarGetInfoTest, InfoVmarBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_info_bad_avail() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -1615,7 +1615,7 @@ fn vmar_info_bad_avail() {
 // ── HANDLE_BASIC on Job (topic 2) — missing tests ──────────────────
 
 /// C++: TEST_F(JobGetInfoTest, InfoHandleBasicNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1636,7 +1636,7 @@ fn job_info_handle_basic_null_avail() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoHandleBasicNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1657,7 +1657,7 @@ fn job_info_handle_basic_null_actual() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1677,7 +1677,7 @@ fn job_info_handle_basic_null_actual_and_avail() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1699,7 +1699,7 @@ fn job_info_handle_basic_invalid_buffer() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1721,7 +1721,7 @@ fn job_info_handle_basic_bad_actual() {
 }
 
 /// C++: TEST_F(JobGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn job_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1755,7 +1755,7 @@ fn job_info_handle_basic_bad_avail() {
 // ── THREAD_STATS (topic 15) — remaining 6 tests ──────────────────
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_thread_stats_null_avail() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "stats-thread").unwrap();
@@ -1776,7 +1776,7 @@ fn thread_info_thread_stats_null_avail() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_thread_stats_null_actual() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "stats-thread").unwrap();
@@ -1797,7 +1797,7 @@ fn thread_info_thread_stats_null_actual() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_thread_stats_null_actual_and_avail() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "stats-thread").unwrap();
@@ -1817,7 +1817,7 @@ fn thread_info_thread_stats_null_actual_and_avail() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_thread_stats_invalid_buffer() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "stats-thread").unwrap();
@@ -1839,7 +1839,7 @@ fn thread_info_thread_stats_invalid_buffer() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_thread_stats_bad_actual() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "stats-thread").unwrap();
@@ -1861,7 +1861,7 @@ fn thread_info_thread_stats_bad_actual() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_thread_stats_bad_avail() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "stats-thread").unwrap();
@@ -1887,7 +1887,7 @@ fn thread_info_thread_stats_bad_avail() {
 // ── HANDLE_BASIC on Process (topic 2) — remaining 6 tests ─────────
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -1909,7 +1909,7 @@ fn process_info_handle_basic_null_avail() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -1931,7 +1931,7 @@ fn process_info_handle_basic_null_actual() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -1952,7 +1952,7 @@ fn process_info_handle_basic_null_actual_and_avail() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -1975,7 +1975,7 @@ fn process_info_handle_basic_invalid_buffer() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -1998,7 +1998,7 @@ fn process_info_handle_basic_bad_actual() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -2023,7 +2023,7 @@ fn process_info_handle_basic_bad_avail() {
 // ── HANDLE_BASIC on Thread (topic 2) — remaining 6 tests ──────────
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleBasicNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hb-thread").unwrap();
@@ -2046,7 +2046,7 @@ fn thread_info_handle_basic_null_avail() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleBasicNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hb-thread").unwrap();
@@ -2069,7 +2069,7 @@ fn thread_info_handle_basic_null_actual() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hb-thread").unwrap();
@@ -2091,7 +2091,7 @@ fn thread_info_handle_basic_null_actual_and_avail() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hb-thread").unwrap();
@@ -2115,7 +2115,7 @@ fn thread_info_handle_basic_invalid_buffer() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hb-thread").unwrap();
@@ -2139,7 +2139,7 @@ fn thread_info_handle_basic_bad_actual() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hb-thread").unwrap();
@@ -2169,7 +2169,7 @@ fn thread_info_handle_basic_bad_avail() {
 // ── HANDLE_TABLE (topic 27) — remaining 7 tests ──────────────────
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_table_null_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -2193,7 +2193,7 @@ fn process_info_handle_table_null_avail() {
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_handle_table_invalid_buffer() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -2232,7 +2232,7 @@ const PROCESS_MAPS_ENTRY_SIZE: usize = 104;
 ///
 /// Query PROCESS_MAPS on an unstarted process. Should succeed with
 /// at least the root VMAR entry (aspace entry at depth 0).
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_maps_unstarted_succeeds() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -2257,7 +2257,7 @@ fn process_info_maps_unstarted_succeeds() {
 ///
 /// Query PROCESS_MAPS on a process with mappings. Should return
 /// entries describing the VMAR tree.
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_maps_smoke_test() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -2279,7 +2279,7 @@ fn process_info_maps_smoke_test() {
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsInvalidHandleFails)
 ///
 /// PROCESS_MAPS with an invalid handle should return BAD_HANDLE.
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_maps_invalid_handle() {
     let ctx = TestContext::new();
     let buf_size = 16 * PROCESS_MAPS_ENTRY_SIZE;
@@ -2304,7 +2304,7 @@ const PROCESS_VMOS_ENTRY_SIZE: usize = 104;
 ///
 /// Query PROCESS_VMOS on a process that has at least one VMO handle.
 /// Should return the VMO info entries.
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_vmos_on_self_succeeds() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -2333,7 +2333,7 @@ fn process_info_vmos_on_self_succeeds() {
 /// Query PROCESS_VMOS on a process that has VMO handles. Should return
 /// VMO info entries with correct koid, size, flags, parent_koid,
 /// num_children, share_count — matching the C++ test assertions.
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_vmos_smoke_test() {
     use zircon_object::vm::{VmoInfoFlags, PAGE_SIZE};
 
@@ -2455,7 +2455,7 @@ fn process_info_vmos_smoke_test() {
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosInvalidHandleFails)
 ///
 /// PROCESS_VMOS with an invalid handle should return BAD_HANDLE.
-#[test]
+#[cfg_attr(test, test)]
 fn process_info_vmos_invalid_handle() {
     let ctx = TestContext::new();
     let buf_size = 16 * PROCESS_VMOS_ENTRY_SIZE;
@@ -2503,7 +2503,7 @@ fn process_info_vmos_invalid_handle() {
 // ═══════════════════════════════════════════════════════════════════
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleBasicOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hb-thread").unwrap();
@@ -2529,7 +2529,7 @@ fn thread_info_handle_basic_on_self() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleBasicInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -2540,7 +2540,7 @@ fn thread_info_handle_basic_invalid_handle() {
 }
 
 /// C++: TEST_F(ThreadGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hb-thread").unwrap();
@@ -2580,7 +2580,7 @@ fn thread_info_handle_basic_zero_buffer() {
 /// C++: TEST(JobGetInfoTest, InfoJobChildJobsGetChild)
 /// Create a child job, enumerate via JOB_CHILDREN, then look up the child
 /// koid with sys_object_get_child (here we just verify the koid appears).
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_child_jobs_get_child() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -2607,7 +2607,7 @@ fn job_get_info_info_job_child_jobs_get_child() {
 /// Querying JOB_CHILDREN with a Job handle (not a process/thread) is the
 /// correct usage. Using a non-job handle should return BAD_HANDLE or
 /// WRONG_TYPE. Here: use an event handle.
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_children_job_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -2628,7 +2628,7 @@ fn job_get_info_info_job_children_job_handle_is_bad_handle() {
 
 /// C++: TEST(JobGetInfoTest, InfoJobChildrenPartiallyUnmappedBufferIsInvalidArgs)
 /// Null buffer with non-zero size → INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_children_partially_unmapped_buffer_is_invalid_args() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -2653,7 +2653,7 @@ fn job_get_info_info_job_children_partially_unmapped_buffer_is_invalid_args() {
 
 /// C++: TEST(JobGetInfoTest, InfoJobChildrenRequiresEnumerateRights)
 /// JOB_CHILDREN without ENUMERATE right → ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_children_requires_enumerate_rights() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -2669,7 +2669,7 @@ fn job_get_info_info_job_children_requires_enumerate_rights() {
 
 /// C++: TEST(JobGetInfoTest, InfoJobChildrenSmallBufferIsOk)
 /// A buffer smaller than avail should still succeed with actual < avail.
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_children_small_buffer_is_ok() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -2691,7 +2691,7 @@ fn job_get_info_info_job_children_small_buffer_is_ok() {
 
 /// C++: TEST(JobGetInfoTest, InfoJobChildrenThreadHandleIsBadHandle)
 /// Using a thread handle for JOB_CHILDREN should return WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_children_thread_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "t").unwrap();
@@ -2709,7 +2709,7 @@ fn job_get_info_info_job_children_thread_handle_is_bad_handle() {
 /// C++: TEST(JobGetInfoTest, InfoJobProcessesGetChild)
 /// Create a process in a job, enumerate via JOB_PROCESSES, verify the
 /// process koid appears.
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_processes_get_child() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -2734,7 +2734,7 @@ fn job_get_info_info_job_processes_get_child() {
 
 /// C++: TEST(JobGetInfoTest, InfoJobProcessesPartiallyUnmappedBufferIsInvalidArgs)
 /// Null buffer with non-zero size → INVALID_ARGS.
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_processes_partially_unmapped_buffer_is_invalid_args() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -2759,7 +2759,7 @@ fn job_get_info_info_job_processes_partially_unmapped_buffer_is_invalid_args() {
 
 /// C++: TEST(JobGetInfoTest, InfoJobProcessesProcessbHandleIsBadHandle)
 /// Using a process handle for JOB_PROCESSES should return WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_processes_processb_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -2775,7 +2775,7 @@ fn job_get_info_info_job_processes_processb_handle_is_bad_handle() {
 
 /// C++: TEST(JobGetInfoTest, InfoJobProcessesRequiresEnumerateRights)
 /// JOB_PROCESSES without ENUMERATE right → ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_processes_requires_enumerate_rights() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -2790,7 +2790,7 @@ fn job_get_info_info_job_processes_requires_enumerate_rights() {
 
 /// C++: TEST(JobGetInfoTest, InfoJobProcessesSmallBufferIsOk)
 /// A buffer smaller than avail should still succeed with actual < avail.
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_processes_small_buffer_is_ok() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -2812,7 +2812,7 @@ fn job_get_info_info_job_processes_small_buffer_is_ok() {
 
 /// C++: TEST(JobGetInfoTest, InfoJobProcessesThreadHandleIsBadHandle)
 /// Using a thread handle for JOB_PROCESSES should return WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn job_get_info_info_job_processes_thread_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "t").unwrap();
@@ -2837,7 +2837,7 @@ const TOPIC_KMEM_STATS_EXTENDED: u32 = 31;
 const TOPIC_GUEST_STATS: u32 = 29;
 
 /// C++: TEST(KernelStatsGetInfoTest, CpuStats)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_cpu_stats() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -2853,7 +2853,7 @@ fn kernel_stats_cpu_stats() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, CpuStatsArraySize)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_cpu_stats_array_size() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -2867,7 +2867,7 @@ fn kernel_stats_cpu_stats_array_size() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, CpuStatsBadHandleType)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_cpu_stats_bad_handle_type() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -2887,7 +2887,7 @@ fn kernel_stats_cpu_stats_bad_handle_type() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, CpuStatsInvalidHandle)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_cpu_stats_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = vec![0u8; 512];
@@ -2898,7 +2898,7 @@ fn kernel_stats_cpu_stats_invalid_handle() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, CpuStatsMonotonicValues)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_cpu_stats_monotonic_values() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -2911,7 +2911,7 @@ fn kernel_stats_cpu_stats_monotonic_values() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, CpuStatsNullBuffer)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_cpu_stats_null_buffer() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -2930,7 +2930,7 @@ fn kernel_stats_cpu_stats_null_buffer() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, GuestStatsArraySize)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_guest_stats_array_size() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -2947,7 +2947,7 @@ fn kernel_stats_guest_stats_array_size() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, KmemStats)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_kmem_stats() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -2964,7 +2964,7 @@ fn kernel_stats_kmem_stats() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, KmemStatsBadHandleType)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_kmem_stats_bad_handle_type() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -2983,7 +2983,7 @@ fn kernel_stats_kmem_stats_bad_handle_type() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, KmemStatsExtended)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_kmem_stats_extended() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -2999,7 +2999,7 @@ fn kernel_stats_kmem_stats_extended() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, KmemStatsExtendedBadHandleType)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_kmem_stats_extended_bad_handle_type() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -3018,7 +3018,7 @@ fn kernel_stats_kmem_stats_extended_bad_handle_type() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, KmemStatsExtendedInvalidHandle)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_kmem_stats_extended_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = vec![0u8; 256];
@@ -3029,7 +3029,7 @@ fn kernel_stats_kmem_stats_extended_invalid_handle() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, KmemStatsExtendedNullBuffer)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_kmem_stats_extended_null_buffer() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -3048,7 +3048,7 @@ fn kernel_stats_kmem_stats_extended_null_buffer() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, KmemStatsExtendedSmallBuffer)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_kmem_stats_extended_small_buffer() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -3063,7 +3063,7 @@ fn kernel_stats_kmem_stats_extended_small_buffer() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, KmemStatsInvalidHandle)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_kmem_stats_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = vec![0u8; 112];
@@ -3074,7 +3074,7 @@ fn kernel_stats_kmem_stats_invalid_handle() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, KmemStatsNullBuffer)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_kmem_stats_null_buffer() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -3093,7 +3093,7 @@ fn kernel_stats_kmem_stats_null_buffer() {
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, KmemStatsSmallBuffer)
-#[test]
+#[cfg_attr(test, test)]
 fn kernel_stats_kmem_stats_small_buffer() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -3119,7 +3119,7 @@ fn kernel_stats_kmem_stats_small_buffer() {
 ///   - VMO has related_koid == 0, channel has related_koid > 0
 ///
 /// We replicate this by giving the target process a VMO and a channel.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_handle_table() {
     use zircon_object::ipc::Channel;
 
@@ -3207,7 +3207,7 @@ fn process_get_info_info_process_handle_table() {
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessHandleTableInsufficientRights)
 /// HANDLE_TABLE without MANAGE_PROCESS right → ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_handle_table_insufficient_rights() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3221,7 +3221,7 @@ fn process_get_info_info_process_handle_table_insufficient_rights() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessHandleTableNullActualAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_handle_table_null_actual_avail_succeeds() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3246,7 +3246,7 @@ fn process_get_info_info_process_handle_table_null_actual_avail_succeeds() {
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessJobHandleIsBadHandle)
 /// Querying PROCESS topic with a job handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_job_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3257,7 +3257,7 @@ fn process_get_info_info_process_job_handle_is_bad_handle() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_bad_actual_is_invalid_arg() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3282,7 +3282,7 @@ fn process_get_info_info_process_maps_bad_actual_is_invalid_arg() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_bad_avail_is_invalid_arg() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3307,7 +3307,7 @@ fn process_get_info_info_process_maps_bad_avail_is_invalid_arg() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_invalid_buffer_pointer_fails() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3332,7 +3332,7 @@ fn process_get_info_info_process_maps_invalid_buffer_pointer_fails() {
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsJobHandleIsBadHandle)
 /// Querying PROCESS_MAPS with a job handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_job_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3343,7 +3343,7 @@ fn process_get_info_info_process_maps_job_handle_is_bad_handle() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_null_actual_and_avail_succeeds() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3366,7 +3366,7 @@ fn process_get_info_info_process_maps_null_actual_and_avail_succeeds() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_null_actual_succeeds() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3390,7 +3390,7 @@ fn process_get_info_info_process_maps_null_actual_succeeds() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_null_avail_succeeds() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3416,7 +3416,7 @@ fn process_get_info_info_process_maps_null_avail_succeeds() {
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsOnSelfFails)
 /// Querying PROCESS_MAPS on self may deadlock (VMAR lock) — zCore
 /// returns (0, 0) to avoid this. Verify we don't crash.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_on_self_fails() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -3433,7 +3433,7 @@ fn process_get_info_info_process_maps_on_self_fails() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsPartiallyUnmappedBufferIsInvalidArgs)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_partially_unmapped_buffer_is_invalid_args() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3458,7 +3458,7 @@ fn process_get_info_info_process_maps_partially_unmapped_buffer_is_invalid_args(
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsRequiresInspectRights)
 /// PROCESS_MAPS without INSPECT right → ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_requires_inspect_rights() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3472,7 +3472,7 @@ fn process_get_info_info_process_maps_requires_inspect_rights() {
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsSmallBufferIsOk)
 /// A buffer too small for all entries should succeed with actual < avail.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_small_buffer_is_ok() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3488,7 +3488,7 @@ fn process_get_info_info_process_maps_small_buffer_is_ok() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsSmokeTestV1)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_smoke_test_v1() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3502,7 +3502,7 @@ fn process_get_info_info_process_maps_smoke_test_v1() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsSmokeTestV2)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_smoke_test_v2() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3518,7 +3518,7 @@ fn process_get_info_info_process_maps_smoke_test_v2() {
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsThreadHandleIsBadHandle)
 /// Querying PROCESS_MAPS with a thread handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_thread_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "t").unwrap();
@@ -3531,7 +3531,7 @@ fn process_get_info_info_process_maps_thread_handle_is_bad_handle() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsZeroSizedBufferIsOk)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_maps_zero_sized_buffer_is_ok() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3547,7 +3547,7 @@ fn process_get_info_info_process_maps_zero_sized_buffer_is_ok() {
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessThreadHandleIsBadHandle)
 /// Querying PROCESS topic with a thread handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_thread_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "t").unwrap();
@@ -3560,7 +3560,7 @@ fn process_get_info_info_process_thread_handle_is_bad_handle() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessThreadsZeroSizedBufferSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_threads_zero_sized_buffer_succeeds() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -3574,7 +3574,7 @@ fn process_get_info_info_process_threads_zero_sized_buffer_succeeds() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_bad_actual_is_invalid_arg() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3599,7 +3599,7 @@ fn process_get_info_info_process_vmos_bad_actual_is_invalid_arg() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_bad_avail_is_invalid_arg() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3624,7 +3624,7 @@ fn process_get_info_info_process_vmos_bad_avail_is_invalid_arg() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_invalid_buffer_pointer_fails() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3649,7 +3649,7 @@ fn process_get_info_info_process_vmos_invalid_buffer_pointer_fails() {
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosJobHandleIsBadHandle)
 /// Querying PROCESS_VMOS with a job handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_job_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3660,7 +3660,7 @@ fn process_get_info_info_process_vmos_job_handle_is_bad_handle() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_null_actual_and_avail_succeeds() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3683,7 +3683,7 @@ fn process_get_info_info_process_vmos_null_actual_and_avail_succeeds() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_null_actual_succeeds() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3707,7 +3707,7 @@ fn process_get_info_info_process_vmos_null_actual_succeeds() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_null_avail_succeeds() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3731,7 +3731,7 @@ fn process_get_info_info_process_vmos_null_avail_succeeds() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosPartiallyUnmappedBufferIsInvalidArgs)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_partially_unmapped_buffer_is_invalid_args() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3756,7 +3756,7 @@ fn process_get_info_info_process_vmos_partially_unmapped_buffer_is_invalid_args(
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosRequiresInspectRights)
 /// PROCESS_VMOS without INSPECT right → ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_requires_inspect_rights() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3768,7 +3768,7 @@ fn process_get_info_info_process_vmos_requires_inspect_rights() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosSmallBufferIsOk)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_small_buffer_is_ok() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3788,7 +3788,7 @@ fn process_get_info_info_process_vmos_small_buffer_is_ok() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosSmokeTestV1)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_smoke_test_v1() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3805,7 +3805,7 @@ fn process_get_info_info_process_vmos_smoke_test_v1() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosSmokeTestV2)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_smoke_test_v2() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3822,7 +3822,7 @@ fn process_get_info_info_process_vmos_smoke_test_v2() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosSmokeTestV3)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_smoke_test_v3() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3842,7 +3842,7 @@ fn process_get_info_info_process_vmos_smoke_test_v3() {
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosThreadHandleIsBadHandle)
 /// Querying PROCESS_VMOS with a thread handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_thread_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "t").unwrap();
@@ -3855,7 +3855,7 @@ fn process_get_info_info_process_vmos_thread_handle_is_bad_handle() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessVmosZeroSizedBufferIsOk)
-#[test]
+#[cfg_attr(test, test)]
 fn process_get_info_info_process_vmos_zero_sized_buffer_is_ok() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -3877,7 +3877,7 @@ const TOPIC_MEMORY_STALL: u32 = 38;
 const MEMORY_STALL_SIZE: usize = 24; // zx_info_memory_stall_t: 3 x u64
 
 /// C++: TEST(StallGetInfoTest, MemoryStallBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn stall_get_info_memory_stall_bad_actual_is_invalid_arg() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -3897,7 +3897,7 @@ fn stall_get_info_memory_stall_bad_actual_is_invalid_arg() {
 }
 
 /// C++: TEST(StallGetInfoTest, MemoryStallBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn stall_get_info_memory_stall_bad_avail_is_invalid_arg() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -3916,7 +3916,7 @@ fn stall_get_info_memory_stall_bad_avail_is_invalid_arg() {
 }
 
 /// C++: TEST(StallGetInfoTest, MemoryStallInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn stall_get_info_memory_stall_invalid_buffer_pointer_fails() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -3935,7 +3935,7 @@ fn stall_get_info_memory_stall_invalid_buffer_pointer_fails() {
 }
 
 /// C++: TEST(StallGetInfoTest, MemoryStallInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn stall_get_info_memory_stall_invalid_handle_fails() {
     let ctx = TestContext::new();
     let mut buf = [0u8; MEMORY_STALL_SIZE];
@@ -3946,7 +3946,7 @@ fn stall_get_info_memory_stall_invalid_handle_fails() {
 }
 
 /// C++: TEST(StallGetInfoTest, MemoryStallNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn stall_get_info_memory_stall_null_actual_and_avail_succeeds() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -3965,7 +3965,7 @@ fn stall_get_info_memory_stall_null_actual_and_avail_succeeds() {
 }
 
 /// C++: TEST(StallGetInfoTest, MemoryStallNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn stall_get_info_memory_stall_null_actual_succeeds() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -3985,7 +3985,7 @@ fn stall_get_info_memory_stall_null_actual_succeeds() {
 }
 
 /// C++: TEST(StallGetInfoTest, MemoryStallNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn stall_get_info_memory_stall_null_avail_succeeds() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -4005,7 +4005,7 @@ fn stall_get_info_memory_stall_null_avail_succeeds() {
 }
 
 /// C++: TEST(StallGetInfoTest, MemoryStallSmokeTest)
-#[test]
+#[cfg_attr(test, test)]
 fn stall_get_info_memory_stall_smoke_test() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -4021,7 +4021,7 @@ fn stall_get_info_memory_stall_smoke_test() {
 }
 
 /// C++: TEST(StallGetInfoTest, MemoryStallZeroSizedBufferIsTooSmall)
-#[test]
+#[cfg_attr(test, test)]
 fn stall_get_info_memory_stall_zero_sized_buffer_is_too_small() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -4044,7 +4044,7 @@ const TASK_STATS_SIZE: usize = 32;
 const TASK_STATS_V1_SIZE: usize = 16;
 
 /// C++: TEST(TaskGetInfoTest, InfoStatsSmokeTest)
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_stats_smoke_test() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4064,7 +4064,7 @@ fn task_get_info_info_stats_smoke_test() {
 /// C++: TEST(TaskGetInfoTest, InfoStatsSmokeTestV1)
 /// V1 uses a 16-byte buffer (2 fields only). The kernel may reject
 /// this as BUFFER_TOO_SMALL if it requires the full 32-byte struct.
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_stats_smoke_test_v1() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4087,7 +4087,7 @@ fn task_get_info_info_stats_smoke_test_v1() {
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoStatsUnstartedSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_stats_unstarted_succeeds() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -4100,7 +4100,7 @@ fn task_get_info_info_stats_unstarted_succeeds() {
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_task_stats_bad_actual_is_invalid_arg() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4121,7 +4121,7 @@ fn task_get_info_info_task_stats_bad_actual_is_invalid_arg() {
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_task_stats_bad_avail_is_invalid_arg() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4142,7 +4142,7 @@ fn task_get_info_info_task_stats_bad_avail_is_invalid_arg() {
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_task_stats_invalid_buffer_pointer_fails() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4163,7 +4163,7 @@ fn task_get_info_info_task_stats_invalid_buffer_pointer_fails() {
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_task_stats_invalid_handle_fails() {
     let ctx = TestContext::new();
     let mut buf = [0u8; TASK_STATS_SIZE];
@@ -4175,7 +4175,7 @@ fn task_get_info_info_task_stats_invalid_handle_fails() {
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsJobHandleIsBadHandle)
 /// TASK_STATS with a job handle → WRONG_TYPE (only processes supported).
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_task_stats_job_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -4188,7 +4188,7 @@ fn task_get_info_info_task_stats_job_handle_is_bad_handle() {
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_task_stats_null_actual_and_avail_succeeds() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4209,7 +4209,7 @@ fn task_get_info_info_task_stats_null_actual_and_avail_succeeds() {
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_task_stats_null_actual_succeeds() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4231,7 +4231,7 @@ fn task_get_info_info_task_stats_null_actual_succeeds() {
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_task_stats_null_avail_succeeds() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4254,7 +4254,7 @@ fn task_get_info_info_task_stats_null_avail_succeeds() {
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsThreadHandleIsBadHandle)
 /// TASK_STATS with a thread handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_task_stats_thread_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "t").unwrap();
@@ -4269,7 +4269,7 @@ fn task_get_info_info_task_stats_thread_handle_is_bad_handle() {
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsZeroSizedBufferIsTooSmall)
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_info_task_stats_zero_sized_buffer_is_too_small() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4300,7 +4300,7 @@ fn task_get_info_info_task_stats_zero_sized_buffer_is_too_small() {
 ///   - shared_cow mapped in both proc0 and proc1
 ///
 /// We replicate the setup and verify the accounting.
-#[test]
+#[cfg_attr(test, test)]
 fn task_get_info_shared_mem_accounting() {
     use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 
@@ -4463,7 +4463,7 @@ fn task_get_info_shared_mem_accounting() {
 // ── Thread handle count bad pointer tests ─────────────────────────
 
 /// C++: TEST(ThreadGetInfoTest, InfoHandleCountBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_handle_count_bad_actual_is_invalid_arg() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hc-t").unwrap();
@@ -4486,7 +4486,7 @@ fn thread_get_info_info_handle_count_bad_actual_is_invalid_arg() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoHandleCountBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_handle_count_bad_avail_is_invalid_arg() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hc-t").unwrap();
@@ -4509,7 +4509,7 @@ fn thread_get_info_info_handle_count_bad_avail_is_invalid_arg() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoHandleCountInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_handle_count_invalid_buffer_pointer_fails() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hc-t").unwrap();
@@ -4532,7 +4532,7 @@ fn thread_get_info_info_handle_count_invalid_buffer_pointer_fails() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoHandleCountNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_handle_count_null_actual_and_avail_succeeds() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hc-t").unwrap();
@@ -4553,7 +4553,7 @@ fn thread_get_info_info_handle_count_null_actual_and_avail_succeeds() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoHandleCountNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_handle_count_null_actual_succeeds() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hc-t").unwrap();
@@ -4575,7 +4575,7 @@ fn thread_get_info_info_handle_count_null_actual_succeeds() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoHandleCountNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_handle_count_null_avail_succeeds() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "hc-t").unwrap();
@@ -4597,7 +4597,7 @@ fn thread_get_info_info_handle_count_null_avail_succeeds() {
 }
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadExceptionReportInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_thread_exception_report_invalid_handle_fails() {
     let ctx = TestContext::new();
     // Topic 11 = THREAD_EXCEPTION_REPORT
@@ -4610,7 +4610,7 @@ fn thread_get_info_info_thread_exception_report_invalid_handle_fails() {
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadJobHandleIsBadHandle)
 /// Querying THREAD topic with a job handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_thread_job_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -4622,7 +4622,7 @@ fn thread_get_info_info_thread_job_handle_is_bad_handle() {
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadProcessHandleIsBadHandle)
 /// Querying THREAD topic with a process handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_thread_process_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4635,7 +4635,7 @@ fn thread_get_info_info_thread_process_handle_is_bad_handle() {
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadStatsJobHandleIsBadHandle)
 /// Querying THREAD_STATS with a job handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_thread_stats_job_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -4647,7 +4647,7 @@ fn thread_get_info_info_thread_stats_job_handle_is_bad_handle() {
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadStatsProcessHandleIsBadHandle)
 /// Querying THREAD_STATS with a process handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_thread_stats_process_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4660,7 +4660,7 @@ fn thread_get_info_info_thread_stats_process_handle_is_bad_handle() {
 
 /// C++: TEST(ThreadGetInfoTest, InfoThreadStatsRuntime)
 /// Query TASK_RUNTIME (topic 30) on a thread — should return runtime info.
-#[test]
+#[cfg_attr(test, test)]
 fn thread_get_info_info_thread_stats_runtime() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "rt-t").unwrap();
@@ -4674,7 +4674,7 @@ fn thread_get_info_info_thread_stats_runtime() {
 // ── HANDLE_BASIC on VMAR (topic 2) ────────────────────────────────
 
 /// C++: TEST(VmarGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_handle_basic_bad_actual_is_invalid_arg() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4695,7 +4695,7 @@ fn vmar_get_info_info_handle_basic_bad_actual_is_invalid_arg() {
 }
 
 /// C++: TEST(VmarGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_handle_basic_bad_avail_is_invalid_arg() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4716,7 +4716,7 @@ fn vmar_get_info_info_handle_basic_bad_avail_is_invalid_arg() {
 }
 
 /// C++: TEST(VmarGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_handle_basic_invalid_buffer_pointer_fails() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4737,7 +4737,7 @@ fn vmar_get_info_info_handle_basic_invalid_buffer_pointer_fails() {
 }
 
 /// C++: TEST(VmarGetInfoTest, InfoHandleBasicInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_handle_basic_invalid_handle_fails() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -4748,7 +4748,7 @@ fn vmar_get_info_info_handle_basic_invalid_handle_fails() {
 }
 
 /// C++: TEST(VmarGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_handle_basic_null_actual_and_avail_succeeds() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4767,7 +4767,7 @@ fn vmar_get_info_info_handle_basic_null_actual_and_avail_succeeds() {
 }
 
 /// C++: TEST(VmarGetInfoTest, InfoHandleBasicNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_handle_basic_null_actual_succeeds() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4787,7 +4787,7 @@ fn vmar_get_info_info_handle_basic_null_actual_succeeds() {
 }
 
 /// C++: TEST(VmarGetInfoTest, InfoHandleBasicNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_handle_basic_null_avail_succeeds() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4807,7 +4807,7 @@ fn vmar_get_info_info_handle_basic_null_avail_succeeds() {
 }
 
 /// C++: TEST(VmarGetInfoTest, InfoHandleBasicOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_handle_basic_on_self_succeeds() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4819,7 +4819,7 @@ fn vmar_get_info_info_handle_basic_on_self_succeeds() {
 }
 
 /// C++: TEST(VmarGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_handle_basic_zero_sized_buffer_fails() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4831,7 +4831,7 @@ fn vmar_get_info_info_handle_basic_zero_sized_buffer_fails() {
 
 /// C++: TEST(VmarGetInfoTest, InfoVmarJobHandleIsBadHandle)
 /// Querying VMAR topic with a job handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_vmar_job_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -4843,7 +4843,7 @@ fn vmar_get_info_info_vmar_job_handle_is_bad_handle() {
 
 /// C++: TEST(VmarGetInfoTest, InfoVmarProcessHandleIsBadHandle)
 /// Querying VMAR topic with a process handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_vmar_process_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let proc_h = ctx
@@ -4856,7 +4856,7 @@ fn vmar_get_info_info_vmar_process_handle_is_bad_handle() {
 
 /// C++: TEST(VmarGetInfoTest, InfoVmarThreadHandleIsBadHandle)
 /// Querying VMAR topic with a thread handle → WRONG_TYPE.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_get_info_info_vmar_thread_handle_is_bad_handle() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "t").unwrap();
@@ -4875,7 +4875,7 @@ const TOPIC_VMAR_MAPS: u32 = 36;
 const VMAR_MAPS_ENTRY_SIZE: usize = 104;
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsBadActualIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_bad_actual_is_invalid_arg() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4897,7 +4897,7 @@ fn vmar_maps_get_info_info_vmar_maps_bad_actual_is_invalid_arg() {
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsBadAvailIsInvalidArg)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_bad_avail_is_invalid_arg() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4919,7 +4919,7 @@ fn vmar_maps_get_info_info_vmar_maps_bad_avail_is_invalid_arg() {
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsInvalidBufferPointerFails)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_invalid_buffer_pointer_fails() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4940,7 +4940,7 @@ fn vmar_maps_get_info_info_vmar_maps_invalid_buffer_pointer_fails() {
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsInvalidHandleFails)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_invalid_handle_fails() {
     let ctx = TestContext::new();
     let mut buf = vec![0u8; 16 * VMAR_MAPS_ENTRY_SIZE];
@@ -4951,7 +4951,7 @@ fn vmar_maps_get_info_info_vmar_maps_invalid_handle_fails() {
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsNullActualAndAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_null_actual_and_avail_succeeds() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4971,7 +4971,7 @@ fn vmar_maps_get_info_info_vmar_maps_null_actual_and_avail_succeeds() {
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsNullActualSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_null_actual_succeeds() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -4992,7 +4992,7 @@ fn vmar_maps_get_info_info_vmar_maps_null_actual_succeeds() {
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsNullAvailSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_null_avail_succeeds() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -5013,7 +5013,7 @@ fn vmar_maps_get_info_info_vmar_maps_null_avail_succeeds() {
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsOnSelfSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_on_self_succeeds() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -5026,7 +5026,7 @@ fn vmar_maps_get_info_info_vmar_maps_on_self_succeeds() {
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsProcessDestroyedFails)
 /// Query VMAR_MAPS on a VMAR whose process has been killed.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_process_destroyed_fails() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -5047,7 +5047,7 @@ fn vmar_maps_get_info_info_vmar_maps_process_destroyed_fails() {
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsRequiresInspectRights)
 /// VMAR_MAPS without INSPECT right → ACCESS_DENIED.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_requires_inspect_rights() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -5059,7 +5059,7 @@ fn vmar_maps_get_info_info_vmar_maps_requires_inspect_rights() {
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsSmokeTest)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_smoke_test() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -5071,7 +5071,7 @@ fn vmar_maps_get_info_info_vmar_maps_smoke_test() {
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsUnstartedSucceeds)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_unstarted_succeeds() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -5084,7 +5084,7 @@ fn vmar_maps_get_info_info_vmar_maps_unstarted_succeeds() {
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsVmarDestroyedFails)
 /// Query VMAR_MAPS on a destroyed VMAR.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_vmar_destroyed_fails() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -5100,7 +5100,7 @@ fn vmar_maps_get_info_info_vmar_maps_vmar_destroyed_fails() {
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsZeroSizedBufferIsOk)
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_maps_get_info_info_vmar_maps_zero_sized_buffer_is_ok() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -5109,4 +5109,245 @@ fn vmar_maps_get_info_info_vmar_maps_zero_sized_buffer_is_ok() {
     let (actual, avail) = get_info(&ctx, vmar_h, TOPIC_VMAR_MAPS, &mut buf).unwrap();
     assert_eq!(actual, 0);
     assert!(avail >= 1);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    info_invalid_handle_fails();
+    info_handle_count();
+    job_info_handle_basic();
+    job_info_handle_basic_invalid_handle();
+    job_info_handle_basic_zero_buffer();
+    job_info_processes();
+    job_info_children();
+    job_info_processes_zero_buffer();
+    process_info_on_self();
+    process_info_zero_buffer();
+    process_info_threads();
+    thread_info_on_self();
+    thread_info_invalid_handle();
+    thread_info_zero_buffer();
+    process_info_handle_basic();
+    process_info_handle_basic_invalid_handle();
+    process_info_handle_basic_zero_buffer();
+    handle_valid_open_succeeds();
+    handle_valid_closed_fails();
+    thread_info_handle_count_on_self();
+    thread_info_handle_count_invalid_handle();
+    thread_info_handle_count_zero_buffer();
+    thread_info_thread_stats_on_self();
+    thread_info_thread_stats_invalid_handle();
+    thread_info_thread_stats_zero_buffer();
+    vmar_info_on_self();
+    vmar_info_invalid_handle();
+    vmar_info_zero_buffer();
+    task_info_runtime_wrong_type();
+    task_info_runtime_invalid_handle();
+    process_info_handle_stats();
+    process_info_handle_table_self();
+    process_info_handle_table_empty();
+    process_info_handle_table_invalid_handle();
+    job_info_processes_invalid_handle();
+    job_info_processes_null_avail();
+    job_info_processes_null_actual();
+    job_info_processes_null_actual_and_avail();
+    job_info_processes_invalid_buffer();
+    job_info_processes_bad_actual();
+    job_info_processes_bad_avail();
+    job_info_children_invalid_handle();
+    job_info_children_zero_buffer();
+    job_info_children_null_avail();
+    job_info_children_null_actual();
+    job_info_children_null_actual_and_avail();
+    job_info_children_invalid_buffer();
+    job_info_children_bad_actual();
+    job_info_children_bad_avail();
+    process_info_invalid_handle();
+    process_info_null_avail();
+    process_info_null_actual();
+    process_info_null_actual_and_avail();
+    process_info_invalid_buffer();
+    process_info_bad_actual();
+    process_info_bad_avail();
+    process_info_threads_invalid_handle();
+    process_info_threads_null_avail();
+    process_info_threads_null_actual();
+    process_info_threads_null_actual_and_avail();
+    process_info_threads_invalid_buffer();
+    process_info_threads_bad_actual();
+    process_info_threads_bad_avail();
+    thread_info_null_avail();
+    thread_info_null_actual();
+    thread_info_null_actual_and_avail();
+    thread_info_invalid_buffer();
+    thread_info_bad_actual();
+    thread_info_bad_avail();
+    vmar_info_null_avail();
+    vmar_info_null_actual();
+    vmar_info_null_actual_and_avail();
+    vmar_info_invalid_buffer();
+    vmar_info_bad_actual();
+    vmar_info_bad_avail();
+    job_info_handle_basic_null_avail();
+    job_info_handle_basic_null_actual();
+    job_info_handle_basic_null_actual_and_avail();
+    job_info_handle_basic_invalid_buffer();
+    job_info_handle_basic_bad_actual();
+    job_info_handle_basic_bad_avail();
+    thread_info_thread_stats_null_avail();
+    thread_info_thread_stats_null_actual();
+    thread_info_thread_stats_null_actual_and_avail();
+    thread_info_thread_stats_invalid_buffer();
+    thread_info_thread_stats_bad_actual();
+    thread_info_thread_stats_bad_avail();
+    process_info_handle_basic_null_avail();
+    process_info_handle_basic_null_actual();
+    process_info_handle_basic_null_actual_and_avail();
+    process_info_handle_basic_invalid_buffer();
+    process_info_handle_basic_bad_actual();
+    process_info_handle_basic_bad_avail();
+    thread_info_handle_basic_null_avail();
+    thread_info_handle_basic_null_actual();
+    thread_info_handle_basic_null_actual_and_avail();
+    thread_info_handle_basic_invalid_buffer();
+    thread_info_handle_basic_bad_actual();
+    thread_info_handle_basic_bad_avail();
+    process_info_handle_table_null_avail();
+    process_info_handle_table_invalid_buffer();
+    process_info_maps_unstarted_succeeds();
+    process_info_maps_smoke_test();
+    process_info_maps_invalid_handle();
+    process_info_vmos_on_self_succeeds();
+    process_info_vmos_smoke_test();
+    process_info_vmos_invalid_handle();
+    thread_info_handle_basic_on_self();
+    thread_info_handle_basic_invalid_handle();
+    thread_info_handle_basic_zero_buffer();
+    job_get_info_info_job_child_jobs_get_child();
+    job_get_info_info_job_children_job_handle_is_bad_handle();
+    job_get_info_info_job_children_partially_unmapped_buffer_is_invalid_args();
+    job_get_info_info_job_children_requires_enumerate_rights();
+    job_get_info_info_job_children_small_buffer_is_ok();
+    job_get_info_info_job_children_thread_handle_is_bad_handle();
+    job_get_info_info_job_processes_get_child();
+    job_get_info_info_job_processes_partially_unmapped_buffer_is_invalid_args();
+    job_get_info_info_job_processes_processb_handle_is_bad_handle();
+    job_get_info_info_job_processes_requires_enumerate_rights();
+    job_get_info_info_job_processes_small_buffer_is_ok();
+    job_get_info_info_job_processes_thread_handle_is_bad_handle();
+    kernel_stats_cpu_stats();
+    kernel_stats_cpu_stats_array_size();
+    kernel_stats_cpu_stats_bad_handle_type();
+    kernel_stats_cpu_stats_invalid_handle();
+    kernel_stats_cpu_stats_monotonic_values();
+    kernel_stats_cpu_stats_null_buffer();
+    kernel_stats_guest_stats_array_size();
+    kernel_stats_kmem_stats();
+    kernel_stats_kmem_stats_bad_handle_type();
+    kernel_stats_kmem_stats_extended();
+    kernel_stats_kmem_stats_extended_bad_handle_type();
+    kernel_stats_kmem_stats_extended_invalid_handle();
+    kernel_stats_kmem_stats_extended_null_buffer();
+    kernel_stats_kmem_stats_extended_small_buffer();
+    kernel_stats_kmem_stats_invalid_handle();
+    kernel_stats_kmem_stats_null_buffer();
+    kernel_stats_kmem_stats_small_buffer();
+    process_get_info_info_process_handle_table();
+    process_get_info_info_process_handle_table_insufficient_rights();
+    process_get_info_info_process_handle_table_null_actual_avail_succeeds();
+    process_get_info_info_process_job_handle_is_bad_handle();
+    process_get_info_info_process_maps_bad_actual_is_invalid_arg();
+    process_get_info_info_process_maps_bad_avail_is_invalid_arg();
+    process_get_info_info_process_maps_invalid_buffer_pointer_fails();
+    process_get_info_info_process_maps_job_handle_is_bad_handle();
+    process_get_info_info_process_maps_null_actual_and_avail_succeeds();
+    process_get_info_info_process_maps_null_actual_succeeds();
+    process_get_info_info_process_maps_null_avail_succeeds();
+    process_get_info_info_process_maps_on_self_fails();
+    process_get_info_info_process_maps_partially_unmapped_buffer_is_invalid_args();
+    process_get_info_info_process_maps_requires_inspect_rights();
+    process_get_info_info_process_maps_small_buffer_is_ok();
+    process_get_info_info_process_maps_smoke_test_v1();
+    process_get_info_info_process_maps_smoke_test_v2();
+    process_get_info_info_process_maps_thread_handle_is_bad_handle();
+    process_get_info_info_process_maps_zero_sized_buffer_is_ok();
+    process_get_info_info_process_thread_handle_is_bad_handle();
+    process_get_info_info_process_threads_zero_sized_buffer_succeeds();
+    process_get_info_info_process_vmos_bad_actual_is_invalid_arg();
+    process_get_info_info_process_vmos_bad_avail_is_invalid_arg();
+    process_get_info_info_process_vmos_invalid_buffer_pointer_fails();
+    process_get_info_info_process_vmos_job_handle_is_bad_handle();
+    process_get_info_info_process_vmos_null_actual_and_avail_succeeds();
+    process_get_info_info_process_vmos_null_actual_succeeds();
+    process_get_info_info_process_vmos_null_avail_succeeds();
+    process_get_info_info_process_vmos_partially_unmapped_buffer_is_invalid_args();
+    process_get_info_info_process_vmos_requires_inspect_rights();
+    process_get_info_info_process_vmos_small_buffer_is_ok();
+    process_get_info_info_process_vmos_smoke_test_v1();
+    process_get_info_info_process_vmos_smoke_test_v2();
+    process_get_info_info_process_vmos_smoke_test_v3();
+    process_get_info_info_process_vmos_thread_handle_is_bad_handle();
+    process_get_info_info_process_vmos_zero_sized_buffer_is_ok();
+    stall_get_info_memory_stall_bad_actual_is_invalid_arg();
+    stall_get_info_memory_stall_bad_avail_is_invalid_arg();
+    stall_get_info_memory_stall_invalid_buffer_pointer_fails();
+    stall_get_info_memory_stall_invalid_handle_fails();
+    stall_get_info_memory_stall_null_actual_and_avail_succeeds();
+    stall_get_info_memory_stall_null_actual_succeeds();
+    stall_get_info_memory_stall_null_avail_succeeds();
+    stall_get_info_memory_stall_smoke_test();
+    stall_get_info_memory_stall_zero_sized_buffer_is_too_small();
+    task_get_info_info_stats_smoke_test();
+    task_get_info_info_stats_smoke_test_v1();
+    task_get_info_info_stats_unstarted_succeeds();
+    task_get_info_info_task_stats_bad_actual_is_invalid_arg();
+    task_get_info_info_task_stats_bad_avail_is_invalid_arg();
+    task_get_info_info_task_stats_invalid_buffer_pointer_fails();
+    task_get_info_info_task_stats_invalid_handle_fails();
+    task_get_info_info_task_stats_job_handle_is_bad_handle();
+    task_get_info_info_task_stats_null_actual_and_avail_succeeds();
+    task_get_info_info_task_stats_null_actual_succeeds();
+    task_get_info_info_task_stats_null_avail_succeeds();
+    task_get_info_info_task_stats_thread_handle_is_bad_handle();
+    task_get_info_info_task_stats_zero_sized_buffer_is_too_small();
+    task_get_info_shared_mem_accounting();
+    thread_get_info_info_handle_count_bad_actual_is_invalid_arg();
+    thread_get_info_info_handle_count_bad_avail_is_invalid_arg();
+    thread_get_info_info_handle_count_invalid_buffer_pointer_fails();
+    thread_get_info_info_handle_count_null_actual_and_avail_succeeds();
+    thread_get_info_info_handle_count_null_actual_succeeds();
+    thread_get_info_info_handle_count_null_avail_succeeds();
+    thread_get_info_info_thread_exception_report_invalid_handle_fails();
+    thread_get_info_info_thread_job_handle_is_bad_handle();
+    thread_get_info_info_thread_process_handle_is_bad_handle();
+    thread_get_info_info_thread_stats_job_handle_is_bad_handle();
+    thread_get_info_info_thread_stats_process_handle_is_bad_handle();
+    thread_get_info_info_thread_stats_runtime();
+    vmar_get_info_info_handle_basic_bad_actual_is_invalid_arg();
+    vmar_get_info_info_handle_basic_bad_avail_is_invalid_arg();
+    vmar_get_info_info_handle_basic_invalid_buffer_pointer_fails();
+    vmar_get_info_info_handle_basic_invalid_handle_fails();
+    vmar_get_info_info_handle_basic_null_actual_and_avail_succeeds();
+    vmar_get_info_info_handle_basic_null_actual_succeeds();
+    vmar_get_info_info_handle_basic_null_avail_succeeds();
+    vmar_get_info_info_handle_basic_on_self_succeeds();
+    vmar_get_info_info_handle_basic_zero_sized_buffer_fails();
+    vmar_get_info_info_vmar_job_handle_is_bad_handle();
+    vmar_get_info_info_vmar_process_handle_is_bad_handle();
+    vmar_get_info_info_vmar_thread_handle_is_bad_handle();
+    vmar_maps_get_info_info_vmar_maps_bad_actual_is_invalid_arg();
+    vmar_maps_get_info_info_vmar_maps_bad_avail_is_invalid_arg();
+    vmar_maps_get_info_info_vmar_maps_invalid_buffer_pointer_fails();
+    vmar_maps_get_info_info_vmar_maps_invalid_handle_fails();
+    vmar_maps_get_info_info_vmar_maps_null_actual_and_avail_succeeds();
+    vmar_maps_get_info_info_vmar_maps_null_actual_succeeds();
+    vmar_maps_get_info_info_vmar_maps_null_avail_succeeds();
+    vmar_maps_get_info_info_vmar_maps_on_self_succeeds();
+    vmar_maps_get_info_info_vmar_maps_process_destroyed_fails();
+    vmar_maps_get_info_info_vmar_maps_requires_inspect_rights();
+    vmar_maps_get_info_info_vmar_maps_smoke_test();
+    vmar_maps_get_info_info_vmar_maps_unstarted_succeeds();
+    vmar_maps_get_info_info_vmar_maps_vmar_destroyed_fails();
+    vmar_maps_get_info_info_vmar_maps_zero_sized_buffer_is_ok();
 }

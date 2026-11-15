@@ -8,14 +8,14 @@ use zircon_object::ipc::Fifo;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::ZxError;
 
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_create() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4); // 16 elements, 4 bytes each
     assert_ne!(f0.id(), f1.id());
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_write_read() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4);
@@ -34,7 +34,7 @@ fn fifo_write_read() {
     assert_eq!(&buf[8..12], &3u32.to_ne_bytes());
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_read_empty() {
     let _ctx = TestContext::new();
     let (_f0, f1) = Fifo::create(16, 4);
@@ -44,7 +44,7 @@ fn fifo_read_empty() {
     assert_eq!(err, ZxError::SHOULD_WAIT);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_peer_closed() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4);
@@ -54,7 +54,7 @@ fn fifo_peer_closed() {
     assert_eq!(err, ZxError::PEER_CLOSED);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_elem_size_mismatch() {
     let _ctx = TestContext::new();
     let (f0, _f1) = Fifo::create(16, 4);
@@ -64,7 +64,7 @@ fn fifo_elem_size_mismatch() {
     assert_eq!(err, ZxError::OUT_OF_RANGE);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_read_elem_size_mismatch() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4);
@@ -77,7 +77,7 @@ fn fifo_read_elem_size_mismatch() {
     assert_eq!(f1.read(8, &mut buf, 1).unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_writable_signal() {
     let _ctx = TestContext::new();
     let (f0, _f1) = Fifo::create(4, 4); // only 4 elements
@@ -93,7 +93,7 @@ fn fifo_writable_signal() {
     assert!(!f0.signal().contains(Signal::WRITABLE));
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_readable_signal() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4);
@@ -108,7 +108,7 @@ fn fifo_readable_signal() {
     assert!(!f1.signal().contains(Signal::READABLE));
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_peer_closed_signal() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4);
@@ -119,7 +119,7 @@ fn fifo_peer_closed_signal() {
     assert!(!f0.signal().contains(Signal::WRITABLE));
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_read_after_peer_closed() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4);
@@ -138,7 +138,7 @@ fn fifo_read_after_peer_closed() {
     assert_eq!(f1.read(4, &mut buf, 1).unwrap_err(), ZxError::PEER_CLOSED);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn fifo_related_koid() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4);
@@ -155,7 +155,7 @@ fn fifo_related_koid() {
 /// At the object level, Fifo::create does not validate — this is tested
 /// in syscall_fifo.rs (create_zero_size / invalid_parameters).
 /// Here we verify the object still works if count=0 (degenerate case).
-#[test]
+#[cfg_attr(test, test)]
 fn zero_size_count() {
     let _ctx = TestContext::new();
     let (fa, _fb) = Fifo::create(0, 4); // zero count
@@ -172,7 +172,7 @@ fn zero_size_count() {
 /// At the object level, Fifo::create does not validate — this is tested
 /// in syscall_fifo.rs (invalid_parameters).
 /// Here we verify the object API returns an error when elem_size=0.
-#[test]
+#[cfg_attr(test, test)]
 fn invalid_elem_size() {
     let _ctx = TestContext::new();
     let (fa, _fb) = Fifo::create(16, 0); // zero elem_size
@@ -184,7 +184,7 @@ fn invalid_elem_size() {
 
 /// Reading from a FIFO whose peer is closed and buffer is empty
 /// returns PEER_CLOSED immediately.
-#[test]
+#[cfg_attr(test, test)]
 fn peer_closed_read_returns_peer_closed() {
     let _ctx = TestContext::new();
     let (fa, fb) = Fifo::create(16, 4);
@@ -193,4 +193,23 @@ fn peer_closed_read_returns_peer_closed() {
     // No data was written — reading should get PEER_CLOSED
     let mut buf = [0u8; 4];
     assert_eq!(fb.read(4, &mut buf, 1).unwrap_err(), ZxError::PEER_CLOSED);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    fifo_create();
+    fifo_write_read();
+    fifo_read_empty();
+    fifo_peer_closed();
+    fifo_elem_size_mismatch();
+    fifo_read_elem_size_mismatch();
+    fifo_writable_signal();
+    fifo_readable_signal();
+    fifo_peer_closed_signal();
+    fifo_read_after_peer_closed();
+    fifo_related_koid();
+    zero_size_count();
+    invalid_elem_size();
+    peer_closed_read_returns_peer_closed();
 }

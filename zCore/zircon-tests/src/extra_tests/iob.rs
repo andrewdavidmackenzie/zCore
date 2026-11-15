@@ -25,7 +25,7 @@ extern crate alloc;
 
 /// C++: TEST(Iob, BadVmOptions)
 /// Creating an IOB with too many regions should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn bad_vm_options() {
     let _ctx = TestContext::new();
     // IOB_MAX_REGIONS = 64. Try creating with 65 regions.
@@ -40,7 +40,7 @@ fn bad_vm_options() {
 
 /// C++: TEST(Iob, Create)
 /// Basic IOB creation: create a pair and verify endpoints are different.
-#[test]
+#[cfg_attr(test, test)]
 fn create() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -51,7 +51,7 @@ fn create() {
 
 /// C++: TEST(Iob, CreateHuge)
 /// Create an IOB with a large VMO backing.
-#[test]
+#[cfg_attr(test, test)]
 fn create_huge() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(256); // 1 MiB
@@ -63,7 +63,7 @@ fn create_huge() {
 
 /// C++: TEST(Iob, CreateMaxRegions)
 /// Create an IOB with exactly IOB_MAX_REGIONS (64) regions.
-#[test]
+#[cfg_attr(test, test)]
 fn create_max_regions() {
     let _ctx = TestContext::new();
     let mut regions = alloc::vec::Vec::new();
@@ -77,7 +77,7 @@ fn create_max_regions() {
 
 /// C++: TEST(Iob, CreateOutOfRangeAndInvalidArgs)
 /// Creating with 65+ regions fails with OUT_OF_RANGE.
-#[test]
+#[cfg_attr(test, test)]
 fn create_out_of_range_and_invalid_args() {
     let _ctx = TestContext::new();
     let mut regions = alloc::vec::Vec::new();
@@ -93,7 +93,7 @@ fn create_out_of_range_and_invalid_args() {
 
 /// C++: TEST(Iob, CreateWithMediatedWriteRingBufferDisciplineInvalidArgs)
 /// ID allocator discipline on a region — allocate_id on a non-ID region fails.
-#[test]
+#[cfg_attr(test, test)]
 fn create_with_mediated_write_ring_buffer_discipline_invalid_args() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -108,7 +108,7 @@ fn create_with_mediated_write_ring_buffer_discipline_invalid_args() {
 
 /// C++: TEST(Iob, CreateWithMediatedWriteRingBufferDisciplineSucceeds)
 /// ID allocator discipline region — allocate_id succeeds.
-#[test]
+#[cfg_attr(test, test)]
 fn create_with_mediated_write_ring_buffer_discipline_succeeds() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -120,7 +120,7 @@ fn create_with_mediated_write_ring_buffer_discipline_succeeds() {
 
 /// C++: TEST(Iob, GetInfoIob)
 /// Verify IOB endpoint properties: region count, endpoint index.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_iob() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(2 * PAGE_SIZE);
@@ -132,7 +132,7 @@ fn get_info_iob() {
 
 /// C++: TEST(Iob, GetInfoIobRegions)
 /// Access region info (VMO, size, access) by index.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_iob_regions() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = create_iob_pair(0x3000);
@@ -143,7 +143,7 @@ fn get_info_iob_regions() {
 
 /// C++: TEST(Iob, GetInfoIobRegionsEdgeCases)
 /// Out-of-range region index returns OUT_OF_RANGE.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_iob_regions_edge_cases() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
@@ -153,7 +153,7 @@ fn get_info_iob_regions_edge_cases() {
 
 /// C++: TEST(Iob, GetInfoProcessMaps)
 /// IOB regions are VMO-backed; verify VMO IDs are non-zero.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_process_maps() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -166,7 +166,7 @@ fn get_info_process_maps() {
 
 /// C++: TEST(Iob, GetInfoProcessVmos)
 /// Both endpoints reference the same backing VMO for each region.
-#[test]
+#[cfg_attr(test, test)]
 fn get_info_process_vmos() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -181,7 +181,7 @@ fn get_info_process_vmos() {
 
 /// C++: TEST(Iob, GetSetNames)
 /// Set and get the name of an IOB endpoint.
-#[test]
+#[cfg_attr(test, test)]
 fn get_set_names() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -193,7 +193,7 @@ fn get_set_names() {
 
 /// C++: TEST(Iob, GetSetNamesEdgeCases)
 /// Empty name and overwriting names.
-#[test]
+#[cfg_attr(test, test)]
 fn get_set_names_edge_cases() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
@@ -205,7 +205,7 @@ fn get_set_names_edge_cases() {
 
 /// C++: TEST(Iob, HandleBasicInfoAndRights)
 /// IOB has a valid KOID and type name.
-#[test]
+#[cfg_attr(test, test)]
 fn handle_basic_info_and_rights() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -217,7 +217,7 @@ fn handle_basic_info_and_rights() {
 
 /// C++: TEST(Iob, IdAllocatorMediatedAccess)
 /// Allocate multiple IDs from an ID allocator region.
-#[test]
+#[cfg_attr(test, test)]
 fn id_allocator_mediated_access() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -233,7 +233,7 @@ fn id_allocator_mediated_access() {
 
 /// C++: TEST(Iob, IdAllocatorMediatedErrors)
 /// ID allocation on invalid region index fails.
-#[test]
+#[cfg_attr(test, test)]
 fn id_allocator_mediated_errors() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -249,7 +249,7 @@ fn id_allocator_mediated_errors() {
 /// C++: TEST(Iob, IdAllocatorMultipleEndpointsAndZeroBlob)
 /// Both endpoints can allocate IDs from the same shared region.
 /// Empty blob (zero-length) is valid.
-#[test]
+#[cfg_attr(test, test)]
 fn id_allocator_multiple_endpoints_and_zero_blob() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -262,7 +262,7 @@ fn id_allocator_multiple_endpoints_and_zero_blob() {
 
 /// C++: TEST(Iob, IobWriteChecksRights)
 /// Access flags on regions control behavior. Verify access field is stored.
-#[test]
+#[cfg_attr(test, test)]
 fn iob_write_checks_rights() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -275,7 +275,7 @@ fn iob_write_checks_rights() {
 
 /// C++: TEST(Iob, IobWriteCorrupt)
 /// Verify that region data can be accessed through the VMO.
-#[test]
+#[cfg_attr(test, test)]
 fn iob_write_corrupt() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
@@ -290,7 +290,7 @@ fn iob_write_corrupt() {
 
 /// C++: TEST(Iob, IobWriteInvalidArgs)
 /// Access a non-existent region index.
-#[test]
+#[cfg_attr(test, test)]
 fn iob_write_invalid_args() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
@@ -300,7 +300,7 @@ fn iob_write_invalid_args() {
 
 /// C++: TEST(Iob, IobWriteMaxMessageSize)
 /// Write max data to region VMO.
-#[test]
+#[cfg_attr(test, test)]
 fn iob_write_max_message_size() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
@@ -315,7 +315,7 @@ fn iob_write_max_message_size() {
 
 /// C++: TEST(Iob, IobWriteMultiThreaded)
 /// Multiple ID allocations don't collide (sequential IDs).
-#[test]
+#[cfg_attr(test, test)]
 fn iob_write_multi_threaded() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -334,7 +334,7 @@ fn iob_write_multi_threaded() {
 
 /// C++: TEST(Iob, IobWriteSuccess)
 /// Write and read through the VMO succeeds.
-#[test]
+#[cfg_attr(test, test)]
 fn iob_write_success() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
@@ -348,7 +348,7 @@ fn iob_write_success() {
 
 /// C++: TEST(Iob, IobWriteUpdatedSignal)
 /// IOB endpoints start with WRITABLE signal.
-#[test]
+#[cfg_attr(test, test)]
 fn iob_write_updated_signal() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -358,7 +358,7 @@ fn iob_write_updated_signal() {
 
 /// C++: TEST(Iob, IobWriteWithFaultSucceeds)
 /// Write to VMO at various offsets within the region.
-#[test]
+#[cfg_attr(test, test)]
 fn iob_write_with_fault_succeeds() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = create_iob_pair(2 * PAGE_SIZE);
@@ -373,7 +373,7 @@ fn iob_write_with_fault_succeeds() {
 
 /// C++: TEST(Iob, IobWriteWithMultipleVectors)
 /// Multiple regions, each with its own VMO, all accessible.
-#[test]
+#[cfg_attr(test, test)]
 fn iob_write_with_multiple_vectors() {
     let _ctx = TestContext::new();
     let vmo0 = VmObject::new_paged(1);
@@ -400,7 +400,7 @@ fn iob_write_with_multiple_vectors() {
 
 /// C++: TEST(Iob, MapWhenPeerClosed)
 /// After peer is dropped, the remaining endpoint sees PEER_CLOSED.
-#[test]
+#[cfg_attr(test, test)]
 fn map_when_peer_closed() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -411,7 +411,7 @@ fn map_when_peer_closed() {
 
 /// C++: TEST(Iob, MappingRights)
 /// Regions with different access flags are stored correctly.
-#[test]
+#[cfg_attr(test, test)]
 fn mapping_rights() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -423,7 +423,7 @@ fn mapping_rights() {
 
 /// C++: TEST(Iob, PartialAndMultipleMappings)
 /// Multiple regions with varying sizes.
-#[test]
+#[cfg_attr(test, test)]
 fn partial_and_multiple_mappings() {
     let _ctx = TestContext::new();
     let vmo0 = VmObject::new_paged(1);
@@ -446,7 +446,7 @@ fn partial_and_multiple_mappings() {
 
 /// C++: TEST(Iob, PeerClosed)
 /// Dropping one endpoint signals PEER_CLOSED on the other.
-#[test]
+#[cfg_attr(test, test)]
 fn peer_closed() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -459,7 +459,7 @@ fn peer_closed() {
 
 /// C++: TEST(Iob, PeerClosedMappedReferences)
 /// After peer is closed, regions are still accessible on the remaining endpoint.
-#[test]
+#[cfg_attr(test, test)]
 fn peer_closed_mapped_references() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -476,7 +476,7 @@ fn peer_closed_mapped_references() {
 
 /// C++: TEST(Iob, RegionInfoSwappedAccess)
 /// Both endpoints see the same region info.
-#[test]
+#[cfg_attr(test, test)]
 fn region_info_swapped_access() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -488,7 +488,7 @@ fn region_info_swapped_access() {
 
 /// C++: TEST(Iob, RegionMap)
 /// Region VMO is mappable — verify it has content size.
-#[test]
+#[cfg_attr(test, test)]
 fn region_map() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
@@ -499,7 +499,7 @@ fn region_map() {
 
 /// C++: TEST(Iob, RoundedSizes)
 /// Region sizes are stored as provided (not rounded).
-#[test]
+#[cfg_attr(test, test)]
 fn rounded_sizes() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -512,7 +512,7 @@ fn rounded_sizes() {
 
 /// C++: TEST(Iob, SharedRegionWithNonRingBufferDiscipline)
 /// IoBufferSharedRegion: create a shared region with a given size.
-#[test]
+#[cfg_attr(test, test)]
 fn shared_region_with_non_ring_buffer_discipline() {
     let _ctx = TestContext::new();
     let sr = IoBufferSharedRegion::create(PAGE_SIZE).unwrap();
@@ -532,7 +532,7 @@ fn shared_region_with_non_ring_buffer_discipline() {
 
 /// C++: TEST(Iob, SignalsAndSignalPeer)
 /// IOB endpoints support user signals.
-#[test]
+#[cfg_attr(test, test)]
 fn signals_and_signal_peer() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -547,7 +547,7 @@ fn signals_and_signal_peer() {
 
 /// C++: TEST(Iob, SymmetricPeerClosedWithMappings)
 /// Drop ep0 — ep1 sees PEER_CLOSED. Drop ep1 — no panic.
-#[test]
+#[cfg_attr(test, test)]
 fn symmetric_peer_closed_with_mappings() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -561,7 +561,7 @@ fn symmetric_peer_closed_with_mappings() {
 
 /// C++: TEST(Iob, VmarMapIobErrors)
 /// Out-of-range region index returns error.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_map_iob_errors() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
@@ -570,7 +570,7 @@ fn vmar_map_iob_errors() {
 
 /// C++: TEST(Iob, VmarMapIobWithFaultBeyondStreamSizeReturnsError)
 /// Writing beyond VMO size should fail.
-#[test]
+#[cfg_attr(test, test)]
 fn vmar_map_iob_with_fault_beyond_stream_size_returns_error() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
@@ -583,7 +583,7 @@ fn vmar_map_iob_with_fault_beyond_stream_size_returns_error() {
 
 /// C++: TEST(Iob, VmoKoid)
 /// Region VMOs have valid KOIDs.
-#[test]
+#[cfg_attr(test, test)]
 fn vmo_koid() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
@@ -596,7 +596,7 @@ fn vmo_koid() {
 
 /// C++: TEST(Iob, WritevZeroLengthAndMultipleIobs)
 /// Create two IOB pairs, verify they're independent.
-#[test]
+#[cfg_attr(test, test)]
 fn writev_zero_length_and_multiple_iobs() {
     let _ctx = TestContext::new();
     let (a0, a1) = create_iob_pair(PAGE_SIZE);
@@ -615,4 +615,51 @@ fn writev_zero_length_and_multiple_iobs() {
     let mut buf = [0u8; 1];
     vb.read(0, &mut buf).unwrap();
     assert_ne!(buf[0], 0xAA);
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    bad_vm_options();
+    create();
+    create_huge();
+    create_max_regions();
+    create_out_of_range_and_invalid_args();
+    create_with_mediated_write_ring_buffer_discipline_invalid_args();
+    create_with_mediated_write_ring_buffer_discipline_succeeds();
+    get_info_iob();
+    get_info_iob_regions();
+    get_info_iob_regions_edge_cases();
+    get_info_process_maps();
+    get_info_process_vmos();
+    get_set_names();
+    get_set_names_edge_cases();
+    handle_basic_info_and_rights();
+    id_allocator_mediated_access();
+    id_allocator_mediated_errors();
+    id_allocator_multiple_endpoints_and_zero_blob();
+    iob_write_checks_rights();
+    iob_write_corrupt();
+    iob_write_invalid_args();
+    iob_write_max_message_size();
+    iob_write_multi_threaded();
+    iob_write_success();
+    iob_write_updated_signal();
+    iob_write_with_fault_succeeds();
+    iob_write_with_multiple_vectors();
+    map_when_peer_closed();
+    mapping_rights();
+    partial_and_multiple_mappings();
+    peer_closed();
+    peer_closed_mapped_references();
+    region_info_swapped_access();
+    region_map();
+    rounded_sizes();
+    shared_region_with_non_ring_buffer_discipline();
+    signals_and_signal_peer();
+    symmetric_peer_closed_with_mappings();
+    vmar_map_iob_errors();
+    vmar_map_iob_with_fault_beyond_stream_size_returns_error();
+    vmo_koid();
+    writev_zero_length_and_multiple_iobs();
 }

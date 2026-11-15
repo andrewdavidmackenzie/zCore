@@ -24,7 +24,7 @@ pub(crate) fn syscall_vmo_create(ctx: &TestContext, size: u64, options: u32) -> 
 /// C++: TEST(VmoTransferDataTestCase, InvalidInputs) — partial
 /// Tests basic validation: non-zero options, non-aligned offsets/lengths,
 /// out-of-range, missing rights, bad handle.
-#[test]
+#[cfg_attr(test, test)]
 fn invalid_inputs() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -99,4 +99,10 @@ fn invalid_inputs() {
         Err(zircon_object::ZxError::BAD_HANDLE),
         "bad src handle should fail"
     );
+}
+
+/// Run all tests in this module.
+#[cfg(feature = "baremetal-test")]
+pub fn run_all() {
+    invalid_inputs();
 }
