@@ -28,7 +28,7 @@ async fn bytes_only_success_case() {
     let echo = EchoServer::start(&ctx.proc);
 
     // Let server start
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -79,7 +79,7 @@ async fn handles_success_case() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -119,7 +119,7 @@ async fn reduced_rights_success_case() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -455,7 +455,7 @@ async fn with_duplicate_op_handle_succeeds() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -756,7 +756,7 @@ async fn handles_info_validation() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )

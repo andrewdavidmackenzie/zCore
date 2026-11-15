@@ -452,7 +452,7 @@ async fn call_few_large_iovecs() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -491,7 +491,7 @@ async fn call_many_small_iovecs() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -530,7 +530,7 @@ async fn call_with_handle() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -567,7 +567,7 @@ async fn call_etc_with_handle() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )

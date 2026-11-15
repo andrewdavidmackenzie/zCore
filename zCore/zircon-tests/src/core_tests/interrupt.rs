@@ -509,7 +509,7 @@ async fn wait_thread_functions_after_suspend_resume() {
     interrupt.trigger(42).unwrap();
 
     // Yield to let spawned task complete.
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     let ts = result.load(core::sync::atomic::Ordering::Acquire);
     assert_eq!(ts, 42);
 }

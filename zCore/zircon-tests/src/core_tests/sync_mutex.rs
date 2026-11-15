@@ -61,7 +61,7 @@ async fn mutexes() {
                 hal_impl::timer::timer_now() < deadline,
                 "mutex contender thread timed out"
             );
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 
@@ -75,7 +75,7 @@ async fn mutexes() {
             if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 

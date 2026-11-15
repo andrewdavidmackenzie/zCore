@@ -59,7 +59,7 @@ async fn single_wait() {
     let t = CompletionTestThread::start(&proc, &completion);
 
     // C++: WaitForAllBlockedOnFutex(threads)
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -90,7 +90,7 @@ async fn multi_wait() {
         .map(|_| CompletionTestThread::start(&proc, &completion))
         .collect();
 
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -336,7 +336,7 @@ async fn signal_requeue() {
         .map(|_| CompletionTestThread::start(&proc, &completion))
         .collect();
 
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -387,7 +387,7 @@ async fn spurious_wakeup_handled() {
 
     let t = CompletionTestThread::start(&proc, &completion);
 
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )

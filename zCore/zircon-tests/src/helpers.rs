@@ -60,7 +60,7 @@ pub fn test_loop_thread_fn(
                 break;
             }
             // Simulate brief "execution" then yield back to the scheduler.
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
             thread.put_context(ctx);
         }
         // CurrentThread drop calls terminate() → state becomes Dead,
@@ -225,7 +225,7 @@ impl FutexTestThread {
                 "FutexTestThread: timed out waiting for thread to wake"
             );
             // Yield to let the waiter thread make progress
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 
@@ -252,7 +252,7 @@ impl FutexTestThread {
                 // the thread's task yet.
                 break;
             }
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 }
@@ -279,7 +279,7 @@ pub async fn assert_woke_thread_count(threads: &[FutexTestThread], target: usize
             target,
             count_woken(threads)
         );
-        hal_impl::thread::preempt_yield().await;
+        hal_impl::thread::yield_now().await;
     }
     assert_eq!(count_woken(threads), target);
 
@@ -499,7 +499,7 @@ impl CompletionTestThread {
                 hal_impl::timer::timer_now() < deadline,
                 "CompletionTestThread: timed out waiting for thread to wake"
             );
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 
@@ -515,7 +515,7 @@ impl CompletionTestThread {
             if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 }
@@ -671,7 +671,7 @@ pub fn mutex_contender_thread_fn(
             contender.counter.fetch_add(1, Ordering::SeqCst);
             contender.mutex.unlock();
             // Small yield to let other threads contend
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
 
         contender
@@ -844,7 +844,7 @@ impl EchoServer {
             if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 }
@@ -1594,7 +1594,7 @@ impl PagerProcessTestThread {
             if st >= PAGER_STATE_READ_RETURNED {
                 return;
             }
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
         panic!("PagerProcessTestThread: timed out waiting for thread to enter BlockedPager");
     }
@@ -1610,7 +1610,7 @@ impl PagerProcessTestThread {
             if self.thread.state() == ThreadState::Dead {
                 return;
             }
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
         panic!("PagerProcessTestThread: timed out waiting for thread to terminate");
     }
@@ -1711,7 +1711,7 @@ impl ExceptionTestThread {
             if st == ThreadState::Dying || st == ThreadState::Dead {
                 return;
             }
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
         panic!("ExceptionTestThread: timed out waiting for BlockedException state");
     }
@@ -1722,7 +1722,7 @@ impl ExceptionTestThread {
             if self.thread.state() == ThreadState::Dead {
                 return;
             }
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
         panic!("ExceptionTestThread: timed out waiting for thread to terminate");
     }

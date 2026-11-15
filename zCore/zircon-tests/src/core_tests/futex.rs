@@ -166,7 +166,7 @@ async fn wakeup() {
     let t = FutexTestThread::start(&proc, &futex, 1);
 
     // Let the thread reach the blocked state
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -206,7 +206,7 @@ async fn wakeup_limit() {
         .collect();
 
     // Let all waiters block
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -258,7 +258,7 @@ async fn requeue() {
         .collect();
 
     // Let all waiters block
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -368,7 +368,7 @@ async fn requeue_unqueued_on_timeout() {
     let t0 = FutexTestThread::start(&proc, &futex1, 100);
 
     // Let thread 0 block
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -385,7 +385,7 @@ async fn requeue_unqueued_on_timeout() {
     let t1 = FutexTestThread::start(&proc, &futex2, 200);
 
     // Let thread 1 block
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -436,7 +436,7 @@ async fn thread_suspended() {
     let t = FutexTestThread::start(&proc, &futex, 1);
 
     // Let the thread block on the futex.
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -494,7 +494,7 @@ async fn event_signaling() {
         .collect();
 
     // Let all threads block
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -539,7 +539,7 @@ async fn wait_exit_race() {
         let t = FutexTestThread::start(&proc, &futex, 0);
 
         // Small yield to let thread start
-        hal_impl::thread::preempt_yield().await;
+        hal_impl::thread::yield_now().await;
 
         // Wake the thread and immediately shut it down — race condition
         futex.wake(1);
@@ -577,7 +577,7 @@ async fn requeue_cycle_stress_test() {
         .collect();
 
     // Let threads block
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -589,7 +589,7 @@ async fn requeue_cycle_stress_test() {
         let f2 = (i + 1) % futexes.len();
         let _ = futexes[f1].requeue(0, 0, 100, &futexes[f2], None, false);
         if i % 5 == 0 {
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 
@@ -627,7 +627,7 @@ async fn requeue_single_owner() {
         .map(|_| FutexTestThread::start(&proc, &futex1, 100))
         .collect();
 
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -674,7 +674,7 @@ async fn wait_invalid_owner() {
     let waiter = FutexTestThread::start(&proc, &futex, 42);
 
     // Let waiter block on the futex
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -724,7 +724,7 @@ async fn requeue_invalid_owner() {
     let waiter_requeue = FutexTestThread::start(&proc, &futex2, 200);
 
     // Let both block
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )

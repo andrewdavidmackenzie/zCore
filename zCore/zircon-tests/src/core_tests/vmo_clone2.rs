@@ -1113,18 +1113,18 @@ async fn drop_children_in_parallel() {
         executor::spawn(async move {
             ready_clone.store(false, core::sync::atomic::Ordering::SeqCst);
             while !ready_clone.load(core::sync::atomic::Ordering::SeqCst) {
-                hal_impl::thread::preempt_yield().await;
+                hal_impl::thread::yield_now().await;
             }
             drop(child_move);
             done_clone.store(true, core::sync::atomic::Ordering::Release);
         });
         while ready.load(core::sync::atomic::Ordering::SeqCst) {
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
         ready.store(true, core::sync::atomic::Ordering::SeqCst);
         drop(vmo);
         while !done.load(core::sync::atomic::Ordering::Acquire) {
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 }
@@ -1168,7 +1168,7 @@ async fn drop_parent_committed_bytes() {
         executor::spawn(async move {
             ready_clone.store(false, core::sync::atomic::Ordering::SeqCst);
             while !ready_clone.load(core::sync::atomic::Ordering::SeqCst) {
-                hal_impl::thread::preempt_yield().await;
+                hal_impl::thread::yield_now().await;
             }
             let committed = vmo_populated_bytes(&child_clone);
             assert!(
@@ -1179,13 +1179,13 @@ async fn drop_parent_committed_bytes() {
             done_clone.store(true, core::sync::atomic::Ordering::Release);
         });
         while ready.load(core::sync::atomic::Ordering::SeqCst) {
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
         ready.store(true, core::sync::atomic::Ordering::SeqCst);
         // Drop the parent.
         drop(vmo);
         while !done.load(core::sync::atomic::Ordering::Acquire) {
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
 
         // Check that we don't change the child.

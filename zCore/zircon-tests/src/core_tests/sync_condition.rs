@@ -62,7 +62,7 @@ async fn condition_test() {
     }
 
     // Wait for threads to block
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(100),
     )
@@ -79,7 +79,7 @@ async fn condition_test() {
             hal_impl::timer::timer_now() < deadline,
             "condvar threads timed out"
         );
-        hal_impl::thread::preempt_yield().await;
+        hal_impl::thread::yield_now().await;
     }
     assert_eq!(woken_counter.load(Ordering::SeqCst), 3);
 
@@ -93,7 +93,7 @@ async fn condition_test() {
             if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
-            hal_impl::thread::preempt_yield().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 }

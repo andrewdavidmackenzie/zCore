@@ -901,7 +901,7 @@ async fn concurrent_reads_consume_unique_elements() {
                     Err(_) => {
                         // Other reader consumed it, or channel is empty.
                         // Yield and retry.
-                        hal_impl::thread::preempt_yield().await;
+                        hal_impl::thread::yield_now().await;
                     }
                 }
             }
@@ -922,7 +922,7 @@ async fn concurrent_reads_consume_unique_elements() {
         if hal_impl::timer::timer_now() >= deadline {
             panic!("readers didn't finish in time");
         }
-        hal_impl::thread::preempt_yield().await;
+        hal_impl::thread::yield_now().await;
     }
 
     // Verify: all 2000 values consumed, no duplicates, monotonic per reader.
@@ -1038,7 +1038,7 @@ async fn wait_many_is_signaled_on_any_element_write() {
         if hal_impl::timer::timer_now() >= deadline {
             panic!("worker didn't finish");
         }
-        hal_impl::thread::preempt_yield().await;
+        hal_impl::thread::yield_now().await;
     }
 
     assert_eq!(state.bytes_from_1.load(Ordering::Acquire), 10);
@@ -1059,7 +1059,7 @@ async fn call_etc_suspended_thread_resumes_and_succeeds() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -1092,7 +1092,7 @@ async fn call_pending_transactions_use_different_ids() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
@@ -1183,7 +1183,7 @@ async fn call_suspended_thread_resumes_and_succeeds() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )

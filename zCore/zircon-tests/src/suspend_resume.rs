@@ -28,8 +28,8 @@ async fn suspend_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    hal_impl::thread::preempt_yield().await;
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend the thread.
     thread.suspend();
@@ -60,8 +60,8 @@ async fn resume_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    hal_impl::thread::preempt_yield().await;
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend.
     thread.suspend();
@@ -98,8 +98,8 @@ async fn suspend_multiple_threads() {
 
     t1.start(helpers::test_loop_thread_fn).unwrap();
     t2.start(helpers::test_loop_thread_fn).unwrap();
-    hal_impl::thread::preempt_yield().await;
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend both.
     t1.suspend();
@@ -133,8 +133,8 @@ async fn suspend_token_drop() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    hal_impl::thread::preempt_yield().await;
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Create a SuspendToken -- this calls thread.suspend().
     let task: Arc<dyn Task> = thread.clone();
@@ -172,8 +172,8 @@ async fn multiple_suspend_tokens() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    hal_impl::thread::preempt_yield().await;
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     let task: Arc<dyn Task> = thread.clone();
     let token1 = SuspendToken::create(&task);
@@ -187,7 +187,7 @@ async fn multiple_suspend_tokens() {
     // the second token is still alive.
     drop(token1);
     // Yield to let any pending state changes propagate.
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     // Thread should still be suspended (second token holds it).
     assert!(
         thread.signal().contains(Signal::THREAD_SUSPENDED),
@@ -218,8 +218,8 @@ async fn kill_while_suspended() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    hal_impl::thread::preempt_yield().await;
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend the thread.
     thread.suspend();
@@ -247,8 +247,8 @@ async fn suspended_thread_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    hal_impl::thread::preempt_yield().await;
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -285,8 +285,8 @@ async fn write_state_while_suspended() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    hal_impl::thread::preempt_yield().await;
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend the thread.
     thread.suspend();
@@ -326,8 +326,8 @@ async fn suspend_process() {
 
     t1.start(helpers::test_loop_thread_fn).unwrap();
     t2.start(helpers::test_loop_thread_fn).unwrap();
-    hal_impl::thread::preempt_yield().await;
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend the entire process.
     use zircon_object::task::Task;

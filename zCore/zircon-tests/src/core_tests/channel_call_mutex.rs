@@ -36,7 +36,7 @@ async fn mutex_held_across_call_chain() {
         .unwrap();
 
     // Wait for the echo server to process and echo back.
-    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::yield_now().await;
     hal_impl::thread::sleep_until(
         hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
     )
