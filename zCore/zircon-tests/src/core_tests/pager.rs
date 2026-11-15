@@ -10682,7 +10682,7 @@ async fn pager_process_kill_after_suspend_vmo_read() {
     // Suspend the thread before killing.
     ptt.thread.suspend();
     // Yield to let suspension take effect.
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Kill the process — should terminate even though suspended.
     ptt.proc.kill();
@@ -10722,7 +10722,7 @@ async fn pager_process_kill_after_suspend_page_fault() {
     );
 
     ptt.thread.suspend();
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
 
     ptt.proc.kill();
     ptt.wait_for_termination().await;
@@ -10760,7 +10760,7 @@ async fn pager_process_kill_after_suspend_usercopy() {
     );
 
     ptt.thread.suspend();
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
 
     ptt.proc.kill();
     ptt.wait_for_termination().await;
@@ -10798,7 +10798,7 @@ async fn pager_process_kill_after_suspend_usercopy_capture() {
     );
 
     ptt.thread.suspend();
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
 
     ptt.proc.kill();
     ptt.wait_for_termination().await;

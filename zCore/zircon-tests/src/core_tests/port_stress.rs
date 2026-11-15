@@ -30,8 +30,8 @@ fn try_dequeue(port: &Arc<Port>) -> Option<PortPacket> {
     if port.signal().contains(Signal::READABLE) {
         // Race: another thread might drain the packet between our check
         // and the dequeue. Use a short timeout via `block_on`.
-        use crate::test_runtime::timeout;
-        crate::test_runtime::block_on(timeout(Duration::from_millis(1), port.wait())).ok()
+        use async_std::future::timeout;
+        async_std::task::block_on(timeout(Duration::from_millis(1), port.wait())).ok()
     } else {
         None
     }
@@ -155,7 +155,7 @@ fn cancel_key_during_match_race() {
             wait_ready.wait();
 
             // Wait for a packet.
-            let pkt = crate::test_runtime::block_on(port.wait());
+            let pkt = async_std::task::block_on(port.wait());
             let repr = PortPacketRepr::from(&pkt);
             if repr.key == rk {
                 wait_packets.fetch_add(1, Ordering::SeqCst);
@@ -365,7 +365,7 @@ fn channel_call_wait_queue_panic_repro() {
         let port_b = port.clone();
         let timed_out_b = thread_a_timed_out.clone();
         let t_b = thread::spawn(move || {
-            let _pkt = crate::test_runtime::block_on(port_b.wait());
+            let _pkt = async_std::task::block_on(port_b.wait());
             while !timed_out_b.load(Ordering::SeqCst) {
                 thread::yield_now();
             }
@@ -543,7 +543,7 @@ fn signal_close_wait() {
     for _ix in 0..NUM_DRAINERS {
         let port_clone = port.clone();
         drainers.push(thread::spawn(move || loop {
-            let pkt = crate::test_runtime::block_on(port_clone.wait());
+            let pkt = async_std::task::block_on(port_clone.wait());
             let repr = PortPacketRepr::from(&pkt);
             if repr.data == PayloadRepr::User([0; 32]) {
                 break;

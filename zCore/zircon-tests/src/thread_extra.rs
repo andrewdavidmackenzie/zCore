@@ -93,7 +93,7 @@ async fn thread_start_and_terminate() {
     thread.start(helpers::test_loop_thread_fn).unwrap();
 
     // Give the thread a chance to run.
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
     assert!(
         thread.signal().contains(Signal::THREAD_RUNNING),
         "thread should be running"
@@ -123,8 +123,8 @@ async fn thread_suspend_resume() {
     thread.start(helpers::test_loop_thread_fn).unwrap();
 
     // Give the thread time to enter the loop and put_context.
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Suspend the thread.
     thread.suspend();
@@ -183,8 +183,8 @@ async fn thread_read_write_state() {
     thread.start(helpers::test_loop_thread_fn).unwrap();
 
     // Give the thread time to enter the loop.
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Suspend to enable read_state/write_state.
     thread.suspend();
@@ -242,7 +242,7 @@ async fn thread_create_and_start() {
     // Start the thread using the test loop.
     thread.start(helpers::test_loop_thread_fn).unwrap();
 
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
     assert!(
         thread.signal().contains(Signal::THREAD_RUNNING),
         "thread should be running after start"
@@ -323,7 +323,7 @@ async fn thread_process_wait_many_threads() {
     t2.start(helpers::test_loop_thread_fn).unwrap();
     t3.start(helpers::test_loop_thread_fn).unwrap();
 
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
 
     // All should be running.
     assert!(t1.signal().contains(Signal::THREAD_RUNNING));
@@ -433,8 +433,8 @@ async fn thread_read_state_suspended() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -465,8 +465,8 @@ async fn thread_write_state_suspended() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -501,8 +501,8 @@ async fn thread_suspend_multiple() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Suspend twice.
     thread.suspend();
@@ -549,8 +549,8 @@ async fn thread_suspend_self() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Suspend the running thread.
     thread.suspend();
@@ -584,8 +584,8 @@ async fn thread_kill_suspended() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -640,7 +640,7 @@ async fn thread_start_with_entry() {
         .start_with_entry(0x1000, 0x8000, 42, 99, helpers::test_loop_thread_fn)
         .unwrap();
 
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
     assert!(
         thread.signal().contains(Signal::THREAD_RUNNING),
         "thread should be running after start_with_entry"
@@ -667,7 +667,7 @@ async fn thread_double_start_fails() {
 
     // First start should succeed.
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
     assert_eq!(thread.state(), ThreadState::Running);
 
     // Second start — zCore currently allows this (known gap).
@@ -721,7 +721,7 @@ async fn thread_wait_for_termination() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
 
     thread.kill();
 
@@ -806,8 +806,8 @@ async fn thread_suspend_then_resume() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     assert!(thread.signal().contains(Signal::THREAD_RUNNING));
 
@@ -842,8 +842,8 @@ async fn thread_suspend_multiple_times() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Suspend 3 times
     thread.suspend();
@@ -1089,8 +1089,8 @@ async fn thread_state_transitions() {
 
     // 2. New -> Running
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
     assert_eq!(thread.state(), ThreadState::Running);
 
     // 3. Running -> Suspended
@@ -1168,8 +1168,8 @@ async fn thread_kill_in_suspend() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Suspend, then kill
     thread.suspend();
@@ -1196,8 +1196,8 @@ async fn thread_exit_while_suspended() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Suspend
     thread.suspend();
@@ -1290,8 +1290,8 @@ async fn thread_start_suspended_thread() {
     // Start the thread — it should become suspended because
     // suspend_count > 0.
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Thread should be suspended (not running).
     as_kobject(&thread)
@@ -1367,8 +1367,8 @@ async fn thread_close_suspend_token() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Suspend
     thread.suspend();
@@ -1400,8 +1400,8 @@ async fn thread_suspend_token_lifetime() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Two "tokens" (suspend calls)
     thread.suspend();
@@ -1439,8 +1439,8 @@ async fn thread_write_state_modifies_execution() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -1494,8 +1494,8 @@ async fn thread_read_state_float_point() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -1529,8 +1529,8 @@ async fn thread_read_state_vector() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::preempt_yield().await;
 
     thread.suspend();
     as_kobject(&thread)

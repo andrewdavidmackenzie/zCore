@@ -328,8 +328,11 @@ async fn untriggered_signal_interrupt_wait() {
     //    This exercises the blocking wait → trigger → wake path.
     let int_clone = interrupt.clone();
     let ts2: i64 = 67890;
-    crate::test_runtime::spawn(async move {
-        crate::test_runtime::sleep(core::time::Duration::from_millis(10)).await;
+    executor::spawn(async move {
+        hal_impl::thread::sleep_until(
+            hal_impl::timer::timer_now() + core::time::Duration::from_millis(10),
+        )
+        .await;
         int_clone.trigger(ts2).unwrap();
     });
     let result2 = interrupt.wait().await.unwrap();
@@ -489,15 +492,25 @@ async fn wait_thread_functions_after_suspend_resume() {
 
     // Basic trigger → wait cycle (simplified from C++ test).
     let int_clone = interrupt.clone();
-    let handle = crate::test_runtime::spawn(async move { int_clone.wait().await.unwrap() });
+    let result = alloc::sync::Arc::new(core::sync::atomic::AtomicI64::new(0));
+    let result_clone = result.clone();
+    executor::spawn(async move {
+        let ts = int_clone.wait().await.unwrap();
+        result_clone.store(ts, core::sync::atomic::Ordering::Release);
+    });
 
     // Small delay to let the wait task block.
-    crate::test_runtime::sleep(core::time::Duration::from_millis(10)).await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(10),
+    )
+    .await;
 
     // Trigger wakes the waiter.
     interrupt.trigger(42).unwrap();
 
-    let ts = handle.await;
+    // Yield to let spawned task complete.
+    hal_impl::thread::preempt_yield().await;
+    let ts = result.load(core::sync::atomic::Ordering::Acquire);
     assert_eq!(ts, 42);
 }
 

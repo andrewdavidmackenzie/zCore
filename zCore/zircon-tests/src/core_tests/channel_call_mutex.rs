@@ -36,8 +36,11 @@ async fn mutex_held_across_call_chain() {
         .unwrap();
 
     // Wait for the echo server to process and echo back.
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // Read the echoed response.
     let response = echo.client.read().unwrap();

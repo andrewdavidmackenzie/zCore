@@ -452,8 +452,11 @@ async fn call_few_large_iovecs() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: 3 iovecs of 8000 bytes = 24000 bytes total
     // At kernel-object level, simulate as a single 24000-byte message
@@ -488,8 +491,11 @@ async fn call_many_small_iovecs() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     let total = 1000 * 10;
     let mut data = vec![0u8; total];
@@ -524,8 +530,11 @@ async fn call_with_handle() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     let event = Event::new();
     let handle = Handle::new(event, zircon_object::object::Rights::DEFAULT_EVENT);
@@ -558,8 +567,11 @@ async fn call_etc_with_handle() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     let event = Event::new();
     let handle = Handle::new(event, zircon_object::object::Rights::DEFAULT_EVENT);

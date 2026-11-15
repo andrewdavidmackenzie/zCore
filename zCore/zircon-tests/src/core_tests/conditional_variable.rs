@@ -59,8 +59,11 @@ async fn broadcast_signal_thread_wait() {
         threads.push((thread, state));
     }
 
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(100)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(100),
+    )
+    .await;
 
     predicate.store(true, Ordering::Release);
     cond.broadcast();
@@ -68,7 +71,7 @@ async fn broadcast_signal_thread_wait() {
     let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     while woken_counter.load(Ordering::SeqCst) < 3 {
         assert!(hal_impl::timer::timer_now() < deadline, "timed out");
-        crate::test_runtime::yield_now().await;
+        hal_impl::thread::preempt_yield().await;
     }
     assert_eq!(woken_counter.load(Ordering::SeqCst), 3);
 
@@ -81,7 +84,7 @@ async fn broadcast_signal_thread_wait() {
             if hal_impl::timer::timer_now() >= dl {
                 break;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 }
@@ -127,8 +130,11 @@ async fn signal_thread_wait() {
         threads.push((thread, state));
     }
 
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(100)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(100),
+    )
+    .await;
 
     // Signal one at a time
     predicate.store(true, Ordering::Release);
@@ -141,7 +147,7 @@ async fn signal_thread_wait() {
                 "timed out waiting for thread {}",
                 i
             );
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
         // The signaled thread sets predicate=false and increments woken.
         // For the next iteration, we set it back to true.
@@ -158,7 +164,7 @@ async fn signal_thread_wait() {
             if hal_impl::timer::timer_now() >= dl {
                 break;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 }

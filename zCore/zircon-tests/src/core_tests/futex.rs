@@ -166,8 +166,11 @@ async fn wakeup() {
     let t = FutexTestThread::start(&proc, &futex, 1);
 
     // Let the thread reach the blocked state
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: ASSERT_OK(zx_futex_wake(&futex, kThreadWakeAllCount));
     futex.wake(usize::MAX);
@@ -203,8 +206,11 @@ async fn wakeup_limit() {
         .collect();
 
     // Let all waiters block
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: ASSERT_OK(zx_futex_wake(&futex, kWakeCount=2));
     futex.wake(2);
@@ -252,8 +258,11 @@ async fn requeue() {
         .collect();
 
     // Let all waiters block
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: ASSERT_OK(zx_futex_requeue(&futex_value1, 3, 100, &futex_value2, 2, INVALID))
     futex1
@@ -359,8 +368,11 @@ async fn requeue_unqueued_on_timeout() {
     let t0 = FutexTestThread::start(&proc, &futex1, 100);
 
     // Let thread 0 block
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: zx_futex_requeue(&futex_value1, 0, 100, &futex_value2, MAX, INVALID)
     // Requeue thread 0 from futex1 to futex2 (wake 0, requeue all)
@@ -373,8 +385,11 @@ async fn requeue_unqueued_on_timeout() {
     let t1 = FutexTestThread::start(&proc, &futex2, 200);
 
     // Let thread 1 block
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // Both threads should now be waiting on futex2.
     // C++: In the C++ test, thread 0 eventually times out. Since
@@ -421,8 +436,11 @@ async fn thread_suspended() {
     let t = FutexTestThread::start(&proc, &futex, 1);
 
     // Let the thread block on the futex.
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // The thread should NOT have returned from its wait yet.
     assert!(
@@ -435,7 +453,10 @@ async fn thread_suspended() {
     // restart mechanism which only exists in bare-metal mode.
     // We verify the thread remains blocked during the simulated
     // "suspend" period.
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
     assert!(
         !t.has_wait_returned(),
         "thread should still be blocked during 'suspend' period"
@@ -473,8 +494,11 @@ async fn event_signaling() {
         .collect();
 
     // Let all threads block
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: event.Signal() → signaled_ = 1; zx_futex_wake(&signaled_, MAX)
     signaled.store(1, Ordering::Release);
@@ -515,7 +539,7 @@ async fn wait_exit_race() {
         let t = FutexTestThread::start(&proc, &futex, 0);
 
         // Small yield to let thread start
-        crate::test_runtime::yield_now().await;
+        hal_impl::thread::preempt_yield().await;
 
         // Wake the thread and immediately shut it down — race condition
         futex.wake(1);
@@ -553,8 +577,11 @@ async fn requeue_cycle_stress_test() {
         .collect();
 
     // Let threads block
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: Main loop — requeue between futexes
     for i in 0..20 {
@@ -562,7 +589,7 @@ async fn requeue_cycle_stress_test() {
         let f2 = (i + 1) % futexes.len();
         let _ = futexes[f1].requeue(0, 0, 100, &futexes[f2], None, false);
         if i % 5 == 0 {
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 
@@ -600,8 +627,11 @@ async fn requeue_single_owner() {
         .map(|_| FutexTestThread::start(&proc, &futex1, 100))
         .collect();
 
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: zx_futex_requeue_single_owner(&futex1, 100, &futex2, 2, INVALID)
     // Equivalent: requeue wake=1, requeue_count=2
@@ -644,8 +674,11 @@ async fn wait_invalid_owner() {
     let waiter = FutexTestThread::start(&proc, &futex, 42);
 
     // Let waiter block on the futex
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: EXPECT_EQ(zx_futex_wait(&futex, 42, waiter.thread().get(), INFINITE),
     //               ZX_ERR_INVALID_ARGS);
@@ -691,8 +724,11 @@ async fn requeue_invalid_owner() {
     let waiter_requeue = FutexTestThread::start(&proc, &futex2, 200);
 
     // Let both block
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: EXPECT_EQ(zx_futex_requeue(&futex1, 1, 100, &futex2, 1,
     //               waiter_wake.thread().get()), ZX_ERR_INVALID_ARGS);

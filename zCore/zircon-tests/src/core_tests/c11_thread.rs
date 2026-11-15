@@ -59,7 +59,7 @@ async fn thread_local_errno() {
             .start(helpers::test_loop_thread_fn)
             .expect("thrd_create should succeed");
     }
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
 
     // C++: thrd_join for each thread, verify return_value == i
     for (i, thread) in threads.iter().enumerate() {

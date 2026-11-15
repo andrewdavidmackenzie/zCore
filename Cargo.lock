@@ -2671,6 +2671,7 @@ dependencies = [
  "executor",
  "hal-impl",
  "lock",
+ "log",
  "spin 0.9.4",
  "xmas-elf",
  "zircon-object",

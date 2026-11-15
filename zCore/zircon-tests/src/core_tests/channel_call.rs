@@ -28,8 +28,11 @@ async fn bytes_only_success_case() {
     let echo = EchoServer::start(&ctx.proc);
 
     // Let server start
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: Fill 512 bytes with i % 256
     let mut data = vec![0u8; 512];
@@ -76,8 +79,11 @@ async fn handles_success_case() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // Create an event and send it
     let event = Event::new();
@@ -113,8 +119,11 @@ async fn reduced_rights_success_case() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // Create event with reduced rights
     let event = Event::new();
@@ -446,8 +455,11 @@ async fn with_duplicate_op_handle_succeeds() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++ test uses DUPLICATE op, which is syscall-layer. Here we
     // test that handle transfer through channel_call works.
@@ -744,8 +756,11 @@ async fn handles_info_validation() {
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
 
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // Create 3 different kernel objects
     let event = Event::new();

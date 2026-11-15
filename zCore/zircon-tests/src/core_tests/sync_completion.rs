@@ -59,8 +59,11 @@ async fn single_wait() {
     let t = CompletionTestThread::start(&proc, &completion);
 
     // C++: WaitForAllBlockedOnFutex(threads)
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: sync_completion_signal(&completion)
     completion.signal();
@@ -87,8 +90,11 @@ async fn multi_wait() {
         .map(|_| CompletionTestThread::start(&proc, &completion))
         .collect();
 
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     completion.signal();
 
@@ -330,8 +336,11 @@ async fn signal_requeue() {
         .map(|_| CompletionTestThread::start(&proc, &completion))
         .collect();
 
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: zx_futex_t futex = 0; sync_completion_signal_requeue(&completion, &futex, ...)
     let requeue_value = alloc::sync::Arc::new(AtomicI32::new(0));
@@ -340,7 +349,10 @@ async fn signal_requeue() {
     completion.signal_requeue(&requeue_futex);
 
     // C++: zx_nanosleep(ZX_MSEC(100)) — verify threads still blocked
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
     for t in &threads {
         assert!(
             !t.has_wait_returned(),
@@ -375,8 +387,11 @@ async fn spurious_wakeup_handled() {
 
     let t = CompletionTestThread::start(&proc, &completion);
 
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: zx_futex_wake(&completion.futex, UINT32_MAX) — spurious wake
     // The thread should re-check the signaled flag, see it's still
@@ -384,7 +399,10 @@ async fn spurious_wakeup_handled() {
     completion.futex.wake(usize::MAX);
 
     // C++: zx_nanosleep(ZX_MSEC(100)); ASSERT_FALSE(thread.exited())
-    crate::test_runtime::sleep(core::time::Duration::from_millis(100)).await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(100),
+    )
+    .await;
     assert!(
         !t.has_wait_returned(),
         "thread should NOT have exited after spurious wake"

@@ -56,7 +56,7 @@ async fn multi_threaded_contention() {
     for (_, state) in &threads {
         while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
             assert!(hal_impl::timer::timer_now() < deadline, "timed out");
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 
@@ -69,7 +69,7 @@ async fn multi_threaded_contention() {
             if hal_impl::timer::timer_now() >= dl {
                 break;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 

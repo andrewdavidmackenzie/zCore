@@ -73,8 +73,11 @@ async fn basic() {
         cond_threads.push((thread, state));
     }
 
-    crate::test_runtime::yield_now().await;
-    crate::test_runtime::sleep(core::time::Duration::from_millis(100)).await;
+    hal_impl::thread::preempt_yield().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(100),
+    )
+    .await;
 
     predicate.store(true, Ordering::Release);
     cond.broadcast();
@@ -82,7 +85,7 @@ async fn basic() {
     let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     while woken_counter.load(Ordering::SeqCst) < 3 {
         assert!(hal_impl::timer::timer_now() < deadline, "condvar timed out");
-        crate::test_runtime::yield_now().await;
+        hal_impl::thread::preempt_yield().await;
     }
 
     for (thread, _) in &cond_threads {
@@ -94,7 +97,7 @@ async fn basic() {
             if hal_impl::timer::timer_now() >= dl {
                 break;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 
@@ -114,7 +117,7 @@ async fn basic() {
     for (_, state) in &mutex_threads {
         while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
             assert!(hal_impl::timer::timer_now() < deadline, "mutex timed out");
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 
@@ -129,7 +132,7 @@ async fn basic() {
             if hal_impl::timer::timer_now() >= dl {
                 break;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 }
@@ -187,7 +190,7 @@ async fn big_stack_size() {
         .expect("pthread_create should succeed (thread start)");
 
     // Yield to let thread run
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Kill and wait for termination (simulates pthread_join)
     thread.kill();
@@ -243,7 +246,7 @@ async fn getstack_other_thread() {
 
     // Start the thread (pthread_create)
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Kill and join (pthread_join)
     thread.kill();
@@ -268,7 +271,7 @@ async fn getstack_other_thread_explicit_size() {
 
     // Start the thread (pthread_create with explicit attr)
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    crate::test_runtime::yield_now().await;
+    hal_impl::thread::preempt_yield().await;
 
     // Kill and join (pthread_join)
     thread.kill();

@@ -1108,19 +1108,24 @@ async fn drop_children_in_parallel() {
 
         let child_move = child;
         let ready_clone = ready.clone();
-        let handle = crate::test_runtime::spawn(async move {
+        let done = alloc::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
+        let done_clone = done.clone();
+        executor::spawn(async move {
             ready_clone.store(false, core::sync::atomic::Ordering::SeqCst);
             while !ready_clone.load(core::sync::atomic::Ordering::SeqCst) {
-                crate::test_runtime::yield_now().await;
+                hal_impl::thread::preempt_yield().await;
             }
             drop(child_move);
+            done_clone.store(true, core::sync::atomic::Ordering::Release);
         });
         while ready.load(core::sync::atomic::Ordering::SeqCst) {
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
         ready.store(true, core::sync::atomic::Ordering::SeqCst);
         drop(vmo);
-        handle.await;
+        while !done.load(core::sync::atomic::Ordering::Acquire) {
+            hal_impl::thread::preempt_yield().await;
+        }
     }
 }
 
@@ -1158,28 +1163,30 @@ async fn drop_parent_committed_bytes() {
 
         let child_clone = child.clone();
         let ready_clone = ready.clone();
-        let handle = crate::test_runtime::spawn(async move {
+        let done = alloc::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
+        let done_clone = done.clone();
+        executor::spawn(async move {
             ready_clone.store(false, core::sync::atomic::Ordering::SeqCst);
             while !ready_clone.load(core::sync::atomic::Ordering::SeqCst) {
-                crate::test_runtime::yield_now().await;
+                hal_impl::thread::preempt_yield().await;
             }
             let committed = vmo_populated_bytes(&child_clone);
-            // Depending on who wins the race, the child will either continue
-            // sharing a page with the parent, or it will have both pages
-            // attributed to it.
             assert!(
                 committed == kattr_bytes_clone_split || committed == kattr_bytes_clone_no_split,
                 "committed bytes in child: {}",
                 committed
             );
+            done_clone.store(true, core::sync::atomic::Ordering::Release);
         });
         while ready.load(core::sync::atomic::Ordering::SeqCst) {
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
         ready.store(true, core::sync::atomic::Ordering::SeqCst);
         // Drop the parent.
         drop(vmo);
-        handle.await;
+        while !done.load(core::sync::atomic::Ordering::Acquire) {
+            hal_impl::thread::preempt_yield().await;
+        }
 
         // Check that we don't change the child.
         vmo_check(&child, 2, 0);

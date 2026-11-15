@@ -18,24 +18,20 @@ extern crate alloc;
 
 type HandleValue = u32;
 
-/// One-time HAL initialization for libos mode.
-/// On bare-metal, the kernel already initializes the HAL.
-#[cfg(feature = "libos")]
+/// One-time HAL + executor initialization.
+/// In libos mode, initializes the HAL and executor.
+/// On bare-metal, the kernel already did this.
 static INIT: spin::Once<()> = spin::Once::new();
 
-#[cfg(feature = "libos")]
 pub fn ensure_hal_init() {
     INIT.call_once(|| {
-        hal_impl::init();
-        // Register the COW callback so write faults on COW-mapped
-        // pages are handled by the Zircon kernel's page fault handler.
-        hal_impl::libos_cow::register_cow_callback(zircon_object::vm::vmar::cow_fault_callback);
+        #[cfg(feature = "libos")]
+        {
+            hal_impl::init();
+            executor::init_runtimes(&[0]);
+            hal_impl::libos_cow::register_cow_callback(zircon_object::vm::vmar::cow_fault_callback);
+        }
     });
-}
-
-#[cfg(not(feature = "libos"))]
-pub fn ensure_hal_init() {
-    // On bare-metal, HAL is already initialized by the kernel.
 }
 
 /// Thread function placeholder for the Syscall struct.
@@ -64,7 +60,7 @@ pub fn test_loop_thread_fn(
                 break;
             }
             // Simulate brief "execution" then yield back to the scheduler.
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
             thread.put_context(ctx);
         }
         // CurrentThread drop calls terminate() → state becomes Dead,
@@ -229,7 +225,7 @@ impl FutexTestThread {
                 "FutexTestThread: timed out waiting for thread to wake"
             );
             // Yield to let the waiter thread make progress
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 
@@ -256,7 +252,7 @@ impl FutexTestThread {
                 // the thread's task yet.
                 break;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 }
@@ -283,13 +279,16 @@ pub async fn assert_woke_thread_count(threads: &[FutexTestThread], target: usize
             target,
             count_woken(threads)
         );
-        crate::test_runtime::yield_now().await;
+        hal_impl::thread::preempt_yield().await;
     }
     assert_eq!(count_woken(threads), target);
 
     // C++: zx::nanosleep(zx::deadline_after(zx::msec(300)));
     // Wait to verify no spurious wakeups
-    crate::test_runtime::sleep(core::time::Duration::from_millis(100)).await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(100),
+    )
+    .await;
     assert_eq!(
         count_woken(threads),
         target,
@@ -500,7 +499,7 @@ impl CompletionTestThread {
                 hal_impl::timer::timer_now() < deadline,
                 "CompletionTestThread: timed out waiting for thread to wake"
             );
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 
@@ -516,7 +515,7 @@ impl CompletionTestThread {
             if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 }
@@ -672,7 +671,7 @@ pub fn mutex_contender_thread_fn(
             contender.counter.fetch_add(1, Ordering::SeqCst);
             contender.mutex.unlock();
             // Small yield to let other threads contend
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
 
         contender
@@ -845,7 +844,7 @@ impl EchoServer {
             if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
     }
 }
@@ -1595,7 +1594,7 @@ impl PagerProcessTestThread {
             if st >= PAGER_STATE_READ_RETURNED {
                 return;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
         panic!("PagerProcessTestThread: timed out waiting for thread to enter BlockedPager");
     }
@@ -1611,7 +1610,7 @@ impl PagerProcessTestThread {
             if self.thread.state() == ThreadState::Dead {
                 return;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
         panic!("PagerProcessTestThread: timed out waiting for thread to terminate");
     }
@@ -1712,7 +1711,7 @@ impl ExceptionTestThread {
             if st == ThreadState::Dying || st == ThreadState::Dead {
                 return;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
         panic!("ExceptionTestThread: timed out waiting for BlockedException state");
     }
@@ -1723,7 +1722,7 @@ impl ExceptionTestThread {
             if self.thread.state() == ThreadState::Dead {
                 return;
             }
-            crate::test_runtime::yield_now().await;
+            hal_impl::thread::preempt_yield().await;
         }
         panic!("ExceptionTestThread: timed out waiting for thread to terminate");
     }

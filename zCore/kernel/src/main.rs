@@ -252,10 +252,10 @@ fn check_exit_code(proc: Arc<Process>) -> i32 {
 
 #[cfg(feature = "baremetal-test")]
 fn run_builtin_tests() -> ! {
-    info!("=== Running built-in Rust zircon-tests ===");
+    warn!("=== Running built-in Rust zircon-tests ===");
     let future = async {
         zircon_tests::run_all().await;
-        info!("=== All tests passed ===");
+        warn!("=== All tests passed ===");
         0i32
     };
     let exit_code = hal_impl::run_executor(future);
