@@ -11,15 +11,11 @@ static EXIT_CODE: AtomicI32 = AtomicI32::new(0);
 /// Enables the timer and interrupts, then loops running the executor
 /// until idle, sleeping between iterations via wait-for-interrupt.
 pub fn run_executor<F: Future<Output = i32> + Send + 'static>(future: F) -> i32 {
-    // Spawn the future at the same priority as Zircon threads (16)
-    // so it doesn't get starved by spawned tasks.
-    executor::spawn_with_priority(
-        async move {
-            let code = future.await;
-            EXIT_CODE.store(code, Ordering::Relaxed);
-        },
-        16,
-    );
+    // Spawn the future into the executor.
+    executor::spawn(async move {
+        let code = future.await;
+        EXIT_CODE.store(code, Ordering::Relaxed);
+    });
 
     crate::timer::timer_enable();
     log::info!("executor run!");

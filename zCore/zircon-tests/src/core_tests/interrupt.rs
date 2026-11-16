@@ -508,8 +508,15 @@ async fn wait_thread_functions_after_suspend_resume() {
     // Trigger wakes the waiter.
     interrupt.trigger(42).unwrap();
 
-    // Yield to let spawned task complete.
-    hal_impl::thread::yield_now().await;
+    // Yield repeatedly to let spawned task complete.
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
+    while result.load(core::sync::atomic::Ordering::Acquire) == 0 {
+        assert!(
+            hal_impl::timer::timer_now() < deadline,
+            "interrupt wait task timed out"
+        );
+        hal_impl::thread::yield_now().await;
+    }
     let ts = result.load(core::sync::atomic::Ordering::Acquire);
     assert_eq!(ts, 42);
 }
