@@ -521,9 +521,13 @@ fn check_style() {
 
     println!("==> Clippy: test crates...");
     Cargo::clippy()
+        .args(["-p", "zircon-tests", "--tests", "--features", "host"])
+        .arg("--no-deps")
+        .args(["--", "--deny", "warnings"])
+        .invoke();
+
+    Cargo::clippy()
         .args([
-            "-p",
-            "zircon-tests",
             "-p",
             "zircon-object",
             "--tests",

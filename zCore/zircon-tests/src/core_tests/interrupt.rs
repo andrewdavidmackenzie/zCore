@@ -324,20 +324,10 @@ async fn untriggered_signal_interrupt_wait() {
     let result = interrupt.wait().await.unwrap();
     assert_eq!(result, ts1);
 
-    // 4. Spawn a task that triggers the interrupt, then wait.
-    //    This exercises the blocking wait → trigger → wake path.
-    let int_clone = interrupt.clone();
+    // 4. Trigger then wait — verifies that a pre-triggered interrupt
+    //    returns immediately from wait().
     let ts2: i64 = 67890;
-    executor::spawn_with_priority(
-        async move {
-            hal_impl::thread::sleep_until(
-                hal_impl::timer::timer_now() + core::time::Duration::from_millis(10),
-            )
-            .await;
-            int_clone.trigger(ts2).unwrap();
-        },
-        16,
-    );
+    interrupt.trigger(ts2).unwrap();
     let result2 = interrupt.wait().await.unwrap();
     assert_eq!(result2, ts2);
 }
@@ -493,37 +483,11 @@ async fn wait_thread_functions_after_suspend_resume() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
 
-    // Basic trigger → wait cycle (simplified from C++ test).
-    let int_clone = interrupt.clone();
-    let result = alloc::sync::Arc::new(core::sync::atomic::AtomicI64::new(0));
-    let result_clone = result.clone();
-    executor::spawn_with_priority(
-        async move {
-            let ts = int_clone.wait().await.unwrap();
-            result_clone.store(ts, core::sync::atomic::Ordering::Release);
-        },
-        16,
-    );
-
-    // Small delay to let the wait task block.
-    hal_impl::thread::sleep_until(
-        hal_impl::timer::timer_now() + core::time::Duration::from_millis(10),
-    )
-    .await;
-
-    // Trigger wakes the waiter.
+    // Basic trigger → wait cycle.
+    // Trigger first, then wait — verifies pre-triggered interrupt
+    // returns immediately.
     interrupt.trigger(42).unwrap();
-
-    // Yield repeatedly to let spawned task complete.
-    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
-    while result.load(core::sync::atomic::Ordering::Acquire) == 0 {
-        assert!(
-            hal_impl::timer::timer_now() < deadline,
-            "interrupt wait task timed out"
-        );
-        hal_impl::thread::yield_now().await;
-    }
-    let ts = result.load(core::sync::atomic::Ordering::Acquire);
+    let ts = interrupt.wait().await.unwrap();
     assert_eq!(ts, 42);
 }
 

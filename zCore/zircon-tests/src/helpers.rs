@@ -1,5 +1,5 @@
 //! Test helper: creates a minimal Zircon process/thread context
-//! for dispatching syscalls in libos mode.
+//! for dispatching syscalls in test mode.
 
 #![allow(dead_code)]
 
@@ -19,13 +19,14 @@ extern crate alloc;
 type HandleValue = u32;
 
 /// One-time HAL + executor initialization.
-/// In libos mode, initializes the HAL and executor.
-/// On bare-metal, the kernel already did this.
+/// One-time HAL and executor initialization.
+/// On bare-metal, the kernel already did this before calling run_all().
+/// On host, we must initialize HAL, executor, and COW handler.
 static INIT: spin::Once<()> = spin::Once::new();
 
 pub fn ensure_hal_init() {
     INIT.call_once(|| {
-        #[cfg(feature = "libos")]
+        #[cfg(not(target_os = "none"))]
         {
             hal_impl::init();
             executor::init_runtimes(&[0]);

@@ -2,15 +2,15 @@
 name = "zircon-tests"
 version = "0.1.0"
 edition = "2021"
-description = "Rust-native Zircon syscall test suite"
+description = "Rust-native Zircon syscall test suite (no_std)"
 
-# Run libos tests: cargo test -p zircon-tests
+# Run tests: cargo test -p zircon-tests
 # Bare-metal: compiled as a library dependency of the kernel.
 
 [features]
-default = ["libos"]
-# libos: tests run on the host via cargo test.
-libos = [
+default = ["host"]
+# host: enable host-mode backends in dependencies.
+host = [
     "zircon-object/libos",
     "zircon-object/aspace-separate",
     "zircon-syscall/libos",
@@ -31,3 +31,6 @@ xmas-elf = "0.7"
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
+
+[package.metadata.cargo-all-features]
+skip_package = true

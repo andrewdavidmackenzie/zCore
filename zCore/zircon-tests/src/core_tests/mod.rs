@@ -26,9 +26,6 @@ mod debuglog;
 mod event;
 mod event_pair;
 pub(crate) mod exception;
-// executable_tls uses thread_local! and std::thread which require std.
-#[cfg(feature = "libos")]
-mod executable_tls;
 mod fifo;
 mod futex;
 mod handle;
@@ -50,10 +47,6 @@ mod object_wait;
 mod page_size;
 pub(crate) mod pager;
 mod port;
-// port_stress uses std::thread, std::sync::Mutex, std::sync::Barrier
-// for multi-threaded stress testing — requires std.
-#[cfg(feature = "libos")]
-mod port_stress;
 mod process;
 mod process_debug;
 pub(crate) mod profile;
@@ -66,9 +59,6 @@ mod register_context_switch;
 mod register_state;
 mod resource;
 mod socket;
-// stack uses thread_local! which requires std.
-#[cfg(feature = "libos")]
-mod stack;
 mod standalone_elf_load;
 mod stream;
 mod sync_completion;
@@ -103,9 +93,6 @@ mod vmo_slice;
 mod vmo_transfer_data;
 mod vmo_zero;
 mod wake_reports;
-// zx_assert_c uses std::panic::catch_unwind which requires std.
-#[cfg(feature = "libos")]
-mod zx_assert_c;
 
 /// Run all core tests.
 #[cfg(feature = "baremetal-test")]

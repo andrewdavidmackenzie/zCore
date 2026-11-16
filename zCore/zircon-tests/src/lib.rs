@@ -22,7 +22,7 @@
 //! cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
 //! ```
 
-#![cfg_attr(not(feature = "libos"), no_std)]
+#![no_std]
 
 #[cfg_attr(not(any(test, feature = "baremetal-test")), allow(unused_imports))]
 #[macro_use]
