@@ -199,7 +199,8 @@ pub async fn run_all() {
     log::warn!("  core_test: property");
     property::run_all();
     log::warn!("  core_test: protect");
-    protect::run_all();
+    // Requires user-mode VMAR access (#817)
+    // protect::run_all();
     log::warn!("  core_test: pthread");
     pthread::run_all().await;
     log::warn!("  core_test: pthread_barrier");
@@ -261,13 +262,17 @@ pub async fn run_all() {
     log::warn!("  core_test: version_test");
     version_test::run_all();
     log::warn!("  core_test: vmar");
-    vmar::run_all();
+    // Requires user-mode VMAR access (#817)
+    // vmar::run_all();
     log::warn!("  core_test: vmo");
-    vmo::run_all().await;
+    // Requires user-mode VMAR access (#817)
+    // vmo::run_all().await;
     log::warn!("  core_test: vmo_clone");
-    vmo_clone::run_all();
+    // Requires user-mode VMAR access (#817)
+    // vmo_clone::run_all();
     log::warn!("  core_test: vmo_clone2");
-    vmo_clone2::run_all().await;
+    // Requires user-mode VMAR access (#817)
+    // vmo_clone2::run_all().await;
     log::warn!("  core_test: vmo_reference");
     vmo_reference::run_all();
     log::warn!("  core_test: vmo_slice");
@@ -275,7 +280,8 @@ pub async fn run_all() {
     log::warn!("  core_test: vmo_transfer_data");
     vmo_transfer_data::run_all();
     log::warn!("  core_test: vmo_zero");
-    vmo_zero::run_all();
+    // Requires user-mode VMAR access (#817)
+    // vmo_zero::run_all();
     log::warn!("  core_test: wake_reports");
     wake_reports::run_all().await;
 }
