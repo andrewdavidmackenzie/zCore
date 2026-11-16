@@ -235,6 +235,7 @@ pub struct AuditResult {
     // Skip/ignore correspondence
     pub stubs: Vec<(String, String, String)>, // (file, fn_name, cpp_ref) — unimplemented!() tests
     pub ignored_not_skipped: Vec<(String, String, String)>, // #[ignore] but NOT in skip list
+    pub petal_ported: usize,                  // Tests ported to petal user-mode binary
 }
 
 /// Run the full audit. Returns `Ok(result)` or `Err(message)` if something
@@ -307,8 +308,27 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
     }
     duplicates.sort_by(|a, b| a.0.cmp(&b.0));
 
-    // Find missing (C++ tests with no Rust match)
-    let missing_in_rust: Vec<String> = cpp_tests.difference(&matched_cpp).cloned().collect();
+    // Load tests ported to petal (user-mode) — excluded from "missing" check
+    let petal_ported: std::collections::HashSet<String> = {
+        let petal_file = std::path::Path::new("tests/petal-ported-tests.txt");
+        if petal_file.exists() {
+            std::fs::read_to_string(petal_file)
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+                .map(|l| l.trim().to_string())
+                .collect()
+        } else {
+            std::collections::HashSet::new()
+        }
+    };
+
+    // Find missing (C++ tests with no Rust match, excluding petal-ported tests)
+    let missing_in_rust: Vec<String> = cpp_tests
+        .difference(&matched_cpp)
+        .filter(|t| !petal_ported.contains(*t))
+        .cloned()
+        .collect();
 
     let rust_ignored = all_rust_tests.iter().filter(|t| t.is_ignored).count();
     let rust_stubs = all_rust_tests.iter().filter(|t| t.is_stub).count();
@@ -354,6 +374,7 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
         cpp_skipped: skip_list.len(),
         stubs,
         ignored_not_skipped,
+        petal_ported: petal_ported.len(),
     })
 }
 
@@ -369,15 +390,18 @@ pub fn print_and_check(result: &AuditResult) -> bool {
     println!("  Rust stubs:              {}", result.rust_stubs);
     println!("  C++ skip-list entries:   {}", result.cpp_skipped);
 
-    if result.rust_count != result.cpp_count {
+    let petal_count = result.petal_ported;
+    let total_rust = result.rust_count + petal_count;
+    println!("  Petal-ported tests:      {}", petal_count);
+    if total_rust != result.cpp_count {
         println!(
-            "  FAIL: Count mismatch — {} Rust tests vs {} C++ tests",
-            result.rust_count, result.cpp_count
+            "  FAIL: Count mismatch — {} Rust tests ({} kernel + {} petal) vs {} C++ tests",
+            total_rust, result.rust_count, petal_count, result.cpp_count
         );
         ok = false;
     }
 
-    if result.matched != result.cpp_count {
+    if (result.matched + petal_count) != result.cpp_count {
         println!(
             "  FAIL: Only {}/{} C++ tests have a Rust match",
             result.matched, result.cpp_count

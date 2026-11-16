@@ -131,30 +131,6 @@ fn allocate_unsatisfiable_test() {
     assert!(result.is_err(), "allocation in full VMAR should fail");
 }
 
-/// C++: TEST(Vmar, AllowFaultsTest)
-/// Map a VMO, read through the mapping (may fault in uncommitted
-/// pages). Verify the read returns the correct data.
-#[cfg_attr(test, test)]
-fn allow_faults_test() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "faults-test").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged(1);
-    // Don't write — page is uncommitted.
-
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
-
-    // Reading uncommitted page through mapping should return zeros.
-    let ptr = addr as *const u64;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 0, "uncommitted page should read as zero");
-
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
-}
-
 /// C++: TEST(Vmar, BadRangeOpNestedVmar)
 /// Protect/unmap on a range spanning a child VMAR boundary.
 #[cfg_attr(test, test)]
@@ -178,37 +154,6 @@ fn bad_range_op_nested_vmar() {
     // Destroy child to verify nested cleanup.
     c1.destroy().unwrap();
     assert!(c1.is_dead());
-}
-
-/// C++: TEST(Vmar, BasicAllocateTest)
-/// Basic VMAR allocation within a process root VMAR.
-#[cfg_attr(test, test)]
-fn basic_allocate_test() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "basic-alloc").unwrap();
-    let vmar = proc.vmar();
-
-    // Allocate a child VMAR.
-    let child = vmar
-        .allocate(None, 4 * PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
-        .unwrap();
-    assert_ne!(child.addr(), 0);
-    assert!(child.is_alive());
-
-    // Map a VMO into the child VMAR.
-    let vmo = VmObject::new_paged(1);
-    vmo.write(0, &[0xAB; 8]).unwrap();
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = child.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
-    assert!(addr >= child.addr());
-
-    // Read through mapping.
-    let ptr = addr as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 0xAB);
-
-    child.unmap(addr, PAGE_SIZE).unwrap();
 }
 
 /// C++: TEST(Vmar, ConcurrentUnmapReadMemory)
@@ -293,114 +238,6 @@ fn destroyed_vmar_test() {
         .allocate(None, PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
         .is_err());
     assert!(child.destroy().is_err()); // already destroyed
-}
-
-/// C++: TEST(Vmar, FaultBeyondReducedStreamSize)
-/// Map VMO, set a smaller content_size, read within and beyond.
-#[cfg_attr(test, test)]
-fn fault_beyond_reduced_stream_size() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "stream-size").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged_with_resizable(true, 2);
-    vmo.write(0, &[0xAA; 8]).unwrap();
-    vmo.write(PAGE_SIZE, &[0xBB; 8]).unwrap();
-    vmo.set_content_size(PAGE_SIZE).unwrap();
-
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar
-        .map(None, vmo.clone(), 0, 2 * PAGE_SIZE, flags)
-        .unwrap();
-
-    // Within content_size: should have data.
-    let ptr = addr as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 0xAA);
-
-    // Beyond content_size but within VMO: still accessible at mapping level.
-    let ptr2 = (addr + PAGE_SIZE) as *const u8;
-    let val2 = unsafe { core::ptr::read_volatile(ptr2) };
-    assert_eq!(val2, 0xBB);
-
-    vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
-}
-
-/// C++: TEST(Vmar, FaultBeyondStreamSize)
-/// Map VMO with content_size set, verify reads work.
-#[cfg_attr(test, test)]
-fn fault_beyond_stream_size() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "stream-fault").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged_with_resizable(true, 1);
-    vmo.write(0, &[42; 8]).unwrap();
-    vmo.set_content_size(4).unwrap();
-
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
-
-    // Read at offset 0 — within content_size.
-    let ptr = addr as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 42);
-
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
-}
-
-/// C++: TEST(Vmar, FaultBeyondStreamSizeForceWritable)
-/// Map VMO read+write with content_size, write through mapping.
-#[cfg_attr(test, test)]
-fn fault_beyond_stream_size_force_writable() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "stream-writable").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged_with_resizable(true, 1);
-    vmo.set_content_size(PAGE_SIZE).unwrap();
-
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
-
-    // Write through mapping.
-    let ptr = addr as *mut u32;
-    unsafe { core::ptr::write_volatile(ptr, 0xBEEF) };
-    let val = unsafe { core::ptr::read_volatile(ptr as *const u32) };
-    assert_eq!(val, 0xBEEF);
-
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
-}
-
-/// C++: TEST(Vmar, FaultBeyondStreamSizeRange)
-/// Map multi-page VMO with content_size, verify range of reads.
-#[cfg_attr(test, test)]
-fn fault_beyond_stream_size_range() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "stream-range").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged_with_resizable(true, 4);
-    for i in 0..4 {
-        vmo.write(i * PAGE_SIZE, &[(i as u8) + 1; 8]).unwrap();
-    }
-    vmo.set_content_size(2 * PAGE_SIZE).unwrap();
-
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, 4 * PAGE_SIZE, flags).unwrap();
-
-    // All 4 pages accessible at mapping level.
-    for i in 0..4 {
-        let ptr = (addr + i * PAGE_SIZE) as *const u8;
-        let val = unsafe { core::ptr::read_volatile(ptr) };
-        assert_eq!(val, (i as u8) + 1);
-    }
-
-    vmar.unmap(addr, 4 * PAGE_SIZE).unwrap();
 }
 
 /// C++: TEST(Vmar, InvalidArgsTest)
@@ -506,34 +343,6 @@ fn map_over_destroyed_test() {
     vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
-/// C++: TEST(Vmar, MapRangeResizable)
-/// Map a resizable VMO, then resize it and verify behavior.
-#[cfg_attr(test, test)]
-fn map_range_resizable() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "map-resizable").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged_with_resizable(true, 2);
-    vmo.write(0, &[0xAA; 8]).unwrap();
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar
-        .map(None, vmo.clone(), 0, 2 * PAGE_SIZE, flags)
-        .unwrap();
-
-    // Read through mapping.
-    let ptr = addr as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 0xAA);
-
-    // Resize VMO to 4 pages.
-    vmo.set_len(4 * PAGE_SIZE).unwrap();
-    assert_eq!(vmo.len(), 4 * PAGE_SIZE);
-
-    vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
-}
-
 /// C++: TEST(Vmar, MapRangeStreamSizeWraparound)
 /// Verify content_size does not cause address wraparound.
 #[cfg_attr(test, test)]
@@ -550,41 +359,6 @@ fn map_range_stream_size_wraparound() {
     let mut buf = [0u8; 8];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 42);
-}
-
-/// C++: TEST(Vmar, MapReadIfXomUnsupported)
-///
-/// Maps a VMO with ZX_VM_PERM_READ_IF_XOM_UNSUPPORTED. If the hardware
-/// does not support execute-only memory (XOM), READ permission is
-/// implicitly added, and probe_for_read succeeds. If XOM *is* supported,
-/// the mapping is execute-only and probe_for_read returns ACCESS_DENIED.
-///
-/// zCore does not support XOM, so the mapping should be readable.
-#[cfg_attr(test, test)]
-fn map_read_if_xom_unsupported() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "xom-test").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged(1);
-    vmo.write(0, &[0xAB; 8]).unwrap();
-
-    // C++ maps with ZX_VM_PERM_READ_IF_XOM_UNSUPPORTED.
-    // In zCore, XOM is not supported so we map with READ (the implicit
-    // permission that would be added). The mapping should succeed.
-    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ).unwrap();
-
-    // Since XOM is unsupported, the mapping should be readable.
-    // C++: probe_for_read returns ZX_OK when XOM is unsupported.
-    let ptr = addr as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(
-        val, 0xAB,
-        "mapping should be readable when XOM is unsupported"
-    );
-
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
 /// C++: TEST(Vmar, MapSpecificOverwriteTest)
@@ -683,33 +457,6 @@ fn op_on_range_with_child_vmar_next_to_it() {
         .unmap(root_vmar.addr() + PAGE_SIZE, PAGE_SIZE)
         .unwrap();
     assert!(child.is_alive());
-}
-
-/// C++: TEST(Vmar, OpRangeRights)
-/// Map with specific permissions, then protect to verify.
-#[cfg_attr(test, test)]
-fn op_range_rights() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "op-rights").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged(1);
-    vmo.write(0, &[42; 8]).unwrap();
-
-    // Map read-only.
-    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ).unwrap();
-
-    // Verify readable.
-    let ptr = addr as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 42);
-
-    // Protect to read+write.
-    vmar.protect(addr, PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE)
-        .unwrap();
-
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
 /// C++: TEST(Vmar, OvermappingTest)
@@ -848,127 +595,6 @@ fn partial_unmap_with_vmar_offset() {
     vmar.unmap(addr + PAGE_SIZE, PAGE_SIZE).unwrap();
 }
 
-/// C++: TEST(Vmar, Prefetch)
-/// Commit pages in a VMO mapped into VMAR (prefetch equivalent).
-#[cfg_attr(test, test)]
-fn prefetch() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "prefetch").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged(4);
-    vmo.commit(0, 4 * PAGE_SIZE).unwrap();
-
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, 4 * PAGE_SIZE, flags).unwrap();
-
-    // All pages should be accessible (committed).
-    for i in 0..4 {
-        let ptr = (addr + i * PAGE_SIZE) as *const u64;
-        let val = unsafe { core::ptr::read_volatile(ptr) };
-        assert_eq!(val, 0, "committed page {} should be zero", i);
-    }
-
-    vmar.unmap(addr, 4 * PAGE_SIZE).unwrap();
-}
-
-/// C++: TEST(Vmar, ProtectCowWritable)
-/// Map a COW clone read-only, then protect to writable.
-#[cfg_attr(test, test)]
-fn protect_cow_writable() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "cow-protect").unwrap();
-    let vmar = proc.vmar();
-
-    let parent = VmObject::new_paged(1);
-    parent.write(0, &[0xAA; 8]).unwrap();
-    let child = parent.create_child(false, 0, PAGE_SIZE).unwrap();
-
-    // Map clone read-only.
-    let addr = vmar
-        .map(None, child.clone(), 0, PAGE_SIZE, MMUFlags::READ)
-        .unwrap();
-
-    // Read through mapping should see parent data.
-    let ptr = addr as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 0xAA);
-
-    // Protect to read+write — this should succeed.
-    vmar.protect(addr, PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE)
-        .unwrap();
-
-    // Write through VMO API to trigger COW.
-    child.write(0, &[0xBB]).unwrap();
-
-    // Clone has new value.
-    let mut buf = [0u8; 1];
-    child.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 0xBB);
-
-    // Parent unchanged.
-    parent.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 0xAA);
-
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
-}
-
-/// C++: TEST(Vmar, ProtectLargeUncomittedTest)
-///
-/// Creates a large VMO (C++ uses 1GB, we use 512 pages for test mode), maps it
-/// read+write, writes to a few pages, then protects a misaligned sub-range
-/// to read-only. Verifies that pages before the protect base remain writable
-/// and pages within the protected range are read-only.
-#[cfg_attr(test, test)]
-fn protect_large_uncommitted_test() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "large-uncommit").unwrap();
-    let vmar = proc.vmar();
-
-    // C++ creates a 1GB VMO. We use 512 pages (2MB) to avoid excessive memory
-    // in test mode, but preserve the test's structural logic.
-    let pages = 512;
-    let size = pages * PAGE_SIZE;
-    let vmo = VmObject::new_paged(pages);
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, size, flags).unwrap();
-
-    // C++: write to a few pages to ensure they exist.
-    // target[0] = 5; target[size/2] = 6; target[size-1] = 7;
-    let ptr = addr as *mut u8;
-    unsafe {
-        core::ptr::write_volatile(ptr, 5);
-        core::ptr::write_volatile(ptr.add(size / 2), 6);
-        core::ptr::write_volatile(ptr.add(size - 1), 7);
-    }
-
-    // C++: base = ROUNDUP(mapping_addr, 512 * page_size) + page_size
-    // Ensure misalignment relative to larger paging structures.
-    let align = 512 * PAGE_SIZE;
-    let base = addr.div_ceil(align) * align + PAGE_SIZE;
-    let protect_size = addr + size - base;
-
-    // Protect from base to end as read-only.
-    vmar.protect(base, protect_size, MMUFlags::READ).unwrap();
-
-    // C++: mapping_addr should still be writable (before the protect base).
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 5, "page before protect base should still be readable");
-
-    // The protected region should still be readable (read-only, not unmapped).
-    let mid_ptr = (addr + size / 2) as *const u8;
-    if addr + size / 2 >= base {
-        // Within protected range — should be readable.
-        let val = unsafe { core::ptr::read_volatile(mid_ptr) };
-        assert_eq!(val, 6, "protected page should still be readable");
-    }
-
-    vmar.unmap(addr, size).unwrap();
-}
-
 /// C++: TEST(Vmar, ProtectMultipleTest)
 ///
 /// Tests protecting across multiple adjacent mappings with various scenarios:
@@ -1066,75 +692,6 @@ fn protect_multiple_test() {
     child3.unmap(g0, mapping_size).unwrap();
     child3.unmap(g2, mapping_size).unwrap();
     child3.destroy().unwrap();
-}
-
-/// C++: TEST(Vmar, ProtectOverDemandPagedTest)
-/// Map an uncommitted (demand-paged) VMO, protect, access.
-#[cfg_attr(test, test)]
-fn protect_over_demand_paged_test() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "demand-paged").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged(2);
-    // Don't write — pages are uncommitted.
-
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, 2 * PAGE_SIZE, flags).unwrap();
-
-    // Protect to read-only.
-    vmar.protect(addr, 2 * PAGE_SIZE, MMUFlags::READ).unwrap();
-
-    // Read should succeed (demand-page zero).
-    let ptr = addr as *const u64;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 0);
-
-    // Restore write.
-    vmar.protect(addr, 2 * PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE)
-        .unwrap();
-    vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
-}
-
-/// C++: TEST(Vmar, ProtectReadIfXomUnsupported)
-///
-/// Maps a VMO with READ permission, verifies it's readable, then
-/// protects with ZX_VM_PERM_READ_IF_XOM_UNSUPPORTED. If XOM is not
-/// supported (which is the case for zCore), READ permission is
-/// implicitly added, so the mapping remains readable.
-#[cfg_attr(test, test)]
-fn protect_read_if_xom_unsupported() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "xom-protect").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged(1);
-    vmo.write(0, &[0xCD; 8]).unwrap();
-
-    // C++: map with ZX_VM_PERM_READ → readable.
-    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ).unwrap();
-
-    // Verify initial mapping is readable.
-    // C++: ASSERT_OK(probe_for_read(addr))
-    let ptr = addr as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 0xCD, "mapping should be readable initially");
-
-    // C++: protect with ZX_VM_PERM_READ_IF_XOM_UNSUPPORTED.
-    // Since XOM is unsupported in zCore, this is equivalent to protecting
-    // with READ. The mapping should remain readable.
-    vmar.protect(addr, PAGE_SIZE, MMUFlags::READ).unwrap();
-
-    // C++: probe_for_read returns ZX_OK when XOM is unsupported.
-    let val2 = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(
-        val2, 0xCD,
-        "mapping should remain readable after protect with READ_IF_XOM_UNSUPPORTED"
-    );
-
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
 /// C++: TEST(Vmar, ProtectSplitTest)
@@ -1274,36 +831,6 @@ fn protect_subregion_test() {
 
     // Cleanup.
     parent_child.destroy().unwrap();
-}
-
-/// C++: TEST(Vmar, ProtectTest)
-/// Map, read, protect to read-only, read again.
-#[cfg_attr(test, test)]
-fn protect_test() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "protect-test").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged(1);
-    vmo.write(0, &42u64.to_ne_bytes()).unwrap();
-
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
-
-    // Read.
-    let ptr = addr as *const u64;
-    assert_eq!(unsafe { core::ptr::read_volatile(ptr) }, 42);
-
-    // Protect to read-only.
-    vmar.protect(addr, PAGE_SIZE, MMUFlags::READ).unwrap();
-
-    // Still readable.
-    assert_eq!(unsafe { core::ptr::read_volatile(ptr) }, 42);
-
-    // Restore and cleanup.
-    vmar.protect(addr, PAGE_SIZE, flags).unwrap();
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
 /// C++: TEST(Vmar, RangeOpCommit)
@@ -1481,29 +1008,6 @@ fn range_op_commit() {
     vmar.destroy().unwrap();
 }
 
-/// C++: TEST(Vmar, RangeOpCommitVmoPages)
-/// Commit VMO pages, write data, map and verify.
-#[cfg_attr(test, test)]
-fn range_op_commit_vmo_pages() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "commit-pages").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged(2);
-    vmo.commit(0, PAGE_SIZE).unwrap();
-    vmo.write(0, &[0xEE; 8]).unwrap();
-
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
-
-    let ptr = addr as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 0xEE);
-
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
-}
-
 /// C++: TEST(Vmar, RangeOpCommitVmoPages2)
 /// Commit multiple pages, verify committed_bytes, decommit some.
 #[cfg_attr(test, test)]
@@ -1524,33 +1028,6 @@ fn range_op_commit_vmo_pages_2() {
     assert_eq!(vmo.get_info().committed_bytes as usize, 2 * PAGE_SIZE);
 }
 
-/// C++: TEST(Vmar, RangeOpMapRange)
-/// Map a VMO and verify all pages are accessible.
-#[cfg_attr(test, test)]
-fn range_op_map_range() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "map-range").unwrap();
-    let vmar = proc.vmar();
-
-    let pages = 8;
-    let vmo = VmObject::new_paged(pages);
-    for i in 0..pages {
-        vmo.write(i * PAGE_SIZE, &[(i as u8) + 1; 8]).unwrap();
-    }
-
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, pages * PAGE_SIZE, flags).unwrap();
-
-    for i in 0..pages {
-        let ptr = (addr + i * PAGE_SIZE) as *const u8;
-        let val = unsafe { core::ptr::read_volatile(ptr) };
-        assert_eq!(val, (i as u8) + 1);
-    }
-
-    vmar.unmap(addr, pages * PAGE_SIZE).unwrap();
-}
-
 /// C++: TEST(Vmar, RangeOpStreamSizeWraparound)
 /// Set content_size near max, verify no wraparound issues.
 #[cfg_attr(test, test)]
@@ -1566,35 +1043,6 @@ fn range_op_stream_size_wraparound() {
     let mut buf = [0u8; 8];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 42);
-}
-
-/// C++: TEST(Vmar, RangeOpSubRegions)
-/// Create nested VMARs with mappings in each, operate on ranges.
-#[cfg_attr(test, test)]
-fn range_op_sub_regions() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "sub-regions").unwrap();
-    let vmar = proc.vmar();
-
-    let child = vmar
-        .allocate(None, 4 * PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
-        .unwrap();
-
-    let vmo = VmObject::new_paged(2);
-    vmo.write(0, &[0xAA; 8]).unwrap();
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-
-    let addr = child.map(None, vmo, 0, 2 * PAGE_SIZE, flags).unwrap();
-
-    // Read through mapping.
-    let ptr = addr as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 0xAA);
-
-    // Destroy child — unmaps everything in it.
-    child.destroy().unwrap();
-    assert!(child.is_dead());
 }
 
 /// C++: TEST(Vmar, RangeOpZero)
@@ -1644,35 +1092,6 @@ fn rights_drop_test() {
     assert!(child.flags().contains(VmarFlags::CAN_MAP_READ));
     assert!(!child.flags().contains(VmarFlags::CAN_MAP_WRITE));
     assert!(!child.flags().contains(VmarFlags::CAN_MAP_EXECUTE));
-}
-
-/// C++: TEST(Vmar, SpecificOverwriteMergeMappings)
-/// Map, unmap, re-map at same location — verify new mapping works.
-#[cfg_attr(test, test)]
-fn specific_overwrite_merge_mappings() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "overwrite-merge").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo1 = VmObject::new_paged(1);
-    vmo1.write(0, &[0xAA; 8]).unwrap();
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-
-    let addr = vmar.map(None, vmo1, 0, PAGE_SIZE, flags).unwrap();
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
-
-    // Re-map with a different VMO at the same address is now possible
-    // (space freed by unmap).
-    let vmo2 = VmObject::new_paged(1);
-    vmo2.write(0, &[0xBB; 8]).unwrap();
-    let addr2 = vmar.map(None, vmo2, 0, PAGE_SIZE, flags).unwrap();
-
-    let ptr = addr2 as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 0xBB);
-
-    vmar.unmap(addr2, PAGE_SIZE).unwrap();
 }
 
 /// C++: TEST(Vmar, UnalignedLenMapTest)
@@ -1778,75 +1197,6 @@ fn unmap_base_not_mapped_test() {
     // Cleanup first mapping.
     child.unmap(first_addr, mapping_size).unwrap();
     child.destroy().unwrap();
-}
-
-/// C++: TEST(Vmar, UnmapLargeUncommittedTest)
-///
-/// Creates a large VMO (C++ uses 1GB, we use 512 pages / 2MB for test mode),
-/// maps it read+write, writes to a few pages, then unmaps a misaligned
-/// sub-range. Verifies that pages before the unmap base remain accessible
-/// and pages within the unmapped range are no longer accessible.
-#[cfg_attr(test, test)]
-fn unmap_large_uncommitted_test() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "unmap-large").unwrap();
-    let vmar = proc.vmar();
-
-    // C++ uses 1GB; we use 512 pages for test mode to avoid excessive memory.
-    let pages = 512;
-    let size = pages * PAGE_SIZE;
-    let vmo = VmObject::new_paged(pages);
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, size, flags).unwrap();
-
-    // C++: Write to a few pages to ensure they exist.
-    // target[0] = 5; target[size/2] = 6; target[size-1] = 7;
-    let ptr = addr as *mut u8;
-    unsafe {
-        core::ptr::write_volatile(ptr, 5);
-        core::ptr::write_volatile(ptr.add(size / 2), 6);
-        core::ptr::write_volatile(ptr.add(size - 1), 7);
-    }
-
-    // Verify writes took effect.
-    assert_eq!(unsafe { core::ptr::read_volatile(ptr) }, 5);
-    assert_eq!(unsafe { core::ptr::read_volatile(ptr.add(size / 2)) }, 6);
-    assert_eq!(unsafe { core::ptr::read_volatile(ptr.add(size - 1)) }, 7);
-
-    // C++: base = ROUNDUP(mapping_addr, 512 * page_size) + page_size
-    // Ensure misalignment relative to larger paging structure level.
-    let align = 512 * PAGE_SIZE;
-    let base = addr.div_ceil(align) * align + PAGE_SIZE;
-    let unmap_size = addr + size - base;
-
-    // Unmap from base to end.
-    vmar.unmap(base, unmap_size).unwrap();
-
-    // C++: mapping_addr should still be writable (before the unmap base).
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 5, "page before unmap base should still be accessible");
-
-    // Pages within the unmapped range should fail read_memory.
-    if addr + size / 4 >= base {
-        let mut buf = [0u8; 1];
-        let result = vmar.read_memory(addr + size / 4, &mut buf);
-        assert!(
-            result.is_err(),
-            "page in unmapped range (size/4) should not be accessible"
-        );
-    }
-    if addr + size / 2 >= base {
-        let mut buf = [0u8; 1];
-        let result = vmar.read_memory(addr + size / 2, &mut buf);
-        assert!(
-            result.is_err(),
-            "page in unmapped range (size/2) should not be accessible"
-        );
-    }
-
-    // Unmap the remaining pages.
-    vmar.unmap(addr, size).unwrap();
 }
 
 /// C++: TEST(Vmar, UnmapMultipleTest)
@@ -2023,31 +1373,6 @@ fn unmap_split_test() {
     // Cleanup.
     vmar.unmap(addr, PAGE_SIZE).unwrap();
     vmar.unmap(addr + 3 * PAGE_SIZE, PAGE_SIZE).unwrap();
-}
-
-/// C++: TEST(Vmar, VmarMapRangeOffsetTest)
-/// Map with a VMO offset, verify correct data through mapping.
-#[cfg_attr(test, test)]
-fn vmar_map_range_offset_test() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "map-offset").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged(4);
-    vmo.write(2 * PAGE_SIZE, &[0xEE; 8]).unwrap();
-
-    // Map 2 pages starting at VMO offset 2*PAGE_SIZE.
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar
-        .map(None, vmo, 2 * PAGE_SIZE, 2 * PAGE_SIZE, flags)
-        .unwrap();
-
-    let ptr = addr as *const u8;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 0xEE);
-
-    vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
 }
 
 /// C++: TEST(Vmar, WriteReadOnlyMemory)

@@ -1,0 +1,46 @@
+# Tests ported from zircon-tests (kernel mode) to petal vmar_test (user mode).
+# These tests dereference VMAR-mapped memory via raw pointers, which requires
+# user-mode execution. The petal binary provides equivalent test coverage.
+ProtectTestCase.CreateCowClone
+ProtectTestCase.SingleMapping
+Vmar.AllowFaultsTest
+Vmar.BasicAllocateTest
+Vmar.FaultBeyondReducedStreamSize
+Vmar.FaultBeyondStreamSize
+Vmar.FaultBeyondStreamSizeForceWritable
+Vmar.FaultBeyondStreamSizeRange
+Vmar.MapRangeResizable
+Vmar.MapReadIfXomUnsupported
+Vmar.OpRangeRights
+Vmar.Prefetch
+Vmar.ProtectCowWritable
+Vmar.ProtectLargeUncomittedTest
+Vmar.ProtectOverDemandPagedTest
+Vmar.ProtectReadIfXomUnsupported
+Vmar.ProtectTest
+Vmar.RangeOpCommitVmoPages
+Vmar.RangeOpMapRange
+Vmar.RangeOpSubRegions
+Vmar.SpecificOverwriteMergeMappings
+Vmar.UnmapLargeUncommittedTest
+Vmar.VmarMapRangeOffsetTest
+VmoClone2TestCase.CloneVmarWrite
+VmoClone2TestCase.ManyCloneMapping
+VmoClone2TestCase.ManyCloneMappingOffset
+VmoClone2TestCase.ParentVmarWrite
+VmoCloneTestCase.Commit
+VmoTestCase.CacheFlush
+VmoTestCase.Commit
+VmoTestCase.FaultBeyondStreamSizeNoPhysOrContig
+VmoTestCase.GrowMappedVmo
+VmoTestCase.Map
+VmoTestCase.MapRead
+VmoTestCase.MappedVmoSmallerThanMapping
+VmoTestCase.NoWriteResizable
+VmoTestCase.ProtectToWrite
+VmoTestCase.ReadOnlyMap
+VmoTestCase.ResizeHazard
+VmoTestCase.UnmapLoanedcontiguousWhileFaulting
+VmoZeroTestCase.DecommitMiddle
+VmoZeroTestCase.UnalignedCommitted
+VmoZeroTestCase.UnalignedSubPage

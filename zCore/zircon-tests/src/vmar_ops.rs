@@ -148,35 +148,6 @@ fn destroy_sub_vmar() {
 }
 
 ///
-/// Change the protection of a mapped range.
-#[cfg_attr(test, test)]
-fn protect_range() {
-    let _ctx = TestContext::new();
-    let root = Job::root();
-    let job = root.create_child().unwrap();
-    let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
-    let vmar = proc.vmar();
-    let vmo = VmObject::new_paged(1);
-    vmo.write(0, &42u64.to_ne_bytes()).unwrap();
-
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
-
-    // Protect to read-only.
-    vmar.protect(addr, PAGE_SIZE, MMUFlags::READ).unwrap();
-
-    // Should still be readable through the mapping.
-    let ptr = addr as *const u64;
-    let val = unsafe { core::ptr::read_volatile(ptr) };
-    assert_eq!(val, 42);
-
-    // Restore and cleanup.
-    vmar.protect(addr, PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE)
-        .unwrap();
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
-}
-
-///
 /// Map a VMO over an existing mapping. The new mapping should
 /// fail with ALREADY_EXISTS (no SPECIFIC_OVERWRITE flag support).
 #[cfg_attr(test, test)]

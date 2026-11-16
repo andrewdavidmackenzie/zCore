@@ -89,6 +89,14 @@ pub fn main() {
     test_many_clone_mapping(root_vmar, page_size);
     test_unaligned_sub_page(root_vmar, page_size);
     test_contiguous_map_unmap(root_vmar, page_size);
+    test_many_clone_mapping_offset(root_vmar, page_size);
+    test_vmar_write_clone_and_parent(root_vmar, page_size);
+    test_protect_over_demand_paged(root_vmar, page_size);
+    test_op_range_rights(root_vmar, page_size);
+    test_allow_faults(root_vmar, page_size);
+    test_range_op_commit(root_vmar, page_size);
+    test_unaligned_committed(root_vmar, page_size);
+    test_unmap_contiguous(root_vmar, page_size);
 
     zx::debug_write(b"vmar_test: PASS\n");
 }
@@ -1438,6 +1446,371 @@ fn test_unaligned_sub_page(root_vmar: HandleValue, page_size: usize) {
 fn test_contiguous_map_unmap(root_vmar: HandleValue, page_size: usize) {
     zx::debug_write(b"  contiguous_map_unmap: ");
     // Create a regular VMO (contiguous needs BTI, use regular for mapping test)
+    let mut vmo: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create(page_size as u64, 0, &mut vmo) },
+        b"create",
+    );
+    let data = [0xDDu8; 8];
+    check(unsafe { zx_vmo_write(vmo, data.as_ptr(), 0, 8) }, b"write");
+    let mut addr: usize = 0;
+    check(
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
+                0,
+                vmo,
+                0,
+                page_size,
+                &mut addr,
+            )
+        },
+        b"map",
+    );
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile(addr as *const u8) },
+        0xDD,
+        b"read",
+    );
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Clone mapping with offset: map child at non-zero offset.
+fn test_many_clone_mapping_offset(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  clone_mapping_offset: ");
+    let mut parent: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create((page_size * 2) as u64, 0, &mut parent) },
+        b"create",
+    );
+    let d0 = [0xA1u8; 8];
+    let d1 = [0xB2u8; 8];
+    check(unsafe { zx_vmo_write(parent, d0.as_ptr(), 0, 8) }, b"w0");
+    check(
+        unsafe { zx_vmo_write(parent, d1.as_ptr(), page_size as u64, 8) },
+        b"w1",
+    );
+    let mut child: HandleValue = 0;
+    check(
+        unsafe {
+            zx_vmo_create_child(
+                parent,
+                ZX_VMO_CHILD_SNAPSHOT,
+                0,
+                (page_size * 2) as u64,
+                &mut child,
+            )
+        },
+        b"clone",
+    );
+    // Map only second page of clone
+    let mut addr: usize = 0;
+    check(
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                ZX_VM_PERM_READ,
+                0,
+                child,
+                page_size,
+                page_size,
+                &mut addr,
+            )
+        },
+        b"map offset",
+    );
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile(addr as *const u8) },
+        0xB2,
+        b"read",
+    );
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Write through clone mapping, write through parent mapping, verify isolation.
+fn test_vmar_write_clone_and_parent(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  write_clone_parent: ");
+    let mut parent: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create(page_size as u64, 0, &mut parent) },
+        b"create",
+    );
+    let data = [0x10u8; 8];
+    check(
+        unsafe { zx_vmo_write(parent, data.as_ptr(), 0, 8) },
+        b"write",
+    );
+    let mut child: HandleValue = 0;
+    check(
+        unsafe {
+            zx_vmo_create_child(
+                parent,
+                ZX_VMO_CHILD_SNAPSHOT,
+                0,
+                page_size as u64,
+                &mut child,
+            )
+        },
+        b"clone",
+    );
+    // Map both
+    let mut parent_addr: usize = 0;
+    let mut child_addr: usize = 0;
+    check(
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
+                0,
+                parent,
+                0,
+                page_size,
+                &mut parent_addr,
+            )
+        },
+        b"map parent",
+    );
+    check(
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
+                0,
+                child,
+                0,
+                page_size,
+                &mut child_addr,
+            )
+        },
+        b"map child",
+    );
+    // Write different values
+    unsafe { core::ptr::write_volatile(child_addr as *mut u8, 0x20) };
+    unsafe { core::ptr::write_volatile(parent_addr as *mut u8, 0x30) };
+    // Verify isolation
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile(child_addr as *const u8) },
+        0x20,
+        b"child",
+    );
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile(parent_addr as *const u8) },
+        0x30,
+        b"parent",
+    );
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, parent_addr, page_size) },
+        b"unmap parent",
+    );
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, child_addr, page_size) },
+        b"unmap child",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Protect over demand-paged (uncommitted) region.
+fn test_protect_over_demand_paged(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  protect_demand_paged: ");
+    let mut vmo: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create((page_size * 4) as u64, 0, &mut vmo) },
+        b"create",
+    );
+    let mut addr: usize = 0;
+    check(
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
+                0,
+                vmo,
+                0,
+                page_size * 4,
+                &mut addr,
+            )
+        },
+        b"map",
+    );
+    // Protect without committing first
+    check(
+        unsafe { zx_vmar_protect(root_vmar, ZX_VM_PERM_READ, addr, page_size * 4) },
+        b"protect ro",
+    );
+    // Now commit by writing via VMO API, then verify read through mapping
+    let data = [0x99u8; 8];
+    check(
+        unsafe { zx_vmo_write(vmo, data.as_ptr(), 0, 8) },
+        b"vmo_write",
+    );
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile(addr as *const u8) },
+        0x99,
+        b"read",
+    );
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size * 4) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Op range rights: map with specific rights, verify access.
+fn test_op_range_rights(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  op_range_rights: ");
+    let mut vmo: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create(page_size as u64, 0, &mut vmo) },
+        b"create",
+    );
+    let data = [0xABu8; 8];
+    check(unsafe { zx_vmo_write(vmo, data.as_ptr(), 0, 8) }, b"write");
+    // Map read-only
+    let mut addr: usize = 0;
+    check(
+        unsafe { zx_vmar_map(root_vmar, ZX_VM_PERM_READ, 0, vmo, 0, page_size, &mut addr) },
+        b"map ro",
+    );
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile(addr as *const u8) },
+        0xAB,
+        b"read",
+    );
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Allow faults: map, touch pages, verify.
+fn test_allow_faults(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  allow_faults: ");
+    let pages = 8;
+    let mut vmo: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create((page_size * pages) as u64, 0, &mut vmo) },
+        b"create",
+    );
+    let mut addr: usize = 0;
+    check(
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
+                0,
+                vmo,
+                0,
+                page_size * pages,
+                &mut addr,
+            )
+        },
+        b"map",
+    );
+    // Touch each page (demand fault)
+    for i in 0..pages {
+        unsafe { core::ptr::write_volatile((addr + i * page_size) as *mut u8, (i + 1) as u8) };
+    }
+    for i in 0..pages {
+        assert_eq_u8(
+            unsafe { core::ptr::read_volatile((addr + i * page_size) as *const u8) },
+            (i + 1) as u8,
+            b"verify fault",
+        );
+    }
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size * pages) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Range op: commit VMO pages via mapping write, verify committed.
+fn test_range_op_commit(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  range_op_commit: ");
+    let pages = 4;
+    let mut vmo: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create((page_size * pages) as u64, 0, &mut vmo) },
+        b"create",
+    );
+    let mut addr: usize = 0;
+    check(
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
+                0,
+                vmo,
+                0,
+                page_size * pages,
+                &mut addr,
+            )
+        },
+        b"map",
+    );
+    // Commit by writing
+    for i in 0..pages {
+        unsafe { core::ptr::write_volatile((addr + i * page_size) as *mut u8, 0xCC) };
+    }
+    // Verify all committed via read
+    for i in 0..pages {
+        assert_eq_u8(
+            unsafe { core::ptr::read_volatile((addr + i * page_size) as *const u8) },
+            0xCC,
+            b"committed",
+        );
+    }
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size * pages) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Unaligned committed: write non-page-aligned data, map, verify.
+fn test_unaligned_committed(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  unaligned_committed: ");
+    let mut vmo: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create(page_size as u64, 0, &mut vmo) },
+        b"create",
+    );
+    // Write at non-aligned offset
+    let data = [0xBBu8; 7];
+    check(
+        unsafe { zx_vmo_write(vmo, data.as_ptr(), 13, 7) },
+        b"write unaligned",
+    );
+    let mut addr: usize = 0;
+    check(
+        unsafe { zx_vmar_map(root_vmar, ZX_VM_PERM_READ, 0, vmo, 0, page_size, &mut addr) },
+        b"map",
+    );
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile((addr + 13) as *const u8) },
+        0xBB,
+        b"read",
+    );
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Contiguous VMO unmap while mapped.
+fn test_unmap_contiguous(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  unmap_contiguous: ");
     let mut vmo: HandleValue = 0;
     check(
         unsafe { zx_vmo_create(page_size as u64, 0, &mut vmo) },
