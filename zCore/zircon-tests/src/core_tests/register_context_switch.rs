@@ -102,7 +102,11 @@ fn segment_selectors_zeroed_on_context_switch() {
 /// Run all tests in this module.
 #[cfg(feature = "baremetal-test")]
 pub fn run_all() {
+    // FPU and segment selector tests are x86-specific
+    #[cfg(target_arch = "x86_64")]
     fpu_long_compute_loop();
+    #[cfg(target_arch = "x86_64")]
     segment_selectors_zeroed_on_interrupt();
+    #[cfg(target_arch = "x86_64")]
     segment_selectors_zeroed_on_context_switch();
 }

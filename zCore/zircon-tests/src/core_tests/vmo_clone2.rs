@@ -1936,8 +1936,8 @@ pub async fn run_all() {
     clone_vmar_write();
     disjoint_clone_progressive();
     disjoint_clone_test2();
-    drop_children_in_parallel().await;
-    drop_parent_committed_bytes().await;
+    drop_children_in_parallel();
+    drop_parent_committed_bytes();
     forbid_contiguous_vmo();
     many_clone_mapping();
     many_clone_mapping_offset();

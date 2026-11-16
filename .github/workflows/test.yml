@@ -242,8 +242,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [aarch64]
-        # x86_64 and riscv64 to be added once validated
+        arch: [aarch64, x86_64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -259,7 +258,7 @@ jobs:
           key: rust-tests-${{ matrix.arch }}
 
       - name: Install QEMU
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-x86
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-x86 ovmf
 
       - name: Build and run Rust zircon-tests
         run: make rust-tests RUST_TESTS_ARCH=${{ matrix.arch }}

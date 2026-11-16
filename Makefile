@@ -605,8 +605,27 @@ RUST_TESTS_ARCH ?= aarch64
 .PHONY: rust-tests-build rust-tests
 rust-tests-build:
 	@echo "==> Building kernel with baremetal-test for $(RUST_TESTS_ARCH)..."
+	@# Build directly (not via zcore-build) to avoid embedding the
+	@# petal shell ZBI, which would compete with the test runner.
 	@cargo clean -p kernel 2>/dev/null || true
-	cargo zcore-build -m qemu-$(RUST_TESTS_ARCH) --flavour "" --extra-features baremetal-test
+ifeq ($(RUST_TESTS_ARCH),aarch64)
+	cargo build --package kernel --no-default-features \
+		--features "baremetal-test gic-400 pl011-uart" \
+		--target targets/qemu-aarch64.json \
+		-Z json-target-spec -Z build-std=core,alloc \
+		-Z build-std-features=compiler-builtins-mem --release
+	@llvm-objcopy -O binary target/qemu-aarch64/release/kernel \
+		target/qemu-aarch64/release/kernel.bin 2>/dev/null || true
+else ifeq ($(RUST_TESTS_ARCH),x86_64)
+	cargo build --package kernel --no-default-features \
+		--features "baremetal-test apic uart-16550 pci" \
+		--target targets/qemu-x86_64.json \
+		-Z json-target-spec -Z build-std=core,alloc \
+		-Z build-std-features=compiler-builtins-mem --release
+	@tools/x86-bootimage/target/release/x86-bootimage \
+		target/qemu-x86_64/release/kernel \
+		target/qemu-x86_64/release/boot.img 2>/dev/null || true
+endif
 
 rust-tests: rust-tests-build
 	@tools/scripts/rust-tests-qemu.sh $(RUST_TESTS_ARCH)
