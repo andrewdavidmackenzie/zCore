@@ -64,6 +64,11 @@ pub fn main() {
     test_protect(root_vmar, page_size);
     test_cow_clone_map(root_vmar, page_size);
     test_unmap(root_vmar, page_size);
+    test_read_only_map(root_vmar, page_size);
+    test_resize_hazard(root_vmar, page_size);
+    test_commit_via_write(root_vmar, page_size);
+    test_map_with_offset(root_vmar, page_size);
+    test_protect_subrange(root_vmar, page_size);
 
     zx::debug_write(b"vmar_test: PASS\n");
 }
@@ -277,6 +282,237 @@ fn test_unmap(root_vmar: HandleValue, page_size: usize) {
 
     check(
         unsafe { zx_vmar_unmap(root_vmar, addr, page_size) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Map VMO read-only, verify read works.
+fn test_read_only_map(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  read_only_map: ");
+
+    let mut vmo: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create(page_size as u64, 0, &mut vmo) },
+        b"vmo_create",
+    );
+    let data = [0xAAu8; 8];
+    check(
+        unsafe { zx_vmo_write(vmo, data.as_ptr(), 0, 8) },
+        b"vmo_write",
+    );
+
+    let mut addr: usize = 0;
+    check(
+        unsafe { zx_vmar_map(root_vmar, ZX_VM_PERM_READ, 0, vmo, 0, page_size, &mut addr) },
+        b"vmar_map ro",
+    );
+
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile(addr as *const u8) },
+        0xAA,
+        b"read ro",
+    );
+
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Map, write through pointer, resize VMO to 0, verify unmap works.
+fn test_resize_hazard(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  resize_hazard: ");
+
+    let mut vmo: HandleValue = 0;
+    // ZX_VMO_RESIZABLE = 2
+    check(
+        unsafe { zx_vmo_create((page_size * 2) as u64, 2, &mut vmo) },
+        b"vmo_create resizable",
+    );
+
+    let mut addr: usize = 0;
+    check(
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
+                0,
+                vmo,
+                0,
+                page_size * 2,
+                &mut addr,
+            )
+        },
+        b"vmar_map",
+    );
+
+    // Write through pointer
+    unsafe { core::ptr::write_volatile(addr as *mut u8, 0x42) };
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile(addr as *const u8) },
+        0x42,
+        b"write",
+    );
+
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size * 2) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Map VMO, commit pages via write, verify data.
+fn test_commit_via_write(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  commit_via_write: ");
+
+    let mut vmo: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create((page_size * 2) as u64, 0, &mut vmo) },
+        b"vmo_create",
+    );
+
+    let mut addr: usize = 0;
+    check(
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
+                0,
+                vmo,
+                0,
+                page_size * 2,
+                &mut addr,
+            )
+        },
+        b"vmar_map",
+    );
+
+    // Write to both pages through mapping
+    unsafe { core::ptr::write_volatile(addr as *mut u8, 0xAA) };
+    unsafe { core::ptr::write_volatile((addr + page_size) as *mut u8, 0xBB) };
+
+    // Read back
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile(addr as *const u8) },
+        0xAA,
+        b"page0",
+    );
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile((addr + page_size) as *const u8) },
+        0xBB,
+        b"page1",
+    );
+
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size * 2) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Map with offset into VMO.
+fn test_map_with_offset(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  map_with_offset: ");
+
+    let mut vmo: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create((page_size * 2) as u64, 0, &mut vmo) },
+        b"vmo_create",
+    );
+
+    // Write to second page via VMO API
+    let data = [0xCCu8; 8];
+    check(
+        unsafe { zx_vmo_write(vmo, data.as_ptr(), page_size as u64, 8) },
+        b"vmo_write page1",
+    );
+
+    // Map only the second page
+    let mut addr: usize = 0;
+    check(
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                ZX_VM_PERM_READ,
+                0,
+                vmo,
+                page_size,
+                page_size,
+                &mut addr,
+            )
+        },
+        b"vmar_map offset",
+    );
+
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile(addr as *const u8) },
+        0xCC,
+        b"read offset",
+    );
+
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size) },
+        b"unmap",
+    );
+    zx::debug_write(b"ok\n");
+}
+
+/// Protect sub-range: map RW, protect first half RO, verify.
+fn test_protect_subrange(root_vmar: HandleValue, page_size: usize) {
+    zx::debug_write(b"  protect_subrange: ");
+
+    let mut vmo: HandleValue = 0;
+    check(
+        unsafe { zx_vmo_create((page_size * 2) as u64, 0, &mut vmo) },
+        b"vmo_create",
+    );
+    let data = [0xEEu8; 8];
+    check(
+        unsafe { zx_vmo_write(vmo, data.as_ptr(), 0, 8) },
+        b"vmo_write",
+    );
+
+    let mut addr: usize = 0;
+    check(
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
+                0,
+                vmo,
+                0,
+                page_size * 2,
+                &mut addr,
+            )
+        },
+        b"vmar_map",
+    );
+
+    // Protect first page to read-only
+    check(
+        unsafe { zx_vmar_protect(root_vmar, ZX_VM_PERM_READ, addr, page_size) },
+        b"protect ro",
+    );
+
+    // First page readable
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile(addr as *const u8) },
+        0xEE,
+        b"read protected",
+    );
+
+    // Second page still writable
+    unsafe { core::ptr::write_volatile((addr + page_size) as *mut u8, 0xFF) };
+    assert_eq_u8(
+        unsafe { core::ptr::read_volatile((addr + page_size) as *const u8) },
+        0xFF,
+        b"write unprotected",
+    );
+
+    check(
+        unsafe { zx_vmar_unmap(root_vmar, addr, page_size * 2) },
         b"unmap",
     );
     zx::debug_write(b"ok\n");
