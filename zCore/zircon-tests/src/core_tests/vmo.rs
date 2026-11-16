@@ -2443,8 +2443,6 @@ pub async fn run_all() {
     child_signal_map();
     log::warn!("    vmo: vmo_zero_page");
     vmo_zero_page();
-    // Moved to petal vmar_test (#817)
-    // cache_flush();
     log::warn!("    vmo: cache_op");
     cache_op();
     log::warn!("    vmo: cache_op_large_vmo");
@@ -2457,8 +2455,6 @@ pub async fn run_all() {
     cache_policy_race();
     log::warn!("    vmo: child_resize_right");
     child_resize_right();
-    // Moved to petal vmar_test (#817)
-    // commit();
     log::warn!("    vmo: compressed_contiguous");
     compressed_contiguous();
     log::warn!("    vmo: contiguous_require_aligned_size");
@@ -2476,26 +2472,14 @@ pub async fn run_all() {
     decommit_misaligned();
     log::warn!("    vmo: discardable");
     discardable();
-    // Moved to petal vmar_test (#817)
-    // fault_beyond_stream_size_no_phys_or_contig();
-    // Moved to petal vmar_test (#817)
-    // grow_mapped_vmo();
     log::warn!("    vmo: lock_unlock");
     lock_unlock();
-    // Moved to petal vmar_test (#817)
-    // map();
-    // Moved to petal vmar_test (#817)
-    // map_read();
-    // Moved to petal vmar_test (#817)
-    // mapped_vmo_smaller_than_mapping();
     log::warn!("    vmo: metadata_bytes");
     metadata_bytes();
     log::warn!("    vmo: no_perm_map");
     no_perm_map();
     log::warn!("    vmo: no_perm_protect");
     no_perm_protect();
-    // Moved to petal vmar_test (#817)
-    // no_write_resizable();
     log::warn!("    vmo: op_out_of_bounds");
     op_out_of_bounds();
     log::warn!("    vmo: parallel_read");
@@ -2512,18 +2496,12 @@ pub async fn run_all() {
     pin_tests();
     log::warn!("    vmo: prefetch");
     prefetch();
-    // Moved to petal vmar_test (#817)
-    // protect_to_write();
-    // Moved to petal vmar_test (#817)
-    // read_only_map();
     log::warn!("    vmo: read_write_invalid_kernel_buffer");
     read_write_invalid_kernel_buffer().await;
     log::warn!("    vmo: read_write_invalid_null_buffer");
     read_write_invalid_null_buffer();
     log::warn!("    vmo: read_write_invalid_user_buffer");
     read_write_invalid_user_buffer();
-    // Moved to petal vmar_test (#817)
-    // resize_hazard();
     log::warn!("    vmo: resize_right");
     resize_right();
     log::warn!("    vmo: rights");
@@ -2538,8 +2516,6 @@ pub async fn run_all() {
     stream_size_slices_and_references();
     log::warn!("    vmo: uncached_contiguous");
     uncached_contiguous();
-    // Moved to petal vmar_test (#817)
-    // unmap_loaned_contiguous_while_faulting();
     log::warn!("    vmo: v1_info");
     v1_info();
     log::warn!("    vmo: v2_info");

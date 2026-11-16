@@ -140,10 +140,6 @@ fn unmap() {
 /// Run all tests in this module.
 #[cfg(feature = "baremetal-test")]
 pub fn run_all() {
-    // Needs user-mode VMAR access (#817)
-    // create_cow_clone();
     merge_mappings();
-    // Needs user-mode VMAR access (#817)
-    // single_mapping();
     unmap();
 }

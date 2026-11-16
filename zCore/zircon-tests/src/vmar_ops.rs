@@ -217,8 +217,6 @@ pub fn run_all() {
     map_large_vmo();
     map_with_offset();
     destroy_sub_vmar();
-    // Moved to petal vmar_test (#817)
-    // protect_range();
     map_overlapping();
     vmar_info();
 }
