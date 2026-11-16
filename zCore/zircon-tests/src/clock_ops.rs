@@ -44,11 +44,11 @@ fn monotonic_increasing() {
 
 ///
 /// zx_clock_get_boot should return a non-zero value.
-/// In libos mode, boot time equals monotonic time.
+/// In test mode, boot time equals monotonic time.
 #[cfg_attr(test, test)]
 fn boot_time_non_zero() {
     let _ctx = TestContext::new();
-    // In zCore libos, boot time == monotonic time.
+    // In test mode, boot time == monotonic time.
     let now = hal_impl::timer::timer_now();
     assert!(
         !now.is_zero(),

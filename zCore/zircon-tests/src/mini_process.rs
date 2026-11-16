@@ -186,7 +186,7 @@ fn kill_process() {
 
     proc.exit(zircon_object::task::TASK_RETCODE_SYSCALL_KILL);
     // After kill, process signals should include PROCESS_TERMINATED.
-    // Note: in libos mode without real execution, the terminated signal
+    // Note: in test mode without real execution, the terminated signal
     // may not be asserted until thread drop.
 }
 
@@ -201,7 +201,7 @@ fn process_return_code() {
     // Set return code via kill (Fuchsia uses TASK_RETCODE_EXCEPTION_KILL).
     proc.exit(zircon_object::task::TASK_RETCODE_SYSCALL_KILL);
     // The return code is set when the process terminates.
-    // In libos mode, we verify the process can be killed without panic.
+    // In test mode, we verify the process can be killed without panic.
 }
 
 /// Run all tests in this module.

@@ -419,7 +419,7 @@ async fn requeue_unqueued_on_timeout() {
 ///
 /// Full thread suspension during futex_wait requires the VDSO syscall
 /// restart mechanism (bare-metal only). We exercise the parts that
-/// work in libos mode: create a waiter thread on a futex, verify it
+/// work in test mode: create a waiter thread on a futex, verify it
 /// blocks, then wake it and verify it completes normally.
 #[cfg_attr(test, async_std::test)]
 async fn thread_suspended() {

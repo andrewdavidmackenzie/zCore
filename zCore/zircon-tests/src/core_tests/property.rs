@@ -149,7 +149,7 @@ fn process_name() {
 // loads. Exception channels catch #UD (no fsgsbase support) and #GP
 // (non-canonical values).
 //
-// GAP: In libos mode we cannot:
+// GAP: In test mode we cannot:
 //   - Execute rdfsbase/wrfsbase CPU instructions
 //   - Handle #UD/#GP hardware exceptions via exception channels
 //   - Create bare threads with modified register state
@@ -243,7 +243,7 @@ fn register_fs_non_thread() {
 /// does not propagate the ZX_CHANNEL_READABLE signal, so
 /// `zx_object_wait_many` returns with pending=0.
 ///
-/// In libos mode we cannot execute `wrfsbase`/`rdfsbase` CPU
+/// In test mode we cannot execute `wrfsbase`/`rdfsbase` CPU
 /// instructions or trigger hardware exceptions. We test only the
 /// syscall-level validation: set_property rejects non-canonical
 /// values with INVALID_ARGS and preserves the old value.
@@ -447,7 +447,7 @@ fn register_gs_non_thread() {
 /// infrastructure does not set ZX_CHANNEL_READABLE on the exception
 /// channel after handling the hardware exception.
 ///
-/// In libos mode we cannot execute `wrgsbase`/`rdgsbase` CPU
+/// In test mode we cannot execute `wrgsbase`/`rdgsbase` CPU
 /// instructions or trigger hardware exceptions. We test only the
 /// syscall-level validation: set_property rejects non-canonical
 /// values with INVALID_ARGS and preserves the old value.

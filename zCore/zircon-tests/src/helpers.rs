@@ -30,6 +30,7 @@ pub fn ensure_hal_init() {
         {
             hal_impl::init();
             executor::init_runtimes(&[0]);
+            // Register COW page fault handler for host execution.
             hal_impl::libos_cow::register_cow_callback(zircon_object::vm::vmar::cow_fault_callback);
         }
     });
@@ -1727,4 +1728,21 @@ impl ExceptionTestThread {
         }
         panic!("ExceptionTestThread: timed out waiting for thread to terminate");
     }
+}
+
+/// Allocate physical frames for use in physical VMO tests.
+/// Returns the physical address of the allocated contiguous region.
+/// Frames are intentionally leaked (not freed on drop) because the
+/// physical VMO takes ownership of the backing memory.
+pub fn alloc_phys_addr(pages: usize) -> usize {
+    use hal_impl::mem::PhysFrame;
+    let frames = PhysFrame::new_contiguous(pages, 0);
+    assert!(
+        !frames.is_empty(),
+        "failed to allocate {} physical frames for test",
+        pages
+    );
+    let paddr = frames[0].paddr();
+    core::mem::forget(frames); // VMO owns the physical memory
+    paddr
 }

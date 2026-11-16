@@ -16,7 +16,7 @@ use zircon_object::ZxError;
 ///
 /// C++ test uses near-SIZE_MAX lengths. On QEMU bare-metal, the kernel's
 /// user buffer validation returns INVALID_ARGS before the VMO bounds
-/// check returns OUT_OF_RANGE. In libos mode the bounds check runs first.
+/// check returns OUT_OF_RANGE. In test mode the bounds check runs first.
 /// TODO: fix bare-metal syscall dispatch to check VMO bounds before buffer.
 /// Then verify exact-size read/write succeeds.
 ///
@@ -28,7 +28,7 @@ use zircon_object::ZxError;
 /// the near-MAX buf_size interacts with user buffer validation
 /// in a way that produces INVALID_ARGS before the VMO bounds
 /// check fires. This is a syscall argument handling bug specific
-/// to the QEMU/bare-metal path and does not affect libos mode.
+/// to the QEMU/bare-metal path and does not affect test mode.
 ///
 /// The Rust test verifies the CORRECT behavior (OUT_OF_RANGE).
 /// The C++ test documents the QEMU-path bug.
@@ -568,7 +568,7 @@ fn vmo_zero_page() {
 /// Create a VMO of 0x8000 bytes (8 pages), map it read-only and
 /// read+write, commit all pages, write data via VMO API, and verify
 /// it's readable through both mappings. Cache flush (zx_cache_flush)
-/// is a no-op in libos mode, but the dual-mapping + commit + data
+/// is a no-op in test mode, but the dual-mapping + commit + data
 /// path is exercised faithfully.
 ///
 /// Note: On aarch64 macOS (16K host pages), cross-mapping coherence
@@ -576,9 +576,9 @@ fn vmo_zero_page() {
 /// read-through coherence (VMO write → mapping read) which works
 /// because pmem_write syncs to user VA. The reverse direction
 /// (mapping write → VMO read) may not sync on anonymous pages, so
-/// we ignore this test in libos if it would fail.
+/// we ignore this test in test mode if it would fail.
 ///
-/// Ignored in libos: dual-mapping read-through coherence fails when
+/// Ignored in test mode: dual-mapping read-through coherence fails when
 /// run in parallel with other tests due to mock_mem anonymous page
 /// aliasing on aarch64 macOS (16K host pages). Passes individually.
 #[cfg_attr(test, test)]
@@ -621,7 +621,7 @@ fn cache_flush() {
     vmo.read(0, &mut vmo_buf).unwrap();
     assert_eq!(vmo_buf, pattern, "VMO read should match written data");
 
-    // Cache flush is a no-op in libos — data should still be intact.
+    // Cache flush is a no-op in test mode — data should still be intact.
     let mut check = vec![0u8; size];
     vmo.read(0, &mut check).unwrap();
     assert_eq!(
@@ -634,7 +634,7 @@ fn cache_flush() {
 }
 
 /// C++: TEST(VmoTestCase, CacheOp)
-/// Write data, then verify it persists (cache ops are no-ops in libos).
+/// Write data, then verify it persists (cache ops are no-ops in test mode).
 #[cfg_attr(test, test)]
 fn cache_op() {
     let _ctx = TestContext::new();
@@ -642,7 +642,7 @@ fn cache_op() {
     let data: Vec<u8> = (0..PAGE_SIZE).map(|i| (i & 0xFF) as u8).collect();
     vmo.write(0, &data).unwrap();
 
-    // In libos mode, cache operations are no-ops. Verify data integrity.
+    // In test mode, cache operations are no-ops. Verify data integrity.
     let mut buf = vec![0u8; PAGE_SIZE];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf, data);
@@ -698,7 +698,7 @@ fn cache_op_out_of_range() {
 #[cfg_attr(test, test)]
 fn cache_op_phys() {
     let _ctx = TestContext::new();
-    let phys = VmObject::new_physical(PAGE_SIZE, 1);
+    let phys = VmObject::new_physical(crate::helpers::alloc_phys_addr(1), 1);
     assert_eq!(phys.len(), PAGE_SIZE);
 
     // Physical VMO info should NOT have TYPE_PAGED.
@@ -804,7 +804,7 @@ fn commit() {
 /// but BTI compressed pinning of contiguous VMOs fails because zCore
 /// doesn't fully implement BTI_COMPRESS address compression.
 ///
-/// In zCore libos mode, BTI/IOMMU infrastructure is not available at
+/// In test mode, BTI/IOMMU infrastructure is not available at
 /// all. The C++ test uses bti.pin() to pin and pmt.unpin() to unpin.
 /// We exercise the same pin+unpin sequence on the contiguous VMO
 /// using the direct pin/unpin API (no BTI).
@@ -1039,7 +1039,7 @@ fn discardable() {
 ///
 /// The C++ test verifies that physical and contiguous VMOs cannot use
 /// ZX_VM_FAULT_BEYOND_STREAM_SIZE mappings (returns NOT_SUPPORTED).
-/// We exercise what we can in libos mode: create a paged VMO, map it,
+/// We exercise what we can in test mode: create a paged VMO, map it,
 /// set content_size (stream size) smaller than the VMO size, and
 /// verify that data within stream size is accessible through the
 /// mapping while the VMO-level read past the VMO end is rejected.
@@ -1071,7 +1071,7 @@ fn fault_beyond_stream_size_no_phys_or_contig() {
     let val = unsafe { core::ptr::read_volatile(addr as *const u8) };
     assert_eq!(val, 0xAA, "data within stream size is accessible");
 
-    // Read beyond content_size through mapping — in libos mode the
+    // Read beyond content_size through mapping — in test mode the
     // mapping is backed by the full VMO, so page 2 data is visible.
     // On bare metal with ZX_VM_FAULT_BEYOND_STREAM_SIZE, this would
     // fault. We verify the data is present (stream size is advisory
@@ -1102,7 +1102,7 @@ fn fault_beyond_stream_size_no_phys_or_contig() {
 /// writes are visible through the mapping.
 ///
 /// The C++ test relies on lazy page faults (MAP without MAP_RANGE) to
-/// access pages beyond the original VMO end after grow. In libos mode
+/// access pages beyond the original VMO end after grow. In test mode
 /// there is no page fault handler, so we unmap and remap after grow.
 #[cfg_attr(test, test)]
 fn grow_mapped_vmo() {
@@ -1265,7 +1265,7 @@ fn map_read() {
 ///
 /// The C++ test maps 2 pages with lazy commit (no MAP_RANGE) and
 /// relies on the kernel fault handler to return OUT_OF_RANGE for the
-/// second page. In libos mode there is no fault handler, so we map
+/// second page. In test mode there is no fault handler, so we map
 /// only the 1-page VMO (with MAP_RANGE) and verify the OUT_OF_RANGE
 /// boundary via VMO-level read.
 #[cfg_attr(test, test)]
@@ -1528,7 +1528,7 @@ fn parallel_write_and_decommit() {
 #[cfg_attr(test, test)]
 fn physical_slice() {
     let _ctx = TestContext::new();
-    let phys = VmObject::new_physical(PAGE_SIZE, 2);
+    let phys = VmObject::new_physical(crate::helpers::alloc_phys_addr(2), 2);
     assert_eq!(phys.len(), 2 * PAGE_SIZE);
 
     // Creating a slice of a physical VMO.
@@ -1594,7 +1594,7 @@ fn physical_vmo_oob_mapping() {
     let proc = Process::create(&job, "phys-oob").unwrap();
     let vmar = proc.vmar();
 
-    let phys = VmObject::new_physical(PAGE_SIZE, 1);
+    let phys = VmObject::new_physical(crate::helpers::alloc_phys_addr(1), 1);
     let flags = MMUFlags::READ | MMUFlags::WRITE;
 
     // Map exactly 1 page — should succeed.
@@ -1712,7 +1712,7 @@ fn protect_to_write() {
 ///
 /// Map VMO read-only. Verify reads through the mapping work.
 /// On bare metal, probe_for_write would return ACCESS_DENIED;
-/// in libos mode, mock_mem doesn't enforce write protection on
+/// in test mode, mock_mem doesn't enforce write protection on
 /// the host mmap, so we only verify the read path.
 #[cfg_attr(test, test)]
 fn read_only_map() {
@@ -1737,7 +1737,7 @@ fn read_only_map() {
     );
 
     // Note: on bare metal, writing through this mapping would fault
-    // with ACCESS_DENIED. In libos mode, mock_mem doesn't enforce
+    // with ACCESS_DENIED. In test mode, mock_mem doesn't enforce
     // write protection on the host mmap, so we can't test the write
     // rejection here.
 
@@ -1818,7 +1818,7 @@ fn read_write_invalid_null_buffer() {
 /// ```
 ///
 /// The unmapped-buffer and past-mapping NOT_FOUND checks require kernel-level
-/// guarded_user_copy, which libos mode doesn't enforce (memcpy succeeds on any
+/// guarded_user_copy, which test mode doesn't enforce (memcpy succeeds on any
 /// host-valid address). We faithfully test what we can:
 /// - OUT_OF_RANGE when reading/writing past the VMO's size.
 /// - Successful read/write within bounds after mapping.
@@ -1859,7 +1859,7 @@ fn read_write_invalid_user_buffer() {
     // Note: The C++ test also checks NOT_FOUND for unmapped VMAR regions
     // and for read/write past the mapped region but within VMO bounds.
     // These require kernel-level guarded_user_copy fault handling, which
-    // libos mode doesn't enforce (copy_to_user is a plain memcpy).
+    // test mode doesn't enforce (copy_to_user is a plain memcpy).
 
     vmar.unmap(addr, mapped_size).unwrap();
 }
@@ -1868,7 +1868,7 @@ fn read_write_invalid_user_buffer() {
 ///
 /// Map a 2-page resizable VMO, read an element through the mapping to
 /// verify initial state, then shrink the VMO to 0 pages. On bare metal
-/// the second page would fault with OUT_OF_RANGE. In libos we verify
+/// the second page would fault with OUT_OF_RANGE. In test mode we verify
 /// through the VMO API that data beyond the new size is gone, and that
 /// the first page data was intact before the shrink.
 #[cfg_attr(test, test)]
@@ -1894,7 +1894,7 @@ fn resize_hazard() {
     vmo.set_len(0).unwrap();
 
     // On bare metal, reading through the mapping would now fault with
-    // OUT_OF_RANGE. In libos mode we verify through VMO API that reads
+    // OUT_OF_RANGE. In test mode we verify through VMO API that reads
     // past the (now 0) size fail.
     let mut check = [0u8; 4];
     assert_eq!(
@@ -1963,7 +1963,7 @@ fn rights_exec() {
 /// the stream size), then increases stream size back to 4 pages and
 /// unpins.
 ///
-/// In libos mode we don't have BTI infrastructure, but we can exercise
+/// In test mode we don't have BTI infrastructure, but we can exercise
 /// the kernel-object pin/unpin path directly. We commit all pages first
 /// (pin requires committed pages), pin them, reduce content_size
 /// (stream size), verify pinned pages are preserved, unpin, re-pin,
@@ -2205,7 +2205,7 @@ fn uncached_contiguous() {
 }
 
 /// C++: TEST(VmoTestCase, UnmapLoanedcontiguousWhileFaulting)
-/// Map and unmap a contiguous VMO — no concurrent faulting in libos.
+/// Map and unmap a contiguous VMO — no concurrent faulting in test mode.
 #[cfg_attr(test, test)]
 fn unmap_loaned_contiguous_while_faulting() {
     let _ctx = TestContext::new();
@@ -2503,14 +2503,11 @@ pub async fn run_all() {
     log::warn!("    vmo: parallel_write_and_decommit");
     parallel_write_and_decommit();
     log::warn!("    vmo: physical_slice");
-    // Physical VMO: unmapped phys addr on bare-metal (#820)
-    // physical_slice();
+    physical_slice();
     log::warn!("    vmo: physical_vmo_invalid_initial_size");
-    // Physical VMO: unmapped phys addr on bare-metal (#820)
-    // physical_vmo_invalid_initial_size();
+    physical_vmo_invalid_initial_size();
     log::warn!("    vmo: physical_vmo_oob_mapping");
-    // Physical VMO: unmapped phys addr on bare-metal (#820)
-    // physical_vmo_oob_mapping();
+    physical_vmo_oob_mapping();
     log::warn!("    vmo: pin_tests");
     pin_tests();
     log::warn!("    vmo: prefetch");

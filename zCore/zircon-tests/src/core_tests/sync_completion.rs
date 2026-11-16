@@ -112,7 +112,7 @@ async fn multi_wait() {
 /// 1 thread blocks on a wait with a deadline. No signal is sent.
 /// Thread should wake with TIMED_OUT.
 ///
-/// In libos mode, we exercise the timeout path using an Event and
+/// In test mode, we exercise the timeout path using an Event and
 /// sys_object_wait_one with an immediate deadline. The Event is
 /// never signaled, so the wait returns TIMED_OUT — the same
 /// kernel code path as sync_completion_wait_deadline with a past

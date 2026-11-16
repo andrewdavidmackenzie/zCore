@@ -11,7 +11,7 @@ use zircon_object::ZxError;
 /// Start a thread, let it run briefly, query ZX_INFO_TASK_RUNTIME.
 /// The thread should have accumulated some non-zero queue_time or
 /// cpu_time. With the priority scheduler, the thread gets CPU time
-/// even in libos test mode.
+/// even in test mode test mode.
 #[cfg_attr(test, async_std::test)]
 async fn process_get_info_runtime() {
     let _ctx = TestContext::new();
@@ -89,7 +89,7 @@ async fn process_get_info_runtime_v1() {
 /// main thread calls get_info on the process 10000 times to try
 /// to trigger a deadlock race.
 ///
-/// In libos mode we can't run a mini-process, but we can exercise
+/// In test mode we can't run a mini-process, but we can exercise
 /// the same kernel APIs (wait_async + cancel) on a port bound to
 /// the process's signal set, verifying there's no deadlock or panic.
 ///

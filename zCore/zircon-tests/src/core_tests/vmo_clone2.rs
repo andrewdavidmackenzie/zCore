@@ -60,7 +60,7 @@ fn poll_vmo_populated_bytes(vmo: &Arc<VmObject>, expected: u64) {
             return;
         }
         // Yield to let other tasks run (bare-metal compatible).
-        // On libos, this is a cooperative yield; on bare-metal,
+        // Yield to let other tasks run.
         // the kernel executor schedules other tasks.
         core::hint::spin_loop();
     }
@@ -1362,7 +1362,7 @@ fn map_range_read_only() {
 fn no_physical() {
     let _ctx = TestContext::new();
     // Create a physical VMO at address 0 (test-mode only, no real HW backing).
-    let physical = VmObject::new_physical(0, 1);
+    let physical = VmObject::new_physical(crate::helpers::alloc_phys_addr(1), 1);
 
     // Attempting to create a snapshot child should fail.
     let result = physical.create_child(false, 0, PAGE_SIZE);

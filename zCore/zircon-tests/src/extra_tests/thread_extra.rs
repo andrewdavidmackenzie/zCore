@@ -296,7 +296,7 @@ async fn suspend_resume_from_multiple_threads() {
     hal_impl::thread::yield_now().await;
 
     // Simulate two independent suspenders by calling suspend twice
-    // (in libos, all calls come from the same async context, but the
+    // (in test mode, all calls come from the same async context, but the
     // kernel's suspend count is what we're testing)
     thread.suspend(); // suspender A
     thread.suspend(); // suspender B
@@ -322,7 +322,7 @@ async fn suspend_resume_from_multiple_threads() {
 }
 
 /// Fuchsia equivalent: TEST(Threads, SuspendStoppedThread)
-/// Suspend a thread that has been stopped (via exception). In libos
+/// Suspend a thread that has been stopped (via exception). In test mode
 /// mode we approximate this by suspending a thread that has been
 /// killed (Dead state) — the kernel should handle it gracefully.
 #[cfg_attr(test, async_std::test)]
@@ -347,7 +347,7 @@ async fn suspend_stopped_thread() {
 
 /// Fuchsia equivalent: TEST(Threads, SuspendStoppedAndBlockedThread)
 /// Suspend a thread that is both stopped (exception) and blocked
-/// (syscall). In libos mode we test by suspending a sleeping thread,
+/// (syscall). In test mode we test by suspending a sleeping thread,
 /// then killing it while suspended, verifying the composite state
 /// transitions work correctly.
 #[cfg_attr(test, async_std::test)]

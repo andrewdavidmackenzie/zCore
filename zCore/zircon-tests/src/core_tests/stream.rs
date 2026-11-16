@@ -244,7 +244,7 @@ fn stream_no_contiguous_or_physical_vmo() {
     }
 
     // A physical VMO should not be paged
-    let physical = VmObject::new_physical(PAGE_SIZE, 1);
+    let physical = VmObject::new_physical(crate::helpers::alloc_phys_addr(1), 1);
     assert!(!physical.is_paged());
     // The syscall would return NOT_SUPPORTED
 }
@@ -480,7 +480,7 @@ fn stream_write_vector_with_append_mode() {
 ///   - Real multi-threaded racing with page faults
 ///   - TestThread::WaitForCrash with specific fault address checking
 ///
-/// None of this is available in libos mode. We implement the faithful
+/// None of this is available in test mode. We implement the faithful
 /// sequential analog: verify that after reducing stream_size, reads
 /// at the seek position beyond stream_size return 0 bytes.
 #[cfg_attr(test, test)]
@@ -512,7 +512,7 @@ fn stream_fault_beyond_stream_size_resize_down_race() {
         // With ZX_VM_FAULT_BEYOND_STREAM_SIZE, this faults with OUT_OF_RANGE
         // because stream_size is 0 but the access is at test_offset.
         //
-        // In libos mode, we verify that stream reads past content_size
+        // In test mode, we verify that stream reads past content_size
         // return 0 bytes (the stream-level analog of the MMU fault).
         let stream = Stream::create(vmo.clone(), 0, 0x1); // MODE_READ
         stream
@@ -552,7 +552,7 @@ fn append_supplies_zeroes() {
 }
 
 /// C++: TEST(StreamTestCase, AppendWithMultipleThreads)
-/// In libos mode there are no real concurrent threads, so we simulate
+/// In test mode there are no real concurrent threads, so we simulate
 /// sequential appends from "multiple threads" by just doing them in order.
 #[cfg_attr(test, test)]
 fn append_with_multiple_threads() {
@@ -619,7 +619,7 @@ fn content_size_updated_on_partial_write() {
 /// This requires pager-backed VMOs with TRAP_DIRTY support — the pager
 /// thread intercepts dirty requests and selectively fails pages, causing
 /// the stream write to partially succeed. This infrastructure (UserPager,
-/// TRAP_DIRTY, async dirty page faults) is not available in libos mode.
+/// TRAP_DIRTY, async dirty page faults) is not available in test mode.
 ///
 /// Faithful port: We create a 3-page VMO and attempt a 2-page write
 /// starting at page_size offset. Without pager TRAP_DIRTY, the write
@@ -909,7 +909,7 @@ fn read_vector_alias() {
 /// a read_at from offset 0. The content_size ends up as either
 /// truncate_to_size or initial_vmo_size depending on ordering.
 ///
-/// In libos mode we simulate both outcomes sequentially.
+/// In test mode we simulate both outcomes sequentially.
 ///
 /// Iterations: 50 (reduced from C++ 500 since no real race).
 #[cfg_attr(test, test)]
@@ -971,7 +971,7 @@ fn read_write_shrink_race() {
 /// The content_size ends up as either truncate_to_size (truncate last)
 /// or initial_vmo_size (write last).
 ///
-/// In libos mode we simulate both orderings sequentially.
+/// In test mode we simulate both orderings sequentially.
 ///
 /// Iterations: 50 (matching C++).
 #[cfg_attr(test, test)]
@@ -1022,9 +1022,9 @@ fn write_shrink_race() {
 /// fails mid-operation, and the stream must cancel the pending size
 /// update: content_size and seek must remain at 0.
 ///
-/// In libos mode all buffers live in the same address space, so we
+/// In test mode all buffers live in the same address space, so we
 /// cannot construct a truly unmapped buffer. This test is ignored in
-/// libos mode. We still verify the near-overflow offset path as a
+/// test mode. We still verify the near-overflow offset path as a
 /// basic sanity check.
 #[cfg_attr(test, test)]
 fn write_vector_unmapped_user_buffer_cancels_operation() {
@@ -1033,7 +1033,7 @@ fn write_vector_unmapped_user_buffer_cancels_operation() {
     vmo.set_content_size(0).unwrap();
     let stream = Stream::create(vmo.clone(), 0, 0x3); // MODE_READ | MODE_WRITE
 
-    // In non-libos mode this would use actual unmapped memory.
+    // In non-test mode this would use actual unmapped memory.
     // For now, test the overflow path: write_at with near-max offset
     // should fail with FILE_BIG or OUT_OF_RANGE.
     let result = stream.write_at(b"data", usize::MAX - 1);

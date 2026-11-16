@@ -618,7 +618,7 @@ fn close_wait_race() {
                     let obj = event.clone() as Arc<dyn KernelObject>;
                     // In the C++ test, BAD_HANDLE and WRONG_TYPE are
                     // acceptable because the port may be closed at any time.
-                    // In our libos model, the Arc keeps the port alive but
+                    // In our test model, the Arc keeps the port alive but
                     // we still exercise the observer registration path.
                     let _ = obj.send_signal_to_port_async(Signal::SIGNALED, &p, 0, false);
                 }

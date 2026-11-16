@@ -48,7 +48,7 @@ fn profile_set_on_thread() {
         .add_handle(Handle::new(profile, Rights::DEFAULT_PROFILE));
 
     // Apply profile to thread — should succeed (even though scheduling
-    // isn't actually changed in libos mode)
+    // isn't actually changed in test mode)
     let result = sc.sys_object_set_profile(thread_h, profile_h, 0);
     assert!(
         result.is_ok(),

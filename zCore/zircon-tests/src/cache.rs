@@ -1,7 +1,7 @@
 //! Cache control tests.
 //!
 //! Ports of Fuchsia's zircon/system/utest/core/cache tests.
-//! In zCore libos mode, cache operations are implemented as compiler
+//! In test mode, cache operations are implemented as compiler
 //! fences (no-ops on the actual cache). These tests verify the syscall
 //! API's argument validation and error paths.
 
@@ -14,7 +14,7 @@ const ZX_CACHE_FLUSH_INVALIDATE: u32 = 1 << 1;
 const ZX_CACHE_FLUSH_INSN: u32 = 1 << 2;
 
 ///
-/// Flush the data cache for a range of memory. In libos mode this
+/// Flush the data cache for a range of memory. In test mode this
 /// is a no-op fence but should succeed for valid arguments.
 #[cfg_attr(test, test)]
 fn flush_data_cache() {
@@ -28,7 +28,7 @@ fn flush_data_cache() {
 }
 
 ///
-/// Flush the instruction cache for a range. In libos mode this is
+/// Flush the instruction cache for a range. In test mode this is
 /// a no-op fence but should succeed for valid arguments.
 #[cfg_attr(test, test)]
 fn flush_instruction_cache() {
@@ -41,7 +41,7 @@ fn flush_instruction_cache() {
 }
 
 ///
-/// Synchronize data and instruction caches (DATA | INSN). In libos
+/// Synchronize data and instruction caches (DATA | INSN). In test mode
 /// mode this is a no-op fence but should succeed.
 #[cfg_attr(test, test)]
 fn sync_caches() {
@@ -66,7 +66,7 @@ fn flush_null_address() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
-    // size > 0 with addr 0. In libos mode, the fence doesn't touch memory.
+    // size > 0 with addr 0. In test mode, the fence doesn't touch memory.
     let result = sc.sys_cache_flush(0, 64, ZX_CACHE_FLUSH_DATA);
     assert!(result.is_ok());
 }
@@ -99,7 +99,7 @@ fn flush_with_invalidate() {
 }
 
 ///
-/// Flush cache for a large contiguous range. Should succeed in libos
+/// Flush cache for a large contiguous range. Should succeed in test mode
 /// mode (fence only).
 #[cfg_attr(test, test)]
 fn flush_large_range() {

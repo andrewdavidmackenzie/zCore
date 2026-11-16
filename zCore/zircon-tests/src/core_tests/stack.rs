@@ -16,7 +16,7 @@ use zircon_object::object::KernelObject;
 ///
 /// The C++ test uses Clang safe-stack/shadow-call-stack sanitizers,
 /// __builtin_frame_address, __builtin_thread_pointer, and environ.
-/// None of these are available in Rust or libos mode.
+/// None of these are available in Rust or test mode.
 ///
 /// We verify the page-distinctness concept: stack, heap, and
 /// thread-local storage occupy different memory regions.

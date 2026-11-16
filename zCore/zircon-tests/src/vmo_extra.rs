@@ -645,7 +645,7 @@ fn vmo_op_range_unlock() {
 
 ///
 /// op_range CACHE_SYNC flushes dirty cache lines for the given range.
-/// In libos mode this is a no-op that should succeed.
+/// In test mode this is a no-op that should succeed.
 #[cfg_attr(test, test)]
 fn vmo_op_range_cache_sync() {
     let _ctx = TestContext::new();
@@ -654,7 +654,7 @@ fn vmo_op_range_cache_sync() {
     vmo.write(0, &[42u8; 64]).unwrap();
 
     // Cache sync on committed pages should succeed.
-    // In libos mode, cache operations are no-ops.
+    // In test mode, cache operations are no-ops.
     // The kernel object doesn't expose cache_sync directly —
     // the syscall layer handles it. Just verify the VMO is valid.
     let mut buf = [0u8; 64];
@@ -664,7 +664,7 @@ fn vmo_op_range_cache_sync() {
 
 ///
 /// op_range CACHE_CLEAN cleans (writes back) cache lines for the range.
-/// In libos mode this is a no-op.
+/// In test mode this is a no-op.
 #[cfg_attr(test, test)]
 fn vmo_op_range_cache_clean() {
     let _ctx = TestContext::new();
@@ -672,14 +672,14 @@ fn vmo_op_range_cache_clean() {
     let vmo = VmObject::new_paged(1);
     vmo.write(0, &[77u8; 64]).unwrap();
 
-    // Verify data survives (cache clean is no-op in libos).
+    // Verify data survives (cache clean is no-op in test mode).
     let mut buf = [0u8; 64];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 77);
 }
 
 ///
-/// op_range CACHE_INVALIDATE invalidates cache lines. In libos mode
+/// op_range CACHE_INVALIDATE invalidates cache lines. In test mode
 /// this is a no-op. Requires uncached VMO in Fuchsia — we skip that
 /// requirement and just verify the VMO remains readable.
 #[cfg_attr(test, test)]
@@ -689,7 +689,7 @@ fn vmo_op_range_cache_invalidate() {
     let vmo = VmObject::new_paged(1);
     vmo.write(0, &[0xABu8; 64]).unwrap();
 
-    // In libos mode, cache invalidate is a no-op.
+    // In test mode, cache invalidate is a no-op.
     let mut buf = [0u8; 64];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0xAB);
@@ -697,7 +697,7 @@ fn vmo_op_range_cache_invalidate() {
 
 ///
 /// op_range ALWAYS_NEED hints to the kernel that pages should be kept
-/// resident. In libos mode this is a no-op — just verify no error.
+/// resident. In test mode this is a no-op — just verify no error.
 #[cfg_attr(test, test)]
 fn vmo_op_range_always_need() {
     let _ctx = TestContext::new();
@@ -711,7 +711,7 @@ fn vmo_op_range_always_need() {
 }
 
 ///
-/// op_range DONT_NEED hints that pages can be evicted. In libos mode
+/// op_range DONT_NEED hints that pages can be evicted. In test mode
 /// this is a no-op — pages remain committed.
 #[cfg_attr(test, test)]
 fn vmo_op_range_dont_need() {

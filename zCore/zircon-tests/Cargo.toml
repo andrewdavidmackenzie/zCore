@@ -9,11 +9,9 @@ description = "Rust-native Zircon syscall test suite (no_std)"
 
 [features]
 default = ["host"]
-# host: enable host-mode backends in dependencies.
+# host: enable host-mode HAL backend and separate address spaces.
 host = [
-    "zircon-object/libos",
     "zircon-object/aspace-separate",
-    "zircon-syscall/libos",
     "hal-impl/libos",
 ]
 # baremetal-test: tests compiled as a library for kernel integration.

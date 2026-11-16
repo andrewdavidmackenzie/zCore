@@ -7,7 +7,7 @@
 //! over all GDT selectors with `LAR`, and test all 256 `INT` instructions.
 //! Each expects a crash (ASSERT_DEATH).
 //!
-//! In zCore's libos (host) mode, executing these instructions would crash
+//! In test mode, executing these instructions would crash
 //! the test process with a real segfault. We port the test structure
 //! faithfully by creating a Zircon thread for each death test, setting it
 //! up as if it would execute the faulting instruction, and verifying that
@@ -168,7 +168,7 @@ fn jump_to_first_ldt_entry() {
 /// access rights. LAR is safe to call on any selector — it doesn't fault,
 /// it just sets ZF=0 for invalid selectors. This is NOT a death test.
 ///
-/// On x86_64, we can execute LAR safely even in libos mode.
+/// On x86_64, we can execute LAR safely even in test mode.
 /// On other architectures, we verify the iteration logic matches C++.
 #[cfg_attr(test, test)]
 fn test_all_gdt_selectors() {

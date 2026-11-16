@@ -141,7 +141,7 @@ async fn already_passed_deadline_on_wait_one() {
 ///
 /// Basic timer lifecycle. C++ first does a wait_one with zero timeout
 /// to verify ZX_ERR_TIMED_OUT and pending==0, then loops 3 times with
-/// 10ms future deadlines and calls wait_one. In libos mode we test
+/// 10ms future deadlines and calls wait_one. In test mode we test
 /// with past deadlines (fire immediately) and use syscall-layer wait_one.
 #[cfg_attr(test, async_std::test)]
 async fn basic() {

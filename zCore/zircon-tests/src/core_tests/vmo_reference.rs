@@ -344,7 +344,7 @@ fn mapping_update_nested_child_destroy() {
 /// Lines 791/793 of vmo-reference.cc: `EXPECT_EQ(0u, *buf)` fails
 /// with `*buf == 0xBB`.
 ///
-/// In libos mode, `read_memory` resolves through `VmObject::read`
+/// In test mode, `read_memory` resolves through `VmObject::read`
 /// (not through hardware PTEs), so this test passes correctly.
 /// On QEMU/bare-metal, after dropping root and decommitting through
 /// the nested reference, sibling VMAR mappings should read zeros
@@ -409,7 +409,7 @@ fn mapping_update_nested_root_destroy() {
     );
 
     // C++ DIVERGENCE: On QEMU/bare-metal, ref1/ref2 mappings still
-    // read 0xBB here (stale PTEs not invalidated). In libos mode,
+    // read 0xBB here (stale PTEs not invalidated). In test mode,
     // read_memory goes through VmObject::read which sees the
     // decommitted frame and returns zeros correctly.
     //

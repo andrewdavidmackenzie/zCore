@@ -2845,7 +2845,7 @@ fn kernel_stats_cpu_stats() {
     // Provide buffer for up to 8 CPUs.
     let mut buf = vec![0u8; 64 * 8];
     let result = get_info(&ctx, res_h, TOPIC_CPU_STATS, &mut buf);
-    // May succeed or return NOT_SUPPORTED in libos mode.
+    // May succeed or return NOT_SUPPORTED in test mode.
     match result {
         Ok((actual, _avail)) => assert!(actual >= 1, "should have at least 1 CPU"),
         Err(e) => assert_eq!(e, zircon_object::ZxError::NOT_SUPPORTED),

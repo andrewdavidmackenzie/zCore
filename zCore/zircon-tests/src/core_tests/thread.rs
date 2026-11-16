@@ -466,7 +466,7 @@ fn get_affinity() {
     assert_eq!(thread.state(), ThreadState::New);
 
     // The info struct should be valid (not zeroed / panicked).
-    // In libos mode we're running on the host, so there's at least 1 CPU.
+    // In test mode we're running on the host, so there's at least 1 CPU.
     let _ = info;
 }
 
@@ -885,7 +885,7 @@ async fn reading_fp_register_state() {
     // On x86_64: FP state read should succeed and return 152 bytes.
     // On aarch64: NOT_SUPPORTED (FP uses vector regs on ARM).
     // If the thread isn't properly suspended (timing issue), the read
-    // may return BAD_STATE — that's acceptable in libos mode.
+    // may return BAD_STATE — that's acceptable in test mode.
     match result {
         Ok(size) => {
             #[cfg(target_arch = "x86_64")]
@@ -905,7 +905,7 @@ async fn reading_fp_register_state() {
             // isn't tracked in the cooperative executor.
         }
         Err(ZxError::BAD_STATE) => {
-            // Thread not fully suspended — timing issue in libos mode.
+            // Thread not fully suspended — timing issue in test mode.
         }
         Err(e) => panic!("unexpected error from FP state read: {:?}", e),
     }
@@ -971,7 +971,7 @@ async fn reading_general_register_state() {
     assert!(ip != 0 || sp != 0, "at least IP or SP should be non-zero");
 
     // Verify the buffer contains some data, not entirely zeros.
-    // In libos mode with the cooperative executor, most registers
+    // In test mode with the cooperative executor, most registers
     // are zero because no real instructions execute. The rflags
     // register (set by setup_uspace to 0x3202) should be non-zero.
     // On bare-metal with real execution, all regs would be populated.
@@ -2009,7 +2009,7 @@ async fn thread_start_on_initial_thread() {
 
 /// C++: TEST(Threads, ThreadStartWithZeroInstructionPointer)
 /// Start a thread with IP=0. On real hardware this triggers a fatal
-/// page fault exception with fault_address=0. In libos mode, we
+/// page fault exception with fault_address=0. In test mode, we
 /// verify the context is set correctly and attempt to start —
 /// the cooperative executor won't actually fault but the kernel
 /// should accept the configuration.
@@ -2044,7 +2044,7 @@ async fn thread_start_with_zero_instruction_pointer() {
 
     // Start the thread — it should be accepted by the kernel even
     // with IP=0 (the fault happens during execution, not at start).
-    // In libos mode with the cooperative executor, this won't
+    // In test mode with the cooperative executor, this won't
     // actually cause a page fault but the thread lifecycle should
     // work correctly.
     thread.start(helpers::test_loop_thread_fn).unwrap();

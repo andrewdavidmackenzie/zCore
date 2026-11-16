@@ -113,12 +113,12 @@ fn pin_multiple() {
     assert_eq!(bti.get_info().pmo_count, 2);
 }
 
-/// Create a contiguous VMO (works in libos mode via bitmap allocator).
+/// Create a contiguous VMO (works in test mode via bitmap allocator).
 #[cfg_attr(test, test)]
 fn contiguous_vmo_creation() {
     let _ctx = TestContext::new();
 
-    // new_contiguous uses the bitmap allocator in libos mode.
+    // new_contiguous uses the bitmap allocator in test mode.
     let vmo = VmObject::new_contiguous(4, PAGE_SIZE_LOG2).unwrap();
     assert_eq!(vmo.len(), 4 * PAGE_SIZE);
 

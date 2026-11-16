@@ -271,7 +271,7 @@ fn exception_report_pointer_read_only() {
 
     // The C++ test enters restricted mode and the kernel tries to write
     // the exception report to the read-only mapping, which fails.
-    // In libos mode we can't enter restricted mode, but we can verify:
+    // In test mode we can't enter restricted mode, but we can verify:
     // 1. The mapping was created read-only (no WRITE flag).
     // 2. The VMO itself is still readable via the handle.
     let mut buf = [0u8; 64];

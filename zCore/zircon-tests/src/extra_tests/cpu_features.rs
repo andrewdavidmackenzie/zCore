@@ -44,7 +44,7 @@ fn arm_mops() {
     // FEAT_MOPS is available: the C++ test executes SETP/SETM/SETE inline
     // assembly to fill 8 bytes with 0xBB and asserts:
     //   EXPECT_EQ(mem, 0xbbbbbbbbbbbbbbbb);
-    // In libos (non-aarch64 host), we cannot execute ARM instructions.
+    // In test mode (non-aarch64 host), we cannot execute ARM instructions.
     // On aarch64, the MOPS instructions are not available in user-mode
     // inline asm without kernel EL1 enablement. Verify the feature bit
     // was detected correctly (reaching here means it was).
@@ -62,7 +62,7 @@ fn arm_mops() {
 /// ```
 ///
 /// Tests that corrupting the C flag between MOPS instructions causes a fault.
-/// Cannot safely test in libos mode (ASSERT_DEATH would kill the test process).
+/// Cannot safely test in test mode (ASSERT_DEATH would kill the test process).
 /// The C++ test is `#ifdef __aarch64__` — guarded here with cfg.
 #[cfg_attr(test, test)]
 fn arm_mops_exception() {
@@ -79,7 +79,7 @@ fn arm_mops_exception() {
 
     // C++ uses ASSERT_DEATH: deliberately corrupts the NZCV C flag between
     // SETP and SETM instructions, which should cause a hardware exception.
-    // In libos mode we cannot safely test this — ASSERT_DEATH would kill
+    // In test mode we cannot safely test this — ASSERT_DEATH would kill
     // the test process. The test is skipped when FEAT_MOPS is absent (which
     // is the case on all current QEMU/host configurations).
     //
@@ -87,7 +87,7 @@ fn arm_mops_exception() {
     // 1. Set up a 0x20000-byte buffer filled with 0xAA
     // 2. Execute SETP, then invert the C flag via MRS/EOR/MSR NZCV
     // 3. Execute SETM — should fault
-    // This is inherently destructive and cannot be tested in libos.
+    // This is inherently destructive and cannot be tested in test mode.
 }
 
 /// Run all tests in this module.

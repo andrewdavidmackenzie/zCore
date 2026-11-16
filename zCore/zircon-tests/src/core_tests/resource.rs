@@ -11,7 +11,7 @@ use zircon_object::object::KernelObject;
 
 // ============================================================================
 // Missing Fuchsia core-tests: Resource suite (36 tests)
-// All require system/MMIO/IRQ resources not available in libos mode.
+// All require system/MMIO/IRQ resources not available in test mode.
 // ============================================================================
 
 /// C++: TEST(Resource, BasicActions)
@@ -1460,8 +1460,11 @@ fn vmo_creation() {
         .is_ok());
 
     // Create physical VMO (uses a host-provided physical address in
-    // libos mode — this is a dummy mapping but exercises the object).
-    let vmo = VmObject::new_physical(0x1000_0000, 0x4000 / PAGE_SIZE);
+    // test mode — this is a dummy mapping but exercises the object).
+    let vmo = VmObject::new_physical(
+        crate::helpers::alloc_phys_addr(0x4000 / PAGE_SIZE),
+        0x4000 / PAGE_SIZE,
+    );
     assert_eq!(vmo.len(), 0x4000);
 }
 
@@ -1489,7 +1492,7 @@ fn vmo_creation_smaller() {
         .is_ok());
 
     // Physical VMO rounds up to 1 page.
-    let vmo = VmObject::new_physical(0x2000_0000, 1);
+    let vmo = VmObject::new_physical(crate::helpers::alloc_phys_addr(1), 1);
     assert_eq!(vmo.len(), PAGE_SIZE);
 }
 

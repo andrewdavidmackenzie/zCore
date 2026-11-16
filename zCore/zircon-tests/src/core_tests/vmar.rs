@@ -1,7 +1,7 @@
 //! VMAR tests.
 //!
 //! Tests for VMAR allocate, map, protect, unmap operations.
-//! With the `aspace-separate` feature, these now work in libos mode
+//! With the `aspace-separate` feature, these now work in test mode
 //! because the user address space base is above the host mmap floor.
 
 use crate::helpers::TestContext;
@@ -917,7 +917,7 @@ fn protect_cow_writable() {
 
 /// C++: TEST(Vmar, ProtectLargeUncomittedTest)
 ///
-/// Creates a large VMO (C++ uses 1GB, we use 512 pages for libos), maps it
+/// Creates a large VMO (C++ uses 1GB, we use 512 pages for test mode), maps it
 /// read+write, writes to a few pages, then protects a misaligned sub-range
 /// to read-only. Verifies that pages before the protect base remain writable
 /// and pages within the protected range are read-only.
@@ -929,7 +929,7 @@ fn protect_large_uncommitted_test() {
     let vmar = proc.vmar();
 
     // C++ creates a 1GB VMO. We use 512 pages (2MB) to avoid excessive memory
-    // in libos mode, but preserve the test's structural logic.
+    // in test mode, but preserve the test's structural logic.
     let pages = 512;
     let size = pages * PAGE_SIZE;
     let vmo = VmObject::new_paged(pages);
@@ -1616,7 +1616,7 @@ fn range_op_zero() {
     vmo.zero(0, 32).unwrap();
 
     // Read through VMO API (mapping may not reflect zero due to
-    // page cache disconnect in libos mode).
+    // page cache disconnect in test mode).
     let mut buf = [0xFFu8; 64];
     vmo.read(0, &mut buf).unwrap();
     for (i, &byte) in buf[..32].iter().enumerate() {
@@ -1782,7 +1782,7 @@ fn unmap_base_not_mapped_test() {
 
 /// C++: TEST(Vmar, UnmapLargeUncommittedTest)
 ///
-/// Creates a large VMO (C++ uses 1GB, we use 512 pages / 2MB for libos),
+/// Creates a large VMO (C++ uses 1GB, we use 512 pages / 2MB for test mode),
 /// maps it read+write, writes to a few pages, then unmaps a misaligned
 /// sub-range. Verifies that pages before the unmap base remain accessible
 /// and pages within the unmapped range are no longer accessible.
@@ -1793,7 +1793,7 @@ fn unmap_large_uncommitted_test() {
     let proc = Process::create(&job, "unmap-large").unwrap();
     let vmar = proc.vmar();
 
-    // C++ uses 1GB; we use 512 pages for libos to avoid excessive memory.
+    // C++ uses 1GB; we use 512 pages for test mode to avoid excessive memory.
     let pages = 512;
     let size = pages * PAGE_SIZE;
     let vmo = VmObject::new_paged(pages);

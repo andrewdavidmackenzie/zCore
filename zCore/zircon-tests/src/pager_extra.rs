@@ -2949,7 +2949,7 @@ fn pager_evict_after_detach() {
 
 ///
 /// Read from supplied pages in a pager-backed VMO (pinning is a
-/// no-op at the kernel-object level in libos mode).
+/// no-op at the kernel-object level in test mode).
 #[cfg_attr(test, test)]
 fn pager_read_pinned_pages() {
     let _ctx = TestContext::new();
@@ -2983,7 +2983,7 @@ fn pager_write_pinned_pages() {
 }
 
 ///
-/// Pin before supply — in libos mode, we just supply then read.
+/// Pin before supply — in test mode, we just supply then read.
 #[cfg_attr(test, test)]
 fn pager_pin_before_supply() {
     let _ctx = TestContext::new();

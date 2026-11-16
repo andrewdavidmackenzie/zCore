@@ -107,7 +107,7 @@ async fn too_many_objects() {
     let _ctx = TestContext::new();
     // The limit is MAX_WAIT_MANY_ITEMS = 32 in zircon-syscall.
     // We verify by checking the constant exists and is reasonable.
-    // In libos mode, we create 33 events and verify we can wait on
+    // In test mode, we create 33 events and verify we can wait on
     // each individually (the many-at-once path requires the syscall
     // layer's UserWaitItem which is internal).
     let events: alloc::vec::Vec<_> = (0..33).map(|_| Event::new()).collect();

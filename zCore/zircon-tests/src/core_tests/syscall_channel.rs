@@ -1803,7 +1803,7 @@ fn write_iovec_too_many_iovecs_returns_out_of_range() {
 
     // Pass num_bytes = 8193 (number of iovecs) with option USE_IOVEC=2
     // The pointer doesn't need to be valid because the count check
-    // happens before reading the iovec array in libos mode.
+    // happens before reading the iovec array in test mode.
     // But in this implementation, read_array is called first, so we need
     // a valid pointer. Use a valid but empty array — read_array of 8193
     // elements will check the count.
@@ -2087,7 +2087,7 @@ async fn call_etc_invalid_args() {
 
 /// C++: TEST(ChannelCallEtcTest, CallEtcSuccess) — syscall level
 /// A successful channel_call_etc requires an async responder thread.
-/// Since libos mode is single-threaded, the call will time out waiting
+/// Since test mode is single-threaded, the call will time out waiting
 /// for a reply.
 #[cfg_attr(test, async_std::test)]
 async fn call_etc_success() {
@@ -2182,7 +2182,7 @@ async fn call_consumes_handles_on_error() {
 
 /// C++: TEST(ChannelTest, CallConsumesHandlesOnSuccess) — syscall level
 /// A successful call would transfer the handles. Since we can't complete
-/// the call in libos mode (no async responder), this verifies the write
+/// the call in test mode (no async responder), this verifies the write
 /// side consumed the handles before timing out.
 #[cfg_attr(test, async_std::test)]
 async fn call_consumes_handles_on_success() {

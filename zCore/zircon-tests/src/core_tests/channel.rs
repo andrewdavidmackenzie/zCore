@@ -549,7 +549,7 @@ fn write_to_peer_closed_consumes_moved_handles() {
 
     // The handle was consumed (it was moved into the MessagePacket
     // which was dropped when write failed). We can't directly verify
-    // handle consumption in libos mode, but we verify the error.
+    // handle consumption in test mode, but we verify the error.
 }
 
 /// C++: TEST(ChannelTest, WaitManyIsSignaledForBothWrites)
@@ -754,7 +754,7 @@ fn read_may_discard_with_zero_size_buffers() {
 ///
 /// Write a handle into a channel, read successfully, verify the handle
 /// is properly consumed. The C++ test uses a faulting kernel-space
-/// address for the handles buffer — in libos mode we instead verify
+/// address for the handles buffer — in test mode we instead verify
 /// the handle lifecycle is correct by reading normally and confirming
 /// the handle is consumed from the message.
 #[cfg_attr(test, test)]
@@ -792,7 +792,7 @@ fn read_fault_does_not_leak_handles() {
 fn no_spurious_readable_signal_when_racing() {
     let _ctx = TestContext::new();
 
-    // Reduced iteration count for libos (C++ uses 10,000 but that's
+    // Reduced iteration count for test mode (C++ uses 10,000 but that's
     // a stress test for preemptive scheduling races).
     const ITERATIONS: usize = 100;
 

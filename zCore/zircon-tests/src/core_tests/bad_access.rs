@@ -5,7 +5,7 @@
 //!
 //! The C++ tests verify that channel syscalls reject invalid user pointers
 //! (unmapped addresses, kernel-space addresses) and that bad syscall numbers
-//! cause crashes. In zCore's libos mode there is no MMU-backed fault
+//! cause crashes. In test mode there is no MMU-backed fault
 //! injection, so we exercise the same syscall paths and verify the same
 //! error codes where possible.
 
@@ -24,7 +24,7 @@ type HandleValue = u32;
 /// ```
 ///
 /// Writing from an unmapped address (0x1000) to a channel should fail.
-/// In real Fuchsia this is a page fault caught by the kernel. In libos
+/// In real Fuchsia this is a page fault caught by the kernel. In test mode
 /// mode the `copy_from_user` address-range validation rejects addresses
 /// in the low guard region (first 64 KiB), producing the same result
 /// without an actual SIGSEGV.
@@ -44,7 +44,7 @@ fn invalid_mapped_address_fails() {
     .expect("channel create should succeed");
 
     // C++ uses unmapped_addr = (void*)4096 with 1 byte.
-    // In libos mode, `copy_from_user` rejects addresses below 0x10000
+    // In test mode, `copy_from_user` rejects addresses below 0x10000
     // (low guard region), returning InvalidPointer → INVALID_ARGS.
     let unmapped_addr: usize = 4096;
     let result = sc.sys_channel_write(
@@ -72,7 +72,7 @@ fn invalid_mapped_address_fails() {
 /// ```
 ///
 /// Writing from a kernel-space address should fail.
-/// In libos mode, `copy_from_user` rejects addresses at or above
+/// In test mode, `copy_from_user` rejects addresses at or above
 /// the kernel address-space base (0xffff_8000_0000_0000), matching
 /// the bare-metal MMU behavior.
 #[cfg_attr(test, test)]
@@ -181,7 +181,7 @@ fn syscall_num_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
-    // C++ tests invoke raw bad_syscall() which traps. In zCore's libos
+    // C++ tests invoke raw bad_syscall() which traps. In test mode
     // mode, syscall dispatch is a Rust function call. We verify that
     // the dispatch path handles invalid inputs by closing bad handles.
     // ZX_SYS_COUNT and higher numbers are rejected by the match in dispatch.
@@ -209,7 +209,7 @@ fn syscall_num_test() {
 /// ```
 ///
 /// Reading handles into an unmapped address should return INVALID_ARGS.
-/// In libos mode, `copy_to_user` rejects addresses in the low guard
+/// In test mode, `copy_to_user` rejects addresses in the low guard
 /// region, producing an error without an actual SIGSEGV.
 #[cfg_attr(test, test)]
 fn channel_read_handle() {

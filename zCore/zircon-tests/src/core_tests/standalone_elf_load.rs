@@ -118,7 +118,7 @@ fn load() {
     assert!(found_symbol, "test module has no kTestRoData symbol");
 
     // C++ step j: if native machine, call TestStart(17, 23) and assert == 40.
-    // We cannot call code from a mapped VMO in libos mode — the
+    // We cannot call code from a mapped VMO in test mode — the
     // mapping is backed by anonymous memory, not executable pages
     // with proper instruction fetch support. This step is only
     // testable on bare-metal/QEMU where VMAR mappings are real

@@ -248,7 +248,7 @@ fn invalid_handle_and_wrong_type() {
 
 /// C++: TEST(FifoTest, ReadBadBuffer)
 /// Reading with a null/bad buffer pointer at the syscall level.
-/// In libos mode, null UserOutPtr writes will fail.
+/// In test mode, null UserOutPtr writes will fail.
 #[cfg_attr(test, test)]
 fn read_bad_buffer() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
@@ -405,7 +405,7 @@ fn read_write_bad_actual_count() {
     let (f0, _f1) = Fifo::create(16, 4);
     let h0 = ctx.proc.add_handle(Handle::new(f0, Rights::DEFAULT_FIFO));
 
-    // Write with null actual_count pointer — in libos mode, writing to a
+    // Write with null actual_count pointer — in test mode, writing to a
     // null UserOutPtr triggers a panic/error. The C++ test verifies that
     // passing nullptr for actual_count is handled gracefully (either
     // tolerated or rejected with a specific error).
@@ -418,7 +418,7 @@ fn read_write_bad_actual_count() {
         UserOutPtr::from(0usize), // null actual
     );
     // Null actual_count is tolerated in Fuchsia (actual_count is optional).
-    // In zCore libos mode, the null UserOutPtr write may succeed (if the
+    // In test mode, the null UserOutPtr write may succeed (if the
     // write to actual is skipped) or fail. Either outcome is acceptable.
     assert!(
         result.is_ok() || result.is_err(),
@@ -464,7 +464,7 @@ fn read_write_bad_actual_count_returns_invalid_args() {
         1,
         UserOutPtr::from(0usize), // null actual
     );
-    // In libos mode null UserOutPtr may succeed or fail — verify no panic
+    // In test mode null UserOutPtr may succeed or fail — verify no panic
     assert!(
         result.is_ok() || result.is_err(),
         "should not panic on null actual_count for read"
@@ -478,7 +478,7 @@ fn read_write_bad_actual_count_returns_invalid_args() {
         1,
         UserOutPtr::from(0usize), // null actual
     );
-    // In libos mode null UserOutPtr may succeed or fail — verify no panic
+    // In test mode null UserOutPtr may succeed or fail — verify no panic
     assert!(
         result.is_ok() || result.is_err(),
         "should not panic on null actual_count for write"
@@ -486,7 +486,7 @@ fn read_write_bad_actual_count_returns_invalid_args() {
 }
 
 /// C++: TEST(FifoTest, ReadWriteKernelAddressBufferReturnsInvalidArgs)
-/// Using a kernel-space address as a user buffer. In libos mode,
+/// Using a kernel-space address as a user buffer. In test mode,
 /// this isn't distinguishable, but we verify the syscall doesn't panic.
 #[cfg_attr(test, test)]
 fn read_write_kernel_address_buffer_returns_invalid_args() {
@@ -499,7 +499,7 @@ fn read_write_kernel_address_buffer_returns_invalid_args() {
     let (f0, _f1) = Fifo::create(16, 4);
     let h0 = ctx.proc.add_handle(Handle::new(f0, Rights::DEFAULT_FIFO));
 
-    // In libos mode, all addresses are valid. Just verify no panic.
+    // In test mode, all addresses are valid. Just verify no panic.
     let data = [0u8; 4];
     let mut actual: usize = 0;
     let result = sc.sys_fifo_write(

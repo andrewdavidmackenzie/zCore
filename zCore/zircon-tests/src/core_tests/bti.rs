@@ -2,7 +2,7 @@
 //!
 //! Tests for BTI/IOMMU kernel objects: creation, pin, unpin,
 //! quarantine, contiguous VMO, and info queries.
-//! The DummyIommu works fully in libos mode.
+//! The DummyIommu works fully in test mode.
 
 use crate::helpers::TestContext;
 use alloc::sync::Arc;

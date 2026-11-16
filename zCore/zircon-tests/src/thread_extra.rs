@@ -779,7 +779,7 @@ async fn thread_invalid_handle_start() {
 
 ///
 /// Suspend a thread blocked in zx_channel_call. Requires a real
-/// running thread blocked in a syscall — not possible in libos mode.
+/// running thread blocked in a syscall — not possible in test mode.
 #[cfg_attr(test, test)]
 fn thread_suspend_in_channel_call() {}
 

@@ -8,7 +8,7 @@
 //!
 //! The thread sampler (`zx_sampler_create`/`start`/`stop`/`read`) is a
 //! kernel-level profiling facility that periodically samples thread
-//! register state.  In libos mode, sampling is done eagerly at
+//! register state.  In test mode, sampling is done eagerly at
 //! start/stop/read time rather than via periodic timer interrupts.
 
 use crate::helpers::TestContext;
@@ -54,7 +54,7 @@ fn start_stop() {
         hal_impl::user::UserOutPtr::from(&mut actual as *mut usize as usize),
     );
     assert!(result.is_ok());
-    // In libos mode, at least one thread (the test thread) should be sampled.
+    // In test mode, at least one thread (the test thread) should be sampled.
     assert!(actual > 0, "should have some sample data, got 0");
 
     // Stop.
@@ -222,7 +222,7 @@ fn non_running_thread() {
     // Start sampling before any threads are created.
     assert!(sc.sys_sampler_start(h).is_ok());
 
-    // Read — in libos mode, the test thread itself should be sampled.
+    // Read — in test mode, the test thread itself should be sampled.
     let mut actual: usize = 0;
     assert!(sc
         .sys_sampler_read(

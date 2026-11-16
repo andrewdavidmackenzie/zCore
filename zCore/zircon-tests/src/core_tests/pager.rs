@@ -49,7 +49,7 @@ pub(crate) fn create_pager_and_port() -> (Arc<Pager>, Arc<Port>) {
 
 // ── Bulk-ported pager tests (batch 3) ───────────────────────────────
 //
-// Tests for eviction (decommit), pinning (not supported in libos),
+// Tests for eviction (decommit), pinning (not supported in test mode),
 // dirty traps, writeback lifecycle, page requests, and VMO info.
 
 // ── Bulk-ported pager tests (from pager.cc) ─────────────────────────
@@ -89,7 +89,7 @@ fn pager_bulk_odd_length_supply_test_vmo() {
 
 /// C++: TEST(Pager, BulkOddLengthSupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_bulk_odd_length_supply_test_vmar() {
     let _ctx = TestContext::new();
@@ -146,7 +146,7 @@ fn pager_bulk_odd_offset_supply_test_vmo() {
 
 /// C++: TEST(Pager, BulkOddOffsetSupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_bulk_odd_offset_supply_test_vmar() {
     let _ctx = TestContext::new();
@@ -196,7 +196,7 @@ fn pager_bulk_single_supply_test_vmo() {
 
 /// C++: TEST(Pager, BulkSingleSupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_bulk_single_supply_test_vmar() {
     let _ctx = TestContext::new();
@@ -629,7 +629,7 @@ fn pager_clone_read_from_clone_test_vmo() {
 
 /// C++: TEST(Pager, CloneReadFromCloneTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_clone_read_from_clone_test_vmar() {
     let _ctx = TestContext::new();
@@ -679,7 +679,7 @@ fn pager_clone_read_from_parent_test_vmo() {
 
 /// C++: TEST(Pager, CloneReadFromParentTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_clone_read_from_parent_test_vmar() {
     let _ctx = TestContext::new();
@@ -704,7 +704,7 @@ fn pager_clone_read_from_parent_test_vmar() {
 /// The C++ test creates a 2-page pager VMO, supplies both pages, creates
 /// a resizable clone, reads from the clone, then resizes the clone to 0.
 /// After resize, reads should fail (OUT_OF_RANGE).
-/// In libos mode, we verify the clone creation, supply, read, and resize
+/// In test mode, we verify the clone creation, supply, read, and resize
 /// lifecycle. We create the clone as resizable (using create_child with
 /// resizable=true is not available, so we create a non-resizable clone
 /// and just verify the clone sees the supplied content).
@@ -1016,7 +1016,7 @@ fn pager_clone_simultaneous_read_test_vmar() {
 /// parent, reads page 1 from the clone (populating it), then commits
 /// the clone (which generates requests for pages 0 and 3 — the gaps
 /// around the already-present pages).
-/// In libos mode, we supply all pages before creating the clone.
+/// In test mode, we supply all pages before creating the clone.
 #[cfg_attr(test, test)]
 fn pager_clone_split_commit_test() {
     let _ctx = TestContext::new();
@@ -1092,7 +1092,7 @@ fn pager_clone_write_to_clone_test_vmo() {
 
 /// C++: TEST(Pager, CloneWriteToCloneTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read()/write() in libos mode.
+/// Same as Vmo variant — both use vmo.read()/write() in test mode.
 #[cfg_attr(test, test)]
 fn pager_clone_write_to_clone_test_vmar() {
     let _ctx = TestContext::new();
@@ -1227,7 +1227,7 @@ fn pager_concurrent_multipage_access_test_vmo() {
 
 /// C++: TEST(Pager, ConcurrentMultipageAccessTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_concurrent_multipage_access_test_vmar() {
     let _ctx = TestContext::new();
@@ -1244,7 +1244,7 @@ fn pager_concurrent_multipage_access_test_vmar() {
 ///
 /// The C++ test has 32 threads all reading the same page concurrently.
 /// We supply the page and verify it's readable (the concurrency aspect
-/// cannot be tested in libos mode without threads).
+/// cannot be tested in test mode without threads).
 #[cfg_attr(test, test)]
 fn pager_concurrent_overlapping_access_test_vmo() {
     let _ctx = TestContext::new();
@@ -1261,7 +1261,7 @@ fn pager_concurrent_overlapping_access_test_vmo() {
 
 /// C++: TEST(Pager, ConcurrentOverlappingAccessTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_concurrent_overlapping_access_test_vmar() {
     let _ctx = TestContext::new();
@@ -1318,7 +1318,7 @@ fn pager_decommit_on_detach_test_vmo() {
 
 /// C++: TEST(Pager, DecommitOnDetachTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_decommit_on_detach_test_vmar() {
     let _ctx = TestContext::new();
@@ -1428,7 +1428,7 @@ fn pager_detach_close_pager_test() {
 ///
 /// The C++ test supplies page 0, detaches, then reads across pages 0-1.
 /// The read spanning the unsupplied page 1 should fail with BAD_STATE.
-/// In libos mode, we supply page 0, detach, and verify the supplied
+/// In test mode, we supply page 0, detach, and verify the supplied
 /// page is still readable (non-mapping VMO read of committed data).
 #[cfg_attr(test, test)]
 fn pager_detach_non_mapping_access() {
@@ -1488,7 +1488,7 @@ fn pager_early_supply_test_vmo() {
 
 /// C++: TEST(Pager, EarlySupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_early_supply_test_vmar() {
     let _ctx = TestContext::new();
@@ -1504,7 +1504,7 @@ fn pager_early_supply_test_vmar() {
 
 /// C++: TEST(Pager, EarlyWakeCloneRace)
 ///
-/// The C++ test races clone creation with page supply. In libos mode
+/// The C++ test races clone creation with page supply. In test mode
 /// we exercise the synchronous equivalent: supply pages, create a
 /// clone while pages are being supplied, and verify both parent and
 /// clone see the correct content.
@@ -1537,7 +1537,7 @@ fn pager_early_wake_clone_race() {
 /// 64-127. A concurrent reader thread reads all 128 pages and wakes
 /// progressively as pages become available.
 ///
-/// In zCore libos mode, we exercise the synchronous equivalent:
+/// In test mode, we exercise the synchronous equivalent:
 /// supply pages in non-linear order and verify all pages are readable
 /// with correct auto-generated content after each supply batch.
 #[cfg_attr(test, test)]
@@ -1596,7 +1596,7 @@ fn pager_early_wake_non_linear_supply() {
 /// supplies pages in 32-page batches, verifying that each batch wakes
 /// the reader to copy data progressively.
 ///
-/// In zCore libos mode, concurrent threads/blocking page faults are
+/// In test mode, concurrent threads/blocking page faults are
 /// not available. We exercise the synchronous equivalent: create a
 /// large VMO, supply pages in batches, and verify each batch is
 /// readable with correct auto-generated content.
@@ -1630,7 +1630,7 @@ fn pager_early_wake_on_supply() {
 /// C++: TEST(Pager, EarlyWakeOverlappingRequests)
 ///
 /// The C++ test has overlapping read requests from multiple threads.
-/// In libos mode we exercise overlapping supply ranges and verify
+/// In test mode we exercise overlapping supply ranges and verify
 /// all pages are readable with correct content.
 #[cfg_attr(test, test)]
 fn pager_early_wake_overlapping_requests() {
@@ -1654,7 +1654,7 @@ fn pager_early_wake_overlapping_requests() {
 
 /// C++: TEST(Pager, EarlyWakeWithResize)
 ///
-/// The C++ test races a resize with a page supply. In libos mode we
+/// The C++ test races a resize with a page supply. In test mode we
 /// exercise the synchronous equivalent: supply pages, resize down
 /// (truncating), then resize up (extending with zero pages).
 #[cfg_attr(test, test)]
@@ -1711,7 +1711,7 @@ fn pager_eviction_hint_always_need() {
 /// C++: TEST(Pager, EvictionHintsCloneVmar)
 ///
 /// The C++ test maps a clone of a pager VMO and uses VMAR OP hints.
-/// In libos mode we exercise the equivalent: create a pager VMO,
+/// In test mode we exercise the equivalent: create a pager VMO,
 /// supply pages, create a clone, and verify ALWAYS_NEED/DONT_NEED
 /// ops on the clone return NOT_SUPPORTED (same as root).
 #[cfg_attr(test, test)]
@@ -1744,7 +1744,7 @@ fn pager_eviction_hints_clone_vmar() {
 /// C++: TEST(Pager, EvictionHintsNestedVmar)
 ///
 /// The C++ test uses nested VMAR mappings with eviction hints.
-/// In libos mode we exercise nested clones with hints instead:
+/// In test mode we exercise nested clones with hints instead:
 /// create a chain of 3 clones and verify ALWAYS_NEED returns
 /// NOT_SUPPORTED at each level.
 #[cfg_attr(test, test)]
@@ -1788,7 +1788,7 @@ fn pager_eviction_hints_op_range() {
 /// C++: TEST(Pager, EvictionHintsVmar)
 ///
 /// The C++ test maps a pager VMO into a VMAR and uses eviction hints.
-/// In libos mode we exercise the synchronous equivalent: supply pages,
+/// In test mode we exercise the synchronous equivalent: supply pages,
 /// verify ALWAYS_NEED/DONT_NEED on the VMO return NOT_SUPPORTED,
 /// and verify the page is still readable.
 #[cfg_attr(test, test)]
@@ -2016,7 +2016,7 @@ fn pager_fail_multiple_vmos() {
 /// verifies the overlapping request gets its failure while the primary
 /// request re-generates a request for page 1.
 ///
-/// In libos mode we exercise the synchronous path: fail page 1, supply
+/// In test mode we exercise the synchronous path: fail page 1, supply
 /// pages 0 and 2-3, then re-supply page 1, and verify all readable.
 #[cfg_attr(test, test)]
 fn pager_fail_overlap_request() {
@@ -2074,7 +2074,7 @@ fn pager_fail_overlapping_range_commit() {
 /// C++: TEST(Pager, FailOverlappingRangeRead)
 ///
 /// Same pattern as FailOverlappingRangeCommit but with vmo_read instead
-/// of commit. Both exercise the same pager fail path in libos mode.
+/// of commit. Both exercise the same pager fail path in test mode.
 #[cfg_attr(test, test)]
 fn pager_fail_overlapping_range_read() {
     let _ctx = TestContext::new();
@@ -2142,7 +2142,7 @@ fn pager_fail_single_page_vmo() {
 
 /// C++: TEST(Pager, FailSinglePageVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_fail_single_page_vmar() {
     let _ctx = TestContext::new();
@@ -2236,7 +2236,7 @@ fn pager_many_request_test_vmo() {
 
 /// C++: TEST(Pager, ManyRequestTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_many_request_test_vmar() {
     let _ctx = TestContext::new();
@@ -2254,7 +2254,7 @@ fn pager_many_request_test_vmar() {
 ///
 /// The C++ test maps an aux VMO into the process address space, writes
 /// to the mapping, and then supplies the mapped page to the pager VMO.
-/// In zCore libos mode we don't have user-space mappings, so we test
+/// In zCore test mode we don't have user-space mappings, so we test
 /// the core supply_pages transfer: create an aux VMO, write data to
 /// it, supply that page to the pager VMO, and verify the pager VMO
 /// received the data.
@@ -2376,7 +2376,7 @@ fn pager_multisupply_commit_test() {
 /// clone. The commit generates page requests for unsupplied pages
 /// in the root VMO.
 ///
-/// In zCore libos mode we cannot use VMAR OP_COMMIT with concurrent
+/// In zCore test mode we cannot use VMAR OP_COMMIT with concurrent
 /// threads. Instead we pre-supply pages to the root VMO, create a
 /// COW clone, fork a page in the clone (by writing), and verify:
 /// 1. The forked page is committed in the clone.
@@ -2435,7 +2435,7 @@ fn pager_op_commit_clone_vmar() {
 /// with a concurrent thread blocking on page faults. The commit
 /// generates page requests for unsupplied pages.
 ///
-/// In zCore libos mode we cannot use VMAR OP_COMMIT with concurrent
+/// In zCore test mode we cannot use VMAR OP_COMMIT with concurrent
 /// threads. Instead we pre-supply pages to both VMOs and verify:
 /// 1. Both VMOs have their pages committed after supply.
 /// 2. Pages are readable in both VMOs.
@@ -2504,7 +2504,7 @@ fn pager_op_commit_vmar() {
 /// overlapping commit threads (stride-7 and stride-5), then supplies
 /// pages in stride-3 chunks. This exercises the supply logic when
 /// multiple overlapping commits are pending.
-/// In libos mode, we supply pages in overlapping stride-3 and stride-5
+/// In test mode, we supply pages in overlapping stride-3 and stride-5
 /// patterns, then verify all pages are readable.
 #[cfg_attr(test, test)]
 fn pager_overlap_commit_supply_test() {
@@ -2545,7 +2545,7 @@ fn pager_overlap_commit_supply_test() {
 ///
 /// The C++ test creates a 32-page VMO, starts two threads that commit
 /// overlapping ranges [8,24) and [0,32), supplies pages in order to
-/// satisfy both, and verifies all pages are readable. In libos mode,
+/// satisfy both, and verifies all pages are readable. In test mode,
 /// we supply overlapping ranges and verify all pages are readable.
 #[cfg_attr(test, test)]
 fn pager_overlap_commit_test() {
@@ -2604,7 +2604,7 @@ fn pager_overlap_supply_test_vmo() {
 
 /// C++: TEST(Pager, OverlapSupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_overlap_supply_test_vmar() {
     let _ctx = TestContext::new();
@@ -2627,7 +2627,7 @@ fn pager_overlap_supply_test_vmar() {
 /// already present (to avoid requesting pages that exist in the
 /// hierarchy).
 ///
-/// In zCore libos mode, we pre-supply pages and verify that the
+/// In test mode, we pre-supply pages and verify that the
 /// hierarchical page lookup works: pages written in child/grandchild
 /// are visible through the great-grandchild, and root pages fall
 /// through the entire chain.
@@ -2857,7 +2857,7 @@ fn pager_pinned_supply_pages() {
 /// It tests prefetch on the root VMO, through a slice, and through
 /// a COW clone (where a forked page should NOT generate a request).
 ///
-/// In zCore libos mode, we pre-supply pages and verify that the
+/// In test mode, we pre-supply pages and verify that the
 /// prefetch-equivalent behavior works: pages are readable after
 /// supply, slices share parent pages, and COW isolation is preserved.
 #[cfg_attr(test, test)]
@@ -2926,7 +2926,7 @@ fn pager_prefetch() {
 /// one for the lower range (pages 0-1) and one for the upper range
 /// (pages 3-4), splitting around the already-present page 2.
 ///
-/// In zCore libos mode, we cannot generate page requests via commit
+/// In test mode, we cannot generate page requests via commit
 /// with concurrent threads. Instead, we pre-supply page 2, then supply
 /// pages 0-1 and 3-4 separately, and verify all pages are readable —
 /// demonstrating that a present page in the middle doesn't interfere
@@ -2993,7 +2993,7 @@ fn pager_presupply_test_vmo() {
 
 /// C++: TEST(Pager, PresupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_presupply_test_vmar() {
     let _ctx = TestContext::new();
@@ -3006,7 +3006,7 @@ fn pager_presupply_test_vmar() {
 
 /// C++: TEST(Pager, ProxyUseAfterFree)
 ///
-/// The C++ test races VMO destruction with pager operations. In libos
+/// The C++ test races VMO destruction with pager operations. In test mode
 /// mode we exercise the lifecycle sequentially: supply page, drop the
 /// VMO reference while keeping a clone alive, verify the clone is still
 /// usable (no use-after-free).
@@ -3033,7 +3033,7 @@ fn pager_proxy_use_after_free() {
 
 /// C++: TEST(Pager, RacyPortDequeue)
 ///
-/// The C++ test races port dequeue with page supply. In libos mode
+/// The C++ test races port dequeue with page supply. In test mode
 /// we exercise the port lifecycle synchronously: create pager+port+VMO,
 /// supply pages, and verify the VMO content. Port operations (queue/
 /// dequeue) are exercised through the supply_pages path.
@@ -3056,7 +3056,7 @@ fn pager_racy_port_dequeue() {
 /// C++: TEST(Pager, ReadCloseInterruptEarlyTestVmo)
 ///
 /// The C++ test has a reader thread that blocks, then the pager is closed
-/// (dropped) before supplying the page. In libos mode, we exercise the
+/// (dropped) before supplying the page. In test mode, we exercise the
 /// synchronous lifecycle: supply page, read, then close (drop) the pager
 /// and verify the VMO's supplied content survives.
 #[cfg_attr(test, test)]
@@ -3081,7 +3081,7 @@ fn pager_read_close_interrupt_early_test_vmo() {
 
 /// C++: TEST(Pager, ReadCloseInterruptEarlyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_read_close_interrupt_early_test_vmar() {
     let _ctx = TestContext::new();
@@ -3104,7 +3104,7 @@ fn pager_read_close_interrupt_early_test_vmar() {
 /// C++: TEST(Pager, ReadCloseInterruptLateTestVmo)
 ///
 /// The C++ test supplies the page, then closes the pager while a reader
-/// is active. In libos mode we supply, read, close, and verify the data
+/// is active. In test mode we supply, read, close, and verify the data
 /// is accessible even after the pager is dropped.
 #[cfg_attr(test, test)]
 fn pager_read_close_interrupt_late_test_vmo() {
@@ -3128,7 +3128,7 @@ fn pager_read_close_interrupt_late_test_vmo() {
 
 /// C++: TEST(Pager, ReadCloseInterruptLateTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_read_close_interrupt_late_test_vmar() {
     let _ctx = TestContext::new();
@@ -3146,7 +3146,7 @@ fn pager_read_close_interrupt_late_test_vmar() {
 
 /// C++: TEST(Pager, ReadDetachInterruptEarlyTestVmo)
 ///
-/// The C++ test detaches a VMO before a reader has started. In libos
+/// The C++ test detaches a VMO before a reader has started. In test mode
 /// mode we exercise the detach lifecycle: supply page, detach, verify
 /// clean pages are decommitted (Fuchsia behavior).
 #[cfg_attr(test, test)]
@@ -3166,7 +3166,7 @@ fn pager_read_detach_interrupt_early_test_vmo() {
 
 /// C++: TEST(Pager, ReadDetachInterruptEarlyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_read_detach_interrupt_early_test_vmar() {
     let _ctx = TestContext::new();
@@ -3182,7 +3182,7 @@ fn pager_read_detach_interrupt_early_test_vmar() {
 /// C++: TEST(Pager, ReadDetachInterruptLateTestVmo)
 ///
 /// The C++ test supplies a page, then detaches while a reader is active.
-/// In libos mode we supply, read, then detach and verify the page was
+/// In test mode we supply, read, then detach and verify the page was
 /// readable before detach and decommitted after.
 #[cfg_attr(test, test)]
 fn pager_read_detach_interrupt_late_test_vmo() {
@@ -3202,7 +3202,7 @@ fn pager_read_detach_interrupt_late_test_vmo() {
 
 /// C++: TEST(Pager, ReadDetachInterruptLateTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_read_detach_interrupt_late_test_vmar() {
     let _ctx = TestContext::new();
@@ -3219,7 +3219,7 @@ fn pager_read_detach_interrupt_late_test_vmar() {
 /// C++: TEST(Pager, ReadResizeTestVmo)
 ///
 /// The C++ test has a reader thread that blocks while a resize truncates
-/// the VMO underneath it. In libos mode we exercise the synchronous
+/// the VMO underneath it. In test mode we exercise the synchronous
 /// equivalent: supply pages, read page 1, resize to 1 page, verify
 /// page 0 is still readable and page 1 is gone.
 #[cfg_attr(test, test)]
@@ -3248,7 +3248,7 @@ fn pager_read_resize_test_vmo() {
 
 /// C++: TEST(Pager, ReadResizeTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_read_resize_test_vmar() {
     let _ctx = TestContext::new();
@@ -3274,7 +3274,7 @@ fn pager_read_resize_test_vmar() {
 /// which makes the pin fail with OUT_OF_RANGE.
 ///
 /// This requires concurrent threads + blocking page faults, which are
-/// not available in zCore libos mode. Instead we exercise the
+/// not available in test mode. Instead we exercise the
 /// synchronous equivalent: supply pages, resize down, verify that
 /// pinning a now-out-of-range page fails with OUT_OF_RANGE.
 #[cfg_attr(test, test)]
@@ -3367,7 +3367,7 @@ fn pager_sequential_multipage_test_vmo() {
 
 /// C++: TEST(Pager, SequentialMultipageTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_sequential_multipage_test_vmar() {
     let _ctx = TestContext::new();
@@ -3420,7 +3420,7 @@ fn pager_single_page_test_vmo() {
 
 /// C++: TEST(Pager, SinglePageTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_single_page_test_vmar() {
     let _ctx = TestContext::new();
@@ -3540,7 +3540,7 @@ fn pager_supply_after_fail() {
 /// C++: TEST(Pager, SuspendCommitTest)
 ///
 /// The C++ test suspends a thread blocked on a commit, then resumes and
-/// supplies the page. In libos mode we exercise the synchronous equivalent:
+/// supplies the page. In test mode we exercise the synchronous equivalent:
 /// supply pages and verify commit (read all pages) succeeds.
 #[cfg_attr(test, test)]
 fn pager_suspend_commit_test() {
@@ -3563,7 +3563,7 @@ fn pager_suspend_commit_test() {
 
 /// C++: TEST(Pager, SuspendInKernelCaptureFaultsTest)
 ///
-/// The C++ test suspends a thread in a kernel fault handler. In libos
+/// The C++ test suspends a thread in a kernel fault handler. In test mode
 /// mode we exercise fault capture semantics: supply a page, read to
 /// trigger any kernel copy path, verify the page is committed.
 #[cfg_attr(test, test)]
@@ -3587,7 +3587,7 @@ fn pager_suspend_in_kernel_capture_faults_test() {
 /// C++: TEST(Pager, SuspendInKernelTest)
 ///
 /// The C++ test suspends a thread blocked in a kernel page fault. In
-/// libos mode we exercise the synchronous equivalent: supply page,
+/// test mode we exercise the synchronous equivalent: supply page,
 /// verify read succeeds, supply another page, verify both are committed.
 #[cfg_attr(test, test)]
 fn pager_suspend_in_kernel_test() {
@@ -3606,7 +3606,7 @@ fn pager_suspend_in_kernel_test() {
 
 /// C++: TEST(Pager, SuspendReadTestVmo)
 ///
-/// The C++ test suspends a thread blocked on a VMO read. In libos mode
+/// The C++ test suspends a thread blocked on a VMO read. In test mode
 /// we exercise the supply→read lifecycle and verify the page is readable.
 #[cfg_attr(test, test)]
 fn pager_suspend_read_test_vmo() {
@@ -3623,7 +3623,7 @@ fn pager_suspend_read_test_vmo() {
 
 /// C++: TEST(Pager, SuspendReadTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_suspend_read_test_vmar() {
     let _ctx = TestContext::new();
@@ -3661,7 +3661,7 @@ fn pager_uncommitted_single_page_test_vmo() {
 
 /// C++: TEST(Pager, UncommittedSinglePageTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
+/// Same as Vmo variant — both use vmo.read() in test mode.
 #[cfg_attr(test, test)]
 fn pager_uncommitted_single_page_test_vmar() {
     let _ctx = TestContext::new();
@@ -3708,7 +3708,7 @@ fn pager_uncommitted_supply() {
 /// C++: TEST(Pager, VmarMapRangeTest)
 ///
 /// The C++ test maps a pager VMO into a VMAR with MAP_RANGE and verifies
-/// pages are pre-committed. In libos mode we exercise the equivalent:
+/// pages are pre-committed. In test mode we exercise the equivalent:
 /// supply pages, read them (committing through VMO read), and verify
 /// committed state.
 #[cfg_attr(test, test)]
@@ -3735,7 +3735,7 @@ fn pager_vmar_map_range_test() {
 /// C++: TEST(Pager, VmarRemapTest)
 ///
 /// The C++ test remaps a pager VMO into a different VMAR region. In
-/// libos mode we exercise the equivalent: supply pages, read, re-supply
+/// test mode we exercise the equivalent: supply pages, read, re-supply
 /// with different data (simulating remap), and verify the data changed.
 #[cfg_attr(test, test)]
 fn pager_vmar_remap_test() {
@@ -3758,7 +3758,7 @@ fn pager_vmar_remap_test() {
 /// C++: TEST(Pager, VmarUnmapTest)
 ///
 /// The C++ test unmaps a pager VMO from the VMAR and verifies pages
-/// can be decommitted. In libos mode we exercise the equivalent:
+/// can be decommitted. In test mode we exercise the equivalent:
 /// supply pages, detach (analogous to unmap — pages become decommittable),
 /// decommit, and verify zeros.
 #[cfg_attr(test, test)]
@@ -3805,7 +3805,7 @@ fn pager_vmo_info_pager_test() {
 /// C++: TEST(Pager, ZeroHandlesRace)
 ///
 /// The C++ test races handle creation/destruction with pager operations.
-/// In libos mode we exercise the lifecycle synchronously: create VMO,
+/// In test mode we exercise the lifecycle synchronously: create VMO,
 /// supply page, create clone (adds a handle reference), drop clone,
 /// verify VMO is still usable. Repeat several times.
 #[cfg_attr(test, test)]
@@ -4111,7 +4111,7 @@ fn pager_wb_delayed_dirty_zero_range() {
 fn pager_wb_delayed_pin_awaiting_clean() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     let (vmo, key) = pager_helper.create_vmo(1);
     pager_helper.supply_pages(&vmo, key, 0, 1);
     assert!(UserPagerHelper::check_page(&vmo, key, 0));
@@ -4157,7 +4157,7 @@ fn pager_wb_detach_with_pending_dirty_request_vmo() {
 fn pager_wb_detach_with_pending_dirty_request_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // TRAP_DIRTY; VMAR variant — same kernel path in libos.
+    // TRAP_DIRTY; VMAR variant — same kernel path in test mode.
     let (vmo, key) = pager_helper.create_vmo_with_options(1, 8);
     pager_helper.supply_pages(&vmo, key, 0, 1);
 
@@ -4173,7 +4173,7 @@ fn pager_wb_detach_with_pending_dirty_request_vmar() {
 ///
 /// In the C++ test, a pager VMO is mapped, written via mapping (marks dirty),
 /// then the mapping protection is changed. Since VMAR mapping is not available
-/// in libos mode, we exercise the equivalent via VMO write (which also dirties
+/// in test mode, we exercise the equivalent via VMO write (which also dirties
 /// pages without TRAP_DIRTY). After writing, we verify the page content and
 /// that the VMO is marked modified. We then do a writeback cycle and confirm
 /// content is preserved.
@@ -4260,7 +4260,7 @@ fn pager_wb_dirty_after_map_protect_trap_dirty() {
 fn pager_wb_dirty_after_pin() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     // Verify basic TRAP_DIRTY supply + write with OP_DIRTY.
     let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
     pager_helper.supply_pages(&vmo, key, 0, 2);
@@ -4553,7 +4553,7 @@ fn pager_wb_dirty_requests_repeated_writes() {
 fn pager_wb_dirty_requests_via_mapping() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires VMAR mapping, not available in libos mode.
+    // This test requires VMAR mapping, not available in test mode.
     // Verify basic TRAP_DIRTY VMO creation instead.
     let (vmo, key) = pager_helper.create_vmo_with_options(1, 8);
     pager_helper.supply_pages(&vmo, key, 0, 1);
@@ -4642,7 +4642,7 @@ fn pager_wb_fail_dirty_requests_for_zero_pages() {
 fn pager_wb_failed_pin_awaiting_clean() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     let (vmo, key) = pager_helper.create_vmo(1);
     pager_helper.supply_pages(&vmo, key, 0, 1);
     assert!(UserPagerHelper::check_page(&vmo, key, 0));
@@ -4769,7 +4769,7 @@ fn pager_wb_modified_no_reset_trap_dirty() {
 ///
 /// In the C++ test, a pager VMO is mapped and written via the mapping,
 /// which marks the VMO as modified. Since VMAR mapping is not available
-/// in libos mode, we exercise the equivalent via VMO write and verify
+/// in test mode, we exercise the equivalent via VMO write and verify
 /// content. Note: VMO write does not currently set the modified flag
 /// (only VMAR mapping writes do via auto_mark_dirty), so we verify
 /// content correctness rather than the modified flag.
@@ -5078,7 +5078,7 @@ fn pager_wb_no_dirty_requests_after_detach_vmo() {
 fn pager_wb_no_dirty_requests_after_detach_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // ZX_VMO_TRAP_DIRTY = 8; VMAR variant — same kernel path in libos.
+    // ZX_VMO_TRAP_DIRTY = 8; VMAR variant — same kernel path in test mode.
     let (vmo, key) = pager_helper.create_vmo_with_options(1, 8);
     pager_helper.supply_pages(&vmo, key, 0, 1);
 
@@ -5167,7 +5167,7 @@ fn pager_wb_no_dirty_requests_on_commit() {
 fn pager_wb_no_dirty_requests_on_map_range() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires VMAR mapping with MAP_RANGE, not available in libos mode.
+    // This test requires VMAR mapping with MAP_RANGE, not available in test mode.
     // Verify basic TRAP_DIRTY VMO creation and supply instead.
     let (vmo, key) = pager_helper.create_vmo_with_options(3, 8);
     pager_helper.supply_pages(&vmo, key, 0, 3);
@@ -5293,7 +5293,7 @@ fn pager_wb_not_modified_clone_write_trap_dirty() {
 fn pager_wb_not_modified_failed_pin_write() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     let (vmo, key) = pager_helper.create_vmo(1);
     pager_helper.supply_pages(&vmo, key, 0, 1);
     assert!(!vmo.query_modified(true), "should not be modified yet");
@@ -5409,7 +5409,7 @@ fn pager_wb_not_modified_on_failed_vmo_write_trap_dirty() {
 ///
 /// In the C++ test, a pager VMO is mapped and only read via the mapping,
 /// which should NOT mark the VMO as modified. Since VMAR mapping is not
-/// available in libos mode, we exercise the equivalent via VMO read.
+/// available in test mode, we exercise the equivalent via VMO read.
 #[cfg_attr(test, test)]
 fn pager_wb_not_modified_on_mapping_read_no_trap_dirty() {
     let _ctx = TestContext::new();
@@ -5498,7 +5498,7 @@ fn pager_wb_not_modified_on_vmo_read_trap_dirty() {
 fn pager_wb_not_modified_partial_failed_pin_write() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     let (vmo, key) = pager_helper.create_vmo(1);
     pager_helper.supply_pages(&vmo, key, 0, 1);
     assert!(!vmo.query_modified(true), "should not be modified yet");
@@ -5727,7 +5727,7 @@ fn pager_wb_op_zero_partial_page_trap_dirty() {
 /// C++: TEST(PagerWriteback, OpZeroPinnedNoTrapDirty)
 ///
 /// In the C++ test, a pager VMO page is pinned then zeroed via op_range.
-/// Since BTI/pin is not available in libos mode, we exercise the
+/// Since BTI/pin is not available in test mode, we exercise the
 /// equivalent: supply pages, zero a page, verify zeros, and confirm the
 /// other page is unchanged.
 #[cfg_attr(test, test)]
@@ -6047,7 +6047,7 @@ fn pager_wb_op_zero_writeback_trap_dirty() {
 fn pager_wb_pin_after_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     // Verify basic OP_DIRTY on TRAP_DIRTY VMO.
     let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
     pager_helper.supply_pages(&vmo, key, 0, 2);
@@ -6065,7 +6065,7 @@ fn pager_wb_pin_after_dirty() {
 /// C++: TEST(PagerWriteback, PinForReadNoTrapDirty)
 ///
 /// In the C++ test, a pager VMO page is pinned for reading via BTI.
-/// Since BTI/pin is not available in libos mode, we exercise the
+/// Since BTI/pin is not available in test mode, we exercise the
 /// equivalent: supply page, read it, verify NOT modified (pin-for-read
 /// should not dirty pages).
 #[cfg_attr(test, test)]
@@ -6118,7 +6118,7 @@ fn pager_wb_pin_for_read_trap_dirty() {
 /// C++: TEST(PagerWriteback, PinForWriteNoTrapDirty)
 ///
 /// In the C++ test, a pager VMO page is pinned for writing via BTI,
-/// which dirties the page. Since BTI/pin is not available in libos mode,
+/// which dirties the page. Since BTI/pin is not available in test mode,
 /// we exercise the equivalent via VMO write.
 #[cfg_attr(test, test)]
 fn pager_wb_pin_for_write_no_trap_dirty() {
@@ -6199,7 +6199,7 @@ fn pager_wb_pin_for_write_trap_dirty() {
 /// C++: TEST(PagerWriteback, PinForWriteUnpopulatedNoTrapDirty)
 ///
 /// In the C++ test, a pager VMO page that has NOT been supplied (unpopulated)
-/// is pinned for writing. Since BTI/pin is not available in libos mode,
+/// is pinned for writing. Since BTI/pin is not available in test mode,
 /// we verify that an unpopulated page cannot be read (returns zeros or
 /// the page-fault path is hit), then supply and write it.
 #[cfg_attr(test, test)]
@@ -6259,7 +6259,7 @@ fn pager_wb_pin_for_write_unpopulated_trap_dirty() {
 /// C++: TEST(PagerWriteback, PinnedWritebackNoTrapDirty)
 ///
 /// In the C++ test, a pinned pager VMO page goes through a writeback
-/// cycle while pinned. Since BTI/pin is not available in libos mode,
+/// cycle while pinned. Since BTI/pin is not available in test mode,
 /// we exercise the equivalent: supply page, write to it, do writeback
 /// cycle, then verify content is preserved.
 #[cfg_attr(test, test)]
@@ -6398,7 +6398,7 @@ fn pager_wb_query_vmo_stats_invalid_pointer() {
 ///
 /// In the C++ test, a page is dirtied, writeback is begun (awaiting clean),
 /// and then a read-pin is attempted. Since BTI/pin is not available in
-/// libos mode, we exercise the equivalent: dirty a page, begin writeback,
+/// test mode, we exercise the equivalent: dirty a page, begin writeback,
 /// read the page (should still succeed during writeback), then end
 /// writeback.
 #[cfg_attr(test, test)]
@@ -6826,7 +6826,7 @@ fn pager_wb_resize_writeback_dirty_after_query_trap_dirty() {
 ///
 /// In the C++ test, a resizable VMO is mapped, written, writeback is begun,
 /// an interleaved write is done via mapping during writeback, then
-/// writeback ends. Since VMAR mapping is not available in libos mode,
+/// writeback ends. Since VMAR mapping is not available in test mode,
 /// we use VMO write instead. We verify that content written during
 /// writeback is preserved.
 #[cfg_attr(test, test)]
@@ -7833,7 +7833,7 @@ fn pager_wb_resize_writeback_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackWithMappingNoTrapDirty)
 ///
 /// In the C++ test, a resizable VMO is mapped, written via mapping,
-/// then writeback is done. Since VMAR mapping is not available in libos
+/// then writeback is done. Since VMAR mapping is not available in test mode
 /// mode, we use VMO write. We verify the writeback cycle preserves
 /// content.
 #[cfg_attr(test, test)]
@@ -8249,7 +8249,7 @@ fn pager_wb_slice_op_zero_trap_dirty() {
 /// C++: TEST(PagerWriteback, SlicePinWriteNoTrapDirty)
 ///
 /// In the C++ test, a slice of a pager VMO is pinned for writing via BTI.
-/// Since BTI/pin is not available in libos mode, we exercise the
+/// Since BTI/pin is not available in test mode, we exercise the
 /// equivalent: create a slice, write to it, verify both slice and parent
 /// see the written data (slices share pages), and confirm the VMO is
 /// marked modified.
@@ -8515,7 +8515,7 @@ fn pager_wb_untracked_beyond_stream_size() {
 ///
 /// In the C++ test, a page is dirtied, writeback is begun (awaiting clean),
 /// and then a write-pin is attempted (re-dirtying the page). Since BTI/pin
-/// is not available in libos mode, we exercise the equivalent: dirty a
+/// is not available in test mode, we exercise the equivalent: dirty a
 /// page, begin writeback, write again (re-dirty during writeback), then
 /// end writeback. The re-written content should be preserved.
 #[cfg_attr(test, test)]
@@ -10460,7 +10460,7 @@ fn pager_snapshot_snapshot_vmo_with_slice() {
 /// C++: TEST(Snapshot, ResizeSnapshotRace)
 ///
 /// Regression test for concurrent resize + snapshot. The C++ test races
-/// resize with snapshot creation. In libos mode we exercise the
+/// resize with snapshot creation. In test mode we exercise the
 /// sequential equivalent: create a resizable VMO, write to last page,
 /// snapshot, resize, and verify COW isolation.
 #[cfg_attr(test, test)]
@@ -10500,7 +10500,7 @@ fn pager_snapshot_resize_snapshot_race() {
 ///
 /// This is the canonical "kill blocked reader" test. In C++ the
 /// thread does sys_vmo_read which traps into the pager path.
-/// In libos mode, read_paged() + blocking_run is the equivalent.
+/// In test mode, read_paged() + blocking_run is the equivalent.
 #[cfg_attr(test, async_std::test)]
 async fn pager_process_kill_blocked_user_vmo_read() {
     use crate::helpers::PagerProcessTestThread;
@@ -10542,7 +10542,7 @@ async fn pager_process_kill_blocked_user_vmo_read() {
 /// C++: TEST(PagerProcess, KillBlockedUserPageFault)
 ///
 /// Same as KillBlockedUserVmoRead but in C++ the thread accesses a
-/// mapped address causing a page fault. In libos mode there is no
+/// mapped address causing a page fault. In test mode there is no
 /// MMU mapping, so we use the same read_paged() path. The kernel
 /// behavior being tested is identical: a thread blocked waiting for
 /// pager pages is killed.
@@ -10582,7 +10582,7 @@ async fn pager_process_kill_blocked_user_page_fault() {
 ///
 /// Same as KillBlockedUserVmoRead but in C++ the thread does a
 /// get_info/read_state that requires copying from a pager-backed
-/// buffer. In libos mode this exercises the same code path.
+/// buffer. In test mode this exercises the same code path.
 #[cfg_attr(test, async_std::test)]
 async fn pager_process_kill_blocked_usercopy() {
     use crate::helpers::PagerProcessTestThread;
@@ -10618,7 +10618,7 @@ async fn pager_process_kill_blocked_usercopy() {
 /// C++: TEST(PagerProcess, KillBlockedUsercopyCaptureFaults)
 ///
 /// Same as KillBlockedUsercopy but with fault capture enabled.
-/// In libos mode, the code path is identical to the other variants.
+/// In test mode, the code path is identical to the other variants.
 #[cfg_attr(test, async_std::test)]
 async fn pager_process_kill_blocked_usercopy_capture_faults() {
     use crate::helpers::PagerProcessTestThread;
@@ -10697,7 +10697,7 @@ async fn pager_process_kill_after_suspend_vmo_read() {
 /// C++: TEST(PagerProcess, KillAfterSuspendPageFault)
 ///
 /// Same as KillAfterSuspendVmoRead but in C++ the thread blocks on
-/// a page fault. In libos mode the code path is identical.
+/// a page fault. In test mode the code path is identical.
 #[cfg_attr(test, async_std::test)]
 async fn pager_process_kill_after_suspend_page_fault() {
     use crate::helpers::PagerProcessTestThread;

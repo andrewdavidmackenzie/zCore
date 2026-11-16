@@ -37,7 +37,7 @@ fn membarrier_data_basic() {
 
 /// C++: TEST(MembarrierSyncProcessInsn, Basic)
 /// Verify that instruction-side memory barrier semantics work.
-/// In libos mode, instruction barriers are no-ops but we verify
+/// In test mode, instruction barriers are no-ops but we verify
 /// VMO data consistency after write-then-read patterns.
 #[cfg_attr(test, test)]
 fn membarrier_insn_basic() {
@@ -48,7 +48,7 @@ fn membarrier_insn_basic() {
     let insn_data: Vec<u8> = (0..256).map(|i| (i & 0xFF) as u8).collect();
     vmo.write(0, &insn_data).unwrap();
 
-    // Read back and verify (instruction barrier is a no-op in libos).
+    // Read back and verify (instruction barrier is a no-op in test mode).
     let mut buf = vec![0u8; 256];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf, insn_data, "instruction data should be consistent");
