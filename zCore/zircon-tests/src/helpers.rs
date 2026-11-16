@@ -31,7 +31,7 @@ pub fn ensure_hal_init() {
             hal_impl::init();
             executor::init_runtimes(&[0]);
             // Register COW page fault handler for host execution.
-            hal_impl::libos_cow::register_cow_callback(zircon_object::vm::vmar::cow_fault_callback);
+            hal_impl::cow::register_cow_callback(zircon_object::vm::vmar::cow_fault_callback);
         }
     });
 }
