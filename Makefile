@@ -614,8 +614,11 @@ ifeq ($(RUST_TESTS_ARCH),aarch64)
 		--target targets/qemu-aarch64.json \
 		-Z json-target-spec -Z build-std=core,alloc \
 		-Z build-std-features=compiler-builtins-mem --release
-	@llvm-objcopy -O binary target/qemu-aarch64/release/kernel \
-		target/qemu-aarch64/release/kernel.bin 2>/dev/null || true
+	@OBJCOPY=$$(find "$$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1); \
+		if [ -n "$$OBJCOPY" ]; then "$$OBJCOPY" -O binary target/qemu-aarch64/release/kernel target/qemu-aarch64/release/kernel.bin; \
+		elif command -v llvm-objcopy >/dev/null 2>&1; then llvm-objcopy -O binary target/qemu-aarch64/release/kernel target/qemu-aarch64/release/kernel.bin; \
+		elif command -v rust-objcopy >/dev/null 2>&1; then rust-objcopy -O binary target/qemu-aarch64/release/kernel target/qemu-aarch64/release/kernel.bin; \
+		else echo "ERROR: no objcopy found"; exit 1; fi
 else ifeq ($(RUST_TESTS_ARCH),x86_64)
 	cargo build --package kernel --no-default-features \
 		--features "baremetal-test apic uart-16550 pci" \
@@ -631,8 +634,11 @@ else ifeq ($(RUST_TESTS_ARCH),riscv64)
 		--target targets/qemu-riscv64.json \
 		-Z json-target-spec -Z build-std=core,alloc \
 		-Z build-std-features=compiler-builtins-mem --release
-	@llvm-objcopy -O binary target/qemu-riscv64/release/kernel \
-		target/qemu-riscv64/release/kernel.bin 2>/dev/null || true
+	@OBJCOPY=$$(find "$$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1); \
+		if [ -n "$$OBJCOPY" ]; then "$$OBJCOPY" -O binary target/qemu-riscv64/release/kernel target/qemu-riscv64/release/kernel.bin; \
+		elif command -v llvm-objcopy >/dev/null 2>&1; then llvm-objcopy -O binary target/qemu-riscv64/release/kernel target/qemu-riscv64/release/kernel.bin; \
+		elif command -v rust-objcopy >/dev/null 2>&1; then rust-objcopy -O binary target/qemu-riscv64/release/kernel target/qemu-riscv64/release/kernel.bin; \
+		else echo "ERROR: no objcopy found"; exit 1; fi
 endif
 
 rust-tests: rust-tests-build

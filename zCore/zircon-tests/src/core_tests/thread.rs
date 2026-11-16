@@ -1903,7 +1903,7 @@ fn thread_local_register_state() {
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     let tls_offset = usize::MAX; // skip on unsupported arch
 
-    if tls_offset + 8 > n {
+    if tls_offset == usize::MAX || tls_offset + 8 > n {
         return; // GeneralRegs too small for TLS field
     }
 

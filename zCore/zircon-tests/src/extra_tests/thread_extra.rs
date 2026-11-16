@@ -439,7 +439,7 @@ fn thread_local() {
     let mut buf2 = vec![0u8; 512];
     let n2 = t2.read_state(ThreadStateKind::General, &mut buf2).unwrap();
 
-    if tls_offset + 8 > n1 || tls_offset + 8 > n2 {
+    if tls_offset == usize::MAX || tls_offset + 8 > n1 || tls_offset + 8 > n2 {
         return; // arch doesn't support TLS offset check
     }
 
