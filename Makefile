@@ -625,9 +625,10 @@ else ifeq ($(RUST_TESTS_ARCH),x86_64)
 		--target targets/qemu-x86_64.json \
 		-Z json-target-spec -Z build-std=core,alloc \
 		-Z build-std-features=compiler-builtins-mem --release
+	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
 	@tools/x86-bootimage/target/release/x86-bootimage \
 		target/qemu-x86_64/release/kernel \
-		target/qemu-x86_64/release/boot.img 2>/dev/null || true
+		target/qemu-x86_64/release/boot.img
 else ifeq ($(RUST_TESTS_ARCH),riscv64)
 	cargo build --package kernel --no-default-features \
 		--features "baremetal-test uart-16550 riscv-intc riscv-plic pci" \
