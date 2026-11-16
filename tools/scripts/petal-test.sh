@@ -24,10 +24,35 @@ case "$ARCH" in
   aarch64)
     RUST_TARGET="aarch64-unknown-none-softfloat"
     KERNEL="target/qemu-aarch64/release/kernel.bin"
+    ROOTFS_IMG="target/qemu-aarch64/release/aarch64-zircon.img"
     QEMU_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
       -machine virt -cpu cortex-a72 -smp "$CORES"
+      -serial mon:stdio
+    )
+    ;;
+  x86_64)
+    RUST_TARGET="x86_64-unknown-none"
+    KERNEL="target/qemu-x86_64/release/boot.img"
+    ROOTFS_IMG="target/qemu-x86_64/release/x86_64-zircon.img"
+    QEMU_CMD=(
+      qemu-system-x86_64
+      -m 4G -display none -no-reboot -nographic
+      -machine q35 -cpu qemu64,+fsgsbase -smp "$CORES"
+      -serial mon:stdio
+      -bios /usr/share/ovmf/OVMF.fd
+    )
+    ;;
+  riscv64)
+    RUST_TARGET="riscv64gc-unknown-none-elf"
+    KERNEL="target/qemu-riscv64/release/kernel.bin"
+    ROOTFS_IMG="target/qemu-riscv64/release/riscv64-zircon.img"
+    QEMU_CMD=(
+      qemu-system-riscv64
+      -m 2G -display none -no-reboot -nographic
+      -machine virt -smp "$CORES"
+      -bios default
       -serial mon:stdio
     )
     ;;
@@ -37,37 +62,27 @@ case "$ARCH" in
     ;;
 esac
 
-# Build the petal binary first
-cargo build -p petal --bin "$BIN" --target "$RUST_TARGET" --release
+# Build the petal test ZBI (not the shell)
+cargo petal-zbi --arch "$ARCH" --bin "$BIN"
 
-# Copy test binary into rootfs dir BEFORE building the kernel
-# (cargo zcore-build creates the SFS rootfs from this directory)
-ROOTFS_DIR="target/rootfs/zircon/$ARCH"
-mkdir -p "$ROOTFS_DIR/bin"
-cp "target/$RUST_TARGET/release/$BIN" "$ROOTFS_DIR/bin/$BIN"
-
-# Build kernel with ROOTPROC pointing to the test binary
-ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/$BIN" \
-  cargo zcore-build -m "qemu-$ARCH"
-
-ROOTFS_IMG="target/qemu-$ARCH/release/$ARCH-zircon.img"
-
-# Strip kernel
-OBJCOPY=$(find "$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1)
-if [ -n "$OBJCOPY" ]; then
-  "$OBJCOPY" --strip-all -O binary "target/qemu-$ARCH/release/kernel" "$KERNEL"
-elif command -v llvm-objcopy >/dev/null 2>&1; then
-  llvm-objcopy --strip-all -O binary "target/qemu-$ARCH/release/kernel" "$KERNEL"
-fi
+# Build kernel with the test ZBI embedded.
+# Set PETAL_ZBI to prevent cargo zcore-build from overwriting
+# our test ZBI with the shell ZBI.
+cargo clean -p kernel 2>/dev/null || true
+PETAL_ZBI="$(pwd)/target/petal/$ARCH/petal.zbi" \
+  cargo zcore-build -m "qemu-$ARCH" --flavour ""
 
 echo "==> Running petal $BIN on $ARCH QEMU (timeout=${TIMEOUT}s)..."
 LOG=$(mktemp /tmp/petal-test-XXXXXX.log)
 trap "rm -f $LOG" EXIT
 
-"${QEMU_CMD[@]}" \
-  -kernel "$KERNEL" \
-  -initrd "$ROOTFS_IMG" \
-  > "$LOG" 2>&1 &
+if [ "$ARCH" = "x86_64" ]; then
+  QEMU_CMD+=(-drive "format=raw,file=$KERNEL")
+else
+  QEMU_CMD+=(-kernel "$KERNEL" -initrd "$ROOTFS_IMG")
+fi
+
+"${QEMU_CMD[@]}" > "$LOG" 2>&1 &
 QEMU_PID=$!
 
 ELAPSED=0

@@ -237,12 +237,21 @@ jobs:
 
   rust-tests-qemu:
     name: Rust Zircon Tests (${{ matrix.arch }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        arch: [aarch64, x86_64]
+        include:
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            qemu-pkg: qemu-system-arm
+          - arch: x86_64
+            runner: ubuntu-latest
+            qemu-pkg: qemu-system-x86 ovmf
+          - arch: riscv64
+            runner: ubuntu-latest
+            qemu-pkg: qemu-system-misc
     steps:
       - uses: actions/checkout@v4
         with:
@@ -255,13 +264,16 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: rust-tests-${{ matrix.arch }}
+          key: rust-tests-${{ matrix.arch }}-${{ matrix.runner }}
 
       - name: Install QEMU
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-x86 ovmf
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.qemu-pkg }}
 
-      - name: Build and run Rust zircon-tests
+      - name: Build and run Rust zircon-tests (kernel mode)
         run: make rust-tests RUST_TESTS_ARCH=${{ matrix.arch }}
+
+      - name: Run petal vmar_test (user mode)
+        run: tools/scripts/petal-test.sh ${{ matrix.arch }} vmar_test
 
   zircon-core-tests-x86:
     name: Zircon Core Tests (x86_64)

@@ -39,6 +39,17 @@ case "$ARCH" in
       -bios /usr/share/ovmf/OVMF.fd
     )
     ;;
+  riscv64)
+    KERNEL="target/qemu-riscv64/release/kernel.bin"
+    QEMU_CMD=(
+      qemu-system-riscv64
+      -m 2G -display none -no-reboot -nographic
+      -machine virt -smp "$CORES"
+      -bios default
+      -kernel "$KERNEL"
+      -serial mon:stdio
+    )
+    ;;
   *)
     echo "ERROR: unsupported arch '$ARCH'"
     exit 1
