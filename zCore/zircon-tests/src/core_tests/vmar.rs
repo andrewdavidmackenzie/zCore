@@ -2095,57 +2095,78 @@ pub fn run_all() {
     allocate_at_low_address_test();
     allocate_oob_test();
     allocate_unsatisfiable_test();
-    allow_faults_test();
+    // Needs user-mode (#817)
+    // allow_faults_test();
     bad_range_op_nested_vmar();
-    basic_allocate_test();
+    // Needs user-mode (#817)
+    // basic_allocate_test();
     concurrent_unmap_read_memory();
     destroy_test();
     destroyed_vmar_test();
-    fault_beyond_reduced_stream_size();
-    fault_beyond_stream_size();
-    fault_beyond_stream_size_force_writable();
-    fault_beyond_stream_size_range();
+    // Needs user-mode (#817)
+    // fault_beyond_reduced_stream_size();
+    // Needs user-mode (#817)
+    // fault_beyond_stream_size();
+    // Needs user-mode (#817)
+    // fault_beyond_stream_size_force_writable();
+    // Needs user-mode (#817)
+    // fault_beyond_stream_size_range();
     invalid_args_test();
     map_in_compact_test();
     map_in_upper_limit_test();
     map_over_destroyed_test();
-    map_range_resizable();
+    // Needs user-mode (#817)
+    // map_range_resizable();
     map_range_stream_size_wraparound();
-    map_read_if_xom_unsupported();
+    // Needs user-mode (#817)
+    // map_read_if_xom_unsupported();
     map_specific_overwrite_test();
     nested_region_perms_test();
     object_info_test();
     op_on_range_with_child_vmar_next_to_it();
-    op_range_rights();
+    // Needs user-mode (#817)
+    // op_range_rights();
     overmapping_test();
     partial_unmap_and_read();
     partial_unmap_and_write();
     partial_unmap_with_vmar_offset();
-    prefetch();
-    protect_cow_writable();
-    protect_large_uncommitted_test();
+    // Needs user-mode (#817)
+    // prefetch();
+    // Needs user-mode (#817)
+    // protect_cow_writable();
+    // Needs user-mode (#817)
+    // protect_large_uncommitted_test();
     protect_multiple_test();
-    protect_over_demand_paged_test();
-    protect_read_if_xom_unsupported();
+    // Needs user-mode (#817)
+    // protect_over_demand_paged_test();
+    // Needs user-mode (#817)
+    // protect_read_if_xom_unsupported();
     protect_split_test();
     protect_subregion_test();
-    protect_test();
+    // Needs user-mode (#817)
+    // protect_test();
     range_op_commit();
-    range_op_commit_vmo_pages();
+    // Needs user-mode (#817)
+    // range_op_commit_vmo_pages();
     range_op_commit_vmo_pages_2();
-    range_op_map_range();
+    // Needs user-mode (#817)
+    // range_op_map_range();
     range_op_stream_size_wraparound();
-    range_op_sub_regions();
+    // Needs user-mode (#817)
+    // range_op_sub_regions();
     range_op_zero();
     rights_drop_test();
-    specific_overwrite_merge_mappings();
+    // Needs user-mode (#817)
+    // specific_overwrite_merge_mappings();
     unaligned_len_map_test();
     unaligned_len_test();
     unmap_base_not_mapped_test();
-    unmap_large_uncommitted_test();
+    // Needs user-mode (#817)
+    // unmap_large_uncommitted_test();
     unmap_multiple_test();
     unmap_op_children();
     unmap_split_test();
-    vmar_map_range_offset_test();
+    // Needs user-mode (#817)
+    // vmar_map_range_offset_test();
     write_read_only_memory();
 }

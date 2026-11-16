@@ -653,9 +653,12 @@ pub fn run_all() {
     child_zero_then_write();
     nested();
     contiguous();
-    unaligned_sub_page();
-    decommit_middle();
-    unaligned_committed();
+    // Moved to petal vmar_test (#817)
+    // unaligned_sub_page();
+    // Moved to petal vmar_test (#817)
+    // decommit_middle();
+    // Moved to petal vmar_test (#817)
+    // unaligned_committed();
     resize_over_hidden_markers();
     zero_frees_and_allocates();
     zero_hidden_no_content();

@@ -558,11 +558,15 @@ fn addr_and_size() {
 pub fn run_all() {
     vmar_root_exists();
     vmar_allocate_child();
-    vmar_map_and_access();
+    // Moved to petal vmar_test (#817)
+    // vmar_map_and_access();
     vmar_unmap();
-    vmar_map_multi_page();
-    vmar_map_with_vmo_offset();
-    vmar_protect();
+    // Moved to petal vmar_test (#817)
+    // vmar_map_multi_page();
+    // Moved to petal vmar_test (#817)
+    // vmar_map_with_vmo_offset();
+    // Moved to petal vmar_test (#817)
+    // vmar_protect();
     vmar_destroy_child();
     create_destroy();
     create_invalid_args();

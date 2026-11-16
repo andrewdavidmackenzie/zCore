@@ -430,7 +430,8 @@ pub fn run_all() {
     immutable_clone();
     not_immutable_missing_no_write();
     clone_rights();
-    clone_commit_via_mapping();
+    // Moved to petal vmar_test (#817)
+    // clone_commit_via_mapping();
     not_immutable_missing_snapshot();
     size_align();
     resize_child();

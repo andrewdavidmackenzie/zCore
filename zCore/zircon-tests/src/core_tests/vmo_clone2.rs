@@ -1933,21 +1933,25 @@ pub async fn run_all() {
     many_clone_offset();
     marker_clears_split_bits();
     parent_start_limit_regression();
-    clone_vmar_write();
+    // Moved to petal vmar_test (#817)
+    // clone_vmar_write();
     disjoint_clone_progressive();
     disjoint_clone_test2();
     drop_children_in_parallel();
     drop_parent_committed_bytes();
     forbid_contiguous_vmo();
-    many_clone_mapping();
-    many_clone_mapping_offset();
+    // Moved to petal vmar_test (#817)
+    // many_clone_mapping();
+    // Moved to petal vmar_test (#817)
+    // many_clone_mapping_offset();
     map_range_read_only();
     no_physical();
     no_snapshot_pager();
     obj_mem_accounting();
     offset();
     offset_progressive_write();
-    parent_vmar_write();
+    // Moved to petal vmar_test (#817)
+    // parent_vmar_write();
     pin_before_create_failure();
     pin_clone_pages();
     snapshot_at_least_on_write_slice_in_chain();
