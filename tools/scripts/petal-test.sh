@@ -62,15 +62,23 @@ case "$ARCH" in
     ;;
 esac
 
-# Build the petal test ZBI (not the shell)
+# Build the petal test binary as a ZBI, then build the kernel
+# with ROOTPROC pointing to it.
 cargo petal-zbi --arch "$ARCH" --bin "$BIN"
-
-# Build kernel with the test ZBI embedded.
-# Set PETAL_ZBI to prevent cargo zcore-build from overwriting
-# our test ZBI with the shell ZBI.
 cargo clean -p kernel 2>/dev/null || true
 PETAL_ZBI="$(pwd)/target/petal/$ARCH/petal.zbi" \
+  ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/$BIN" \
   cargo zcore-build -m "qemu-$ARCH" --flavour ""
+
+# Strip kernel ELF to raw binary for QEMU
+if [ "$ARCH" != "x86_64" ]; then
+  OBJCOPY=$(find "$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1)
+  if [ -n "$OBJCOPY" ]; then
+    "$OBJCOPY" -O binary "target/qemu-$ARCH/release/kernel" "$KERNEL"
+  elif command -v llvm-objcopy >/dev/null 2>&1; then
+    llvm-objcopy -O binary "target/qemu-$ARCH/release/kernel" "$KERNEL"
+  fi
+fi
 
 echo "==> Running petal $BIN on $ARCH QEMU (timeout=${TIMEOUT}s)..."
 LOG=$(mktemp /tmp/petal-test-XXXXXX.log)

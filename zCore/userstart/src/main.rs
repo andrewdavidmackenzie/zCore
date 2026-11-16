@@ -231,11 +231,12 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     });
 
     // Forward bootstrap handles to init using processargs format.
-    let forward_handles = [root_job, root_resource, zbi_vmo];
-    let forward_info: [u32; 3] = [
+    let forward_handles = [root_job, root_resource, zbi_vmo, init_vmar];
+    let forward_info: [u32; 4] = [
         pa_hnd(PA_JOB_DEFAULT, 0),
         pa_hnd(PA_RESOURCE, 0),
         pa_hnd(PA_VMO_BOOTDATA, 0),
+        pa_hnd(PA_VMAR_ROOT, 0),
     ];
     let mut fwd_buf = [0u8; 128];
     let fwd_len = write_processargs_header(&forward_info, &mut fwd_buf);

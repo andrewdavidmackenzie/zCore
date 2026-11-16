@@ -20,7 +20,7 @@ use zx::sys::{
 const ZX_OK: ZxStatus = 0;
 const ZX_VM_PERM_READ: u32 = 1;
 const ZX_VM_PERM_WRITE: u32 = 2;
-const ZX_VMO_CHILD_SNAPSHOT: u32 = 0;
+const ZX_VMO_CHILD_SNAPSHOT: u32 = 1 << 0; // SNAPSHOT (full CoW)
 
 fn check(status: ZxStatus, name: &[u8]) {
     if status != ZX_OK {
