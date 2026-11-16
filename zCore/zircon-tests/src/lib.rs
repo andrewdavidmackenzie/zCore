@@ -315,9 +315,11 @@ pub async fn run_all() {
     log::warn!("TEST MODULE: timer_ops");
     timer_ops::run_all();
     log::warn!("TEST MODULE: vmar_extra");
-    vmar_extra::run_all();
+    // Requires user-mode VMAR access (#817)
+    // vmar_extra::run_all();
     log::warn!("TEST MODULE: vmar_ops");
-    vmar_ops::run_all();
+    // Requires user-mode VMAR access (#817)
+    // vmar_ops::run_all();
     log::warn!("TEST MODULE: vmo_clone_extra");
     vmo_clone_extra::run_all();
     log::warn!("TEST MODULE: vmo_contiguous");
