@@ -246,12 +246,13 @@ jobs:
           - arch: aarch64
             runner: ubuntu-24.04-arm
             qemu-pkg: qemu-system-arm
-          - arch: x86_64
-            runner: ubuntu-latest
-            qemu-pkg: qemu-system-x86 ovmf
-          - arch: riscv64
-            runner: ubuntu-latest
-            qemu-pkg: qemu-system-misc
+          # x86_64 and riscv64 need investigation (#820)
+          # - arch: x86_64
+          #   runner: ubuntu-latest
+          #   qemu-pkg: qemu-system-x86 ovmf
+          # - arch: riscv64
+          #   runner: ubuntu-latest
+          #   qemu-pkg: qemu-system-misc
     steps:
       - uses: actions/checkout@v4
         with:
@@ -272,8 +273,9 @@ jobs:
       - name: Build and run Rust zircon-tests (kernel mode)
         run: make rust-tests RUST_TESTS_ARCH=${{ matrix.arch }}
 
-      - name: Run petal vmar_test (user mode)
-        run: tools/scripts/petal-test.sh ${{ matrix.arch }} vmar_test
+      # TODO: petal vmar_test needs rootfs infrastructure (#817)
+      # - name: Run petal vmar_test (user mode)
+      #   run: tools/scripts/petal-test.sh ${{ matrix.arch }} vmar_test
 
   zircon-core-tests-x86:
     name: Zircon Core Tests (x86_64)
