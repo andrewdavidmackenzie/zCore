@@ -328,13 +328,16 @@ async fn untriggered_signal_interrupt_wait() {
     //    This exercises the blocking wait → trigger → wake path.
     let int_clone = interrupt.clone();
     let ts2: i64 = 67890;
-    executor::spawn(async move {
-        hal_impl::thread::sleep_until(
-            hal_impl::timer::timer_now() + core::time::Duration::from_millis(10),
-        )
-        .await;
-        int_clone.trigger(ts2).unwrap();
-    });
+    executor::spawn_with_priority(
+        async move {
+            hal_impl::thread::sleep_until(
+                hal_impl::timer::timer_now() + core::time::Duration::from_millis(10),
+            )
+            .await;
+            int_clone.trigger(ts2).unwrap();
+        },
+        16,
+    );
     let result2 = interrupt.wait().await.unwrap();
     assert_eq!(result2, ts2);
 }
@@ -494,10 +497,13 @@ async fn wait_thread_functions_after_suspend_resume() {
     let int_clone = interrupt.clone();
     let result = alloc::sync::Arc::new(core::sync::atomic::AtomicI64::new(0));
     let result_clone = result.clone();
-    executor::spawn(async move {
-        let ts = int_clone.wait().await.unwrap();
-        result_clone.store(ts, core::sync::atomic::Ordering::Release);
-    });
+    executor::spawn_with_priority(
+        async move {
+            let ts = int_clone.wait().await.unwrap();
+            result_clone.store(ts, core::sync::atomic::Ordering::Release);
+        },
+        16,
+    );
 
     // Small delay to let the wait task block.
     hal_impl::thread::sleep_until(

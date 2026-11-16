@@ -308,7 +308,7 @@ pub mod key {
     pub const PRIORITY_SHIFT: usize = 58;
     pub const TASK_NUM_PER_PRIORITY: usize = 1 << PRIORITY_SHIFT;
     pub const MAX_PRIORITY: usize = 1 << 5;
-    pub const DEFAULT_PRIORITY: usize = 16;
+    pub const DEFAULT_PRIORITY: usize = 4;
 
     pub const PAGE_INDEX_SHIFT: usize = 6;
 

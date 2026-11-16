@@ -1110,14 +1110,17 @@ async fn drop_children_in_parallel() {
         let ready_clone = ready.clone();
         let done = alloc::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
         let done_clone = done.clone();
-        executor::spawn(async move {
-            ready_clone.store(false, core::sync::atomic::Ordering::SeqCst);
-            while !ready_clone.load(core::sync::atomic::Ordering::SeqCst) {
-                hal_impl::thread::yield_now().await;
-            }
-            drop(child_move);
-            done_clone.store(true, core::sync::atomic::Ordering::Release);
-        });
+        executor::spawn_with_priority(
+            async move {
+                ready_clone.store(false, core::sync::atomic::Ordering::SeqCst);
+                while !ready_clone.load(core::sync::atomic::Ordering::SeqCst) {
+                    hal_impl::thread::yield_now().await;
+                }
+                drop(child_move);
+                done_clone.store(true, core::sync::atomic::Ordering::Release);
+            },
+            16,
+        );
         while ready.load(core::sync::atomic::Ordering::SeqCst) {
             hal_impl::thread::yield_now().await;
         }
@@ -1165,19 +1168,22 @@ async fn drop_parent_committed_bytes() {
         let ready_clone = ready.clone();
         let done = alloc::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
         let done_clone = done.clone();
-        executor::spawn(async move {
-            ready_clone.store(false, core::sync::atomic::Ordering::SeqCst);
-            while !ready_clone.load(core::sync::atomic::Ordering::SeqCst) {
-                hal_impl::thread::yield_now().await;
-            }
-            let committed = vmo_populated_bytes(&child_clone);
-            assert!(
-                committed == kattr_bytes_clone_split || committed == kattr_bytes_clone_no_split,
-                "committed bytes in child: {}",
-                committed
-            );
-            done_clone.store(true, core::sync::atomic::Ordering::Release);
-        });
+        executor::spawn_with_priority(
+            async move {
+                ready_clone.store(false, core::sync::atomic::Ordering::SeqCst);
+                while !ready_clone.load(core::sync::atomic::Ordering::SeqCst) {
+                    hal_impl::thread::yield_now().await;
+                }
+                let committed = vmo_populated_bytes(&child_clone);
+                assert!(
+                    committed == kattr_bytes_clone_split || committed == kattr_bytes_clone_no_split,
+                    "committed bytes in child: {}",
+                    committed
+                );
+                done_clone.store(true, core::sync::atomic::Ordering::Release);
+            },
+            16,
+        );
         while ready.load(core::sync::atomic::Ordering::SeqCst) {
             hal_impl::thread::yield_now().await;
         }
