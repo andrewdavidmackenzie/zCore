@@ -246,13 +246,12 @@ jobs:
           - arch: aarch64
             runner: ubuntu-24.04-arm
             qemu-pkg: qemu-system-arm
-          # x86_64 and riscv64 need investigation (#820)
-          # - arch: x86_64
-          #   runner: ubuntu-latest
-          #   qemu-pkg: qemu-system-x86 ovmf
-          # - arch: riscv64
-          #   runner: ubuntu-latest
-          #   qemu-pkg: qemu-system-misc
+          - arch: x86_64
+            runner: ubuntu-latest
+            qemu-pkg: qemu-system-x86 ovmf
+          - arch: riscv64
+            runner: ubuntu-latest
+            qemu-pkg: qemu-system-misc
     steps:
       - uses: actions/checkout@v4
         with:

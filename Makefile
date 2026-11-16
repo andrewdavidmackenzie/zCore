@@ -621,7 +621,7 @@ ifeq ($(RUST_TESTS_ARCH),aarch64)
 		else echo "ERROR: no objcopy found"; exit 1; fi
 else ifeq ($(RUST_TESTS_ARCH),x86_64)
 	cargo build --package kernel --no-default-features \
-		--features "baremetal-test apic uart-16550 pci" \
+		--features "baremetal-test apic uart-16550 pci dynamic-linking" \
 		--target targets/qemu-x86_64.json \
 		-Z json-target-spec -Z build-std=core,alloc \
 		-Z build-std-features=compiler-builtins-mem --release
