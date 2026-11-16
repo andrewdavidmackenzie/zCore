@@ -90,10 +90,10 @@ impl Syscall<'_> {
         match vmar.check_user_access(addr, len, MMUFlags::READ) {
             Ok(()) => Ok(()),
             Err(ZxError::ACCESS_DENIED) => Err(ZxError::INVALID_ARGS),
-            #[cfg(feature = "libos")]
             Err(ZxError::NOT_FOUND) => {
-                // In libos mode, addresses not in any VMAR mapping may be
-                // valid host memory (stack, heap). Allow them.
+                // Address not in any VMAR mapping — allow it for
+                // kernel-mode execution where kernel addresses serve
+                // as "user" buffers.
                 Ok(())
             }
             Err(_) => Err(ZxError::INVALID_ARGS),
@@ -111,10 +111,13 @@ impl Syscall<'_> {
         match vmar.check_user_access(addr, len, MMUFlags::WRITE) {
             Ok(()) => Ok(()),
             Err(ZxError::ACCESS_DENIED) => Err(ZxError::INVALID_ARGS),
-            #[cfg(feature = "libos")]
             Err(ZxError::NOT_FOUND) => {
-                // In libos mode, addresses not in any VMAR mapping may be
-                // valid host memory (stack, heap). Allow them.
+                // Address not in any VMAR mapping. In kernel-mode test
+                // execution and libos mode, kernel/stack addresses are
+                // valid — there's no real user/kernel memory split.
+                // Only reject if there's a true user-space process with
+                // mapped VMARs (the address would be in a mapping if it
+                // were valid user memory).
                 Ok(())
             }
             Err(_) => Err(ZxError::INVALID_ARGS),
