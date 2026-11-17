@@ -206,3 +206,7 @@ path = "src/bin/job_test.rs"
 [[bin]]
 name = "futex-test"
 path = "src/bin/futex_test.rs"
+
+[[bin]]
+name = "iovec-test"
+path = "src/bin/iovec_test.rs"
