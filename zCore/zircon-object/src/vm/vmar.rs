@@ -208,7 +208,11 @@ impl VmAddressRegion {
             addr,
             size,
             parent: None,
-            page_table: Arc::new(Mutex::new(PageTable::from_current().clone_kernel())), //hal PageTable
+            page_table: {
+                let pt = PageTable::from_current().clone_kernel();
+                log::warn!("new_root: table_phys={:#x}", pt.table_phys());
+                Arc::new(Mutex::new(pt))
+            }, //hal PageTable
             inner: Mutex::new(Some(VmarInner::default())),
             memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
