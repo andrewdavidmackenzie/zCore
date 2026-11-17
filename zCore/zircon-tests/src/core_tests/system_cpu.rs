@@ -325,9 +325,14 @@ fn get_performance_info() {
 
     let online_cpus: usize = hal_impl::cpu::num_cpus();
 
+    // Each entry: { u32 cpu, u32 integral, u32 fractional } = 12 bytes
+    const SCALE_ENTRY_SIZE: usize = 12;
+    // Each limit entry: { u32 cpu, u32 limit_type, u64 min, u64 max } = 24 bytes
+    const LIMIT_ENTRY_SIZE: usize = 24;
+
     // Query ZX_CPU_DEFAULT_PERF_SCALE (topic 2)
     {
-        let mut perf_info = [0u8; 12]; // 1 entry: { u32 cpu, u32 integral, u32 fractional }
+        let mut perf_info = alloc::vec![0u8; SCALE_ENTRY_SIZE * online_cpus];
         let mut count: usize = usize::MAX;
         let result = sc.sys_system_get_performance_info(
             cpu_resource,
@@ -339,7 +344,7 @@ fn get_performance_info() {
         assert_eq!(result, Ok(()));
         assert_eq!(count, online_cpus);
 
-        // Parse: cpu_number (u32) + scale { u32 integral, u32 fractional }
+        // Parse first entry: cpu_number (u32) + scale { u32 integral, u32 fractional }
         let cpu = u32::from_ne_bytes([perf_info[0], perf_info[1], perf_info[2], perf_info[3]]);
         let integral = u32::from_ne_bytes([perf_info[4], perf_info[5], perf_info[6], perf_info[7]]);
         let fractional =
@@ -354,7 +359,7 @@ fn get_performance_info() {
 
     // Query ZX_CPU_PERF_SCALE (topic 1)
     {
-        let mut perf_info = [0u8; 12];
+        let mut perf_info = alloc::vec![0u8; SCALE_ENTRY_SIZE * online_cpus];
         let mut count: usize = usize::MAX;
         let result = sc.sys_system_get_performance_info(
             cpu_resource,
@@ -379,8 +384,7 @@ fn get_performance_info() {
 
     // Query ZX_CPU_PERF_LIMIT (topic 3)
     {
-        // zx_cpu_perf_limit_t = { u32 cpu, u32 limit_type, u64 min, u64 max } = 24 bytes
-        let mut limit_info = [0u8; 24];
+        let mut limit_info = alloc::vec![0u8; LIMIT_ENTRY_SIZE * online_cpus];
         let mut count: usize = usize::MAX;
         let result = sc.sys_system_get_performance_info(
             cpu_resource,
@@ -395,26 +399,8 @@ fn get_performance_info() {
         let cpu = u32::from_ne_bytes([limit_info[0], limit_info[1], limit_info[2], limit_info[3]]);
         let limit_type =
             u32::from_ne_bytes([limit_info[4], limit_info[5], limit_info[6], limit_info[7]]);
-        let min = u64::from_ne_bytes([
-            limit_info[8],
-            limit_info[9],
-            limit_info[10],
-            limit_info[11],
-            limit_info[12],
-            limit_info[13],
-            limit_info[14],
-            limit_info[15],
-        ]);
-        let max = u64::from_ne_bytes([
-            limit_info[16],
-            limit_info[17],
-            limit_info[18],
-            limit_info[19],
-            limit_info[20],
-            limit_info[21],
-            limit_info[22],
-            limit_info[23],
-        ]);
+        let min = u64::from_ne_bytes(limit_info[8..16].try_into().unwrap());
+        let max = u64::from_ne_bytes(limit_info[16..24].try_into().unwrap());
 
         assert_eq!(cpu, 0);
         // C++: EXPECT_EQ(entry.limit_type, ZX_CPU_PERF_LIMIT_TYPE_RATE)
