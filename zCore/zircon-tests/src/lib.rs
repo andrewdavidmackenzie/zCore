@@ -1,5 +1,12 @@
 //! Rust-native Zircon syscall test suite.
 //!
+//! Syscall-layer tests (using UserInPtr/UserOutPtr) have been ported
+//! to petal user-mode binaries. The remaining modules here contain
+//! kernel-API tests plus helpers used by cross-module references.
+//! Functions in ported modules are kept for the host `cargo test`
+//! path but are not called from `run_all()` on bare-metal.
+#![allow(dead_code)]
+//!
 //! This crate contains tests organized into two categories:
 //!
 //! ## `core_tests` -- 1:1 C++ core-test ports (~1800 tests)
@@ -259,29 +266,6 @@ pub async fn run_all() {
     // On bare-metal, kernel addresses are correctly rejected by VMAR
     // validation. These tests only run in libos mode (host `cargo test`).
     // They need to migrate to the petal user-mode binary.
-    #[cfg(not(target_os = "none"))]
-    {
-        run_module!(bad_syscall);
-        run_module!(clock_extra);
-        run_module!(clock_ops);
-        run_module!(cprng);
-        run_module!(debug);
-        run_module!(exception_extra);
-        run_module!(mini_process);
-        run_module!(object_info_extra);
-        run_module!(async object_wait_extra);
-        run_module!(syscall_channel_extra);
-        run_module!(syscall_fifo_extra);
-        run_module!(syscall_handle_extra);
-        run_module!(syscall_object);
-        run_module!(async syscall_port_extra);
-        run_module!(syscall_signal_extra);
-        run_module!(syscall_socket_extra);
-        run_module!(async syscall_transfer_data_extra);
-        run_module!(async syscall_vmo_extra);
-        run_module!(async thread_extra);
-        run_module!(timer_extra);
-        run_module!(async vmo_discardable);
-        run_module!(vmo_extra);
-    }
+    // Syscall-layer tests have been ported to petal user-mode binaries.
+    // They run on bare-metal QEMU via the petal test infrastructure.
 }

@@ -266,3 +266,19 @@ path = "src/bin/handle_wait_test.rs"
 [[bin]]
 name = "object-wait-test"
 path = "src/bin/object_wait_test.rs"
+
+[[bin]]
+name = "channel-call-test"
+path = "src/bin/channel_call_test.rs"
+
+[[bin]]
+name = "sync-completion-test"
+path = "src/bin/sync_completion_test.rs"
+
+[[bin]]
+name = "wake-reports-test"
+path = "src/bin/wake_reports_test.rs"
+
+[[bin]]
+name = "object-wait-extra-test"
+path = "src/bin/object_wait_extra_test.rs"
