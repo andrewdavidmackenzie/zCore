@@ -178,3 +178,11 @@ path = "src/bin/exceptions_arch_test.rs"
 [[bin]]
 name = "vmo-discardable-test"
 path = "src/bin/vmo_discardable_test.rs"
+
+[[bin]]
+name = "system-cpu-test"
+path = "src/bin/system_cpu_test.rs"
+
+[[bin]]
+name = "cpu-mask-profile-test"
+path = "src/bin/cpu_mask_profile_test.rs"
