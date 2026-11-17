@@ -15,7 +15,6 @@ supported-boards = [
     "qemu-aarch64-uefi",
     "qemu-x86_64",
     "raspi400",
-    "raspi400-uefi",
     "x86-laptop",
     "jolla-c2",
     "libos",

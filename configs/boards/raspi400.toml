@@ -1,22 +1,32 @@
-# Raspberry Pi 400 -- Zircon mode
+# Raspberry Pi 400 -- UEFI boot via pftf/RPi4 firmware
 #
 # Real hardware: BCM2711 SoC, PL011 UART, GIC-400 (non-secure),
-# no VirtIO, no PCI. Boots from SD card via extlinux (U-Boot).
+# no VirtIO, no PCI.
 #
-# The board ships no rootfs; Zircon-only products boot the petal shell
-# from the ZBI embedded in the kernel image.
+# Uses EDK2 UEFI firmware (https://github.com/pftf/RPi4) to provide
+# a standard UEFI boot environment. The kernel is loaded by the UEFI
+# stub from the ESP partition on the SD card, and is linked at
+# 0x80200000 (same as QEMU UEFI), in the Pi 400's 4GB RAM range.
+#
+# This is the only board configuration verified on real hardware
+# (see docs/hw-test-log.md); the legacy raw/extlinux boot path was
+# removed when the raspi400 and raspi400-uefi boards were merged.
+#
+# Zircon-only products boot the petal shell from the ZBI embedded in
+# the kernel image (the board ships no rootfs).
 
 arch = "aarch64"
 cores = 4
-linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker_raspi400.ld"
+linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker-uefi.ld"
 drivers = ["pl011-uart", "gic-400"]
-features = ["board-raspi400"]
-boot-method = "sdcard"
+features = ["uefi-boot", "board-raspi400"]
+stub-features = ["board-raspi400", "uefi-console"]
+boot-method = "uefi"
 flash-method = "sd"
 default-product = "petal"
 
-# No [qemu] section -- this is real hardware only.
-# Use `make raspi400-run` for QEMU emulation with raspi4b machine.
+# No [qemu] section -- this is real hardware only. The QEMU raspi4b
+# machine cannot boot the UEFI-linked kernel.
 
 [rustc-target]
 llvm-target = "aarch64-unknown-linux-gnu"

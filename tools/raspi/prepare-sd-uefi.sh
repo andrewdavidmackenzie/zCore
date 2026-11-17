@@ -4,7 +4,7 @@
 #
 # This script:
 # 1. Downloads pftf/RPi4 UEFI firmware (if not cached)
-# 2. Builds the UEFI stub and kernel for raspi400-uefi
+# 2. Builds the UEFI stub and kernel for the raspi400 board
 # 3. Creates an ESP-compatible layout on the SD card
 #
 # Usage:
@@ -91,7 +91,7 @@ fi
 # --- Step 2: Build the UEFI stub ---
 echo "==> Building UEFI stub for Pi 400..."
 cd "$PROJECT_DIR/tools/aarch64-uefi-stub"
-# Stub features are configured in configs/raspi400-uefi.toml (stub-features).
+# Stub features are configured in configs/boards/raspi400.toml (stub-features).
 # The xtask build handles this automatically via 'cargo xtask zcore-build'.
 # For the SD card script we build the stub directly with the same features.
 cargo build --release --target aarch64-unknown-uefi --features board-raspi400,uefi-console
@@ -105,9 +105,9 @@ fi
 # --- Step 3: Build the kernel ---
 echo "==> Building zCore kernel for Pi 400 UEFI..."
 cd "$PROJECT_DIR"
-ZCORE_CMDLINE="LOG=info ROOTPROC=/bin/busybox?sh" cargo xtask zcore-build -m raspi400-uefi
+ZCORE_CMDLINE="LOG=info ROOTPROC=/bin/busybox?sh" cargo xtask zcore-build -m busybox.raspi400
 
-KERNEL_ELF="$PROJECT_DIR/target/busybox.raspi400-uefi/release/kernel"
+KERNEL_ELF="$PROJECT_DIR/target/busybox.raspi400/release/kernel"
 if [ ! -f "$KERNEL_ELF" ]; then
     echo "ERROR: Kernel ELF not found at $KERNEL_ELF"
     exit 1

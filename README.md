@@ -53,8 +53,7 @@ You never need to specify feature flags manually.
 | `qemu-aarch64` | aarch64 | QEMU virt |
 | `qemu-x86_64` | x86_64 | QEMU q35 |
 | `qemu-riscv64` | riscv64 | QEMU virt |
-| `raspi400` | aarch64 | Raspberry Pi 400 (SD/extlinux) |
-| `raspi400-uefi` | aarch64 | Raspberry Pi 400 (UEFI) |
+| `raspi400` | aarch64 | Raspberry Pi 400 (UEFI via pftf firmware) |
 | `x86-laptop` | x86_64 | x86_64 real hardware (UEFI) |
 | `jolla-c2` | aarch64 | Jolla C2 phone |
 | `libos` | host | runs as a host process |

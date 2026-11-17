@@ -7,7 +7,7 @@
 #   SD mount point: the mounted FAT32 boot partition of the SD card.
 #
 # Boards:
-#   raspi400  — copies kernel + config to the Pi boot partition
+#   raspi400  — pftf UEFI firmware + zCore stub + kernel on the ESP
 #   jolla-c2  — writes an ext4 boot image (needs DISK=, see
 #               tools/jolla-c2/make-sdcard-image.sh)
 
@@ -18,8 +18,8 @@ CONFIG="${2:?Usage: $0 <sd-mount-point> <product.board>}"
 BOARD="${CONFIG##*.}"
 
 case "$BOARD" in
-  raspi400 | raspi400-uefi)
-    exec "$(dirname "$0")/raspi/prepare-sd.sh" "$SD"
+  raspi400)
+    exec "$(dirname "$0")/raspi/prepare-sd-uefi.sh" "$SD"
     ;;
   jolla-c2)
     if [ -z "${DISK:-}" ]; then

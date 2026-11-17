@@ -249,12 +249,14 @@ else
 endif
 
 # Backwards-compatible aliases for the old per-board targets.
+# The raspi400 board is UEFI-only (the raspi400-uefi board was merged
+# into it); both old SD targets now flash via the UEFI preparation.
 raspi400-build:
 	cargo bin -m petal.raspi400
 raspi400-sd: raspi400-build
-	@tools/raspi/prepare-sd.sh "$(SD)"
-raspi400-uefi-sd:
 	@tools/raspi/prepare-sd-uefi.sh "$(SD)"
+raspi400-uefi-sd:
+	$(MAKE) flash CONFIG=busybox.raspi400 SD=$(SD)
 jollac2-build:
 	cargo bin -m petal.jolla-c2
 jollac2-sd: jollac2-build

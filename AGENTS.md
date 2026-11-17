@@ -64,7 +64,7 @@ Products: `busybox` (Zircon+Linux, busybox shell), `petal` (Zircon only,
 petal shell), `petal-linux`, `zircon-hello` (bringup), `core-tests`
 (x86_64 QEMU only), `rust-tests` (in-kernel test runner).
 Boards: `qemu-aarch64`, `qemu-x86_64`, `qemu-riscv64`, `raspi400`,
-`raspi400-uefi`, `x86-laptop`, `jolla-c2`, `libos`, plus RISC-V boards.
+`x86-laptop`, `jolla-c2`, `libos`, plus RISC-V boards.
 
 List them: `make list-products` / `make list-boards`.
 Persist a default: `cargo zcore set petal.qemu-aarch64` (then plain
