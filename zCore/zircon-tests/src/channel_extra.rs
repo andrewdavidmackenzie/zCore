@@ -14,7 +14,6 @@ use zircon_object::ZxError;
 
 /// When peer is closed but messages remain, both READABLE and PEER_CLOSED
 /// should be set simultaneously.
-#[cfg_attr(test, test)]
 fn read_remaining_messages_preserves_signals() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -41,7 +40,6 @@ fn read_remaining_messages_preserves_signals() {
 }
 
 /// When check_and_read's checker rejects a message, the message stays.
-#[cfg_attr(test, test)]
 fn check_and_read_preserves_message_on_failure() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -65,7 +63,6 @@ fn check_and_read_preserves_message_on_failure() {
 }
 
 /// Writing multiple handles in a single message, all received correctly.
-#[cfg_attr(test, test)]
 fn multiple_handles_transferred() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -98,7 +95,6 @@ fn multiple_handles_transferred() {
 }
 
 /// Messages are delivered in FIFO order even with mixed sizes.
-#[cfg_attr(test, test)]
 fn message_fifo_order() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -122,7 +118,6 @@ fn message_fifo_order() {
 }
 
 /// Both endpoints can write and read independently.
-#[cfg_attr(test, test)]
 fn bidirectional_communication() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -154,7 +149,6 @@ fn bidirectional_communication() {
 }
 
 /// A message near the maximum size can be written and read.
-#[cfg_attr(test, test)]
 fn large_message() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -175,7 +169,6 @@ fn large_message() {
 }
 
 /// After reading all messages, the READABLE signal should be cleared.
-#[cfg_attr(test, test)]
 fn write_after_read_drains_queue() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -207,7 +200,6 @@ fn write_after_read_drains_queue() {
 }
 
 /// A handle transferred through a channel retains its rights.
-#[cfg_attr(test, test)]
 fn handle_transfer_preserves_rights() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -232,7 +224,6 @@ fn handle_transfer_preserves_rights() {
 }
 
 /// Channels can be nested multiple levels deep.
-#[cfg_attr(test, test)]
 fn nested_channel_deep_hierarchy() {
     let _ctx = TestContext::new();
 
@@ -273,7 +264,6 @@ fn nested_channel_deep_hierarchy() {
 }
 
 /// check_write_capacity returns PEER_CLOSED when peer is gone.
-#[cfg_attr(test, test)]
 fn check_write_capacity_peer_closed() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -287,7 +277,6 @@ fn check_write_capacity_peer_closed() {
 
 /// After the peer is closed, related_koid still returns the cached
 /// peer KOID (matching Fuchsia's PeeredDispatcher behavior).
-#[cfg_attr(test, test)]
 fn related_koid_persists_on_peer_close() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -301,7 +290,6 @@ fn related_koid_persists_on_peer_close() {
 ///
 /// Write a message at the maximum allowed size (64 KiB). Should
 /// succeed without error.
-#[cfg_attr(test, test)]
 fn write_max_message_size() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -321,7 +309,6 @@ fn write_max_message_size() {
 /// this returns OUT_OF_RANGE. zCore's Channel::write at the object
 /// level may not enforce the 64 KiB limit — this is a syscall-layer
 /// check. Document the behavior.
-#[cfg_attr(test, test)]
 fn write_exceeds_max_message_size() {
     let _ctx = TestContext::new();
     let (local, _remote) = Channel::create();
@@ -341,7 +328,6 @@ fn write_exceeds_max_message_size() {
 ///
 /// Read with MAY_DISCARD flag on an empty channel returns
 /// SHOULD_WAIT (no messages to discard).
-#[cfg_attr(test, test)]
 fn read_may_discard_empty_message() {
     let _ctx = TestContext::new();
     let (_local, remote) = Channel::create();
@@ -352,7 +338,6 @@ fn read_may_discard_empty_message() {
 ///
 /// Multiple messages written before any reads — all should be
 /// readable in FIFO order from the other endpoint.
-#[cfg_attr(test, test)]
 fn multiple_readers_writers() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -376,7 +361,6 @@ fn multiple_readers_writers() {
 /// Writing to a channel whose peer has been closed should return
 /// PEER_CLOSED and the handles in the message should be consumed
 /// (closed).
-#[cfg_attr(test, test)]
 fn write_after_peer_closed_fails_cleanly() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -399,7 +383,6 @@ fn write_after_peer_closed_fails_cleanly() {
 ///
 /// Set user signals on a channel endpoint and verify they are
 /// visible through the signal mask.
-#[cfg_attr(test, test)]
 fn signal_mask_user_signals() {
     let _ctx = TestContext::new();
     let (local, _remote) = Channel::create();
@@ -412,7 +395,6 @@ fn signal_mask_user_signals() {
 ///
 /// When the peer is closed, WRITABLE should be cleared and
 /// PEER_CLOSED should be set.
-#[cfg_attr(test, test)]
 fn peer_closed_clears_writable() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -426,7 +408,6 @@ fn peer_closed_clears_writable() {
 ///
 /// Write a message with data but an empty handles array. Read should
 /// return the data with zero handles.
-#[cfg_attr(test, test)]
 fn empty_handle_array_transfer() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -444,7 +425,6 @@ fn empty_handle_array_transfer() {
 ///
 /// Channel call with no reply should time out. Requires async
 /// infrastructure for the call wait loop.
-#[cfg_attr(test, test)]
 fn call_timeout_no_reply() {
     // Channel call requires a responder thread to send a reply.
 }
@@ -452,13 +432,11 @@ fn call_timeout_no_reply() {
 ///
 /// Channel call receives a reply with a mismatched transaction ID.
 /// The call should ignore it and continue waiting. Requires async.
-#[cfg_attr(test, test)]
 fn call_reply_mismatched_txid() {
     // Channel call requires a responder thread to send replies.
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     read_remaining_messages_preserves_signals();
     check_and_read_preserves_message_on_failure();

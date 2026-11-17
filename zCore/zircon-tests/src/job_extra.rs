@@ -10,14 +10,12 @@ use zircon_object::task::{
 };
 use zircon_object::ZxError;
 
-#[cfg_attr(test, test)]
 fn job_root() {
     let _ctx = TestContext::new();
     let job = Job::root();
     assert_ne!(job.id(), 0);
 }
 
-#[cfg_attr(test, test)]
 fn job_create_child() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -26,7 +24,6 @@ fn job_create_child() {
     assert_eq!(child.parent().unwrap().id(), root.id());
 }
 
-#[cfg_attr(test, test)]
 fn job_kill() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -37,7 +34,6 @@ fn job_kill() {
     assert!(child.signal().contains(Signal::JOB_TERMINATED));
 }
 
-#[cfg_attr(test, test)]
 fn job_no_children_signal() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -49,7 +45,6 @@ fn job_no_children_signal() {
     assert!(sig.contains(Signal::JOB_NO_PROCESSES));
 }
 
-#[cfg_attr(test, test)]
 fn job_child_clears_no_jobs() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -59,7 +54,6 @@ fn job_child_clears_no_jobs() {
     assert!(!root.signal().contains(Signal::JOB_NO_JOBS));
 }
 
-#[cfg_attr(test, test)]
 fn job_process_clears_no_processes() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -69,7 +63,6 @@ fn job_process_clears_no_processes() {
     assert!(!root.signal().contains(Signal::JOB_NO_PROCESSES));
 }
 
-#[cfg_attr(test, test)]
 fn job_nested() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -80,7 +73,6 @@ fn job_nested() {
     assert_eq!(child.parent().unwrap().id(), root.id());
 }
 
-#[cfg_attr(test, test)]
 fn job_kill_terminates_children() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -91,7 +83,6 @@ fn job_kill_terminates_children() {
     assert!(child.signal().contains(Signal::JOB_TERMINATED));
 }
 
-#[cfg_attr(test, test)]
 fn job_cannot_create_child_on_dead_job() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -104,14 +95,12 @@ fn job_cannot_create_child_on_dead_job() {
     assert!(result.is_err());
 }
 
-#[cfg_attr(test, test)]
 fn job_type_name() {
     let _ctx = TestContext::new();
     let root = Job::root();
     assert_eq!(root.type_name(), "Job");
 }
 
-#[cfg_attr(test, test)]
 fn job_name() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -120,7 +109,6 @@ fn job_name() {
 }
 
 /// Creating a child on a dead (killed) job must fail with BAD_STATE.
-#[cfg_attr(test, test)]
 fn job_create_invalid() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -138,7 +126,6 @@ fn job_create_invalid() {
 }
 
 /// Killing a job terminates its child processes.
-#[cfg_attr(test, test)]
 fn job_kill_terminates_child_processes() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -155,7 +142,6 @@ fn job_kill_terminates_child_processes() {
 }
 
 /// Killing a child job removes it from the parent's child list.
-#[cfg_attr(test, test)]
 fn job_kill_removes_from_tree() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -173,7 +159,6 @@ fn job_kill_removes_from_tree() {
 }
 
 /// Job return code tracking — killed jobs propagate the code to child processes.
-#[cfg_attr(test, test)]
 fn job_return_code() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -192,7 +177,6 @@ fn job_return_code() {
 }
 
 /// Set and get job policies.
-#[cfg_attr(test, test)]
 fn job_set_get_policy() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -243,7 +227,6 @@ fn job_set_get_policy() {
 }
 
 /// Setting policy with an invalid topic should fail.
-#[cfg_attr(test, test)]
 fn job_set_policy_invalid_topic() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -262,7 +245,6 @@ fn job_set_policy_invalid_topic() {
 }
 
 /// Setting policy with an invalid action combination.
-#[cfg_attr(test, test)]
 fn job_set_policy_invalid_action() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -291,7 +273,6 @@ fn job_set_policy_invalid_action() {
 }
 
 /// Policy set on parent is inherited by child.
-#[cfg_attr(test, test)]
 fn job_set_policy_on_child() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -320,7 +301,6 @@ fn job_set_policy_on_child() {
 }
 
 /// Verify that child job's policy reflects what was set on the parent.
-#[cfg_attr(test, test)]
 fn job_get_policy_inherited() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -364,7 +344,6 @@ fn job_get_policy_inherited() {
 
 /// After killing a job with a specific code, the return code is
 /// propagated to child processes.
-#[cfg_attr(test, test)]
 fn job_return_code_after_kill() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -388,7 +367,6 @@ fn job_return_code_after_kill() {
 }
 
 /// A job with no children has the ZERO_CHILDREN-related signals set.
-#[cfg_attr(test, test)]
 fn job_no_children() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -417,7 +395,6 @@ fn job_no_children() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     job_root();
     job_create_child();

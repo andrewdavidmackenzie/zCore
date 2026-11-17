@@ -9,7 +9,6 @@ use zircon_object::task::{Job, Process, Thread, ThreadStateKind};
 /// C++: TEST(ThreadInitialStateTests, RegisterValues)
 /// Verify that a newly-created thread has valid initial register state.
 /// In zCore, the initial state is set via setup_uspace.
-#[cfg_attr(test, test)]
 fn register_values() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -45,7 +44,6 @@ fn register_values() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     register_values();
 }

@@ -37,7 +37,6 @@ use zircon_object::task::{Job, Process, Task, Thread};
 /// 1. Uncontested mutex lock/unlock (CAS fast path)
 /// 2. 3 threads doing condvar wait, main broadcasts, all wake
 /// 3. 3 mutex contender threads
-#[cfg_attr(test, async_std::test)]
 async fn basic() {
     use crate::helpers::{
         condvar_waiter_thread_fn, mutex_contender_thread_fn, CondvarWaiterState,
@@ -145,7 +144,6 @@ async fn basic() {
 ///
 /// We verify: Thread::create returns a valid object, and the thread
 /// knows its own KOID (equivalent of the non-null pthread_self check).
-#[cfg_attr(test, test)]
 fn self_main_thread() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -174,7 +172,6 @@ fn self_main_thread() {
 /// We verify: thread creation succeeds (the kernel primitive),
 /// and the thread can be started with test_loop_thread_fn and
 /// terminated (simulating the join).
-#[cfg_attr(test, async_std::test)]
 async fn big_stack_size() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -212,7 +209,6 @@ async fn big_stack_size() {
 /// At the kernel level, the stack is a VMAR region. We verify that
 /// the process VMAR exists and has a valid KOID (the kernel object
 /// that backs stack allocation).
-#[cfg_attr(test, test)]
 fn getstack_main_thread() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -234,7 +230,6 @@ fn getstack_main_thread() {
 /// At the kernel level: create a thread, start it, verify it has
 /// a valid handle (C++ does zx_handle_duplicate to prove validity),
 /// then join (wait for termination).
-#[cfg_attr(test, async_std::test)]
 async fn getstack_other_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -259,7 +254,6 @@ async fn getstack_other_thread() {
 /// Same as GetstackOtherThread but with explicit stack size (1 MB).
 /// At kernel level, the stack size attribute is consumed during
 /// thread_start (VMAR allocation), not thread_create.
-#[cfg_attr(test, async_std::test)]
 async fn getstack_other_thread_explicit_size() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -280,7 +274,6 @@ async fn getstack_other_thread_explicit_size() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     basic().await;
     self_main_thread();

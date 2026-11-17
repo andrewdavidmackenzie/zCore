@@ -26,7 +26,6 @@ use zircon_object::signal::Futex;
 ///
 /// Verifies that a zero-initialized completion matches a default-constructed one.
 /// C++: memcmp(&static_completion, &completion, sizeof) == 0
-#[cfg_attr(test, test)]
 fn initializer() {
     let _ctx = TestContext::new();
     // C++: static sync_completion_t static_completion (bss-zeroed)
@@ -47,7 +46,6 @@ fn initializer() {
 /// 1 thread blocks on sync_completion_wait_deadline (futex_wait).
 /// Main thread signals (store SIGNALED + futex_wake).
 /// Thread wakes with ZX_OK.
-#[cfg_attr(test, async_std::test)]
 async fn single_wait() {
     use crate::helpers::{CompletionTestThread, SyncCompletion};
 
@@ -77,7 +75,6 @@ async fn single_wait() {
 /// C++: TEST(SyncCompletionTest, MultiWait)
 ///
 /// 16 threads block on the same completion, then all are signaled.
-#[cfg_attr(test, async_std::test)]
 async fn multi_wait() {
     use crate::helpers::{CompletionTestThread, SyncCompletion};
 
@@ -120,7 +117,6 @@ async fn multi_wait() {
 ///
 /// C++ source: zircon/system/utest/core/sync-completion/completion.cc
 ///   sync_completion_wait_deadline(&completion, deadline) → ZX_ERR_TIMED_OUT
-#[cfg_attr(test, async_std::test)]
 async fn timeout_single_wait() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -160,7 +156,6 @@ async fn timeout_single_wait() {
 /// C++ source: zircon/system/utest/core/sync-completion/completion.cc
 ///   sync_completion_wait_deadline(&completion, deadline) → ZX_ERR_TIMED_OUT
 ///   (for each of 16 threads)
-#[cfg_attr(test, async_std::test)]
 async fn timeout_multi_wait() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -217,7 +212,6 @@ async fn timeout_multi_wait() {
 /// At kernel level: sync_completion_wait checks the atomic flag
 /// before calling futex_wait. If already signaled, returns ZX_OK
 /// without blocking.
-#[cfg_attr(test, test)]
 fn presignal_single_wait() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
@@ -239,7 +233,6 @@ fn presignal_single_wait() {
 /// C++: TEST(SyncCompletionTest, PresignalMultiWait)
 ///
 /// Same as PresignalSingleWait but verifiable by multiple "threads".
-#[cfg_attr(test, test)]
 fn presignal_multi_wait() {
     let _ctx = TestContext::new();
     let completion = AtomicI32::new(0);
@@ -263,7 +256,6 @@ fn presignal_multi_wait() {
 /// second signal (first signal was cleared by reset).
 ///
 /// At kernel level: signal stores 1 + futex_wake, reset stores 0.
-#[cfg_attr(test, test)]
 fn reset_cycle_single_wait() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
@@ -296,7 +288,6 @@ fn reset_cycle_single_wait() {
 /// C++: TEST(SyncCompletionTest, ResetCycleMultiWait)
 ///
 /// Same as ResetCycleSingleWait but with multiple "waiters".
-#[cfg_attr(test, test)]
 fn reset_cycle_multi_wait() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
@@ -322,7 +313,6 @@ fn reset_cycle_multi_wait() {
 ///
 /// Threads block on completion, signal_requeue moves them to a
 /// different futex, then wake the new futex.
-#[cfg_attr(test, async_std::test)]
 async fn signal_requeue() {
     use crate::helpers::{CompletionTestThread, SyncCompletion};
     use core::sync::atomic::AtomicI32;
@@ -377,7 +367,6 @@ async fn signal_requeue() {
 ///
 /// 1 thread blocks on completion. Raw futex_wake (spurious) should
 /// NOT cause the thread to exit. Then proper signal → thread exits.
-#[cfg_attr(test, async_std::test)]
 async fn spurious_wakeup_handled() {
     use crate::helpers::{CompletionTestThread, SyncCompletion};
 
@@ -428,7 +417,6 @@ async fn spurious_wakeup_handled() {
 /// 5. ASSERT_FALSE(sync_completion_signaled(&sync))
 ///
 /// Pure atomic flag check — no blocking, no threads needed.
-#[cfg_attr(test, test)]
 fn completion_signaled() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
@@ -481,7 +469,6 @@ fn completion_signaled() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     initializer();
     single_wait().await;

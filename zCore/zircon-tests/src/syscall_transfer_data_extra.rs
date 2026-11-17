@@ -12,7 +12,6 @@ use zircon_object::object::{Handle, Rights};
 use zircon_object::vm::{VmObject, PAGE_SIZE};
 
 /// Test missing WRITE right on dst handle.
-#[cfg_attr(test, test)]
 fn missing_write_right_on_dst() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -34,7 +33,6 @@ fn missing_write_right_on_dst() {
 }
 
 /// Test missing READ right on src handle.
-#[cfg_attr(test, test)]
 fn missing_read_right_on_src() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -56,7 +54,6 @@ fn missing_read_right_on_src() {
 }
 
 /// Test missing WRITE right on src handle (src needs READ|WRITE).
-#[cfg_attr(test, test)]
 fn missing_write_right_on_src() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -78,7 +75,6 @@ fn missing_write_right_on_src() {
 }
 
 /// Test wrong-type handle (use an event handle instead of VMO).
-#[cfg_attr(test, test)]
 fn wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -109,7 +105,6 @@ fn wrong_type() {
 }
 
 /// Syscall-level basic transfer test.
-#[cfg_attr(test, async_std::test)]
 async fn basic_transfer() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -149,7 +144,6 @@ async fn basic_transfer() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     missing_write_right_on_dst();
     missing_read_right_on_src();

@@ -17,7 +17,6 @@ extern crate alloc;
 ///
 /// Transfer the maximum number of handles in a single channel message.
 /// Fuchsia allows up to 64 handles per message.
-#[cfg_attr(test, test)]
 fn channel_max_handles() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -41,7 +40,6 @@ fn channel_max_handles() {
 
 ///
 /// Queue many messages on a channel. All should be readable in FIFO.
-#[cfg_attr(test, test)]
 fn channel_queue_depth() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -64,7 +62,6 @@ fn channel_queue_depth() {
 ///
 /// Write data until the socket buffer is full. Writing more should
 /// return SHOULD_WAIT.
-#[cfg_attr(test, test)]
 fn socket_stream_capacity() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -101,7 +98,6 @@ fn socket_stream_capacity() {
 ///
 /// Send a message with both data and handles. Verify both are
 /// received correctly.
-#[cfg_attr(test, test)]
 fn channel_message_data_and_handles() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -126,7 +122,6 @@ fn channel_message_data_and_handles() {
 ///
 /// Verify FIFO element count tracking as elements are written and
 /// read.
-#[cfg_attr(test, test)]
 fn fifo_element_count() {
     let _ctx = TestContext::new();
     let (local, remote) = Fifo::create(8, 4);
@@ -142,7 +137,6 @@ fn fifo_element_count() {
 ///
 /// Write a completely empty message (zero bytes, zero handles).
 /// Should succeed.
-#[cfg_attr(test, test)]
 fn channel_zero_bytes_zero_handles() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -160,7 +154,6 @@ fn channel_zero_bytes_zero_handles() {
 ///
 /// Write a specific pattern through a socket and verify it is
 /// received identically.
-#[cfg_attr(test, test)]
 fn socket_data_integrity() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -177,7 +170,6 @@ fn socket_data_integrity() {
 ///
 /// Transfer different object types through a channel. Each should
 /// retain its type and KOID.
-#[cfg_attr(test, test)]
 fn channel_handle_transfer_preserves_type() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -211,7 +203,6 @@ fn channel_handle_transfer_preserves_type() {
 ///
 /// Multiple reads from a channel. After draining all messages,
 /// READABLE should be cleared.
-#[cfg_attr(test, test)]
 fn channel_multiple_reads_clears() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -233,7 +224,6 @@ fn channel_multiple_reads_clears() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     channel_max_handles();
     channel_queue_depth();

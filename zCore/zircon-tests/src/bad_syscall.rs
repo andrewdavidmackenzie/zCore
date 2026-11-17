@@ -16,7 +16,6 @@ type HandleValue = u32;
 /// Issuing a syscall with an invalid/unrecognized number should return
 /// NOT_SUPPORTED. In zCore, syscall dispatch uses a match statement;
 /// unrecognized numbers return NOT_SUPPORTED.
-#[cfg_attr(test, test)]
 fn bad_syscall_invalid_number() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -40,7 +39,6 @@ fn bad_syscall_invalid_number() {
 /// NOT_SUPPORTED for a truncated syscall. In zCore, the dispatch
 /// layer always receives the correct number of arguments from the
 /// Rust type system. This test documents the gap.
-#[cfg_attr(test, test)]
 fn bad_syscall_too_few_args() {
     // In C++, calling a syscall with too few arguments returns NOT_SUPPORTED.
     // In Rust, the type system enforces the correct number of arguments at
@@ -57,7 +55,6 @@ fn bad_syscall_too_few_args() {
 ///
 /// Common pattern: passing an invalid handle value to various syscalls
 /// should consistently return BAD_HANDLE.
-#[cfg_attr(test, test)]
 fn bad_syscall_invalid_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -82,7 +79,6 @@ fn bad_syscall_invalid_handle() {
 /// closing ZX_HANDLE_INVALID is a no-op that returns Ok(()).
 /// However, using handle 0 in other syscalls (like duplicate) should
 /// return BAD_HANDLE.
-#[cfg_attr(test, test)]
 fn bad_syscall_zero_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -110,7 +106,6 @@ fn bad_syscall_zero_handle() {
 /// returns NOT_SUPPORTED. In zCore, syscall numbers are u32 (unsigned)
 /// so negative values wrap to large positive values. We verify that
 /// a very large handle value (simulating wrapping) is rejected.
-#[cfg_attr(test, test)]
 fn bad_syscall_negative_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -126,7 +121,6 @@ fn bad_syscall_negative_handle() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     bad_syscall_invalid_number();
     bad_syscall_too_few_args();

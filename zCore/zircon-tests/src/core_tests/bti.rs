@@ -22,7 +22,6 @@ pub(crate) fn create_iommu_bti() -> (Arc<Iommu>, Arc<BusTransactionInitiator>) {
 
 /// C++: TEST(Bti, Create)
 /// Create IOMMU and BTI, verify they have valid koids.
-#[cfg_attr(test, test)]
 fn create() {
     let _ctx = TestContext::new();
     let (iommu, bti) = create_iommu_bti();
@@ -32,7 +31,6 @@ fn create() {
 
 /// C++: TEST(Bti, GetInfoTest)
 /// Verify BTI info fields through lifecycle.
-#[cfg_attr(test, test)]
 fn get_info() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -46,7 +44,6 @@ fn get_info() {
 
 /// C++: TEST(Bti, NameSupport)
 /// BTI supports set/get name.
-#[cfg_attr(test, test)]
 fn name_support() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -60,7 +57,6 @@ fn name_support() {
 /// C++: TEST(Bti, Clone)
 /// In C++, "clone" creates a duplicate handle to the BTI. We test
 /// that cloning via Arc gives the same BTI (same KOID, shared state).
-#[cfg_attr(test, test)]
 fn clone() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -81,7 +77,6 @@ fn clone() {
 /// fails. We verify that a pinned VMO cannot be decommitted.
 /// After the PMT is fully dropped (which calls vmo.unpin internally),
 /// decommit should succeed.
-#[cfg_attr(test, test)]
 fn decommit_race() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -108,7 +103,6 @@ fn decommit_race() {
 
 /// C++: TEST(Bti, InvalidPinArgs)
 /// Pin with invalid arguments: zero size, misaligned size.
-#[cfg_attr(test, test)]
 fn invalid_pin_args() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -137,7 +131,6 @@ fn invalid_pin_args() {
 /// C++: TEST(Bti, NoDelayedUnpin)
 /// Unpin takes effect immediately — the PMT is removed from the BTI
 /// right away, not deferred.
-#[cfg_attr(test, test)]
 fn no_delayed_unpin() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -161,7 +154,6 @@ fn no_delayed_unpin() {
 /// C++: TEST(Bti, Pin)
 /// Pin a VMO, verify physical addresses are returned, and that
 /// the VMO data is accessible after pin.
-#[cfg_attr(test, test)]
 fn pin() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -189,7 +181,6 @@ fn pin() {
 
 /// C++: TEST(Bti, PinContigFlag)
 /// Pin a contiguous VMO and verify it's treated as contiguous.
-#[cfg_attr(test, test)]
 fn pin_contig_flag() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -213,7 +204,6 @@ fn pin_contig_flag() {
 
 /// C++: TEST(Bti, PinContiguous)
 /// Pin a contiguous VMO and verify addresses are contiguous.
-#[cfg_attr(test, test)]
 fn pin_contiguous() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -253,7 +243,6 @@ fn pin_contiguous() {
 /// We verify the limit calculation and that the object-level pin
 /// succeeds with a large (but valid) page count, confirming the
 /// limit is at the syscall layer, not the kernel object layer.
-#[cfg_attr(test, test)]
 fn pin_too_many_addresses() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -296,7 +285,6 @@ fn pin_too_many_addresses() {
 /// are rejected until release_quarantine is called. Our DummyIommu
 /// doesn't enforce this restriction, so we verify the quarantine
 /// state tracking and release_quarantine behavior.
-#[cfg_attr(test, test)]
 fn quarantine_disallows_pin() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -328,7 +316,6 @@ fn quarantine_disallows_pin() {
 /// In C++, resizing a VMO that has pinned pages should fail. We
 /// verify that a pinned resizable VMO rejects resize while pinned,
 /// and that after the PMT is fully dropped, resize succeeds.
-#[cfg_attr(test, test)]
 fn resize() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -357,7 +344,6 @@ fn resize() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     create();
     get_info();

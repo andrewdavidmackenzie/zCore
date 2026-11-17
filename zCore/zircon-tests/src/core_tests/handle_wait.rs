@@ -16,7 +16,6 @@ extern crate alloc;
 /// C++: TEST(HandleWaitTest, HandleWaitTest)
 /// Wait on a single handle via port async. Signal the event and
 /// verify the port receives the packet.
-#[cfg_attr(test, async_std::test)]
 async fn handle_wait_test() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -40,7 +39,6 @@ async fn handle_wait_test() {
 /// C++: TEST(HandleWaitTest, HandleWaitMultipleThreads)
 /// Wait on multiple handles simultaneously via port async.
 /// Each event signals independently and delivers a unique packet.
-#[cfg_attr(test, async_std::test)]
 async fn handle_wait_multiple_threads() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -78,7 +76,6 @@ async fn handle_wait_multiple_threads() {
 /// C++: TEST(ObjectWaitManyTest, InvalidHandle)
 /// Waiting on a non-existent object is rejected. We test by attempting
 /// to wait_signal on a dropped event, which returns immediately.
-#[cfg_attr(test, async_std::test)]
 async fn invalid_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -102,7 +99,6 @@ async fn invalid_handle() {
 /// We test via kernel-level wait: creating >32 wait futures is the
 /// equivalent check, but the syscall limit is tested here via the
 /// wait_one path with an invalid handle to verify error propagation.
-#[cfg_attr(test, async_std::test)]
 async fn too_many_objects() {
     let _ctx = TestContext::new();
     // The limit is MAX_WAIT_MANY_ITEMS = 32 in zircon-syscall.
@@ -127,7 +123,6 @@ async fn too_many_objects() {
 
 /// C++: TEST(ObjectWaitManyTest, WaitForEventsSignaled)
 /// Signal events before waiting — should return immediately.
-#[cfg_attr(test, async_std::test)]
 async fn wait_for_events_signaled() {
     let _ctx = TestContext::new();
     let e1 = Event::new();
@@ -148,7 +143,6 @@ async fn wait_for_events_signaled() {
 
 /// C++: TEST(ObjectWaitManyTest, WaitForEventsThenSignal)
 /// Wait for events, then signal them — the wait should complete.
-#[cfg_attr(test, async_std::test)]
 async fn wait_for_events_then_signal() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -163,7 +157,6 @@ async fn wait_for_events_then_signal() {
 
 /// C++: TEST(ObjectWaitManyTest, WaitOnZeroThings)
 /// Calling wait with no items and a past deadline returns TIMED_OUT.
-#[cfg_attr(test, async_std::test)]
 async fn wait_on_zero_things() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -189,7 +182,6 @@ async fn wait_on_zero_things() {
 
 /// C++: TEST(ObjectWaitOneTest, EmptySignalSet)
 /// Waiting for an empty signal set with a past deadline returns TIMED_OUT.
-#[cfg_attr(test, async_std::test)]
 async fn empty_signal_set() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -213,7 +205,6 @@ async fn empty_signal_set() {
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventSignaled)
 /// Signal an event before wait_one — should return immediately.
-#[cfg_attr(test, async_std::test)]
 async fn wait_for_event_signaled() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -241,7 +232,6 @@ async fn wait_for_event_signaled() {
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventThenSignal)
 /// Signal event, then wait — wait_one should see it immediately.
-#[cfg_attr(test, async_std::test)]
 async fn wait_for_event_then_signal() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -269,7 +259,6 @@ async fn wait_for_event_then_signal() {
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventTimeout)
 /// Wait on an unsignaled event with a past deadline — TIMED_OUT.
-#[cfg_attr(test, async_std::test)]
 async fn wait_for_event_timeout() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -293,7 +282,6 @@ async fn wait_for_event_timeout() {
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventTimeoutPreSignalClear)
 /// Signal an event, clear the signal, then wait — should TIMED_OUT.
-#[cfg_attr(test, async_std::test)]
 async fn wait_for_event_timeout_pre_signal_clear() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -323,7 +311,6 @@ async fn wait_for_event_timeout_pre_signal_clear() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     handle_wait_test().await;
     handle_wait_multiple_threads().await;

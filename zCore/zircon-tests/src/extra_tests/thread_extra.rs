@@ -25,7 +25,6 @@ fn as_kobject(thread: &alloc::sync::Arc<Thread>) -> alloc::sync::Arc<dyn KernelO
 /// Fuchsia equivalent: TEST(Threads, KillSuspendedImmediately)
 /// Suspend a thread and immediately kill it before the suspend fully
 /// completes. The kill should preempt the suspend — thread goes Dead.
-#[cfg_attr(test, async_std::test)]
 async fn kill_suspended_immediately() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -48,7 +47,6 @@ async fn kill_suspended_immediately() {
 /// Fuchsia equivalent: TEST(Threads, KillSuspendedThread)
 /// Suspend a running thread, wait for SUSPENDED, then kill it.
 /// Thread should transition cleanly to Dead.
-#[cfg_attr(test, async_std::test)]
 async fn kill_suspended_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -75,7 +73,6 @@ async fn kill_suspended_thread() {
 /// Fuchsia equivalent: TEST(Threads, KillWaitingThread)
 /// Kill a thread that is blocked on a syscall (sleeping).
 /// The blocking wait should be interrupted and the thread exits.
-#[cfg_attr(test, async_std::test)]
 async fn kill_waiting_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -102,7 +99,6 @@ async fn kill_waiting_thread() {
 /// Fuchsia equivalent: TEST(Threads, ExitBusy)
 /// A thread that exits voluntarily (returns from its entry function)
 /// should transition to Dead and signal THREAD_TERMINATED.
-#[cfg_attr(test, async_std::test)]
 async fn exit_busy() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -134,7 +130,6 @@ async fn exit_busy() {
 /// A thread blocked in channel_call is killed before receiving a reply.
 /// The in-flight message should not leak — the channel peer should
 /// not have stale messages after the thread dies.
-#[cfg_attr(test, async_std::test)]
 async fn channel_call_doesnt_leak_message() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -164,7 +159,6 @@ async fn channel_call_doesnt_leak_message() {
 /// Fuchsia equivalent: TEST(Threads, SuspendRunningThread)
 /// Suspend a currently-running thread. Verify THREAD_SUSPENDED fires,
 /// THREAD_RUNNING is cleared, and state is Suspended.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_running_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -203,7 +197,6 @@ async fn suspend_running_thread() {
 /// deadlock. At the kernel object level, we verify that suspending
 /// the test context's own thread doesn't panic and produces the
 /// expected error or state.
-#[cfg_attr(test, test)]
 fn suspend_self() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -232,7 +225,6 @@ fn suspend_self() {
 /// Take two suspend tokens, register wait_async for THREAD_RUNNING
 /// on a port. Release one token (still suspended), release second
 /// (resumes), verify port receives the RUNNING signal.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_multiple_wait_async() {
     use zircon_object::signal::{Port, PortPacketRepr};
 
@@ -284,7 +276,6 @@ async fn suspend_multiple_wait_async() {
 /// Multiple Zircon threads independently suspend and resume a target.
 /// Verify the suspend count is tracked correctly — the target only
 /// resumes when all outstanding suspends are released.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_resume_from_multiple_threads() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -325,7 +316,6 @@ async fn suspend_resume_from_multiple_threads() {
 /// Suspend a thread that has been stopped (via exception). In test mode
 /// mode we approximate this by suspending a thread that has been
 /// killed (Dead state) — the kernel should handle it gracefully.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_stopped_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -350,7 +340,6 @@ async fn suspend_stopped_thread() {
 /// (syscall). In test mode we test by suspending a sleeping thread,
 /// then killing it while suspended, verifying the composite state
 /// transitions work correctly.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_stopped_and_blocked_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -383,7 +372,6 @@ async fn suspend_stopped_and_blocked_thread() {
 /// Fuchsia equivalent: TEST(Threads, SuspendStoppedAndBlockedThread2)
 /// Variant: kill the blocked thread first, then try to suspend.
 /// The thread should be Dead and the suspend should be a no-op.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_stopped_and_blocked_thread2() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -413,7 +401,6 @@ async fn suspend_stopped_and_blocked_thread2() {
 /// Verify that TLS registers are independent per thread. Set
 /// different TLS values on two suspended threads and verify they
 /// don't interfere with each other.
-#[cfg_attr(test, test)]
 fn thread_local() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -470,7 +457,6 @@ fn thread_local() {
 /// Read thread state during the startup transition. After setup_uspace
 /// but before the thread fully enters Running, the register state
 /// should contain the initial values (entry, stack, args).
-#[cfg_attr(test, test)]
 fn thread_read_state_when_starting() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -509,7 +495,6 @@ fn thread_read_state_when_starting() {
 /// aarch64-only: write the CPSR/SPSR flags register and verify
 /// the value round-trips via write_state/read_state.
 #[cfg(target_arch = "aarch64")]
-#[cfg_attr(test, test)]
 fn writing_arm_flags_register() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -552,7 +537,6 @@ fn writing_arm_flags_register() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     kill_suspended_immediately().await;
     kill_suspended_thread().await;

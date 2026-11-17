@@ -33,7 +33,6 @@ type HandleValue = u32;
 /// a recognized command (only help, ps, threads, kill are supported),
 /// so the call will return INVALID_ARGS. The faithful port calls the
 /// same syscall with the same arguments.
-#[cfg_attr(test, test)]
 fn k_hotplug_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -66,7 +65,6 @@ fn k_hotplug_test() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     k_hotplug_test();
 }

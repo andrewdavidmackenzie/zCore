@@ -25,7 +25,6 @@ fn sampler_config(period_ns: u64, buffer_size: u64) -> [u8; 16] {
 
 /// C++: TEST(ThreadSampler, StartStop)
 /// Creates a sampler, starts sampling, reads at least one record, stops.
-#[cfg_attr(test, test)]
 fn start_stop() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -82,7 +81,6 @@ fn start_stop() {
 
 /// C++: TEST(ThreadSampler, SamplerLifetime)
 /// Only one sampler can exist at a time.
-#[cfg_attr(test, test)]
 fn sampler_lifetime() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -130,7 +128,6 @@ fn sampler_lifetime() {
 
 /// C++: TEST(ThreadSampler, InvalidOptions)
 /// Non-zero options returns INVALID_ARGS.
-#[cfg_attr(test, test)]
 fn invalid_options() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -149,7 +146,6 @@ fn invalid_options() {
 
 /// C++: TEST(ThreadSampler, DroppedSampler)
 /// Dropping a sampler mid-session, then creating a new one works.
-#[cfg_attr(test, test)]
 fn dropped_sampler() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -201,7 +197,6 @@ fn dropped_sampler() {
 
 /// C++: TEST(ThreadSampler, NonRunningThread)
 /// Sampler captures threads that start after sampling begins.
-#[cfg_attr(test, test)]
 fn non_running_thread() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -241,7 +236,6 @@ fn non_running_thread() {
 
 /// C++: TEST(ThreadSampler, HighFrequency)
 /// Stress test with short period and large buffer.
-#[cfg_attr(test, test)]
 fn high_frequency() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -279,7 +273,6 @@ fn high_frequency() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     start_stop();
     sampler_lifetime();

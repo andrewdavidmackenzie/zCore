@@ -20,7 +20,6 @@ fn as_kobject(thread: &Arc<Thread>) -> Arc<dyn KernelObject> {
 ///
 /// Suspend a running thread. The thread should stop executing and
 /// signal THREAD_SUSPENDED.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -52,7 +51,6 @@ async fn suspend_thread() {
 ///
 /// Suspend then resume a thread. The thread should continue
 /// executing from where it stopped.
-#[cfg_attr(test, async_std::test)]
 async fn resume_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -88,7 +86,6 @@ async fn resume_thread() {
 ///
 /// Suspend multiple threads in the same process simultaneously.
 /// All should stop and be resumable.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_multiple_threads() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -125,7 +122,6 @@ async fn suspend_multiple_threads() {
 
 ///
 /// Drop a suspend token. The thread should automatically resume.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_token_drop() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -164,7 +160,6 @@ async fn suspend_token_drop() {
 ///
 /// Note: zCore's current suspend/resume uses a counter, so multiple
 /// suspends require matching resumes. We test via SuspendToken.
-#[cfg_attr(test, async_std::test)]
 async fn multiple_suspend_tokens() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -210,7 +205,6 @@ async fn multiple_suspend_tokens() {
 
 ///
 /// Kill a suspended thread. The thread should die without resuming.
-#[cfg_attr(test, async_std::test)]
 async fn kill_while_suspended() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -239,7 +233,6 @@ async fn kill_while_suspended() {
 ///
 /// While a thread is suspended, its state should be SUSPENDED.
 /// Read state should succeed.
-#[cfg_attr(test, async_std::test)]
 async fn suspended_thread_state() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -277,7 +270,6 @@ async fn suspended_thread_state() {
 ///
 /// Write to a thread's register state while it is suspended.
 /// The new state should take effect when the thread resumes.
-#[cfg_attr(test, async_std::test)]
 async fn write_state_while_suspended() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -316,7 +308,6 @@ async fn write_state_while_suspended() {
 
 ///
 /// Suspend all threads in a process simultaneously.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_process() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -351,7 +342,6 @@ async fn suspend_process() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     suspend_thread().await;
     resume_thread().await;

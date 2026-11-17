@@ -8,7 +8,6 @@ use zircon_object::object::{KernelObject, Signal};
 use zircon_object::vm::{VmObject, PAGE_SIZE};
 
 /// Snapshot clone sees parent data at creation time.
-#[cfg_attr(test, test)]
 fn clone_sees_parent_data() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -21,7 +20,6 @@ fn clone_sees_parent_data() {
 }
 
 /// Write to parent after clone doesn't affect child.
-#[cfg_attr(test, test)]
 fn clone_parent_write_isolation() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -40,7 +38,6 @@ fn clone_parent_write_isolation() {
 }
 
 /// Write to child doesn't affect parent.
-#[cfg_attr(test, test)]
 fn clone_child_write_isolation() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -58,7 +55,6 @@ fn clone_child_write_isolation() {
 }
 
 /// Multiple clones are independent.
-#[cfg_attr(test, test)]
 fn clone_multiple_independent() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -80,7 +76,6 @@ fn clone_multiple_independent() {
 }
 
 /// Clone of a clone (grandchild).
-#[cfg_attr(test, test)]
 fn clone_grandchild() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -102,7 +97,6 @@ fn clone_grandchild() {
 }
 
 /// Clone with offset.
-#[cfg_attr(test, test)]
 fn clone_with_offset() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(4);
@@ -127,7 +121,6 @@ fn clone_with_offset() {
 }
 
 /// committed_bytes reflects COW state.
-#[cfg_attr(test, test)]
 fn clone_committed_bytes() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -147,7 +140,6 @@ fn clone_committed_bytes() {
 }
 
 /// Clone is not resizable by default.
-#[cfg_attr(test, test)]
 fn clone_not_resizable_by_default() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -158,7 +150,6 @@ fn clone_not_resizable_by_default() {
 }
 
 /// Clone can be resizable if requested.
-#[cfg_attr(test, test)]
 fn clone_resizable() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -171,7 +162,6 @@ fn clone_resizable() {
 }
 
 /// Clone has IS_COW_CLONE flag set.
-#[cfg_attr(test, test)]
 fn clone_is_cow_flag() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -190,7 +180,6 @@ fn clone_is_cow_flag() {
 }
 
 /// Dropping child restores VMO_ZERO_CHILDREN on parent.
-#[cfg_attr(test, test)]
 fn clone_zero_children_signal() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -204,7 +193,6 @@ fn clone_zero_children_signal() {
 }
 
 /// Multiple clones: signal only restored when ALL children dropped.
-#[cfg_attr(test, test)]
 fn clone_zero_children_all_dropped() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -221,7 +209,6 @@ fn clone_zero_children_all_dropped() {
 }
 
 /// Clone reads zeros beyond parent's written region.
-#[cfg_attr(test, test)]
 fn clone_reads_zeros_beyond_parent_data() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -236,7 +223,6 @@ fn clone_reads_zeros_beyond_parent_data() {
 }
 
 /// Clone name and type_name.
-#[cfg_attr(test, test)]
 fn clone_name() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -248,7 +234,6 @@ fn clone_name() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     clone_sees_parent_data();
     clone_parent_write_isolation();

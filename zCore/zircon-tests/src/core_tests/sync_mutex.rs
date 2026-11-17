@@ -31,7 +31,6 @@ extern crate alloc;
 /// execution with blocking futex_wait.
 /// 3 threads concurrently lock/unlock a mutex, each incrementing
 /// a shared counter. The total should be the sum of all iterations.
-#[cfg_attr(test, async_std::test)]
 async fn mutexes() {
     use crate::helpers::{mutex_contender_thread_fn, MutexContenderState, SyncMutex};
     use alloc::sync::Arc;
@@ -101,7 +100,6 @@ async fn mutexes() {
 /// at least once (got_lock_1/2/3 == true).
 ///
 /// In single-threaded mode, we can test the CAS semantics of trylock.
-#[cfg_attr(test, test)]
 fn try_mutexes() {
     let _ctx = TestContext::new();
     let mutex = AtomicI32::new(0);
@@ -163,7 +161,6 @@ fn try_mutexes() {
 ///
 /// At kernel level: sync_mutex_timedlock calls futex_wait with a deadline.
 /// In single-threaded mode, we test the value-mismatch fast path.
-#[cfg_attr(test, async_std::test)]
 async fn timeout_elapsed() {
     let _ctx = TestContext::new();
     // Mutex is "locked" (non-zero value, simulating another thread holding it)
@@ -193,7 +190,6 @@ async fn timeout_elapsed() {
 /// At kernel level: the second sync_mutex_lock on an already-held
 /// mutex detects the deadlock (owner == current thread) and aborts.
 /// In our test, we verify that the CAS for the second lock fails.
-#[cfg_attr(test, test)]
 fn no_recursion() {
     let _ctx = TestContext::new();
     let mutex = AtomicI32::new(0);
@@ -221,7 +217,6 @@ fn no_recursion() {
 ///
 /// At kernel level: assert_held checks that the mutex value equals
 /// the current thread's KOID. We check the value is non-zero (held).
-#[cfg_attr(test, test)]
 fn assert_held() {
     let _ctx = TestContext::new();
     let mutex = AtomicI32::new(0);
@@ -251,7 +246,6 @@ fn assert_held() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     mutexes().await;
     try_mutexes();

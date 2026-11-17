@@ -12,7 +12,6 @@ extern crate alloc;
 
 /// C++: TEST(SyscallGenerationTest, HandleCopyoutFailure)
 /// Handle copyout failure: closing an invalid handle returns BAD_HANDLE.
-#[cfg_attr(test, test)]
 fn handle_copyout_failure() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -23,7 +22,6 @@ fn handle_copyout_failure() {
 
 /// C++: TEST(SyscallGenerationTest, HandleCreateFailure)
 /// Verify that creating with invalid arguments returns errors.
-#[cfg_attr(test, test)]
 fn handle_create_failure() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -41,7 +39,6 @@ fn handle_create_failure() {
 
 /// C++: TEST(SyscallGenerationTest, HandleCreateSuccess)
 /// Verify channel creation returns valid handles.
-#[cfg_attr(test, test)]
 fn handle_create_success() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -61,7 +58,6 @@ fn handle_create_success() {
 
 /// C++: TEST(SyscallGenerationTest, RustHandleSyscall)
 /// Verify handle duplicate syscall works.
-#[cfg_attr(test, test)]
 fn rust_handle_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -85,7 +81,6 @@ fn rust_handle_syscall() {
 
 /// C++: TEST(SyscallGenerationTest, RustPointerSyscalls)
 /// Verify pointer-based syscalls handle null correctly.
-#[cfg_attr(test, test)]
 fn rust_pointer_syscalls() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -101,7 +96,6 @@ fn rust_pointer_syscalls() {
 
 /// C++: TEST(SyscallGenerationTest, RustSyscall)
 /// Verify basic syscall dispatch works.
-#[cfg_attr(test, test)]
 fn rust_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -120,7 +114,6 @@ fn rust_syscall() {
 
 /// C++: TEST(SyscallGenerationTest, RustWrapper)
 /// Verify Rust syscall wrapper error propagation.
-#[cfg_attr(test, test)]
 fn rust_wrapper() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -141,7 +134,6 @@ fn rust_wrapper() {
 
 /// C++: TEST(SyscallGenerationTest, Syscall)
 /// Verify raw syscall dispatch.
-#[cfg_attr(test, test)]
 fn syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -159,7 +151,6 @@ fn syscall() {
 /// C++: TEST(SyscallGenerationTest, WideningSignedNarrow)
 /// Verify signed narrow arguments are handled correctly.
 /// Test with negative values in syscall arguments.
-#[cfg_attr(test, test)]
 fn widening_signed_narrow() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -177,7 +168,6 @@ fn widening_signed_narrow() {
 
 /// C++: TEST(SyscallGenerationTest, WideningSignedWide)
 /// Verify signed wide arguments work.
-#[cfg_attr(test, test)]
 fn widening_signed_wide() {
     let _ctx = TestContext::new();
     // VMO operations use u64 for sizes — verify large values work.
@@ -191,7 +181,6 @@ fn widening_signed_wide() {
 
 /// C++: TEST(SyscallGenerationTest, WideningUnsignedNarrow)
 /// Verify unsigned narrow arguments.
-#[cfg_attr(test, test)]
 fn widening_unsigned_narrow() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -208,7 +197,6 @@ fn widening_unsigned_narrow() {
 
 /// C++: TEST(SyscallGenerationTest, WideningUnsignedWide)
 /// Verify unsigned wide arguments.
-#[cfg_attr(test, test)]
 fn widening_unsigned_wide() {
     let _ctx = TestContext::new();
     // VMO with page count using wide u64 internally.
@@ -218,7 +206,6 @@ fn widening_unsigned_wide() {
 
 /// C++: TEST(SyscallGenerationTest, Wrapper)
 /// Verify syscall wrapper validation.
-#[cfg_attr(test, test)]
 fn wrapper() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -233,7 +220,6 @@ fn wrapper() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     handle_copyout_failure();
     handle_create_failure();

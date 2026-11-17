@@ -19,7 +19,6 @@ fn get_address_tagging_features() -> u32 {
 ///
 /// We read from `VdsoConstants.features.address_tagging` directly, which
 /// is the kernel-side source of truth backing the vDSO function.
-#[cfg_attr(test, test)]
 fn address_tagging_get_system_features_x86_64() {
     let _ctx = TestContext::new();
     let features = get_address_tagging_features();
@@ -31,7 +30,6 @@ fn address_tagging_get_system_features_x86_64() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     address_tagging_get_system_features_x86_64();
 }

@@ -10,7 +10,6 @@ use zircon_object::signal::Timer;
 
 ///
 /// Create a timer and verify it has a valid KOID.
-#[cfg_attr(test, test)]
 fn create_timer() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -19,7 +18,6 @@ fn create_timer() {
 
 ///
 /// Set and get the name of a timer.
-#[cfg_attr(test, test)]
 fn timer_name() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -29,7 +27,6 @@ fn timer_name() {
 
 ///
 /// A newly created timer should not be signaled.
-#[cfg_attr(test, test)]
 fn timer_not_signaled_initially() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -39,7 +36,6 @@ fn timer_not_signaled_initially() {
 ///
 /// Set a deadline on a timer. If the deadline is in the past, the
 /// timer should signal immediately.
-#[cfg_attr(test, test)]
 fn timer_set_deadline() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -49,7 +45,6 @@ fn timer_set_deadline() {
 ///
 /// Set a deadline then cancel the timer. The timer should not be
 /// signaled after cancellation.
-#[cfg_attr(test, test)]
 fn timer_cancel() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -61,7 +56,6 @@ fn timer_cancel() {
 ///
 /// Set a timer, then set it again with a different deadline. The
 /// new deadline should replace the old one.
-#[cfg_attr(test, test)]
 fn timer_set_then_reset() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -71,7 +65,6 @@ fn timer_set_then_reset() {
 
 ///
 /// Create multiple timers. Each should have a unique KOID.
-#[cfg_attr(test, test)]
 fn timer_multiple_creation() {
     let _ctx = TestContext::new();
     let t1 = Timer::new();
@@ -83,7 +76,6 @@ fn timer_multiple_creation() {
 
 ///
 /// Create timers with different slack modes (Center, Early, Late).
-#[cfg_attr(test, test)]
 fn timer_slack_modes() {
     use zircon_object::signal::Slack;
     let _ctx = TestContext::new();
@@ -94,7 +86,6 @@ fn timer_slack_modes() {
 
 ///
 /// Cancel a timer that has never been set. Should be a no-op.
-#[cfg_attr(test, test)]
 fn timer_cancel_when_not_set() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -104,7 +95,6 @@ fn timer_cancel_when_not_set() {
 
 ///
 /// Cancel a timer twice. Second cancel should be a no-op.
-#[cfg_attr(test, test)]
 fn timer_double_cancel_safe() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -115,7 +105,6 @@ fn timer_double_cancel_safe() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     create_timer();
     timer_name();

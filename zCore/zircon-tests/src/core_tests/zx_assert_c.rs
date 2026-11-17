@@ -34,14 +34,12 @@ fn echo_value(val: u32) -> u32 {
 // ── ZxAssertCTest suite ────────────────────────────────────────────
 
 /// C++: TEST(ZxAssertCTest, ZxAssertValidPredicatePasses)
-#[cfg_attr(test, test)]
 fn zx_assert_c_valid_predicate_passes() {
     let expected: u32 = line!();
     assert_eq!(echo_value(expected), expected);
 }
 
 /// C++: TEST(ZxAssertCTest, ZxAssertMsgValidPredicatePasses)
-#[cfg_attr(test, test)]
 fn zx_assert_c_msg_valid_predicate_passes() {
     let expected: u32 = line!();
     let val = echo_value(expected);
@@ -49,14 +47,12 @@ fn zx_assert_c_msg_valid_predicate_passes() {
 }
 
 /// C++: TEST(ZxAssertCTest, ZxDebugAssertValidPredicatePasses)
-#[cfg_attr(test, test)]
 fn zx_assert_c_debug_valid_predicate_passes() {
     let expected: u32 = line!();
     debug_assert_eq!(echo_value(expected), expected);
 }
 
 /// C++: TEST(ZxAssertCTest, ZxDebugAssertMsgValidPredicatePasses)
-#[cfg_attr(test, test)]
 fn zx_assert_c_debug_msg_valid_predicate_passes() {
     let expected: u32 = line!();
     let val = echo_value(expected);
@@ -64,7 +60,6 @@ fn zx_assert_c_debug_msg_valid_predicate_passes() {
 }
 
 /// C++: TEST(ZxAssertCTest, ZxAssertInvalidPredicateFails)
-#[cfg_attr(test, test)]
 fn zx_assert_c_invalid_predicate_fails() {
     let expected: u32 = line!();
     let actual: u32 = expected + 1;
@@ -75,7 +70,6 @@ fn zx_assert_c_invalid_predicate_fails() {
 }
 
 /// C++: TEST(ZxAssertCTest, ZxAssertMsgInvalidPredicateFails)
-#[cfg_attr(test, test)]
 fn zx_assert_c_msg_invalid_predicate_fails() {
     let expected: u32 = line!();
     let actual: u32 = expected + 1;
@@ -90,7 +84,6 @@ fn zx_assert_c_msg_invalid_predicate_fails() {
 }
 
 /// C++: TEST(ZxAssertCTest, ZxDebugAssertInvalidPredicateFails)
-#[cfg_attr(test, test)]
 fn zx_assert_c_debug_invalid_predicate_fails() {
     let expected: u32 = line!();
     let actual: u32 = expected + 1;
@@ -113,7 +106,6 @@ fn zx_assert_c_debug_invalid_predicate_fails() {
 }
 
 /// C++: TEST(ZxAssertCTest, ZxDebugAssertMsgInvalidPredicateFails)
-#[cfg_attr(test, test)]
 fn zx_assert_c_debug_msg_invalid_predicate_fails() {
     let expected: u32 = line!();
     let actual: u32 = expected + 1;
@@ -139,14 +131,12 @@ fn zx_assert_c_debug_msg_invalid_predicate_fails() {
 // ── ZxAssertCppTest suite ──────────────────────────────────────────
 
 /// C++: TEST(ZxAssertCppTest, ZxAssertValidPredicatePasses)
-#[cfg_attr(test, test)]
 fn zx_assert_cpp_valid_predicate_passes() {
     let expected: u32 = line!();
     assert_eq!(echo_value(expected), expected);
 }
 
 /// C++: TEST(ZxAssertCppTest, ZxAssertMsgValidPredicatePasses)
-#[cfg_attr(test, test)]
 fn zx_assert_cpp_msg_valid_predicate_passes() {
     let expected: u32 = line!();
     let val = echo_value(expected);
@@ -154,14 +144,12 @@ fn zx_assert_cpp_msg_valid_predicate_passes() {
 }
 
 /// C++: TEST(ZxAssertCppTest, ZxDebugAssertValidPredicatePasses)
-#[cfg_attr(test, test)]
 fn zx_assert_cpp_debug_valid_predicate_passes() {
     let expected: u32 = line!();
     debug_assert_eq!(echo_value(expected), expected);
 }
 
 /// C++: TEST(ZxAssertCppTest, ZxDebugAssertMsgValidPredicatePasses)
-#[cfg_attr(test, test)]
 fn zx_assert_cpp_debug_msg_valid_predicate_passes() {
     let expected: u32 = line!();
     let val = echo_value(expected);
@@ -169,7 +157,6 @@ fn zx_assert_cpp_debug_msg_valid_predicate_passes() {
 }
 
 /// C++: TEST(ZxAssertCppTest, ZxAssertInvalidPredicateFails)
-#[cfg_attr(test, test)]
 fn zx_assert_cpp_invalid_predicate_fails() {
     let expected: u32 = line!();
     let actual: u32 = expected + 1;
@@ -180,7 +167,6 @@ fn zx_assert_cpp_invalid_predicate_fails() {
 }
 
 /// C++: TEST(ZxAssertCppTest, ZxAssertMsgInvalidPredicateFails)
-#[cfg_attr(test, test)]
 fn zx_assert_cpp_msg_invalid_predicate_fails() {
     let expected: u32 = line!();
     let actual: u32 = expected + 1;
@@ -195,7 +181,6 @@ fn zx_assert_cpp_msg_invalid_predicate_fails() {
 }
 
 /// C++: TEST(ZxAssertCppTest, ZxDebugAssertInvalidPredicateFails)
-#[cfg_attr(test, test)]
 fn zx_assert_cpp_debug_invalid_predicate_fails() {
     let expected: u32 = line!();
     let actual: u32 = expected + 1;
@@ -218,7 +203,6 @@ fn zx_assert_cpp_debug_invalid_predicate_fails() {
 }
 
 /// C++: TEST(ZxAssertCppTest, ZxDebugAssertMsgInvalidPredicateFails)
-#[cfg_attr(test, test)]
 fn zx_assert_cpp_debug_msg_invalid_predicate_fails() {
     let expected: u32 = line!();
     let actual: u32 = expected + 1;
@@ -242,7 +226,6 @@ fn zx_assert_cpp_debug_msg_invalid_predicate_fails() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     zx_assert_c_valid_predicate_passes();
     zx_assert_c_msg_valid_predicate_passes();

@@ -12,10 +12,10 @@ use zircon_object::ZxError;
 ///   - Sets+clears USER_SIGNAL_1 on items[0] and items[2] (transient)
 ///   - Sets USER_SIGNAL_1 on items[1] (persistent but not watched)
 ///   - Sets USER_SIGNAL_0 on items[0] (watched → wakes wait_many)
-/// Expected: items[0].pending == USER_SIGNAL_0,
-///           items[1].pending == USER_SIGNAL_1,
-///           items[2].pending == 0.
-#[cfg_attr(test, async_std::test)]
+///
+/// Expected: `items[0].pending == USER_SIGNAL_0`,
+///   `items[1].pending == USER_SIGNAL_1`,
+///   `items[2].pending == 0`.
 async fn wait_many_transient_signals_not_returned() {
     use hal_impl::user::UserInOutPtr;
 
@@ -100,7 +100,6 @@ async fn wait_many_transient_signals_not_returned() {
 /// 1. Set+clear USER_SIGNAL_0, then wait for USER_SIGNAL_0 → TIMED_OUT
 /// 2. Additionally set USER_SIGNAL_1, wait for USER_SIGNAL_1 → OK,
 ///    observed contains USER_SIGNAL_1 but NOT USER_SIGNAL_0.
-#[cfg_attr(test, async_std::test)]
 async fn wait_one_transient_signals_not_returned() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -146,7 +145,6 @@ async fn wait_one_transient_signals_not_returned() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     wait_many_transient_signals_not_returned().await;
     wait_one_transient_signals_not_returned().await;

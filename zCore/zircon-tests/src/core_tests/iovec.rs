@@ -42,7 +42,6 @@ fn syscall_channel_create(ctx: &TestContext) -> (HandleValue, HandleValue) {
 // ────────────────────────── Write tests ──────────────────────────
 
 /// C++: TEST(IOVecTest, WriteZeroIovecs)
-#[cfg_attr(test, test)]
 fn write_zero_iovecs() {
     let ctx = TestContext::new();
     let (write_h, read_h) = syscall_channel_create(&ctx);
@@ -144,7 +143,6 @@ fn write_read_iovecs<const N: usize, const M: usize>(ctx: &TestContext) {
 
 /// C++: TEST(IOVecTest, WriteFewLargeIovecs)
 /// Test writing a small number of iovecs, which fit within the kernel stack buffer.
-#[cfg_attr(test, test)]
 fn write_few_large_iovecs() {
     let ctx = TestContext::new();
     write_read_iovecs::<3, 8000>(&ctx);
@@ -152,14 +150,12 @@ fn write_few_large_iovecs() {
 
 /// C++: TEST(IOVecTest, WriteManySmallIovecs)
 /// Test writing a large number of iovecs, that don't fit within the stack buffer.
-#[cfg_attr(test, test)]
 fn write_many_small_iovecs() {
     let ctx = TestContext::new();
     write_read_iovecs::<1000, 10>(&ctx);
 }
 
 /// C++: TEST(IOVecTest, WriteWithHandle)
-#[cfg_attr(test, test)]
 fn write_with_handle() {
     let ctx = TestContext::new();
     let (write_h, read_h) = syscall_channel_create(&ctx);
@@ -214,7 +210,6 @@ fn write_with_handle() {
 }
 
 /// C++: TEST(IOVecTest, WriteEtcWithHandle)
-#[cfg_attr(test, test)]
 fn write_etc_with_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -313,21 +308,18 @@ fn check_for_out_of_range_write<const N: usize, const M: usize>(ctx: &TestContex
 }
 
 /// C++: TEST(IOVecTest, WriteTooManyIovecs)
-#[cfg_attr(test, test)]
 fn write_too_many_iovecs() {
     let ctx = TestContext::new();
     check_for_out_of_range_write::<9000, 1>(&ctx);
 }
 
 /// C++: TEST(IOVecTest, WriteTooManyBytes)
-#[cfg_attr(test, test)]
 fn write_too_many_bytes() {
     let ctx = TestContext::new();
     check_for_out_of_range_write::<1000, 100>(&ctx);
 }
 
 /// C++: TEST(IOVecTest, WriteNonZeroReservedIovec)
-#[cfg_attr(test, test)]
 fn write_non_zero_reserved_iovec() {
     let ctx = TestContext::new();
     let (write_h, _read_h) = syscall_channel_create(&ctx);
@@ -352,7 +344,6 @@ fn write_non_zero_reserved_iovec() {
 }
 
 /// C++: TEST(IOVecTest, WriteNullBufferNonnullSize)
-#[cfg_attr(test, test)]
 fn write_null_buffer_nonnull_size() {
     let ctx = TestContext::new();
     let (write_h, _read_h) = syscall_channel_create(&ctx);
@@ -395,7 +386,6 @@ struct TestChannelCallArgs {
 
 /// C++: TEST(IOVecTest, CallIovecBytesLessThanTxidSize)
 /// Call with iovec total bytes < sizeof(zx_txid_t) (4) should return INVALID_ARGS.
-#[cfg_attr(test, async_std::test)]
 async fn call_iovec_bytes_less_than_txid_size() {
     let ctx = TestContext::new();
     let (client_h, _server_h) = syscall_channel_create(&ctx);
@@ -446,7 +436,6 @@ async fn call_iovec_bytes_less_than_txid_size() {
 /// handled in the syscall dispatcher (sys_channel_call with USE_IOVEC
 /// flag). At the kernel-object level, Channel::call() takes a single
 /// MessagePacket. We test the echo pattern with a direct channel_call.
-#[cfg_attr(test, async_std::test)]
 async fn call_few_large_iovecs() {
     use crate::helpers::{EchoServer, TestContext};
 
@@ -485,7 +474,6 @@ async fn call_few_large_iovecs() {
 /// C++: TEST(IOVecTest, CallManySmallIovecs)
 ///
 /// Same as CallFewLargeIovecs but with 1000 * 10 = 10000 bytes.
-#[cfg_attr(test, async_std::test)]
 async fn call_many_small_iovecs() {
     use crate::helpers::{EchoServer, TestContext};
 
@@ -522,7 +510,6 @@ async fn call_many_small_iovecs() {
 /// C++: TEST(IOVecTest, CallWithHandle)
 ///
 /// Echo server echoes bytes + handle.
-#[cfg_attr(test, async_std::test)]
 async fn call_with_handle() {
     use crate::helpers::{EchoServer, TestContext};
     use zircon_object::object::Handle;
@@ -559,7 +546,6 @@ async fn call_with_handle() {
 ///
 /// Same as CallWithHandle — handle disposition is syscall-layer.
 /// At kernel-object level we verify handle transfer via echo.
-#[cfg_attr(test, async_std::test)]
 async fn call_etc_with_handle() {
     use crate::helpers::{EchoServer, TestContext};
     use zircon_object::object::Handle;
@@ -642,21 +628,18 @@ async fn check_for_out_of_range_call<const N: usize, const M: usize>(ctx: &TestC
 }
 
 /// C++: TEST(IOVecTest, CallTooManyIovecs)
-#[cfg_attr(test, async_std::test)]
 async fn call_too_many_iovecs() {
     let ctx = TestContext::new();
     check_for_out_of_range_call::<9000, 1>(&ctx).await;
 }
 
 /// C++: TEST(IOVecTest, CallTooManyBytes)
-#[cfg_attr(test, async_std::test)]
 async fn call_too_many_bytes() {
     let ctx = TestContext::new();
     check_for_out_of_range_call::<1000, 100>(&ctx).await;
 }
 
 /// C++: TEST(IOVecTest, CallNonZeroReservedIovec)
-#[cfg_attr(test, async_std::test)]
 async fn call_non_zero_reserved_iovec() {
     let ctx = TestContext::new();
     let (client_h, _server_h) = syscall_channel_create(&ctx);
@@ -696,7 +679,6 @@ async fn call_non_zero_reserved_iovec() {
 }
 
 /// C++: TEST(IOVecTest, CallNullBufferNonnullSize)
-#[cfg_attr(test, async_std::test)]
 async fn call_null_buffer_nonnull_size() {
     let ctx = TestContext::new();
     let (client_h, _server_h) = syscall_channel_create(&ctx);
@@ -735,7 +717,6 @@ async fn call_null_buffer_nonnull_size() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     write_zero_iovecs();
     write_few_large_iovecs();

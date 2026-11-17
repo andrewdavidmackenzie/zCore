@@ -4,7 +4,7 @@
 //! `zircon/system/utest/core/`.  Test functions have `/// C++: TEST(...)`
 //! doc comments identifying the original C++ test.
 //!
-//! Coverage: 1778 C++ core-tests, one `#[test]` per binary entry.
+//! Coverage: 1778 C++ core-tests.
 
 mod address_tagging;
 mod bad_access;
@@ -95,7 +95,6 @@ mod vmo_zero;
 mod wake_reports;
 
 /// Run a test module, logging its name.
-#[cfg(not(test))]
 macro_rules! run_test {
     ($name:ident) => {{
         log::warn!("  core_test: {}", stringify!($name));
@@ -116,7 +115,6 @@ macro_rules! run_test {
 ///   in libos mode (host `cargo test`). On bare-metal, the kernel correctly
 ///   rejects kernel-space addresses. These tests need to migrate to the
 ///   petal user-mode binary to run on bare-metal.
-#[cfg(not(test))]
 pub async fn run_all() {
     // ── Kernel API tests (no UserInPtr/UserOutPtr) ──────────────────
     run_test!(address_tagging);

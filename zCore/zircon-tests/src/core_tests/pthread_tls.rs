@@ -17,7 +17,6 @@ use zircon_object::task::{Job, Process, Thread};
 /// pthread_key_create/pthread_setspecific/pthread_getspecific work
 /// correctly across threads. In zCore, we verify the kernel-level
 /// prerequisite: each thread has a unique KOID.
-#[cfg_attr(test, test)]
 fn pthread_tls() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -34,7 +33,6 @@ fn pthread_tls() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     pthread_tls();
 }

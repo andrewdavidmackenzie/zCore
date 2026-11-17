@@ -28,7 +28,6 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 ///
 /// zCore does not implement zx_restricted_enter. We verify that the
 /// syscall dispatch path returns NOT_SUPPORTED for unimplemented syscalls.
-#[cfg_attr(test, test)]
 fn enter_invalid_args() {
     let _ctx = TestContext::new();
     // In zCore, restricted_enter is syscall #186. Since it's not
@@ -58,7 +57,6 @@ fn enter_invalid_args() {
 /// 4. Maps the VMO, reads state, writes state, verifies consistency
 ///
 /// We test the VMO read/write pattern that underlies state binding.
-#[cfg_attr(test, test)]
 fn bind_state() {
     let _ctx = TestContext::new();
 
@@ -98,7 +96,6 @@ fn bind_state() {
 /// C++: TEST_P(RestrictedMode, BindStateWithExceptionReport)
 /// Bind state with an exception report pointer.
 /// `zx_restricted_bind_state(0, &vmo, &report)` → OK
-#[cfg_attr(test, test)]
 fn bind_state_with_exception_report() {
     let _ctx = TestContext::new();
 
@@ -120,7 +117,6 @@ fn bind_state_with_exception_report() {
 /// `zx_restricted_unbind_state(0)` → OK (repeated)
 /// `zx_restricted_unbind_state(1)` → INVALID_ARGS
 /// `zx_restricted_unbind_state(0xffffffff)` → INVALID_ARGS
-#[cfg_attr(test, test)]
 fn unbind_state() {
     let _ctx = TestContext::new();
 
@@ -141,7 +137,6 @@ fn unbind_state() {
 ///
 /// Without restricted mode hardware, we verify the thread lifecycle
 /// that would underlie restricted mode entry/exit.
-#[cfg_attr(test, test)]
 fn basic() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -168,7 +163,6 @@ fn basic() {
 /// each thread's FPU state should be preserved.
 ///
 /// Without restricted mode, we verify concurrent thread creation.
-#[cfg_attr(test, test)]
 fn floating_point_state() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -196,7 +190,6 @@ fn floating_point_state() {
 /// in-thread exception handling round-trip times.
 ///
 /// Without restricted mode, we measure thread creation time as proxy.
-#[cfg_attr(test, test)]
 fn bench() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -217,7 +210,6 @@ fn bench() {
 ///
 /// Verifies: exception type = UNDEFINED_INSTRUCTION, arch-specific
 /// fields (ESR on arm64 has IL bit set, FAR = 0).
-#[cfg_attr(test, test)]
 fn in_thread_exception_user_ptr() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -240,7 +232,6 @@ fn in_thread_exception_user_ptr() {
 
 /// C++: TEST_P(RestrictedMode, InThreadExceptionModeState)
 /// Same as UserPtr but exception report is read from the mode state VMO.
-#[cfg_attr(test, test)]
 fn in_thread_exception_mode_state() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -252,7 +243,6 @@ fn in_thread_exception_mode_state() {
 /// C++: TEST_P(RestrictedMode, ExceptionReportPointerReadOnly)
 /// Map the exception report VMO as read-only. Restricted mode enters,
 /// hits exception, but copy-out fails → ZX_RESTRICTED_REASON_EXCEPTION_LOST.
-#[cfg_attr(test, test)]
 fn exception_report_pointer_read_only() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -296,7 +286,6 @@ fn exception_report_pointer_read_only() {
 /// - PC outside user space (set to -1)
 /// - On x86: invalid flags, non-canonical fs_base/gs_base
 /// - On arm64: CPSR with non-user-settable flags
-#[cfg_attr(test, test)]
 fn enter_bad_state_struct() {
     let _ctx = TestContext::new();
 
@@ -322,7 +311,6 @@ fn enter_bad_state_struct() {
 /// running any restricted mode code.
 ///
 /// After the kick is consumed, a subsequent enter should succeed normally.
-#[cfg_attr(test, test)]
 fn kick_before_enter() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -342,7 +330,6 @@ fn kick_before_enter() {
 /// receive THREAD_STARTING, issue a kick, let it enter RM,
 /// verify REASON_KICK. Then receive THREAD_EXITING and verify
 /// that kicking a dying thread returns BAD_STATE.
-#[cfg_attr(test, test)]
 fn kick_while_starting_and_exiting() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -364,7 +351,6 @@ fn kick_while_starting_and_exiting() {
 /// then loops). A kicker thread detects flag=1 and issues a kick.
 /// RM exits with REASON_KICK. Verify the restricted state shows
 /// the mutation from store_one (register incremented to 43).
-#[cfg_attr(test, test)]
 fn kick_while_running() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -377,7 +363,6 @@ fn kick_while_running() {
 /// RM code waits for signal, then is about to issue syscall.
 /// Kicker suspends the thread, issues kick, resumes.
 /// Thread should see REASON_KICK (not REASON_SYSCALL).
-#[cfg_attr(test, test)]
 fn kick_just_before_syscall() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -389,7 +374,6 @@ fn kick_just_before_syscall() {
 /// C++: TEST_P(RestrictedMode, BadInstructionAbort)
 /// Thunk to address 0x0FFFFFFFFFFFFFFE → exception.
 /// Returns REASON_EXCEPTION.
-#[cfg_attr(test, test)]
 fn bad_instruction_abort() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -410,7 +394,6 @@ fn bad_instruction_abort() {
 /// C++: TEST_P(RestrictedMode, BadIncrement)
 /// arm64 only. Execute bad_increment in restricted mode.
 /// The blob contains code that triggers an exception.
-#[cfg_attr(test, test)]
 fn bad_increment() {
     // This test is arm64-only in the C++ source (#ifdef __aarch64__).
     let _ctx = TestContext::new();
@@ -423,7 +406,6 @@ fn bad_increment() {
 /// C++: TEST_P(RestrictedMode, PrefetchInstructionAbort)
 /// kArm machine type only. Thunk to address 0xFFFFFFFC.
 /// Returns REASON_EXCEPTION.
-#[cfg_attr(test, test)]
 fn prefetch_instruction_abort() {
     // This test is arm64/kArm only in the C++ source.
     let _ctx = TestContext::new();
@@ -441,7 +423,6 @@ fn prefetch_instruction_abort() {
 /// kArm machine type only. Save TPIDRRO_EL0 before entering RM,
 /// set restricted mode's tpidr_el0 to a canary, trigger exception,
 /// verify TPIDRRO_EL0 was restored to the normal-mode value.
-#[cfg_attr(test, test)]
 fn exception_redirect_restores_tpidrro_el0() {
     // This test is arm64/kArm only.
     let _ctx = TestContext::new();
@@ -458,7 +439,6 @@ fn exception_redirect_restores_tpidrro_el0() {
 /// C++: TEST_P(RestrictedMode, ThumbModeSyscall)
 /// kArm machine type only. Enter restricted mode in Thumb mode
 /// (CPSR = 0x30), execute thumb_syscall_bounce, verify syscall exit.
-#[cfg_attr(test, test)]
 fn thumb_mode_syscall() {
     // This test is arm64/kArm only.
     let _ctx = TestContext::new();
@@ -476,7 +456,6 @@ fn thumb_mode_syscall() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     enter_invalid_args();
     bind_state();

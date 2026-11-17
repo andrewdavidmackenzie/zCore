@@ -14,7 +14,6 @@ use zircon_object::ZxError;
 /// C++: TEST(InterruptTest, BindPort)
 /// Bind a virtual interrupt to a port with BIND_TO_INTERRUPT option.
 /// Verify binding succeeds, double-bind fails, and unbind works.
-#[cfg_attr(test, test)]
 fn bind_port() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -43,7 +42,6 @@ fn bind_port() {
 /// Trigger a virtual interrupt first (goes to Triggered state),
 /// then bind to a port — the pending trigger should be delivered
 /// as a packet to the port.
-#[cfg_attr(test, async_std::test)]
 async fn bind_triggered_irq_to_port() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -67,7 +65,6 @@ async fn bind_triggered_irq_to_port() {
 /// duplicate triggers should be silently ignored (return Ok but
 /// don't queue another packet). Ack before consuming the packet
 /// returns BAD_STATE.
-#[cfg_attr(test, async_std::test)]
 async fn duplicate_trigger_ignored_while_queued() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -101,7 +98,6 @@ async fn duplicate_trigger_ignored_while_queued() {
 /// A port without BIND_TO_INTERRUPT can still be used to bind an
 /// interrupt (the bind restriction is on port_wait delivery, not
 /// bind itself). Verify bind succeeds with both port options.
-#[cfg_attr(test, test)]
 fn non_bindable_port() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -125,7 +121,6 @@ fn non_bindable_port() {
 /// In C++, passing NULL for the output timestamp in zx_interrupt_wait
 /// is valid and just discards the timestamp. Here we verify trigger
 /// with timestamp=0 works (0 is a valid timestamp value).
-#[cfg_attr(test, test)]
 fn null_output_timestamp() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -141,7 +136,6 @@ fn null_output_timestamp() {
 /// C++: TEST(InterruptTest, PacketDeliveredAfterBind)
 /// Trigger before binding to a port. The pending trigger should be
 /// delivered as a packet when bind happens.
-#[cfg_attr(test, async_std::test)]
 async fn packet_delivered_after_bind() {
     let _ctx = TestContext::new();
     use zircon_object::object::Signal;
@@ -182,7 +176,6 @@ async fn packet_delivered_after_bind() {
 /// C++: TEST(InterruptTest, PacketFollowsRebindToNewPort)
 /// Unbind from one port while a packet is queued. Rebind to another
 /// port — the unconsumed packet should be re-delivered to the new port.
-#[cfg_attr(test, async_std::test)]
 async fn packet_follows_rebind_to_new_port() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -211,7 +204,6 @@ async fn packet_follows_rebind_to_new_port() {
 /// C++: TEST(InterruptTest, PacketFollowsUnbindToWait)
 /// After unbinding from a port, the interrupt can be used in wait
 /// mode (no port). Trigger should set the internal event.
-#[cfg_attr(test, async_std::test)]
 async fn packet_follows_unbind_to_wait() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -238,7 +230,6 @@ async fn packet_follows_unbind_to_wait() {
 /// C++: TEST(InterruptTest, PortUnbindPurgesQueuedPacket)
 /// When unbinding, any queued interrupt packet should be purged from
 /// the port (via remove_interrupt).
-#[cfg_attr(test, async_std::test)]
 async fn port_unbind_purges_queued_packet() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -265,7 +256,6 @@ async fn port_unbind_purges_queued_packet() {
 
 /// C++: TEST(InterruptTest, UnBindPort)
 /// Unbind from a port and verify error conditions.
-#[cfg_attr(test, test)]
 fn un_bind_port() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -297,7 +287,6 @@ fn un_bind_port() {
 /// 4. A second wait() on a re-triggered interrupt returns the new timestamp.
 ///
 /// C++ source: zircon/system/utest/core/interrupt/interrupt-test.cc
-#[cfg_attr(test, async_std::test)]
 async fn untriggered_signal_interrupt_wait() {
     let _ctx = TestContext::new();
     use zircon_object::object::Signal;
@@ -334,7 +323,6 @@ async fn untriggered_signal_interrupt_wait() {
 
 /// C++: TEST(InterruptTest, UntriggeredSignalPortsAndAck)
 /// Verify UNTRIGGERED signal lifecycle with port binding.
-#[cfg_attr(test, async_std::test)]
 async fn untriggered_signal_ports_and_ack() {
     let _ctx = TestContext::new();
     use zircon_object::object::Signal;
@@ -369,7 +357,6 @@ async fn untriggered_signal_ports_and_ack() {
 /// - Initially INTERRUPT_SIGNAL is set (UNTRIGGERED).
 /// - After trigger (no port), INTERRUPT_SIGNAL is cleared.
 /// - After destroy, INTERRUPT_SIGNAL is set (UNTRIGGERED).
-#[cfg_attr(test, test)]
 fn user_signals() {
     let _ctx = TestContext::new();
     use zircon_object::object::Signal;
@@ -403,7 +390,6 @@ fn user_signals() {
 /// C++: TEST(InterruptTest, VirtualInterrupts)
 /// Comprehensive virtual interrupt test: create, bind, trigger,
 /// ack, unbind, destroy lifecycle.
-#[cfg_attr(test, async_std::test)]
 async fn virtual_interrupts() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -445,7 +431,6 @@ async fn virtual_interrupts() {
 /// Virtual interrupts don't have the UNMASK/MASK flags that physical
 /// interrupts have. Verify the virtual interrupt's trigger/ack cycle
 /// works correctly with proper packet consumption.
-#[cfg_attr(test, async_std::test)]
 async fn virtual_not_wakeable() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -478,7 +463,6 @@ async fn virtual_not_wakeable() {
 ///   - Wait until thread is blocked
 ///   - Suspend, then resume, then trigger
 ///   - Thread completes wait successfully
-#[cfg_attr(test, async_std::test)]
 async fn wait_thread_functions_after_suspend_resume() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
@@ -492,7 +476,6 @@ async fn wait_thread_functions_after_suspend_resume() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     bind_port();
     bind_triggered_irq_to_port().await;

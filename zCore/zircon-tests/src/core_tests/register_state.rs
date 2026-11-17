@@ -24,7 +24,6 @@ use zircon_object::object::KernelObject;
 ///
 /// Verified via QEMU core-tests:
 ///   make core-tests CORE_TESTS_FILTER='RegisterStateTest.*'
-#[cfg_attr(test, test)]
 fn context_switch_of_gs_base() {
     // This test exercises x86 FSGSBASE register preservation:
     //   1. Multiple threads set gs_base to unique values.
@@ -63,7 +62,6 @@ fn context_switch_of_gs_base() {
 extern crate alloc;
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     context_switch_of_gs_base();
 }

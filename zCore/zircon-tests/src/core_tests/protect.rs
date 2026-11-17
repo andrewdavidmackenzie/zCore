@@ -9,7 +9,6 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 
 /// C++: TEST(ProtectTestCase, MergeMappings)
 /// Protect sub-ranges of a mapping, then re-protect to merge them.
-#[cfg_attr(test, test)]
 fn merge_mappings() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -45,7 +44,6 @@ fn merge_mappings() {
 
 /// C++: TEST(ProtectTestCase, Unmap)
 /// Protect then unmap a mapping.
-#[cfg_attr(test, test)]
 fn unmap() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -76,7 +74,6 @@ fn unmap() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     merge_mappings();
     unmap();

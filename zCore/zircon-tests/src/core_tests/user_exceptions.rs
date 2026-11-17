@@ -11,7 +11,6 @@ use zircon_object::task::Thread;
 
 /// C++: TEST(UserExceptionsTest, Delivered)
 /// Verify exception channel creation succeeds and has valid handles.
-#[cfg_attr(test, test)]
 fn delivered() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -31,7 +30,6 @@ fn delivered() {
 
 /// C++: TEST(UserExceptionsTest, InvalidArgs)
 /// Invalid arguments to exception channel creation should fail.
-#[cfg_attr(test, test)]
 fn invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -57,7 +55,6 @@ fn invalid_args() {
 /// C++: TEST(UserExceptionsTest, NonFatal)
 /// A debugger exception channel (option=1) on a thread should fail
 /// with INVALID_ARGS (only processes and jobs support debugger option).
-#[cfg_attr(test, test)]
 fn non_fatal() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -77,7 +74,6 @@ fn non_fatal() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     delivered();
     invalid_args();

@@ -9,7 +9,6 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 ///
 /// Map a VMO into the process VMAR and verify the virtual address
 /// is valid and non-zero.
-#[cfg_attr(test, test)]
 fn basic_mapping() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -23,7 +22,6 @@ fn basic_mapping() {
 ///
 /// Map a VMO read-only and read through the VMO to verify data
 /// is accessible (the mapping exists).
-#[cfg_attr(test, test)]
 fn read_mapping() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -43,7 +41,6 @@ fn read_mapping() {
 
 ///
 /// Map a VMO read-write, write through the VMO, and verify data.
-#[cfg_attr(test, test)]
 fn write_mapping() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -69,7 +66,6 @@ fn write_mapping() {
 ///
 /// Unmap a previously mapped region. Verify unmap succeeds and
 /// the address space is reclaimed (re-mapping at the same spot works).
-#[cfg_attr(test, test)]
 fn unmap_mapping() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -84,7 +80,6 @@ fn unmap_mapping() {
 ///
 /// Change the protection of a mapped region (e.g., from RW to RO).
 /// Verify protect succeeds.
-#[cfg_attr(test, test)]
 fn protect_mapping() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -101,7 +96,6 @@ fn protect_mapping() {
 ///
 /// Map the same VMO into two VMAR regions. Both mappings share the
 /// same backing pages. Writes via VMO are visible through both.
-#[cfg_attr(test, test)]
 fn shared_mapping() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -131,7 +125,6 @@ fn shared_mapping() {
 ///
 /// Create a private (COW) mapping of a VMO via a snapshot child.
 /// Writes to the child should not affect the original VMO.
-#[cfg_attr(test, test)]
 fn private_mapping() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -163,7 +156,6 @@ fn private_mapping() {
 ///
 /// Verify that mapping permission flags (READ, WRITE) are stored
 /// and enforced. Map with READ only, then try protect to add WRITE.
-#[cfg_attr(test, test)]
 fn mapping_permissions() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -179,7 +171,6 @@ fn mapping_permissions() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     basic_mapping();
     read_mapping();

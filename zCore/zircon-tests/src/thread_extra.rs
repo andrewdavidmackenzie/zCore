@@ -8,7 +8,6 @@ use crate::helpers::{self, TestContext};
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};
 use zircon_object::task::{Job, Process, Task, Thread, ThreadState, ThreadStateKind};
 
-#[cfg_attr(test, test)]
 fn thread_create() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -17,7 +16,6 @@ fn thread_create() {
     assert_ne!(thread.id(), 0);
 }
 
-#[cfg_attr(test, test)]
 fn thread_name() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -26,7 +24,6 @@ fn thread_name() {
     assert_eq!(thread.name(), "my-thread");
 }
 
-#[cfg_attr(test, test)]
 fn thread_related_koid() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -36,7 +33,6 @@ fn thread_related_koid() {
     assert_eq!(thread.related_koid(), proc.id());
 }
 
-#[cfg_attr(test, test)]
 fn thread_multiple_in_process() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -56,7 +52,6 @@ fn thread_multiple_in_process() {
     assert_eq!(t3.related_koid(), proc.id());
 }
 
-#[cfg_attr(test, test)]
 fn thread_set_name() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -68,7 +63,6 @@ fn thread_set_name() {
     assert_eq!(thread.name(), "renamed");
 }
 
-#[cfg_attr(test, test)]
 fn thread_type_name() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -79,7 +73,6 @@ fn thread_type_name() {
 }
 
 /// Thread starts and eventually terminates when killed.
-#[cfg_attr(test, async_std::test)]
 async fn thread_start_and_terminate() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -113,7 +106,6 @@ async fn thread_start_and_terminate() {
 }
 
 /// Thread can be suspended and resumed.
-#[cfg_attr(test, async_std::test)]
 async fn thread_suspend_resume() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -168,7 +160,6 @@ async fn thread_suspend_resume() {
 }
 
 /// Read and write register state on a suspended thread.
-#[cfg_attr(test, async_std::test)]
 async fn thread_read_write_state() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -213,7 +204,6 @@ async fn thread_read_write_state() {
 }
 
 /// read_state fails with BAD_STATE on a non-suspended thread.
-#[cfg_attr(test, test)]
 fn thread_read_state_not_suspended_fails() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -230,7 +220,6 @@ fn thread_read_state_not_suspended_fails() {
 /// Creates a thread and starts it with a basic entry function.
 /// Verifies that `start` transitions the thread to Running state
 /// using the test loop thread function.
-#[cfg_attr(test, async_std::test)]
 async fn thread_create_and_start() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -261,7 +250,6 @@ async fn thread_create_and_start() {
 /// Kill a newly created thread. Killing a New thread transitions
 /// it to Dying. The thread should be findable as a child of the
 /// process before and not be in Running state after kill.
-#[cfg_attr(test, test)]
 fn thread_kill() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -284,7 +272,6 @@ fn thread_kill() {
 
 ///
 /// Verify get/set of the thread name property.
-#[cfg_attr(test, test)]
 fn thread_name_property() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -308,7 +295,6 @@ fn thread_name_property() {
 ///
 /// Multiple threads in a process: start them all, kill them all,
 /// wait for each to terminate.
-#[cfg_attr(test, async_std::test)]
 async fn thread_process_wait_many_threads() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -348,7 +334,6 @@ async fn thread_process_wait_many_threads() {
 ///
 /// Reading thread state on a New (not-yet-started) thread should
 /// return BAD_STATE because the thread hasn't been suspended.
-#[cfg_attr(test, test)]
 fn thread_read_state_before_start() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -371,7 +356,6 @@ fn thread_read_state_before_start() {
 /// FloatPoint/Vector/Debug/SingleStep are not supported — they
 /// return NOT_SUPPORTED on a suspended thread, or BAD_STATE on a
 /// non-suspended thread.
-#[cfg_attr(test, test)]
 fn thread_read_state_invalid_kind() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -398,7 +382,6 @@ fn thread_read_state_invalid_kind() {
 
 ///
 /// Writing thread state with an unsupported kind should fail.
-#[cfg_attr(test, test)]
 fn thread_write_state_invalid_kind() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -425,7 +408,6 @@ fn thread_write_state_invalid_kind() {
 
 ///
 /// A suspended thread should allow read_state for General registers.
-#[cfg_attr(test, async_std::test)]
 async fn thread_read_state_suspended() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -457,7 +439,6 @@ async fn thread_read_state_suspended() {
 
 ///
 /// A suspended thread should allow write_state for General registers.
-#[cfg_attr(test, async_std::test)]
 async fn thread_write_state_suspended() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -493,7 +474,6 @@ async fn thread_write_state_suspended() {
 
 ///
 /// Multiple suspends require matching number of resumes.
-#[cfg_attr(test, async_std::test)]
 async fn thread_suspend_multiple() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -541,7 +521,6 @@ async fn thread_suspend_multiple() {
 /// Suspend a running thread from the test harness, verify it enters
 /// Suspended state, then resume and clean up. This tests the suspend
 /// mechanism on a thread that has been started
-#[cfg_attr(test, async_std::test)]
 async fn thread_suspend_self() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -576,7 +555,6 @@ async fn thread_suspend_self() {
 ///
 /// A thread that is suspended can be killed, and transitions to
 /// Dying/Dead.
-#[cfg_attr(test, async_std::test)]
 async fn thread_kill_suspended() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -608,7 +586,6 @@ async fn thread_kill_suspended() {
 ///
 /// Getting an exception report on a thread not in exception state
 /// should return BAD_STATE.
-#[cfg_attr(test, test)]
 fn thread_get_exception_report_no_exception() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -628,7 +605,6 @@ fn thread_get_exception_report_no_exception() {
 /// Start a thread with explicit entry point and stack pointer.
 /// Verifies that the context is set up correctly before the
 /// thread begins execution.
-#[cfg_attr(test, async_std::test)]
 async fn thread_start_with_entry() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -658,7 +634,6 @@ async fn thread_start_with_entry() {
 /// doesn't currently guard against this — it unconditionally
 /// transitions to Running. This test documents the current behavior:
 /// double-start succeeds (a known gap).
-#[cfg_attr(test, async_std::test)]
 async fn thread_double_start_fails() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -691,7 +666,6 @@ async fn thread_double_start_fails() {
 /// state via thread.state() since ThreadInfo fields are private to
 /// the zircon-object crate. The info struct is primarily used for
 /// ABI serialization to userspace.
-#[cfg_attr(test, test)]
 fn thread_info_state() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -713,7 +687,6 @@ fn thread_info_state() {
 
 ///
 /// Start a thread, kill it, and wait for the THREAD_TERMINATED signal.
-#[cfg_attr(test, async_std::test)]
 async fn thread_wait_for_termination() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -736,7 +709,6 @@ async fn thread_wait_for_termination() {
 ///
 /// Thread runtime stats require actual CPU execution time tracking.
 /// This test verifies the basic time tracking API.
-#[cfg_attr(test, test)]
 fn thread_stats_runtime() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -759,7 +731,6 @@ fn thread_stats_runtime() {
 /// concern — Process::start() takes a handle arg. Here we verify
 /// that Thread::start (the kernel-level API) works without handles
 /// and that the thread can be created and started normally.
-#[cfg_attr(test, async_std::test)]
 async fn thread_invalid_handle_start() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -780,25 +751,21 @@ async fn thread_invalid_handle_start() {
 ///
 /// Suspend a thread blocked in zx_channel_call. Requires a real
 /// running thread blocked in a syscall — not possible in test mode.
-#[cfg_attr(test, test)]
 fn thread_suspend_in_channel_call() {}
 
 ///
 /// Suspend a thread blocked in zx_port_wait. Requires preemptive
 /// scheduling to interrupt the blocked thread.
-#[cfg_attr(test, test)]
 fn thread_suspend_in_port_wait() {}
 
 ///
 /// Suspend a thread blocked in zx_nanosleep. Requires preemptive
 /// scheduling to interrupt the sleeping thread.
-#[cfg_attr(test, test)]
 fn thread_suspend_in_sleep() {}
 
 ///
 /// Suspend a running thread, verify it stops executing, then resume
 /// it and verify it continues.
-#[cfg_attr(test, async_std::test)]
 async fn thread_suspend_then_resume() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -834,7 +801,6 @@ async fn thread_suspend_then_resume() {
 
 ///
 /// Suspend a thread N times, verify it requires N resumes.
-#[cfg_attr(test, async_std::test)]
 async fn thread_suspend_multiple_times() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -876,7 +842,6 @@ async fn thread_suspend_multiple_times() {
 
 ///
 /// Set and get thread priority.
-#[cfg_attr(test, test)]
 fn thread_priority() {
     use zircon_object::task::{Profile, ProfileInfo, ProfileInfoFlags};
 
@@ -905,7 +870,6 @@ fn thread_priority() {
 ///
 /// Set CPU affinity mask on a thread. Create a CPU_MASK profile
 /// and apply it.
-#[cfg_attr(test, test)]
 fn thread_affinity() {
     use zircon_object::task::{Profile, ProfileInfo, ProfileInfoFlags};
 
@@ -942,7 +906,6 @@ fn thread_affinity() {
 
 ///
 /// Get/set the CPU mask for a thread. Uses profile API.
-#[cfg_attr(test, test)]
 fn thread_cpu_mask() {
     use zircon_object::task::{Profile, ProfileInfo, ProfileInfoFlags};
 
@@ -965,7 +928,6 @@ fn thread_cpu_mask() {
 
 ///
 /// Set explicit CPU affinity via the profile API.
-#[cfg_attr(test, test)]
 fn thread_set_cpu_affinity() {
     use zircon_object::task::{Profile, ProfileInfo, ProfileInfoFlags};
 
@@ -996,14 +958,12 @@ fn thread_set_cpu_affinity() {
 /// Register an exception channel, start a thread that immediately
 /// faults, verify the exception is delivered. Requires exception
 /// channel infrastructure with real thread execution.
-#[cfg_attr(test, test)]
 fn thread_exception_on_start() {}
 
 ///
 /// Verify default rights on a thread handle. Thread handles should
 /// have DEFAULT_THREAD rights which include BASIC, IO, PROPERTY,
 /// DESTROY, SIGNAL, and MANAGE_THREAD.
-#[cfg_attr(test, test)]
 fn thread_rights_basic() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1050,7 +1010,6 @@ fn thread_rights_basic() {
 /// reflecting the thread's current state. While in real Fuchsia
 /// this is done via zx_object_get_info from the thread itself,
 /// we test the underlying kernel API directly.
-#[cfg_attr(test, test)]
 fn thread_get_info_self() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1077,7 +1036,6 @@ fn thread_get_info_self() {
 ///
 /// Verify all state transitions: New -> Running -> Suspended ->
 /// Running -> Dying -> Dead using the async test infrastructure.
-#[cfg_attr(test, async_std::test)]
 async fn thread_state_transitions() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1118,19 +1076,16 @@ async fn thread_state_transitions() {
 ///
 /// Use zx_object_wait_async on a thread handle for TERMINATED signal.
 /// Requires a port + async wait infrastructure with real execution.
-#[cfg_attr(test, test)]
 fn thread_wait_async() {}
 
 ///
 /// Cancel an async wait on a thread handle. Requires port + async
 /// wait infrastructure with real execution.
-#[cfg_attr(test, test)]
 fn thread_cancel_wait_async() {}
 
 ///
 /// Obtain a suspend token and verify suspension. Drop the token to
 /// resume. Requires suspend token lifecycle infrastructure.
-#[cfg_attr(test, test)]
 fn thread_suspend_token() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1160,7 +1115,6 @@ fn thread_suspend_token() {
 ///
 /// Kill a thread while it holds a suspend count. Thread should
 /// transition to Dead regardless.
-#[cfg_attr(test, async_std::test)]
 async fn thread_kill_in_suspend() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1188,7 +1142,6 @@ async fn thread_kill_in_suspend() {
 ///
 /// A thread exits (returns from entry) while suspended. The exit
 /// should take priority over the suspension.
-#[cfg_attr(test, async_std::test)]
 async fn thread_exit_while_suspended() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1216,13 +1169,11 @@ async fn thread_exit_while_suspended() {
 ///
 /// Resume a thread that is stopped in an exception handler. Requires
 /// exception channel infrastructure with real thread execution.
-#[cfg_attr(test, test)]
 fn thread_resume_from_exception() {}
 
 ///
 /// Create a thread with invalid arguments via the syscall layer.
 /// Non-zero options should return INVALID_ARGS.
-#[cfg_attr(test, test)]
 fn thread_create_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1263,21 +1214,18 @@ fn thread_create_invalid_args() {
 /// Suspend a thread that is stopped in an exception handler. The
 /// thread should remain suspended after the exception is resolved.
 /// Requires exception channel + real thread execution.
-#[cfg_attr(test, test)]
 fn thread_suspend_in_exception() {}
 
 ///
 /// Trigger an exception while a thread is suspended. The exception
 /// should be queued and delivered when the thread is resumed.
 /// Requires exception channel + suspension infrastructure.
-#[cfg_attr(test, test)]
 fn thread_exception_during_suspend() {}
 
 ///
 /// Suspend a thread before starting it, then start it. The thread
 /// should enter Suspended state rather than Running, and resume
 /// only after an explicit resume call.
-#[cfg_attr(test, async_std::test)]
 async fn thread_start_suspended_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1318,7 +1266,6 @@ async fn thread_start_suspended_thread() {
 /// Create a thread with bad arguments at the syscall level.
 /// Invalid process handle should return BAD_HANDLE. Using a
 /// non-process handle should return WRONG_TYPE.
-#[cfg_attr(test, test)]
 fn thread_create_with_bad_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1353,13 +1300,11 @@ fn thread_create_with_bad_args() {
 /// Register multiple exception channels on a thread. Exceptions
 /// should be delivered to the most recently registered channel
 /// first. Requires exception channel infrastructure.
-#[cfg_attr(test, test)]
 fn thread_multiple_exception_channels() {}
 
 ///
 /// Close a suspend token while the thread is suspended. The thread
 /// should resume execution.
-#[cfg_attr(test, async_std::test)]
 async fn thread_close_suspend_token() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1392,7 +1337,6 @@ async fn thread_close_suspend_token() {
 ///
 /// Verify suspend token lifetime semantics: multiple tokens can be
 /// active, and the thread resumes only when all tokens are closed.
-#[cfg_attr(test, async_std::test)]
 async fn thread_suspend_token_lifetime() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1431,7 +1375,6 @@ async fn thread_suspend_token_lifetime() {
 /// Write to a suspended thread's register state and verify the
 /// write succeeds. The modified state effect on execution can only
 /// be verified with real thread execution.
-#[cfg_attr(test, async_std::test)]
 async fn thread_write_state_modifies_execution() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1486,7 +1429,6 @@ async fn thread_write_state_modifies_execution() {
 ///
 /// Read the floating-point register state of a suspended thread.
 /// FloatPoint kind should return NOT_SUPPORTED (not implemented).
-#[cfg_attr(test, async_std::test)]
 async fn thread_read_state_float_point() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1521,7 +1463,6 @@ async fn thread_read_state_float_point() {
 ///
 /// Read the vector (SIMD) register state of a suspended thread.
 /// Vector kind should return NOT_SUPPORTED (not implemented).
-#[cfg_attr(test, async_std::test)]
 async fn thread_read_state_vector() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1550,7 +1491,6 @@ async fn thread_read_state_vector() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     thread_create();
     thread_name();

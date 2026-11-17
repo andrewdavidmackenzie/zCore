@@ -23,7 +23,6 @@ fn supply_all_pages(pager: &Pager, vmo: &alloc::sync::Arc<VmObject>, pages: usiz
 }
 
 /// Create a pager.
-#[cfg_attr(test, test)]
 fn pager_create() {
     let _ctx = TestContext::new();
     let pager = Pager::new();
@@ -31,7 +30,6 @@ fn pager_create() {
 }
 
 /// Create a pager-backed VMO.
-#[cfg_attr(test, test)]
 fn pager_create_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -45,7 +43,6 @@ fn pager_create_vmo() {
 }
 
 /// Supply pages from a source VMO and read them back.
-#[cfg_attr(test, test)]
 fn supply_pages_and_readback() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -77,7 +74,6 @@ fn supply_pages_and_readback() {
 }
 
 /// Supply pages to only part of the VMO.
-#[cfg_attr(test, test)]
 fn supply_partial_pages() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -101,7 +97,6 @@ fn supply_partial_pages() {
 }
 
 /// Detach VMO from pager.
-#[cfg_attr(test, test)]
 fn pager_detach_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -116,7 +111,6 @@ fn pager_detach_vmo() {
 }
 
 /// Detach wrong VMO should fail.
-#[cfg_attr(test, test)]
 fn pager_detach_wrong_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -129,7 +123,6 @@ fn pager_detach_wrong_vmo() {
 }
 
 /// request_pages sends a packet to the port.
-#[cfg_attr(test, test)]
 fn pager_request_pages_sends_packet() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -146,7 +139,6 @@ fn pager_request_pages_sends_packet() {
 }
 
 /// Multiple VMOs on the same pager with different keys.
-#[cfg_attr(test, test)]
 fn pager_multiple_vmos() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -177,7 +169,6 @@ fn pager_multiple_vmos() {
 }
 
 /// Pager-backed VMO reports is_pager_backed.
-#[cfg_attr(test, test)]
 fn pager_vmo_is_pager_backed() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -193,7 +184,6 @@ fn pager_vmo_is_pager_backed() {
 ///
 /// Pager::new() always succeeds — there are no invalid options on
 /// the pager itself. This test documents that creation is infallible.
-#[cfg_attr(test, test)]
 fn pager_invalid_create() {
     let _ctx = TestContext::new();
     // Pager::new() returns Arc<Pager>, no Result — always succeeds.
@@ -204,7 +194,6 @@ fn pager_invalid_create() {
 ///
 /// create_vmo with DISCARDABLE option should fail with INVALID_ARGS.
 /// RESIZABLE + UNBOUNDED together should also fail.
-#[cfg_attr(test, test)]
 fn pager_invalid_create_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -229,7 +218,6 @@ fn pager_invalid_create_vmo() {
 
 ///
 /// Detaching a VMO that doesn't belong to the pager should fail.
-#[cfg_attr(test, test)]
 fn pager_invalid_detach_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -250,7 +238,6 @@ fn pager_invalid_detach_vmo() {
 /// Verify invalid create_vmo options are rejected. zCore's VMO layer
 /// auto-commits pages on write, so out-of-bounds supply doesn't fail
 /// the way Fuchsia does. We test the validation paths that do exist.
-#[cfg_attr(test, test)]
 fn pager_invalid_supply_pages() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -280,7 +267,6 @@ fn pager_invalid_supply_pages() {
 
 ///
 /// Supply only a subset of pages in a multi-page VMO.
-#[cfg_attr(test, test)]
 fn pager_supply_pages_partial() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -304,7 +290,6 @@ fn pager_supply_pages_partial() {
 ///
 /// Supply pages from a snapshot (clone) of a VMO. The clone should
 /// contain the original data and supply it correctly.
-#[cfg_attr(test, test)]
 fn pager_supply_pages_from_clone() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -328,7 +313,6 @@ fn pager_supply_pages_from_clone() {
 ///
 /// After detaching a VMO, supply_pages should fail because the VMO
 /// has been disconnected from the pager.
-#[cfg_attr(test, test)]
 fn pager_detach_and_supply_fails() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -357,7 +341,6 @@ fn pager_detach_and_supply_fails() {
 
 ///
 /// Detaching the same VMO twice should fail the second time.
-#[cfg_attr(test, test)]
 fn pager_double_detach_fails() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -378,7 +361,6 @@ fn pager_double_detach_fails() {
 
 ///
 /// Multiple VMOs can be created on the same pager with different keys.
-#[cfg_attr(test, test)]
 fn pager_create_multiple_vmos() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -410,7 +392,6 @@ fn pager_create_multiple_vmos() {
 ///
 /// A pager-backed VMO should report is_pager_backed = true.
 /// A regular VMO should report false.
-#[cfg_attr(test, test)]
 fn pager_vmo_info() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -434,7 +415,6 @@ fn pager_vmo_info() {
 /// the nominal size doesn't fail like in Fuchsia. This test verifies
 /// that op_range on a non-owned VMO correctly rejects with INVALID_ARGS
 /// (the bounds-checking path that does work).
-#[cfg_attr(test, test)]
 fn pager_supply_beyond_vmo_end() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -463,7 +443,6 @@ fn pager_supply_beyond_vmo_end() {
 /// Supply with a non-page-aligned source offset. The supply_pages
 /// implementation works at page granularity internally, so sub-page
 /// alignment depends on the read/write path.
-#[cfg_attr(test, test)]
 fn pager_supply_unaligned() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -493,7 +472,6 @@ fn pager_supply_unaligned() {
 ///
 /// After the pager is dropped, the VMO still exists but is no longer
 /// pager-backed (pager association is cleared in Drop).
-#[cfg_attr(test, test)]
 fn pager_supply_after_close() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -520,7 +498,6 @@ fn pager_supply_after_close() {
 /// an already-validated Arc<Port>. There is no "bad port handle"
 /// at the kernel object level — that's a syscall-layer concern.
 /// This test documents that create_vmo with a valid port always works.
-#[cfg_attr(test, test)]
 fn pager_create_vmo_valid_port() {
     let _ctx = TestContext::new();
     let pager = Pager::new();
@@ -534,7 +511,6 @@ fn pager_create_vmo_valid_port() {
 /// supply_pages with a VMO not owned by this pager. supply_pages
 /// itself doesn't check ownership (it writes directly), but op_range
 /// does — this test verifies op_range rejects non-owned VMOs.
-#[cfg_attr(test, test)]
 fn pager_supply_pages_wrong_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -564,7 +540,6 @@ fn pager_supply_pages_wrong_vmo() {
 ///
 /// op_range with ZX_PAGER_OP_FAIL on an owned VMO should succeed.
 /// It wakes waiters with an error code.
-#[cfg_attr(test, test)]
 fn pager_op_range_fail() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -577,7 +552,6 @@ fn pager_op_range_fail() {
 
 ///
 /// op_range with ZX_PAGER_OP_DIRTY grants dirty permission on supplied pages.
-#[cfg_attr(test, test)]
 fn pager_op_range_dirty() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -600,7 +574,6 @@ fn pager_op_range_dirty() {
 ///
 /// After marking pages dirty via op_range, query_dirty_ranges should
 /// return the dirty ranges.
-#[cfg_attr(test, test)]
 fn pager_query_dirty_ranges() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -634,7 +607,6 @@ fn pager_query_dirty_ranges() {
 ///
 /// query_vmo_stats is not yet implemented in zCore. This test
 /// documents the expected behavior.
-#[cfg_attr(test, test)]
 fn pager_query_vmo_stats() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -650,7 +622,6 @@ fn pager_query_vmo_stats() {
 
 ///
 /// Supplying zero-length range is a no-op and should succeed.
-#[cfg_attr(test, test)]
 fn pager_supply_pages_zero_length() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -663,7 +634,6 @@ fn pager_supply_pages_zero_length() {
 
 ///
 /// Supply exactly one page — the minimal valid supply operation.
-#[cfg_attr(test, test)]
 fn pager_supply_pages_exact_one_page() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -682,7 +652,6 @@ fn pager_supply_pages_exact_one_page() {
 
 ///
 /// Supply multiple pages at once to cover a multi-page VMO entirely.
-#[cfg_attr(test, test)]
 fn pager_supply_pages_multiple_pages() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -708,7 +677,6 @@ fn pager_supply_pages_multiple_pages() {
 
 ///
 /// Supply only the last page of a multi-page VMO.
-#[cfg_attr(test, test)]
 fn pager_supply_pages_last_page() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -735,7 +703,6 @@ fn pager_supply_pages_last_page() {
 
 ///
 /// Supply pages using a non-zero source offset within the aux VMO.
-#[cfg_attr(test, test)]
 fn pager_supply_pages_source_offset() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -755,7 +722,6 @@ fn pager_supply_pages_source_offset() {
 
 ///
 /// op_range with an invalid/unsupported op code should return NOT_SUPPORTED.
-#[cfg_attr(test, test)]
 fn pager_op_range_invalid_op() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -771,7 +737,6 @@ fn pager_op_range_invalid_op() {
 
 ///
 /// op_range on a VMO not owned by this pager should fail with INVALID_ARGS.
-#[cfg_attr(test, test)]
 fn pager_op_range_wrong_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -791,7 +756,6 @@ fn pager_op_range_wrong_vmo() {
 
 ///
 /// WRITEBACK_BEGIN (op=3) is a no-op but should succeed on an owned VMO.
-#[cfg_attr(test, test)]
 fn pager_op_range_writeback_begin() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -803,7 +767,6 @@ fn pager_op_range_writeback_begin() {
 
 ///
 /// WRITEBACK_END (op=4) is a no-op but should succeed on an owned VMO.
-#[cfg_attr(test, test)]
 fn pager_op_range_writeback_end() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -816,7 +779,6 @@ fn pager_op_range_writeback_end() {
 ///
 /// op_range FAIL with different Fuchsia error codes. All should succeed
 /// on an owned VMO.
-#[cfg_attr(test, test)]
 fn pager_op_range_fail_with_error_codes() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -848,7 +810,6 @@ fn pager_op_range_fail_with_error_codes() {
 ///
 /// After detaching, supply_pages still writes data (no ownership
 /// check in supply_pages), but the pager association is cleared.
-#[cfg_attr(test, test)]
 fn pager_detach_then_supply_pages() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -870,7 +831,6 @@ fn pager_detach_then_supply_pages() {
 ///
 /// After detaching, op_range should fail because the VMO is no longer
 /// associated with the pager.
-#[cfg_attr(test, test)]
 fn pager_detach_then_op_range() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -888,7 +848,6 @@ fn pager_detach_then_op_range() {
 
 ///
 /// After detaching, op_range DIRTY should fail (VMO not in pager list).
-#[cfg_attr(test, test)]
 fn pager_detach_then_dirty() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -906,7 +865,6 @@ fn pager_detach_then_dirty() {
 
 ///
 /// After detaching, WRITEBACK_BEGIN succeeds (matching Fuchsia).
-#[cfg_attr(test, test)]
 fn pager_detach_then_writeback_begin() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -923,7 +881,6 @@ fn pager_detach_then_writeback_begin() {
 
 ///
 /// After detaching, WRITEBACK_END succeeds (matching Fuchsia).
-#[cfg_attr(test, test)]
 fn pager_detach_then_writeback_end() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -938,7 +895,6 @@ fn pager_detach_then_writeback_end() {
 ///
 /// After pager is dropped, the VMO is still accessible. Reads from
 /// previously-supplied pages work; unsupplied pages read as zeroes.
-#[cfg_attr(test, test)]
 fn pager_close_then_read() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -964,7 +920,6 @@ fn pager_close_then_read() {
 
 ///
 /// After pager is dropped, the VMO remains writable.
-#[cfg_attr(test, test)]
 fn pager_close_then_write() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -985,7 +940,6 @@ fn pager_close_then_write() {
 /// After pager is dropped, create_vmo cannot be called because we
 /// no longer have an Arc<Pager>. This test verifies pager creation
 /// and drop behavior.
-#[cfg_attr(test, test)]
 fn pager_close_then_create_vmo() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -1002,7 +956,6 @@ fn pager_close_then_create_vmo() {
 
 ///
 /// After pager drop, VMO retains its length.
-#[cfg_attr(test, test)]
 fn pager_close_vmo_still_has_length() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -1020,7 +973,6 @@ fn pager_close_vmo_still_has_length() {
 /// After pager drop, the VMO's pager association is cleared.
 /// is_pager_backed may still return true (the flag is on the VMO
 /// trait), but demand-paging is no longer possible.
-#[cfg_attr(test, test)]
 fn pager_close_vmo_detached() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -1040,7 +992,6 @@ fn pager_close_vmo_detached() {
 
 ///
 /// Create a resizable pager-backed VMO (ZX_VMO_RESIZABLE = 2).
-#[cfg_attr(test, test)]
 fn pager_resizable_vmo_create() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1053,7 +1004,6 @@ fn pager_resizable_vmo_create() {
 
 ///
 /// Resize a resizable pager VMO to a larger size.
-#[cfg_attr(test, test)]
 fn pager_resizable_vmo_grow() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1066,7 +1016,6 @@ fn pager_resizable_vmo_grow() {
 
 ///
 /// Resize a resizable pager VMO to a smaller size.
-#[cfg_attr(test, test)]
 fn pager_resizable_vmo_shrink() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1081,7 +1030,6 @@ fn pager_resizable_vmo_shrink() {
 
 ///
 /// A non-resizable pager VMO (default) should reject resize with UNAVAILABLE.
-#[cfg_attr(test, test)]
 fn pager_non_resizable_vmo_reject_resize() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1097,7 +1045,6 @@ fn pager_non_resizable_vmo_reject_resize() {
 
 ///
 /// After growing a resizable pager VMO, supply pages to the new region.
-#[cfg_attr(test, test)]
 fn pager_resizable_vmo_supply_after_grow() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1124,7 +1071,6 @@ fn pager_resizable_vmo_supply_after_grow() {
 
 ///
 /// Two separate pagers with their own VMOs are fully independent.
-#[cfg_attr(test, test)]
 fn pager_two_pagers_independent() {
     let _ctx = TestContext::new();
     let (pager1, port1) = create_pager_and_port();
@@ -1159,7 +1105,6 @@ fn pager_two_pagers_independent() {
 ///
 /// A VMO can outlive its pager. After the pager is dropped, the VMO
 /// is still valid and accessible.
-#[cfg_attr(test, test)]
 fn pager_vmo_outlives_pager() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -1182,7 +1127,6 @@ fn pager_vmo_outlives_pager() {
 
 ///
 /// Dropping the pager and then all VMO references should not leak or panic.
-#[cfg_attr(test, test)]
 fn pager_drop_pager_drop_vmo() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -1198,7 +1142,6 @@ fn pager_drop_pager_drop_vmo() {
 
 ///
 /// A single pager can manage many VMOs simultaneously.
-#[cfg_attr(test, test)]
 fn pager_with_many_vmos() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1234,7 +1177,6 @@ fn pager_with_many_vmos() {
 
 ///
 /// Detaching one VMO should not affect other VMOs on the same pager.
-#[cfg_attr(test, test)]
 fn pager_detach_one_keep_others() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1264,7 +1206,6 @@ fn pager_detach_one_keep_others() {
 ///
 /// Pre-supply pages before mapping, then read via a faulting thread.
 /// We can test this synchronously: supply pages, then read them.
-#[cfg_attr(test, test)]
 fn pager_presupply_and_read() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1281,7 +1222,6 @@ fn pager_presupply_and_read() {
 
 ///
 /// Supply a page then read it — synchronous version of fault-supply-resume.
-#[cfg_attr(test, test)]
 fn pager_read_after_supply() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1298,7 +1238,6 @@ fn pager_read_after_supply() {
 
 ///
 /// Supply a page then write to it — synchronous version.
-#[cfg_attr(test, test)]
 fn pager_write_after_supply() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1315,7 +1254,6 @@ fn pager_write_after_supply() {
 
 ///
 /// Supply multiple pages, then read across all of them.
-#[cfg_attr(test, test)]
 fn pager_read_multiple_pages() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1338,7 +1276,6 @@ fn pager_read_multiple_pages() {
 
 ///
 /// Supply, write, then read back — synchronous version.
-#[cfg_attr(test, test)]
 fn pager_write_and_read() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1356,7 +1293,6 @@ fn pager_write_and_read() {
 ///
 /// Decommit a supplied page and re-read — the page content is zeroed
 /// after decommit (auto-commit provides zero page).
-#[cfg_attr(test, test)]
 fn pager_read_after_decommit() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1389,7 +1325,6 @@ fn pager_read_after_decommit() {
 ///
 /// Supply after a request_pages call — the request should return
 /// SHOULD_WAIT, then supply provides the data.
-#[cfg_attr(test, test)]
 fn pager_supply_after_fault() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1411,7 +1346,6 @@ fn pager_supply_after_fault() {
 ///
 /// request_pages on a pager-backed VMO generates a SHOULD_WAIT result,
 /// simulating what a mapped read fault would trigger.
-#[cfg_attr(test, test)]
 fn pager_fault_on_read() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1422,7 +1356,6 @@ fn pager_fault_on_read() {
 
 ///
 /// request_pages simulates what a mapped write fault would trigger.
-#[cfg_attr(test, test)]
 fn pager_fault_on_write() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1434,7 +1367,6 @@ fn pager_fault_on_write() {
 ///
 /// Read before any pages are supplied — would block in real kernel.
 /// We test request_pages returns SHOULD_WAIT, then supply resolves it.
-#[cfg_attr(test, test)]
 fn pager_read_before_supply() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1456,7 +1388,6 @@ fn pager_read_before_supply() {
 ///
 /// Create a clone of a pager-backed VMO, supply pages, then read
 /// from the clone. Clone sees parent's supplied data.
-#[cfg_attr(test, test)]
 fn pager_clone_read() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1474,7 +1405,6 @@ fn pager_clone_read() {
 
 ///
 /// Write to a clone of a pager-backed VMO — COW semantics.
-#[cfg_attr(test, test)]
 fn pager_clone_write() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1497,7 +1427,6 @@ fn pager_clone_write() {
 
 ///
 /// Detach the pager, then read from a clone of pre-supplied data.
-#[cfg_attr(test, test)]
 fn pager_clone_read_after_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1517,7 +1446,6 @@ fn pager_clone_read_after_detach() {
 
 ///
 /// Create a snapshot of a pager-backed VMO and read from it.
-#[cfg_attr(test, test)]
 fn pager_snapshot_read() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1535,7 +1463,6 @@ fn pager_snapshot_read() {
 
 ///
 /// Write to a snapshot of a pager-backed VMO — COW isolation.
-#[cfg_attr(test, test)]
 fn pager_snapshot_write() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1557,7 +1484,6 @@ fn pager_snapshot_write() {
 
 ///
 /// Nested clone of a snapshot of a pager-backed VMO.
-#[cfg_attr(test, test)]
 fn pager_snapshot_clone_read() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1576,7 +1502,6 @@ fn pager_snapshot_clone_read() {
 
 ///
 /// A snapshot with a pager-backed child — complex COW chain.
-#[cfg_attr(test, test)]
 fn pager_snapshot_with_pager_child() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1599,7 +1524,6 @@ fn pager_snapshot_with_pager_child() {
 
 ///
 /// Resize a clone of a pager-backed VMO and access the new region.
-#[cfg_attr(test, test)]
 fn pager_clone_resize() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1618,7 +1542,6 @@ fn pager_clone_resize() {
 
 ///
 /// Zero pages in a clone of a pager-backed VMO.
-#[cfg_attr(test, test)]
 fn pager_clone_zero() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1639,7 +1562,6 @@ fn pager_clone_zero() {
 
 ///
 /// Drop the pager while VMOs exist. VMOs should still be accessible.
-#[cfg_attr(test, test)]
 fn pager_destroy_with_active_vmos() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -1663,7 +1585,6 @@ fn pager_destroy_with_active_vmos() {
 ///
 /// Detach a VMO and verify the pager association is cleared. We can't
 /// re-bind to a new pager at the kernel-object level in zCore.
-#[cfg_attr(test, test)]
 fn pager_rebind() {
     let _ctx = TestContext::new();
     let (pager1, port1) = create_pager_and_port();
@@ -1684,7 +1605,6 @@ fn pager_rebind() {
 ///
 /// request_pages generates a packet. Multiple requests generate
 /// multiple SHOULD_WAIT results.
-#[cfg_attr(test, test)]
 fn pager_port_queued_packets() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1700,7 +1620,6 @@ fn pager_port_queued_packets() {
 
 ///
 /// Verify request_pages returns SHOULD_WAIT with the correct key.
-#[cfg_attr(test, test)]
 fn pager_verify_packet_format() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1714,7 +1633,6 @@ fn pager_verify_packet_format() {
 
 ///
 /// Multiple VMOs on different ports — verify independent request_pages.
-#[cfg_attr(test, test)]
 fn pager_multiple_port_observers() {
     let _ctx = TestContext::new();
     let (pager, port1) = create_pager_and_port();
@@ -1729,7 +1647,6 @@ fn pager_multiple_port_observers() {
 
 ///
 /// Supply pages over already-supplied pages — new data replaces old.
-#[cfg_attr(test, test)]
 fn pager_supply_overwrites_existing() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1761,7 +1678,6 @@ fn pager_supply_overwrites_existing() {
 ///
 /// op_range with an ALWAYS_NEED hint — not yet a real op code in zCore,
 /// so we verify it returns NOT_SUPPORTED.
-#[cfg_attr(test, test)]
 fn pager_op_range_always_need() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1774,7 +1690,6 @@ fn pager_op_range_always_need() {
 ///
 /// op_range with a DONT_NEED hint — not yet a real op code in zCore,
 /// so we verify it returns NOT_SUPPORTED.
-#[cfg_attr(test, test)]
 fn pager_op_range_dont_need() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1786,7 +1701,6 @@ fn pager_op_range_dont_need() {
 
 ///
 /// Set and get the name of a pager-backed VMO.
-#[cfg_attr(test, test)]
 fn pager_vmo_name() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1797,7 +1711,6 @@ fn pager_vmo_name() {
 
 ///
 /// Set and get content_size on a pager-backed VMO.
-#[cfg_attr(test, test)]
 fn pager_vmo_content_size() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1811,7 +1724,6 @@ fn pager_vmo_content_size() {
 
 ///
 /// Create a pager-backed VMO (simulates process mapping setup).
-#[cfg_attr(test, test)]
 fn pager_process_create_process() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1822,7 +1734,6 @@ fn pager_process_create_process() {
 
 ///
 /// Drop a pager while VMOs exist — simulates process destruction.
-#[cfg_attr(test, test)]
 fn pager_process_destroy_process() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -1841,7 +1752,6 @@ fn pager_process_destroy_process() {
 ///
 /// Read from a pager-backed VMO after supplying pages (synchronous
 /// equivalent of mapped read through page fault).
-#[cfg_attr(test, test)]
 fn pager_process_read_through_mapping() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1859,7 +1769,6 @@ fn pager_process_read_through_mapping() {
 ///
 /// Write to a pager-backed VMO after supplying pages (synchronous
 /// equivalent of mapped write through page fault).
-#[cfg_attr(test, test)]
 fn pager_process_write_through_mapping() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1876,7 +1785,6 @@ fn pager_process_write_through_mapping() {
 
 ///
 /// Supply pages after request_pages (synchronous fault-supply cycle).
-#[cfg_attr(test, test)]
 fn pager_process_fault_and_supply() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1895,7 +1803,6 @@ fn pager_process_fault_and_supply() {
 
 ///
 /// WRITEBACK_BEGIN followed by WRITEBACK_END on dirty pages.
-#[cfg_attr(test, test)]
 fn pager_writeback_begin_end() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1910,7 +1817,6 @@ fn pager_writeback_begin_end() {
 
 ///
 /// Verify dirty range reporting after marking dirty.
-#[cfg_attr(test, test)]
 fn pager_writeback_dirty_range() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1930,7 +1836,6 @@ fn pager_writeback_dirty_range() {
 
 ///
 /// Writeback only a subset of dirty pages.
-#[cfg_attr(test, test)]
 fn pager_writeback_partial() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1953,7 +1858,6 @@ fn pager_writeback_partial() {
 ///
 /// Writeback after pager detach succeeds — writeback operations
 /// are valid even after the pager is detached (matching Fuchsia).
-#[cfg_attr(test, test)]
 fn pager_writeback_after_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1967,7 +1871,6 @@ fn pager_writeback_after_detach() {
 
 ///
 /// Multiple dirty ranges from non-contiguous dirty ops.
-#[cfg_attr(test, test)]
 fn pager_writeback_multiple_ranges() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -1992,7 +1895,6 @@ fn pager_writeback_multiple_ranges() {
 
 ///
 /// Create a VMO with TRAP_DIRTY and verify it is pager-backed.
-#[cfg_attr(test, test)]
 fn pager_trap_dirty_create() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2003,7 +1905,6 @@ fn pager_trap_dirty_create() {
 
 ///
 /// Write to a TRAP_DIRTY VMO via direct write after supplying pages.
-#[cfg_attr(test, test)]
 fn pager_trap_dirty_write() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2022,7 +1923,6 @@ fn pager_trap_dirty_write() {
 
 ///
 /// Read from a TRAP_DIRTY VMO after supply — reads work normally.
-#[cfg_attr(test, test)]
 fn pager_trap_dirty_read() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2039,7 +1939,6 @@ fn pager_trap_dirty_read() {
 
 ///
 /// After granting dirty via op_range, query_dirty_ranges shows them.
-#[cfg_attr(test, test)]
 fn pager_trap_dirty_query_after_write() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2057,7 +1956,6 @@ fn pager_trap_dirty_query_after_write() {
 
 ///
 /// Full dirty cycle: grant dirty → writeback begin → writeback end.
-#[cfg_attr(test, test)]
 fn pager_trap_dirty_writeback_cycle() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2074,7 +1972,6 @@ fn pager_trap_dirty_writeback_cycle() {
 
 ///
 /// Multiple VMOs with supply and read — sequential concurrent simulation.
-#[cfg_attr(test, test)]
 fn pager_multiple_vmos_fault_concurrent() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2099,7 +1996,6 @@ fn pager_multiple_vmos_fault_concurrent() {
 
 ///
 /// Supply then read — sequential version of concurrent supply+fault.
-#[cfg_attr(test, test)]
 fn pager_concurrent_supply_and_fault() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2121,7 +2017,6 @@ fn pager_concurrent_supply_and_fault() {
 
 ///
 /// Multiple supplies to the same page — first one wins (no overwrite).
-#[cfg_attr(test, test)]
 fn pager_supply_race() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2144,7 +2039,6 @@ fn pager_supply_race() {
 
 ///
 /// Detach then try op_range — sequential race simulation.
-#[cfg_attr(test, test)]
 fn pager_detach_race() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2156,7 +2050,6 @@ fn pager_detach_race() {
 
 ///
 /// Drop pager then verify VMO still works — sequential close race.
-#[cfg_attr(test, test)]
 fn pager_close_race() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -2177,7 +2070,6 @@ fn pager_close_race() {
 
 ///
 /// Shrink a resizable pager VMO.
-#[cfg_attr(test, test)]
 fn pager_resize_shrink_with_pager() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2193,7 +2085,6 @@ fn pager_resize_shrink_with_pager() {
 /// Grow a resizable pager VMO and supply pages to the new region.
 /// In Fuchsia, supply to a grown range is a no-op (zero markers
 /// from resize are not overwritten).
-#[cfg_attr(test, test)]
 fn pager_resize_grow_with_pager() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2215,7 +2106,6 @@ fn pager_resize_grow_with_pager() {
 /// Resize then request_pages on the new region.
 /// In Fuchsia, supply to a resize-extended range is a no-op
 /// (zero markers are not overwritten by supply).
-#[cfg_attr(test, test)]
 fn pager_resize_then_fault() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2240,7 +2130,6 @@ fn pager_resize_then_fault() {
 
 ///
 /// Resize then supply (sequential version of resize-during-fault).
-#[cfg_attr(test, test)]
 fn pager_resize_during_fault() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2263,7 +2152,6 @@ fn pager_resize_during_fault() {
 
 ///
 /// Resize a pager VMO, then detach.
-#[cfg_attr(test, test)]
 fn pager_resize_and_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2281,7 +2169,6 @@ fn pager_resize_and_detach() {
 
 ///
 /// Create a snapshot of a pager-backed VMO after modifying supplied pages.
-#[cfg_attr(test, test)]
 fn pager_snapshot_modified() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2302,7 +2189,6 @@ fn pager_snapshot_modified() {
 
 ///
 /// Write to a snapshot of a modified pager-backed VMO — COW isolation.
-#[cfg_attr(test, test)]
 fn pager_snapshot_modified_write() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2324,7 +2210,6 @@ fn pager_snapshot_modified_write() {
 
 ///
 /// Nested clone of a snapshot of a modified pager-backed VMO.
-#[cfg_attr(test, test)]
 fn pager_snapshot_modified_clone() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2344,7 +2229,6 @@ fn pager_snapshot_modified_clone() {
 
 /// Decommit on a snapshot of a modified pager VMO returns NOT_SUPPORTED.
 /// The snapshot retains its written data since decommit is rejected.
-#[cfg_attr(test, test)]
 fn pager_snapshot_modified_decommit() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2375,7 +2259,6 @@ fn pager_snapshot_modified_decommit() {
 ///
 /// Resize a snapshot of a modified pager-backed VMO.
 /// (zCore doesn't support resizable snapshots, so we test creation only.)
-#[cfg_attr(test, test)]
 fn pager_snapshot_modified_resize() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2399,7 +2282,6 @@ fn pager_snapshot_modified_resize() {
 
 ///
 /// Full writeback cycle: dirty → begin → end.
-#[cfg_attr(test, test)]
 fn pager_writeback_complete() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2414,7 +2296,6 @@ fn pager_writeback_complete() {
 
 ///
 /// Multiple dirty ranges, each written back independently.
-#[cfg_attr(test, test)]
 fn pager_writeback_complete_multiple() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2442,7 +2323,6 @@ fn pager_writeback_complete_multiple() {
 ///
 /// Writeback after pager detach succeeds — writeback operations
 /// are valid even after the pager is detached (matching Fuchsia).
-#[cfg_attr(test, test)]
 fn pager_writeback_complete_after_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2458,7 +2338,6 @@ fn pager_writeback_complete_after_detach() {
 
 ///
 /// Writeback a subset, remaining pages still dirty.
-#[cfg_attr(test, test)]
 fn pager_writeback_complete_partial() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2478,7 +2357,6 @@ fn pager_writeback_complete_partial() {
 
 ///
 /// Dirty new pages during writeback — they should remain dirty.
-#[cfg_attr(test, test)]
 fn pager_writeback_and_dirty() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2503,7 +2381,6 @@ fn pager_writeback_and_dirty() {
 
 ///
 /// After closing the pager, the port still works for other operations.
-#[cfg_attr(test, test)]
 fn pager_close_port_still_works() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -2517,7 +2394,6 @@ fn pager_close_port_still_works() {
 
 ///
 /// Closing the pager clears VMO pager associations.
-#[cfg_attr(test, test)]
 fn pager_close_all_vmos_detached() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -2540,7 +2416,6 @@ fn pager_close_all_vmos_detached() {
 
 ///
 /// Drop all references — no leaks or panics.
-#[cfg_attr(test, test)]
 fn pager_drop_all_references() {
     let _ctx = TestContext::new();
     {
@@ -2556,7 +2431,6 @@ fn pager_drop_all_references() {
 
 ///
 /// Multiple VMOs on different ports from the same pager.
-#[cfg_attr(test, test)]
 fn pager_multiple_ports_one_vmo() {
     let _ctx = TestContext::new();
     let pager = Pager::new();
@@ -2584,7 +2458,6 @@ fn pager_multiple_ports_one_vmo() {
 
 ///
 /// Drop the port while VMOs are still active — VMOs still work.
-#[cfg_attr(test, test)]
 fn pager_port_close() {
     let _ctx = TestContext::new();
     let pager = Pager::new();
@@ -2606,7 +2479,6 @@ fn pager_port_close() {
 
 ///
 /// Create a snapshot clone of a pager-backed VMO and read from it.
-#[cfg_attr(test, test)]
 fn pager_vmo_clone_with_pager() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2624,7 +2496,6 @@ fn pager_vmo_clone_with_pager() {
 
 ///
 /// Create a slice of a pager-backed VMO and read from it.
-#[cfg_attr(test, test)]
 fn pager_vmo_slice_with_pager() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2644,7 +2515,6 @@ fn pager_vmo_slice_with_pager() {
 
 ///
 /// Create a reference child (full-VMO slice) of a pager-backed VMO.
-#[cfg_attr(test, test)]
 fn pager_vmo_reference_with_pager() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2662,7 +2532,6 @@ fn pager_vmo_reference_with_pager() {
 
 ///
 /// Child snapshot of a pager-backed VMO — COW behavior.
-#[cfg_attr(test, test)]
 fn pager_vmo_child_snapshot_with_pager() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2683,7 +2552,6 @@ fn pager_vmo_child_snapshot_with_pager() {
 
 ///
 /// Child slice of a pager-backed VMO shares parent's pages.
-#[cfg_attr(test, test)]
 fn pager_vmo_child_slice_with_pager() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2706,7 +2574,6 @@ fn pager_vmo_child_slice_with_pager() {
 
 ///
 /// Create an unbounded pager-backed VMO (ZX_VMO_UNBOUNDED = 16).
-#[cfg_attr(test, test)]
 fn pager_unbounded_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2720,7 +2587,6 @@ fn pager_unbounded_vmo() {
 
 ///
 /// Create a bounded pager-backed VMO with a fixed size.
-#[cfg_attr(test, test)]
 fn pager_bounded_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2733,7 +2599,6 @@ fn pager_bounded_vmo() {
 
 ///
 /// content_size is tracked on a pager-backed VMO.
-#[cfg_attr(test, test)]
 fn pager_content_size_tracking() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2749,7 +2614,6 @@ fn pager_content_size_tracking() {
 
 ///
 /// Query dirty ranges on a TRAP_DIRTY VMO after marking pages dirty.
-#[cfg_attr(test, test)]
 fn pager_query_stats() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2773,7 +2637,6 @@ fn pager_query_stats() {
 
 ///
 /// Query dirty ranges after detaching — VMO still has the ranges.
-#[cfg_attr(test, test)]
 fn pager_query_stats_after_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2792,7 +2655,6 @@ fn pager_query_stats_after_detach() {
 
 ///
 /// Supply pages to different offsets sequentially (concurrent simulation).
-#[cfg_attr(test, test)]
 fn pager_concurrent_supply() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2815,7 +2677,6 @@ fn pager_concurrent_supply() {
 
 ///
 /// Detach multiple VMOs sequentially.
-#[cfg_attr(test, test)]
 fn pager_concurrent_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2837,7 +2698,6 @@ fn pager_concurrent_detach() {
 
 ///
 /// Drop pager while multiple VMOs exist.
-#[cfg_attr(test, test)]
 fn pager_concurrent_close() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -2858,7 +2718,6 @@ fn pager_concurrent_close() {
 
 ///
 /// request_pages on different pages of the same VMO.
-#[cfg_attr(test, test)]
 fn pager_concurrent_fault() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2873,7 +2732,6 @@ fn pager_concurrent_fault() {
 
 ///
 /// Resize then supply (sequential concurrent-resize simulation).
-#[cfg_attr(test, test)]
 fn pager_concurrent_resize() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2905,7 +2763,6 @@ fn pager_concurrent_resize() {
 
 /// Decommit on a clone returns NOT_SUPPORTED (matches Fuchsia).
 /// Parent data is always preserved regardless.
-#[cfg_attr(test, test)]
 fn pager_evict_clone() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2930,7 +2787,6 @@ fn pager_evict_clone() {
 
 ///
 /// Decommit after detach — decommit still works on the VMO.
-#[cfg_attr(test, test)]
 fn pager_evict_after_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2950,7 +2806,6 @@ fn pager_evict_after_detach() {
 ///
 /// Read from supplied pages in a pager-backed VMO (pinning is a
 /// no-op at the kernel-object level in test mode).
-#[cfg_attr(test, test)]
 fn pager_read_pinned_pages() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2967,7 +2822,6 @@ fn pager_read_pinned_pages() {
 
 ///
 /// Write to supplied pages (simulates pinned write).
-#[cfg_attr(test, test)]
 fn pager_write_pinned_pages() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2984,7 +2838,6 @@ fn pager_write_pinned_pages() {
 
 ///
 /// Pin before supply — in test mode, we just supply then read.
-#[cfg_attr(test, test)]
 fn pager_pin_before_supply() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3004,7 +2857,6 @@ fn pager_pin_before_supply() {
 
 ///
 /// Pin after supply — immediate read succeeds.
-#[cfg_attr(test, test)]
 fn pager_pin_after_supply() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3022,7 +2874,6 @@ fn pager_pin_after_supply() {
 /// Decommit pages from a pager-backed VMO (after detach).
 /// In Fuchsia, decommit is NOT_SUPPORTED while pager-backed;
 /// after detach the VMO is no longer pager-backed and decommit works.
-#[cfg_attr(test, test)]
 fn pager_decommit_pages() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3046,7 +2897,6 @@ fn pager_decommit_pages() {
 }
 
 /// Decommit a specific range of pages (after detach).
-#[cfg_attr(test, test)]
 fn pager_decommit_pager_range() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3077,7 +2927,6 @@ fn pager_decommit_pager_range() {
 
 ///
 /// Commit a range by supplying pages.
-#[cfg_attr(test, test)]
 fn pager_commit_range() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3100,7 +2949,6 @@ fn pager_commit_range() {
 
 ///
 /// Commit before supply — request_pages returns SHOULD_WAIT.
-#[cfg_attr(test, test)]
 fn pager_commit_before_supply() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3120,7 +2968,6 @@ fn pager_commit_before_supply() {
 
 ///
 /// TRAP_DIRTY VMO with supply and dirty op — simulates pinned dirty.
-#[cfg_attr(test, test)]
 fn pager_trap_dirty_pinned() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3138,7 +2985,6 @@ fn pager_trap_dirty_pinned() {
 
 ///
 /// TRAP_DIRTY after detach — op_range should fail.
-#[cfg_attr(test, test)]
 fn pager_trap_dirty_after_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3150,7 +2996,6 @@ fn pager_trap_dirty_after_detach() {
 
 ///
 /// Clone of a TRAP_DIRTY VMO — dirty op on parent.
-#[cfg_attr(test, test)]
 fn pager_trap_dirty_clone() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3169,7 +3014,6 @@ fn pager_trap_dirty_clone() {
 
 ///
 /// Dirty multiple non-contiguous pages and verify query_dirty_ranges.
-#[cfg_attr(test, test)]
 fn pager_dirty_ranges_multiple_pages() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3194,7 +3038,6 @@ fn pager_dirty_ranges_multiple_pages() {
 
 ///
 /// Writeback in progress — begin without end.
-#[cfg_attr(test, test)]
 fn pager_writeback_in_progress() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3208,7 +3051,6 @@ fn pager_writeback_in_progress() {
 
 ///
 /// Complete writeback cycle — dirty → begin → end.
-#[cfg_attr(test, test)]
 fn pager_writeback_clean() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3221,7 +3063,6 @@ fn pager_writeback_clean() {
 
 ///
 /// Dirty during writeback — page remains dirty after writeback ends.
-#[cfg_attr(test, test)]
 fn pager_writeback_dirty_during_writeback() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3242,7 +3083,6 @@ fn pager_writeback_dirty_during_writeback() {
 
 ///
 /// Writeback and supply on different pages (sequential concurrent sim).
-#[cfg_attr(test, test)]
 fn pager_concurrent_writeback_and_fault() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3269,7 +3109,6 @@ fn pager_concurrent_writeback_and_fault() {
 
 ///
 /// request_pages returns SHOULD_WAIT — verifies packet format.
-#[cfg_attr(test, test)]
 fn pager_verify_page_request_packet() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3280,7 +3119,6 @@ fn pager_verify_page_request_packet() {
 
 ///
 /// Verify key is associated with the correct VMO.
-#[cfg_attr(test, test)]
 fn pager_page_request_key() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3293,7 +3131,6 @@ fn pager_page_request_key() {
 
 ///
 /// Multiple request_pages at different offsets.
-#[cfg_attr(test, test)]
 fn pager_multiple_page_requests() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3308,7 +3145,6 @@ fn pager_multiple_page_requests() {
 
 ///
 /// request_pages after detach — pager is cleared, but VMO still works.
-#[cfg_attr(test, test)]
 fn pager_page_request_after_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3323,7 +3159,6 @@ fn pager_page_request_after_detach() {
 
 ///
 /// Watermark signals — not implemented; verify VMO creation succeeds.
-#[cfg_attr(test, test)]
 fn pager_watermark_signals() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3336,7 +3171,6 @@ fn pager_watermark_signals() {
 
 ///
 /// VMO info flags on a pager-backed VMO.
-#[cfg_attr(test, test)]
 fn pager_vmo_info_flags() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3347,7 +3181,6 @@ fn pager_vmo_info_flags() {
 
 ///
 /// VMO info after detach — VMO is no longer actively pager-backed.
-#[cfg_attr(test, test)]
 fn pager_vmo_info_after_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3363,7 +3196,6 @@ fn pager_vmo_info_after_detach() {
 /// Supply with zero-content source creates zero markers (no physical
 /// frames), so committed_pages is 0. Supply with non-zero content
 /// creates committed frames.
-#[cfg_attr(test, test)]
 fn pager_vmo_info_committed_bytes() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3387,7 +3219,6 @@ fn pager_vmo_info_committed_bytes() {
 
 ///
 /// ALWAYS_NEED op not supported in zCore — returns NOT_SUPPORTED.
-#[cfg_attr(test, test)]
 fn pager_vmo_op_always_need() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3398,7 +3229,6 @@ fn pager_vmo_op_always_need() {
 
 ///
 /// DONT_NEED op not supported in zCore — returns NOT_SUPPORTED.
-#[cfg_attr(test, test)]
 fn pager_vmo_op_dont_need() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3414,7 +3244,6 @@ use crate::helpers::UserPagerHelper;
 /// Basic test of UserPagerHelper: create a VMO, supply pages with
 /// auto-generated content, and verify the content matches the
 /// expected pattern.
-#[cfg_attr(test, async_std::test)]
 async fn user_pager_helper_basic() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -3442,7 +3271,6 @@ async fn user_pager_helper_basic() {
 }
 
 /// Multi-page UserPagerHelper test: create 4 pages, supply, verify each.
-#[cfg_attr(test, async_std::test)]
 async fn user_pager_helper_multi_page() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -3461,7 +3289,6 @@ async fn user_pager_helper_multi_page() {
 }
 
 /// UserPagerHelper with multiple VMOs, each with a unique key.
-#[cfg_attr(test, async_std::test)]
 async fn user_pager_helper_multiple_vmos() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -3488,7 +3315,6 @@ async fn user_pager_helper_multiple_vmos() {
 }
 
 /// UserPagerHelper detach_vmo works.
-#[cfg_attr(test, async_std::test)]
 async fn user_pager_helper_detach() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -3506,7 +3332,6 @@ async fn user_pager_helper_detach() {
 /// This is the kernel-level equivalent of C++ Pager.CloneDetachTest:
 /// SNAPSHOT_AT_LEAST_ON_WRITE creates unidirectional children, and
 /// reading through them should see the pager-supplied data.
-#[cfg_attr(test, test)]
 fn unidirectional_child_reads_pager_data() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3577,7 +3402,6 @@ fn unidirectional_child_reads_pager_data() {
 /// C++ analog: Pager.SupplyAfterFail
 /// After OP_FAIL, a new request_pages should supersede the failure
 /// and allow supply_pages to succeed.
-#[cfg_attr(test, test)]
 fn supply_after_fail_clears_failed_markers() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3633,7 +3457,6 @@ fn supply_after_fail_clears_failed_markers() {
 /// Create pager VMO → intermediate clone → final clone.
 /// Commit all pages in the final clone. The intermediate should have
 /// populated_bytes = 0 (all pages belong to the clone, not intermediate).
-#[cfg_attr(test, test)]
 fn clone_chain_commit_attribution() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -3686,7 +3509,6 @@ fn clone_chain_commit_attribution() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     pager_create();
     pager_create_vmo();

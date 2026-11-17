@@ -20,7 +20,6 @@ pub(crate) fn syscall_vmo_create(ctx: &TestContext, size: u64, options: u32) -> 
 }
 /// C++: TEST(VmoTestCase, StreamSize) — syscall level
 /// Get/set stream size via syscall.
-#[cfg_attr(test, test)]
 fn stream_size_via_syscall() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, (PAGE_SIZE * 4) as u64, 0);
@@ -37,7 +36,6 @@ fn stream_size_via_syscall() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     stream_size_via_syscall();
 }

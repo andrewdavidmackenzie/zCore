@@ -13,7 +13,6 @@ use zircon_object::signal::{PayloadRepr, Port, PortPacket, PortPacketRepr};
 
 ///
 /// Queue many packets to a port and dequeue them all.
-#[cfg_attr(test, async_std::test)]
 async fn queue_many() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -38,7 +37,6 @@ async fn queue_many() {
 ///
 /// Queue a signal packet via wait_async, then cancel and verify
 /// the subscription is removed. Sequential version — no threads needed.
-#[cfg_attr(test, test)]
 fn queue_and_cancel() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -68,7 +66,6 @@ fn queue_and_cancel() {
 ///
 /// Multiple objects observed on the same port. Each signal generates
 /// the correct packet. Sequential: signal each event, then drain.
-#[cfg_attr(test, async_std::test)]
 async fn multiple_observers() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -104,7 +101,6 @@ async fn multiple_observers() {
 
 ///
 /// Packets should be dequeued in FIFO order.
-#[cfg_attr(test, async_std::test)]
 async fn port_fifo_order() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -127,7 +123,6 @@ async fn port_fifo_order() {
 
 ///
 /// Queue up to the port packet limit (4096). Verify all are dequeueable.
-#[cfg_attr(test, async_std::test)]
 async fn port_queue_limit() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -147,7 +142,6 @@ async fn port_queue_limit() {
 
 ///
 /// Queue N packets, drain all, verify port is empty.
-#[cfg_attr(test, async_std::test)]
 async fn port_drain_all() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -172,7 +166,6 @@ async fn port_drain_all() {
 ///
 /// Drain a port, then queue more packets. The new packets should
 /// be dequeueable.
-#[cfg_attr(test, async_std::test)]
 async fn port_queue_after_drain() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -197,7 +190,6 @@ async fn port_queue_after_drain() {
 
 ///
 /// Create many ports. Each should have a unique KOID.
-#[cfg_attr(test, test)]
 fn port_multiple_creation() {
     let _ctx = TestContext::new();
     let mut ports = alloc::vec::Vec::new();
@@ -214,7 +206,6 @@ fn port_multiple_creation() {
 ///
 /// Queue a packet with specific payload data and verify it is
 /// preserved on dequeue.
-#[cfg_attr(test, async_std::test)]
 async fn port_packet_payload() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -235,7 +226,6 @@ async fn port_packet_payload() {
 ///
 /// Interleave queue and dequeue operations. Each dequeue should
 /// return the oldest packet.
-#[cfg_attr(test, async_std::test)]
 async fn port_interleave_queue_dequeue() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -253,7 +243,6 @@ async fn port_interleave_queue_dequeue() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     queue_many().await;
     queue_and_cancel();

@@ -14,7 +14,6 @@ extern crate alloc;
 /// C++: TEST(PThreadBarrierTest, InitWithNoThreadsReturnsInval)
 /// A barrier with count=0 is invalid. Simulate by verifying that
 /// an event with no signal set represents an "uninitialized" barrier.
-#[cfg_attr(test, test)]
 fn init_with_no_threads_returns_inval() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -33,7 +32,6 @@ fn init_with_no_threads_returns_inval() {
 /// C++: TEST(PThreadBarrierTest, SingleThreadWinsBarrierObject)
 /// A single thread hitting a barrier with count=1 immediately wins.
 /// Simulate by signaling and checking.
-#[cfg_attr(test, test)]
 fn single_thread_wins_barrier_object() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -48,7 +46,6 @@ fn single_thread_wins_barrier_object() {
 
 /// C++: TEST(PThreadBarrierTest, SingleThreadWinsBarrierObjectResetsBetweenIterations)
 /// A barrier resets after being satisfied. Simulate with signal/clear cycle.
-#[cfg_attr(test, test)]
 fn single_thread_wins_barrier_object_resets_between_iterations() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -65,7 +62,6 @@ fn single_thread_wins_barrier_object_resets_between_iterations() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     init_with_no_threads_returns_inval();
     single_thread_wins_barrier_object();

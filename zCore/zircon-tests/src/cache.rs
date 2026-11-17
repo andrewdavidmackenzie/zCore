@@ -16,7 +16,6 @@ const ZX_CACHE_FLUSH_INSN: u32 = 1 << 2;
 ///
 /// Flush the data cache for a range of memory. In test mode this
 /// is a no-op fence but should succeed for valid arguments.
-#[cfg_attr(test, test)]
 fn flush_data_cache() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -30,7 +29,6 @@ fn flush_data_cache() {
 ///
 /// Flush the instruction cache for a range. In test mode this is
 /// a no-op fence but should succeed for valid arguments.
-#[cfg_attr(test, test)]
 fn flush_instruction_cache() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -43,7 +41,6 @@ fn flush_instruction_cache() {
 ///
 /// Synchronize data and instruction caches (DATA | INSN). In test mode
 /// mode this is a no-op fence but should succeed.
-#[cfg_attr(test, test)]
 fn sync_caches() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -61,7 +58,6 @@ fn sync_caches() {
 /// Flush cache with a null address but non-zero size. The syscall
 /// implementation doesn't validate the address itself — it just does
 /// a fence. Should succeed (no-op).
-#[cfg_attr(test, test)]
 fn flush_null_address() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -73,7 +69,6 @@ fn flush_null_address() {
 
 ///
 /// Flush cache with zero length — should be a no-op and succeed.
-#[cfg_attr(test, test)]
 fn flush_zero_length() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -84,7 +79,6 @@ fn flush_zero_length() {
 
 ///
 /// Flush with DATA | INVALIDATE — should succeed.
-#[cfg_attr(test, test)]
 fn flush_with_invalidate() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -101,7 +95,6 @@ fn flush_with_invalidate() {
 ///
 /// Flush cache for a large contiguous range. Should succeed in test mode
 /// mode (fence only).
-#[cfg_attr(test, test)]
 fn flush_large_range() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -114,7 +107,6 @@ fn flush_large_range() {
 ///
 /// Call zx_cache_flush with an invalid operation code (0). Should
 /// return INVALID_ARGS.
-#[cfg_attr(test, test)]
 fn invalid_operation() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -130,7 +122,6 @@ fn invalid_operation() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     flush_data_cache();
     flush_instruction_cache();

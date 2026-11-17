@@ -33,7 +33,6 @@ extern crate alloc;
 ///   zx_thread_create (thread creation)
 ///   zx_handle_duplicate (handle validity proof)
 ///   zx_handle_close (resource cleanup)
-#[cfg_attr(test, test)]
 fn create_and_verify_thread_handle() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -75,7 +74,6 @@ fn create_and_verify_thread_handle() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     create_and_verify_thread_handle();
 }

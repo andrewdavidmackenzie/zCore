@@ -51,7 +51,6 @@ fn syscall_event_create(ctx: &TestContext) -> HandleValue {
 
 /// C++: TEST(CounterTest, CreateInitial)
 /// Create a counter and verify initial conditions.
-#[cfg_attr(test, test)]
 fn create_initial() {
     let ctx = TestContext::new();
     let handle = syscall_counter_create(&ctx, 0).unwrap();
@@ -78,7 +77,6 @@ fn create_initial() {
 
 /// C++: TEST(CounterTest, CreateInvalidOptions)
 /// Non-zero options should fail.
-#[cfg_attr(test, test)]
 fn create_invalid_options() {
     let ctx = TestContext::new();
     assert_eq!(
@@ -100,7 +98,6 @@ fn create_invalid_options() {
 }
 
 /// C++: TEST(CounterTest, AddInvalidHandle)
-#[cfg_attr(test, test)]
 fn add_invalid_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -112,7 +109,6 @@ fn add_invalid_handle() {
 }
 
 /// C++: TEST(CounterTest, AddWrongType)
-#[cfg_attr(test, test)]
 fn add_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -125,7 +121,6 @@ fn add_wrong_type() {
 
 /// C++: TEST(CounterTest, AddMissingRights)
 /// Add requires both READ and WRITE rights.
-#[cfg_attr(test, test)]
 fn add_missing_rights() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -179,7 +174,6 @@ fn add_missing_rights() {
 
 /// C++: TEST(CounterTest, AddOverflow)
 /// Adding 1 to INT64_MAX should fail with OUT_OF_RANGE.
-#[cfg_attr(test, test)]
 fn add_overflow() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -209,7 +203,6 @@ fn add_overflow() {
 
 /// C++: TEST(CounterTest, AddUnderflow)
 /// Adding -1 to INT64_MIN should fail with OUT_OF_RANGE.
-#[cfg_attr(test, test)]
 fn add_underflow() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -239,7 +232,6 @@ fn add_underflow() {
 
 /// C++: TEST(CounterTest, AddHappyCase)
 /// Comprehensive add test: signal transitions.
-#[cfg_attr(test, test)]
 fn add_happy_case() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -273,7 +265,6 @@ fn add_happy_case() {
 }
 
 /// C++: TEST(CounterTest, ReadInvalidHandle)
-#[cfg_attr(test, test)]
 fn read_invalid_handle() {
     let ctx = TestContext::new();
     assert_eq!(
@@ -283,7 +274,6 @@ fn read_invalid_handle() {
 }
 
 /// C++: TEST(CounterTest, ReadWrongType)
-#[cfg_attr(test, test)]
 fn read_wrong_type() {
     let ctx = TestContext::new();
     let event_h = syscall_event_create(&ctx);
@@ -294,7 +284,6 @@ fn read_wrong_type() {
 }
 
 /// C++: TEST(CounterTest, ReadMissingRights)
-#[cfg_attr(test, test)]
 fn read_missing_rights() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -316,7 +305,6 @@ fn read_missing_rights() {
 }
 
 /// C++: TEST(CounterTest, ReadHappyCase)
-#[cfg_attr(test, test)]
 fn read_happy_case() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -331,7 +319,6 @@ fn read_happy_case() {
 }
 
 /// C++: TEST(CounterTest, WriteInvalidHandle)
-#[cfg_attr(test, test)]
 fn write_invalid_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -342,7 +329,6 @@ fn write_invalid_handle() {
 }
 
 /// C++: TEST(CounterTest, WriteWrongType)
-#[cfg_attr(test, test)]
 fn write_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -354,7 +340,6 @@ fn write_wrong_type() {
 }
 
 /// C++: TEST(CounterTest, WriteMissingRights)
-#[cfg_attr(test, test)]
 fn write_missing_rights() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -392,7 +377,6 @@ fn write_missing_rights() {
 
 /// C++: TEST(CounterTest, WriteHappyCase)
 /// Comprehensive write test: signal transitions.
-#[cfg_attr(test, test)]
 fn write_happy_case() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -422,7 +406,6 @@ fn write_happy_case() {
 
 /// C++: TEST(CounterTest, Signal)
 /// User signals can be set and cleared on a counter.
-#[cfg_attr(test, test)]
 fn signal() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -450,7 +433,6 @@ fn signal() {
 /// Reading a counter with an invalid output pointer should return INVALID_ARGS.
 /// In the C++ test, an empty VMAR mapping (no read/write) and a null pointer
 /// are both tested. Here we test the null pointer path through the syscall layer.
-#[cfg_attr(test, test)]
 fn read_invalid_pointer() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -466,7 +448,6 @@ fn read_invalid_pointer() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     create_initial();
     create_invalid_options();

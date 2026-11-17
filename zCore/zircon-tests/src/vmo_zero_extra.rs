@@ -8,7 +8,6 @@ use zircon_object::signal::{Pager, Port};
 use zircon_object::vm::{VmObject, PAGE_SIZE};
 
 /// Zero pages in a pager-backed VMO (pre-supplied, no faulting).
-#[cfg_attr(test, test)]
 fn hidden_no_content() {
     let _ctx = TestContext::new();
     let pager = Pager::new();
@@ -44,7 +43,6 @@ fn hidden_no_content() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     hidden_no_content();
 }

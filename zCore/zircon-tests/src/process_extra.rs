@@ -8,7 +8,6 @@ use zircon_object::ipc::Channel;
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};
 use zircon_object::task::{Job, Process, Status, Thread};
 
-#[cfg_attr(test, test)]
 fn process_create() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -16,7 +15,6 @@ fn process_create() {
     assert_ne!(proc.id(), 0);
 }
 
-#[cfg_attr(test, test)]
 fn process_name() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -24,7 +22,6 @@ fn process_name() {
     assert_eq!(proc.name(), "my-process");
 }
 
-#[cfg_attr(test, test)]
 fn process_get_info() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -33,7 +30,6 @@ fn process_get_info() {
     assert_eq!(info.return_code, 0);
 }
 
-#[cfg_attr(test, test)]
 fn process_add_thread() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -44,7 +40,6 @@ fn process_add_thread() {
 }
 
 /// A freshly created process with no threads should not be started.
-#[cfg_attr(test, test)]
 fn process_not_started_initially() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -56,7 +51,6 @@ fn process_not_started_initially() {
     assert_eq!(info.return_code, 0);
 }
 
-#[cfg_attr(test, test)]
 fn process_handle_table() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -77,7 +71,6 @@ fn process_handle_table() {
     assert!(proc.get_object::<zircon_object::ipc::Channel>(h).is_err());
 }
 
-#[cfg_attr(test, test)]
 fn process_type_name() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -85,7 +78,6 @@ fn process_type_name() {
     assert_eq!(proc.type_name(), "Process");
 }
 
-#[cfg_attr(test, test)]
 fn process_set_name() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -96,7 +88,6 @@ fn process_set_name() {
     assert_eq!(proc.name(), "renamed");
 }
 
-#[cfg_attr(test, test)]
 fn process_related_koid() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -105,7 +96,6 @@ fn process_related_koid() {
     assert_eq!(proc.related_koid(), job.id());
 }
 
-#[cfg_attr(test, test)]
 fn process_multiple_handles() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -133,7 +123,6 @@ fn process_multiple_handles() {
     assert!(proc.get_object::<zircon_object::ipc::Channel>(h2).is_ok());
 }
 
-#[cfg_attr(test, test)]
 fn process_get_info_exited() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -148,7 +137,6 @@ fn process_get_info_exited() {
 }
 
 /// Process exit code is retrievable after exit.
-#[cfg_attr(test, test)]
 fn process_exit_code() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -168,7 +156,6 @@ fn process_exit_code() {
 }
 
 /// (Additional verification that type_name returns "Process".)
-#[cfg_attr(test, test)]
 fn process_type_name_check() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -177,7 +164,6 @@ fn process_type_name_check() {
 }
 
 /// Multiple handles to different objects in the same process.
-#[cfg_attr(test, test)]
 fn process_multiple_handles_dup() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -205,7 +191,6 @@ fn process_multiple_handles_dup() {
 }
 
 /// Set and retrieve process name (already tested, but C++ exact name).
-#[cfg_attr(test, test)]
 fn process_set_name_cxx() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -221,7 +206,6 @@ fn process_set_name_cxx() {
 }
 
 /// Process related_koid is the parent job's koid.
-#[cfg_attr(test, test)]
 fn process_related_koid_cxx() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -234,7 +218,6 @@ fn process_related_koid_cxx() {
 }
 
 /// Process status transitions: Init -> Exited.
-#[cfg_attr(test, test)]
 fn process_status() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -258,7 +241,6 @@ fn process_status() {
 }
 
 /// Enumerate the process's own handle table.
-#[cfg_attr(test, test)]
 fn process_handle_table_self() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -290,7 +272,6 @@ fn process_handle_table_self() {
 }
 
 /// Enumerate handles and check types are correct.
-#[cfg_attr(test, test)]
 fn process_handle_table_self_detailed() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -323,7 +304,6 @@ fn process_handle_table_self_detailed() {
 }
 
 /// Get a child thread by its koid.
-#[cfg_attr(test, test)]
 fn process_get_child() {
     use zircon_object::object::KernelObject;
     let _ctx = TestContext::new();
@@ -344,7 +324,6 @@ fn process_get_child() {
 }
 
 /// Creating a process on a dead (killed) job should fail.
-#[cfg_attr(test, test)]
 fn process_create_destroyed() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
@@ -360,7 +339,6 @@ fn process_create_destroyed() {
 }
 
 /// Kill a process and check it transitions to terminated.
-#[cfg_attr(test, test)]
 fn process_kill_process() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
@@ -393,7 +371,6 @@ fn process_kill_process() {
 }
 
 /// Query VMAR info for a process's root VMAR.
-#[cfg_attr(test, test)]
 fn process_vmar_info() {
     use zircon_object::object::KernelObject;
     let _ctx = TestContext::new();
@@ -410,7 +387,6 @@ fn process_vmar_info() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     process_create();
     process_name();

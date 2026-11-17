@@ -22,7 +22,6 @@ fn check_info(timer: &Timer, expected_options: u32, expected_deadline: i64, expe
 /// C++ tests `zx::deadline_after()` arithmetic (clamping, overflow).
 /// In Rust, deadline_after is equivalent to monotonic_now + offset.
 /// We verify the timer fires for a past deadline.
-#[cfg_attr(test, test)]
 fn deadline_after() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -36,7 +35,6 @@ fn deadline_after() {
 /// Setting deadline to -1 (past) fires immediately. In Rust,
 /// Duration can't be negative, so we use 0 (also past). Verify
 /// get_info before and after.
-#[cfg_attr(test, test)]
 fn set_negative_deadline() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -58,7 +56,6 @@ fn set_negative_deadline() {
 /// Note: C++ expects slack=0 after firing (cleared by wait_one).
 /// zCore retains the slack value after firing since there's no
 /// wait_one to clear it. We verify deadline=0 and signal.
-#[cfg_attr(test, test)]
 fn set_negative_deadline_max() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -79,7 +76,6 @@ fn set_negative_deadline_max() {
 /// C++ sets slack to -1 which returns ZX_ERR_OUT_OF_RANGE.
 /// In Rust, Duration can't be negative, so we test at the syscall
 /// layer with an invalid slack value.
-#[cfg_attr(test, test)]
 fn set_negative_slack() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -103,7 +99,6 @@ fn set_negative_slack() {
 ///
 /// Set deadline to past, wait_one returns immediately with SIGNALED.
 /// Verify get_info before and after wait_one.
-#[cfg_attr(test, async_std::test)]
 async fn already_passed_deadline_on_wait_one() {
     use hal_impl::user::UserOutPtr;
 
@@ -143,7 +138,6 @@ async fn already_passed_deadline_on_wait_one() {
 /// to verify ZX_ERR_TIMED_OUT and pending==0, then loops 3 times with
 /// 10ms future deadlines and calls wait_one. In test mode we test
 /// with past deadlines (fire immediately) and use syscall-layer wait_one.
-#[cfg_attr(test, async_std::test)]
 async fn basic() {
     use hal_impl::user::UserOutPtr;
 
@@ -197,7 +191,6 @@ async fn basic() {
 ///
 /// Set a far-future timer, verify get_info shows the deadline,
 /// then replace with a past deadline. Verify it fires.
-#[cfg_attr(test, test)]
 fn restart() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -223,7 +216,6 @@ fn restart() {
 /// C++: TEST(Timer, InvalidCalls)
 ///
 /// Creating a timer with an invalid clock should return INVALID_ARGS.
-#[cfg_attr(test, test)]
 fn invalid_calls() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -249,7 +241,6 @@ fn invalid_calls() {
 /// C++ just does `timer.set(zx::time(), zx::nsec(0))` — a single call.
 /// We test additional edge cases: cancel without set, double cancel,
 /// set after cancel.
-#[cfg_attr(test, test)]
 fn edge_cases() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -276,7 +267,6 @@ fn edge_cases() {
 ///
 /// Rapid set cycles to look for race conditions. C++ spins for 5ms
 /// with 100us deadlines. We do 100 iterations with past deadlines.
-#[cfg_attr(test, test)]
 fn restart_race() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -294,7 +284,6 @@ fn restart_race() {
 /// If the timer is already due when set, SIGNALED is asserted
 /// immediately. Canceling deasserts it immediately. Verify via
 /// wait_one with zero timeout.
-#[cfg_attr(test, async_std::test)]
 async fn signals_asserted_immediately() {
     use hal_impl::user::UserOutPtr;
 
@@ -348,7 +337,6 @@ async fn signals_asserted_immediately() {
 /// We verify the timer creation syscall rejects invalid clock IDs
 /// (the validation that would apply to ZX_CLOCK_BOOT) and that
 /// valid timers (ZX_CLOCK_MONOTONIC) work correctly.
-#[cfg_attr(test, test)]
 fn boot_timers_elapse_during_suspend() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -376,7 +364,6 @@ fn boot_timers_elapse_during_suspend() {
 ///
 /// User signals can be asserted and cleared on a timer via syscall layer,
 /// independent of the SIGNALED timer signal. C++ also verifies via wait_one.
-#[cfg_attr(test, async_std::test)]
 async fn user_signal() {
     use hal_impl::user::UserOutPtr;
 
@@ -427,7 +414,6 @@ async fn user_signal() {
 ///
 /// Verify ZX_INFO_HANDLE_BASIC fields: type=TIMER (22),
 /// related_koid=INVALID (0), rights=DEFAULT_TIMER.
-#[cfg_attr(test, test)]
 fn basic_info() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -469,7 +455,6 @@ fn basic_info() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     deadline_after();
     set_negative_deadline();

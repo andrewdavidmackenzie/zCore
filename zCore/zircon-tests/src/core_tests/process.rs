@@ -12,7 +12,6 @@ use zircon_object::ZxError;
 /// The thread should have accumulated some non-zero queue_time or
 /// cpu_time. With the priority scheduler, the thread gets CPU time
 /// even in test mode test mode.
-#[cfg_attr(test, async_std::test)]
 async fn process_get_info_runtime() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -51,7 +50,6 @@ async fn process_get_info_runtime() {
 /// C++: TEST(ProcessTest, GetInfoRuntimeV1)
 ///
 /// Same as GetInfoRuntime but for V1 runtime info format.
-#[cfg_attr(test, async_std::test)]
 async fn process_get_info_runtime_v1() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -94,7 +92,6 @@ async fn process_get_info_runtime_v1() {
 /// the process's signal set, verifying there's no deadlock or panic.
 ///
 /// C++ source: zircon/system/utest/core/process/process.cc
-#[cfg_attr(test, test)]
 fn process_wait_async_cancel_self() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -125,7 +122,6 @@ fn process_wait_async_cancel_self() {
 
 /// C++: TEST(ProcessTest, EmptyNameSucceeds)
 /// Creating a process with an empty name should succeed.
-#[cfg_attr(test, test)]
 fn empty_name_succeeds() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -136,7 +132,6 @@ fn empty_name_succeeds() {
 /// C++: TEST(ProcessTest, LongNameSucceeds)
 /// Creating a process with a name longer than ZX_MAX_NAME_LEN (32)
 /// should succeed. The syscall layer truncates to ZX_MAX_NAME_LEN - 1.
-#[cfg_attr(test, test)]
 fn long_name_succeeds() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::object::HandleValue;
@@ -196,7 +191,6 @@ fn long_name_succeeds() {
 /// C++: TEST(ProcessTest, GetRuntimeNoPermission)
 /// Getting runtime info without INSPECT right returns ACCESS_DENIED
 /// at the syscall level.
-#[cfg_attr(test, test)]
 fn get_runtime_no_permission() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -249,7 +243,6 @@ fn get_runtime_no_permission() {
 /// C++: TEST(ProcessTest, MiniProcessSanity)
 /// Start a thread in a process using the test_loop_thread_fn,
 /// verify the process transitions to started, then kill it.
-#[cfg_attr(test, async_std::test)]
 async fn mini_process_sanity() {
     use crate::helpers;
 
@@ -282,7 +275,6 @@ async fn mini_process_sanity() {
 /// C++: TEST(ProcessTest, ProcessStartNoHandle)
 /// Start a process thread without passing a handle arg. Verify
 /// the thread starts and the process is running.
-#[cfg_attr(test, async_std::test)]
 async fn process_start_no_handle() {
     use crate::helpers;
 
@@ -311,7 +303,6 @@ async fn process_start_no_handle() {
 /// C++: TEST(ProcessTest, ProcessStartNonUserspaceEntry)
 /// Starting a process with a kernel-space entry point returns
 /// INVALID_ARGS at the syscall layer.
-#[cfg_attr(test, test)]
 fn process_start_non_userspace_entry() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -347,7 +338,6 @@ fn process_start_non_userspace_entry() {
 
 /// C++: TEST(ProcessTest, ProcessStartFail)
 /// Starting a process that is already started returns BAD_STATE.
-#[cfg_attr(test, async_std::test)]
 async fn process_start_fail() {
     use crate::helpers;
 
@@ -379,7 +369,6 @@ async fn process_start_fail() {
 /// C++: TEST(ProcessTest, ProcessNotKilledViaThreadClose)
 /// Closing the last thread handle does not kill the process if the
 /// thread is still running.
-#[cfg_attr(test, async_std::test)]
 async fn process_not_killed_via_thread_close() {
     use crate::helpers;
 
@@ -418,7 +407,6 @@ async fn process_not_killed_via_thread_close() {
 /// C++: TEST(ProcessTest, ProcessNotKilledViaProcessClose)
 /// Closing the process handle does not kill it while a thread is
 /// still running.
-#[cfg_attr(test, async_std::test)]
 async fn process_not_killed_via_process_close() {
     use crate::helpers;
 
@@ -451,7 +439,6 @@ async fn process_not_killed_via_process_close() {
 /// C++: TEST(ProcessTest, KillChannelHandleCycle)
 /// Two processes holding handles to each other via channels.
 /// Kill the parent job to break the cycle.
-#[cfg_attr(test, test)]
 fn kill_channel_handle_cycle() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
@@ -488,7 +475,6 @@ fn kill_channel_handle_cycle() {
 
 /// C++: TEST(ProcessTest, InfoReflectsProcessState)
 /// Process info flags reflect created/started/exited states.
-#[cfg_attr(test, test)]
 fn info_reflects_process_state() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -518,7 +504,6 @@ fn info_reflects_process_state() {
 
 /// C++: TEST(ProcessTest, Suspend)
 /// Suspending a process suspends all its threads.
-#[cfg_attr(test, async_std::test)]
 async fn suspend() {
     use crate::helpers;
     use zircon_object::task::Task;
@@ -562,7 +547,6 @@ async fn suspend() {
 /// Suspending the current process (self) via the syscall layer
 /// returns NOT_SUPPORTED because the calling thread would be
 /// suspended, deadlocking the syscall.
-#[cfg_attr(test, test)]
 fn suspend_self() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -587,7 +571,6 @@ fn suspend_self() {
 
 /// C++: TEST(ProcessTest, SuspendMultipleThreads)
 /// Suspending a process with multiple threads suspends all of them.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_multiple_threads() {
     use crate::helpers;
     use zircon_object::task::Task;
@@ -633,7 +616,6 @@ async fn suspend_multiple_threads() {
 /// C++: TEST(ProcessTest, SuspendBeforeCreatingThreads)
 /// Suspend a process before creating threads. Then create a thread
 /// and start it — the thread should start suspended.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_before_creating_threads() {
     use crate::helpers;
     use zircon_object::task::Task;
@@ -666,7 +648,6 @@ async fn suspend_before_creating_threads() {
 
 /// C++: TEST(ProcessTest, SuspendBeforeStartingThreads)
 /// Suspend after thread creation but before process start.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_before_starting_threads() {
     use crate::helpers;
     use zircon_object::task::Task;
@@ -699,7 +680,6 @@ async fn suspend_before_starting_threads() {
 /// C++: TEST(ProcessTest, SuspendProcessThenThread)
 /// Suspend the process, then suspend a thread; releasing the process
 /// token should leave the thread suspended.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_process_then_thread() {
     use crate::helpers;
     use zircon_object::task::Task;
@@ -738,7 +718,6 @@ async fn suspend_process_then_thread() {
 /// C++: TEST(ProcessTest, SuspendThreadThenProcess)
 /// Suspend a thread, then the process; releasing the process token
 /// should leave the thread suspended.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_thread_then_process() {
     use crate::helpers;
     use zircon_object::task::Task;
@@ -775,7 +754,6 @@ async fn suspend_thread_then_process() {
 /// C++: TEST(ProcessTest, SuspendThreadAndProcessBeforeStartingProcess)
 /// Suspend both thread and process before starting; both must
 /// be released before the thread runs.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_thread_and_process_before_starting_process() {
     use crate::helpers;
     use zircon_object::task::Task;
@@ -811,7 +789,6 @@ async fn suspend_thread_and_process_before_starting_process() {
 /// C++: TEST(ProcessTest, SuspendTwice)
 /// Suspending a process twice requires releasing both tokens before
 /// threads resume.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_twice() {
     use crate::helpers;
     use zircon_object::task::Task;
@@ -845,7 +822,6 @@ async fn suspend_twice() {
 
 /// C++: TEST(ProcessTest, SuspendTwiceBeforeCreatingThreads)
 /// Double-suspend before thread creation.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_twice_before_creating_threads() {
     use crate::helpers;
     use zircon_object::task::Task;
@@ -881,7 +857,6 @@ async fn suspend_twice_before_creating_threads() {
 /// Suspend a process while one of its threads is dying (killed).
 /// Ignored: hangs on slow ARM emulation (ubuntu-24.04-arm CI) due
 /// to async scheduling not giving threads a chance to run.
-#[cfg_attr(test, async_std::test)]
 async fn suspend_with_dying_thread() {
     use crate::helpers;
     use zircon_object::task::Task;
@@ -918,7 +893,6 @@ async fn suspend_with_dying_thread() {
 /// C++: TEST(ProcessTest, CreateAndKillJobRaceStress)
 /// Stress test: create processes while killing their parent job.
 /// Exercise the race between Process::create and Job::kill.
-#[cfg_attr(test, test)]
 fn create_and_kill_job_race_stress() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
@@ -957,7 +931,6 @@ fn create_and_kill_job_race_stress() {
 
 /// C++: TEST(ProcessTest, ProcessStartWriteThreadState)
 /// Start a process, suspend it, write thread state, then resume.
-#[cfg_attr(test, async_std::test)]
 async fn process_start_write_thread_state() {
     use crate::helpers;
     use zircon_object::task::{Task, ThreadStateKind};
@@ -998,7 +971,6 @@ async fn process_start_write_thread_state() {
 /// C++: TEST(ProcessTest, ForbidDestroyRootVmar)
 /// Destroying the root VMAR should succeed or return NOT_SUPPORTED,
 /// and subsequent get_info should not crash.
-#[cfg_attr(test, test)]
 fn forbid_destroy_root_vmar() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1030,7 +1002,6 @@ fn forbid_destroy_root_vmar() {
 /// C++ source: zircon/system/utest/core/process/process.cc
 ///   zx_object_get_property(self, ZX_PROP_PROCESS_HW_TRACE_CONTEXT_ID, ...)
 ///   → ZX_ERR_NOT_SUPPORTED (on unsupported architectures)
-#[cfg_attr(test, test)]
 fn process_hw_trace_context_id_property() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1078,7 +1049,6 @@ fn process_hw_trace_context_id_property() {
 /// C++: TEST(ProcessTest, InfoProcessNoProcessHandles)
 /// After killing a process, its info should still be queryable even
 /// if no handles to the process remain (as long as we have an Arc).
-#[cfg_attr(test, test)]
 fn info_process_no_process_handles() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
@@ -1111,7 +1081,6 @@ fn info_process_no_process_handles() {
 extern crate alloc;
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     process_get_info_runtime().await;
     process_get_info_runtime_v1().await;

@@ -91,7 +91,6 @@ fn get_address_tagging_features() -> u32 {
 /// Verifies TBI is available, then dereferences a tagged pointer.
 /// On platforms without TBI, returns early (the C++ test is conditionally
 /// compiled under `#if defined(__aarch64__)`).
-#[cfg_attr(test, test)]
 fn address_tagging_get_system_features_a_arch64() {
     let _ctx = TestContext::new();
     let features = get_address_tagging_features();
@@ -125,7 +124,6 @@ fn address_tagging_get_system_features_a_arch64() {
 /// This test exercises the kernel's user-pointer tag-stripping on the
 /// buffer arguments while verifying that VMAR address arguments must
 /// be untagged. Without TBI support, returns early.
-#[cfg_attr(test, test)]
 fn vmar_tagged_address() {
     let _ctx = TestContext::new();
     if !tbi_supported() {
@@ -265,7 +263,6 @@ fn vmar_tagged_address() {
 ///
 /// This requires ARM64 TBI hardware and exception infrastructure.
 /// Without TBI support, returns early.
-#[cfg_attr(test, test)]
 fn tagged_far_segfault() {
     let _ctx = TestContext::new();
     if !tbi_supported() {
@@ -319,7 +316,6 @@ fn tagged_far_segfault() {
 ///
 /// Requires ARM64 debug registers (DBGWCR/DBGWVR) and TBI.
 /// Without TBI support, returns early.
-#[cfg_attr(test, test)]
 fn tagged_far_watchpoint() {
     let _ctx = TestContext::new();
     if !tbi_supported() {
@@ -380,7 +376,6 @@ fn tagged_far_watchpoint() {
 /// 5. Wakes the futex (implicitly via cleanup)
 ///
 /// Without TBI support, returns early.
-#[cfg_attr(test, test)]
 fn futex_wait_wake() {
     let _ctx = TestContext::new();
     if !tbi_supported() {
@@ -435,7 +430,6 @@ fn futex_wait_wake() {
 /// page fault handler must strip the tag to resolve the fault.
 ///
 /// Without TBI support, returns early.
-#[cfg_attr(test, test)]
 fn vmm_page_fault_handler_data_abort() {
     let _ctx = TestContext::new();
     if !tbi_supported() {
@@ -505,7 +499,6 @@ fn vmm_page_fault_handler_data_abort() {
 /// 2. Tagged kernel address (0xffff_ffff_ffff_fff0)
 ///
 /// Without TBI support, returns early.
-#[cfg_attr(test, test)]
 fn instruction_abort_no_tag() {
     let _ctx = TestContext::new();
     if !tbi_supported() {
@@ -558,7 +551,6 @@ fn instruction_abort_no_tag() {
 /// starting execution.
 ///
 /// Without TBI support, returns early.
-#[cfg_attr(test, test)]
 fn thread_start_tagged_address() {
     let _ctx = TestContext::new();
     if !tbi_supported() {
@@ -614,7 +606,6 @@ fn thread_start_tagged_address() {
 /// tagged entry and/or SP. The kernel must strip tags before jumping.
 ///
 /// Without TBI support, returns early.
-#[cfg_attr(test, test)]
 fn process_start_tagged_address() {
     let _ctx = TestContext::new();
     if !tbi_supported() {
@@ -656,7 +647,6 @@ fn process_start_tagged_address() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     address_tagging_get_system_features_a_arch64();
     vmar_tagged_address();

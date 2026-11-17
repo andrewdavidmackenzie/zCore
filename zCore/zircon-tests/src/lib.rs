@@ -182,7 +182,6 @@ mod vmo_zero_extra;
 mod zx_assert_extra;
 
 /// Log and run a test module.
-#[cfg(not(test))]
 macro_rules! run_module {
     ($name:ident) => {{
         log::warn!("TEST MODULE: {}", stringify!($name));
@@ -199,7 +198,6 @@ macro_rules! run_module {
 /// Tests are split into kernel API tests (run everywhere) and syscall
 /// tests (need user-mode buffers, only run in libos/host mode).
 /// Syscall tests will migrate to the petal user-mode binary.
-#[cfg(not(test))]
 pub async fn run_all() {
     // core_tests and extra_tests handle the kernel/syscall split internally
     run_module!(async core_tests);

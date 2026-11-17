@@ -17,7 +17,6 @@ use crate::helpers::TestContext;
 /// We exercise the Profile creation and sys_object_set_profile paths
 /// with a CPU_MASK-only profile (mask=0). The scheduler ignores the
 /// empty mask and allows the thread to run on any CPU.
-#[cfg_attr(test, test)]
 fn empty_mask_is_valid() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -73,7 +72,6 @@ fn empty_mask_is_valid() {
 /// exercising the real kernel API paths. Affinity enforcement requires
 /// the preemptive scheduler (not yet in zCore), so we verify the
 /// creation and application succeed.
-#[cfg_attr(test, test)]
 fn apply_profile() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -126,7 +124,6 @@ fn apply_profile() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     empty_mask_is_valid();
     apply_profile();

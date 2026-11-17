@@ -10,7 +10,6 @@ use zircon_object::task::{Job, Process, Profile, ProfileInfo, ProfileInfoFlags, 
 use zircon_object::ZxError;
 
 /// Creating a profile with invalid parameters should fail.
-#[cfg_attr(test, test)]
 fn profile_create_invalid() {
     let _ctx = TestContext::new();
     // No flags at all → INVALID_ARGS
@@ -27,7 +26,6 @@ fn profile_create_invalid() {
 
 /// Setting a profile on a thread via sys_object_set_profile syscall.
 /// We exercise the syscall layer directly.
-#[cfg_attr(test, test)]
 fn profile_set_on_thread() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -62,7 +60,6 @@ fn profile_set_on_thread() {
 }
 
 /// Setting a profile on a VMAR via sys_object_set_profile.
-#[cfg_attr(test, test)]
 fn profile_set_on_job() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -91,7 +88,6 @@ fn profile_set_on_job() {
 }
 
 /// Getting info from a profile — read back the stored ProfileInfo.
-#[cfg_attr(test, test)]
 fn profile_get_info() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 24);
@@ -104,7 +100,6 @@ fn profile_get_info() {
 
 /// Setting priority via profile — create a priority profile and verify
 /// it stores correctly, then attempt to apply via syscall.
-#[cfg_attr(test, test)]
 fn profile_priority() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -136,7 +131,6 @@ fn profile_priority() {
 }
 
 /// Setting CPU affinity via profile — create a CPU_MASK profile.
-#[cfg_attr(test, test)]
 fn profile_affinity() {
     let _ctx = TestContext::new();
 
@@ -160,7 +154,6 @@ fn profile_affinity() {
 }
 
 /// Setting deadline parameters via profile — create a DEADLINE profile.
-#[cfg_attr(test, test)]
 fn profile_deadline_parameters() {
     let _ctx = TestContext::new();
 
@@ -175,7 +168,6 @@ fn profile_deadline_parameters() {
 }
 
 /// Profile with invalid parameters should fail — various error paths.
-#[cfg_attr(test, test)]
 fn profile_invalid_params() {
     let _ctx = TestContext::new();
 
@@ -214,7 +206,6 @@ fn profile_invalid_params() {
 }
 
 /// Profile name property support — verify set_name/name via KernelObject.
-#[cfg_attr(test, test)]
 fn profile_name_support() {
     let _ctx = TestContext::new();
     let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 8);
@@ -229,7 +220,6 @@ fn profile_name_support() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     profile_create_invalid();
     profile_set_on_thread();

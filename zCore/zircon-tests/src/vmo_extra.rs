@@ -14,7 +14,6 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 use zircon_object::ZxError;
 
 /// vmo_create: basic creation with correct size.
-#[cfg_attr(test, test)]
 fn vmo_create() {
     let _ctx = TestContext::new();
 
@@ -23,7 +22,6 @@ fn vmo_create() {
 }
 
 /// vmo_read/write: basic data round-trip.
-#[cfg_attr(test, test)]
 fn vmo_read_write() {
     let _ctx = TestContext::new();
 
@@ -37,7 +35,6 @@ fn vmo_read_write() {
 }
 
 /// vmo_read: reading unwritten pages returns zeros.
-#[cfg_attr(test, test)]
 fn vmo_read_zeros() {
     let _ctx = TestContext::new();
 
@@ -48,7 +45,6 @@ fn vmo_read_zeros() {
 }
 
 /// vmo_get_size: reports correct size.
-#[cfg_attr(test, test)]
 fn vmo_get_size() {
     let _ctx = TestContext::new();
 
@@ -57,7 +53,6 @@ fn vmo_get_size() {
 }
 
 /// vmo_set_size: resize a resizable VMO.
-#[cfg_attr(test, test)]
 fn vmo_set_size() {
     let _ctx = TestContext::new();
 
@@ -72,7 +67,6 @@ fn vmo_set_size() {
 }
 
 /// vmo_set_size: non-resizable VMO returns error.
-#[cfg_attr(test, test)]
 fn vmo_set_size_not_resizable() {
     let _ctx = TestContext::new();
 
@@ -81,7 +75,6 @@ fn vmo_set_size_not_resizable() {
 }
 
 /// vmo_create_child (SNAPSHOT): COW clone isolation.
-#[cfg_attr(test, test)]
 fn vmo_snapshot_isolation() {
     let _ctx = TestContext::new();
 
@@ -114,7 +107,6 @@ fn vmo_snapshot_isolation() {
 }
 
 /// vmo_create_child (SLICE): transparent write-through.
-#[cfg_attr(test, test)]
 fn vmo_slice_write_through() {
     let _ctx = TestContext::new();
 
@@ -140,7 +132,6 @@ fn vmo_slice_write_through() {
 }
 
 /// vmo_op_range (COMMIT): committed bytes increase.
-#[cfg_attr(test, test)]
 fn vmo_commit() {
     let _ctx = TestContext::new();
 
@@ -155,7 +146,6 @@ fn vmo_commit() {
 }
 
 /// vmo_op_range (DECOMMIT): releases pages.
-#[cfg_attr(test, test)]
 fn vmo_decommit() {
     let _ctx = TestContext::new();
 
@@ -173,7 +163,6 @@ fn vmo_decommit() {
 }
 
 /// VMO zero operation.
-#[cfg_attr(test, test)]
 fn vmo_zero() {
     let _ctx = TestContext::new();
 
@@ -188,7 +177,6 @@ fn vmo_zero() {
 }
 
 /// Slice populated_bytes should be zero (pages attributed to parent).
-#[cfg_attr(test, test)]
 fn vmo_slice_attributed_counts() {
     let _ctx = TestContext::new();
 
@@ -209,7 +197,6 @@ fn vmo_slice_attributed_counts() {
 /// Page-aligned decommit works correctly.
 /// NOTE: zCore's kernel object layer does not enforce page-alignment
 /// on decommit offset/length — the syscall layer would add those checks.
-#[cfg_attr(test, test)]
 fn vmo_decommit_aligned() {
     let _ctx = TestContext::new();
 
@@ -226,7 +213,6 @@ fn vmo_decommit_aligned() {
 }
 
 /// Decommit past end returns OUT_OF_RANGE.
-#[cfg_attr(test, test)]
 fn vmo_decommit_out_of_range() {
     let _ctx = TestContext::new();
 
@@ -240,7 +226,6 @@ fn vmo_decommit_out_of_range() {
 }
 
 /// Zero past end returns OUT_OF_RANGE.
-#[cfg_attr(test, test)]
 fn vmo_zero_out_of_range() {
     let _ctx = TestContext::new();
 
@@ -253,7 +238,6 @@ fn vmo_zero_out_of_range() {
 }
 
 /// committed_bytes increases after write, decreases after decommit.
-#[cfg_attr(test, test)]
 fn vmo_committed_bytes_tracking() {
     let _ctx = TestContext::new();
 
@@ -274,7 +258,6 @@ fn vmo_committed_bytes_tracking() {
 }
 
 /// VMO_ZERO_CHILDREN signal management.
-#[cfg_attr(test, test)]
 fn vmo_zero_children_signal() {
     let _ctx = TestContext::new();
 
@@ -292,7 +275,6 @@ fn vmo_zero_children_signal() {
 }
 
 /// Growing a VMO preserves existing data; new area is zero.
-#[cfg_attr(test, test)]
 fn vmo_resize_data_preserved() {
     let _ctx = TestContext::new();
 
@@ -314,7 +296,6 @@ fn vmo_resize_data_preserved() {
 }
 
 /// Shrinking and re-growing a VMO zeroes the new pages.
-#[cfg_attr(test, test)]
 fn vmo_resize_shrink_data_lost() {
     let _ctx = TestContext::new();
 
@@ -333,7 +314,6 @@ fn vmo_resize_shrink_data_lost() {
 }
 
 /// VMO name get/set.
-#[cfg_attr(test, test)]
 fn vmo_name() {
     let _ctx = TestContext::new();
 
@@ -345,7 +325,6 @@ fn vmo_name() {
     assert_eq!(vmo.name(), "renamed");
 }
 
-#[cfg_attr(test, test)]
 fn vmo_type_name() {
     let _ctx = TestContext::new();
 
@@ -354,7 +333,6 @@ fn vmo_type_name() {
 }
 
 /// Multiple children can be created from the same parent.
-#[cfg_attr(test, test)]
 fn vmo_multiple_children() {
     let _ctx = TestContext::new();
 
@@ -378,7 +356,6 @@ fn vmo_multiple_children() {
 }
 
 /// Write, decommit, re-write cycle.
-#[cfg_attr(test, test)]
 fn vmo_commit_decommit_round_trip() {
     let _ctx = TestContext::new();
 
@@ -403,7 +380,6 @@ fn vmo_commit_decommit_round_trip() {
 
 ///
 /// Verify VMO size reporting for various creation sizes.
-#[cfg_attr(test, test)]
 fn vmo_get_size_extended() {
     let _ctx = TestContext::new();
 
@@ -424,7 +400,6 @@ fn vmo_get_size_extended() {
 
 ///
 /// Shrink a VMO and verify data beyond the new size is lost.
-#[cfg_attr(test, test)]
 fn vmo_resize_smaller() {
     let _ctx = TestContext::new();
 
@@ -448,7 +423,6 @@ fn vmo_resize_smaller() {
 ///
 /// Resize a VMO larger and read from the new pages — they should
 /// contain zeros.
-#[cfg_attr(test, test)]
 fn vmo_resize_and_read() {
     let _ctx = TestContext::new();
 
@@ -474,7 +448,6 @@ fn vmo_resize_and_read() {
 ///
 /// Commit pages by writing, then decommit. Verify committed_bytes
 /// tracks correctly and decommitted pages read as zero.
-#[cfg_attr(test, test)]
 fn vmo_commit_decommit_basic() {
     let _ctx = TestContext::new();
 
@@ -516,7 +489,6 @@ fn vmo_commit_decommit_basic() {
 ///
 /// Set and get the VMO name property. Verify it persists and can be
 /// changed multiple times.
-#[cfg_attr(test, test)]
 fn vmo_name_property() {
     let _ctx = TestContext::new();
 
@@ -543,7 +515,6 @@ fn vmo_name_property() {
 ///
 /// op_range COMMIT commits pages. After commit, committed_bytes should
 /// reflect the committed pages.
-#[cfg_attr(test, test)]
 fn vmo_op_range_commit() {
     let _ctx = TestContext::new();
 
@@ -562,7 +533,6 @@ fn vmo_op_range_commit() {
 ///
 /// op_range DECOMMIT releases committed pages. After decommit, reading
 /// returns zeros and committed_bytes decreases.
-#[cfg_attr(test, test)]
 fn vmo_op_range_decommit() {
     let _ctx = TestContext::new();
 
@@ -587,7 +557,6 @@ fn vmo_op_range_decommit() {
 
 ///
 /// op_range ZERO zeroes a range within the VMO without decommitting.
-#[cfg_attr(test, test)]
 fn vmo_op_range_zero() {
     let _ctx = TestContext::new();
 
@@ -617,7 +586,6 @@ fn vmo_op_range_zero() {
 
 ///
 /// op_range LOCK is not implemented in zCore. Should fail.
-#[cfg_attr(test, test)]
 fn vmo_op_range_lock() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -631,7 +599,6 @@ fn vmo_op_range_lock() {
 
 ///
 /// op_range UNLOCK is not implemented in zCore. Should fail.
-#[cfg_attr(test, test)]
 fn vmo_op_range_unlock() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -646,7 +613,6 @@ fn vmo_op_range_unlock() {
 ///
 /// op_range CACHE_SYNC flushes dirty cache lines for the given range.
 /// In test mode this is a no-op that should succeed.
-#[cfg_attr(test, test)]
 fn vmo_op_range_cache_sync() {
     let _ctx = TestContext::new();
 
@@ -665,7 +631,6 @@ fn vmo_op_range_cache_sync() {
 ///
 /// op_range CACHE_CLEAN cleans (writes back) cache lines for the range.
 /// In test mode this is a no-op.
-#[cfg_attr(test, test)]
 fn vmo_op_range_cache_clean() {
     let _ctx = TestContext::new();
 
@@ -682,7 +647,6 @@ fn vmo_op_range_cache_clean() {
 /// op_range CACHE_INVALIDATE invalidates cache lines. In test mode
 /// this is a no-op. Requires uncached VMO in Fuchsia — we skip that
 /// requirement and just verify the VMO remains readable.
-#[cfg_attr(test, test)]
 fn vmo_op_range_cache_invalidate() {
     let _ctx = TestContext::new();
 
@@ -698,7 +662,6 @@ fn vmo_op_range_cache_invalidate() {
 ///
 /// op_range ALWAYS_NEED hints to the kernel that pages should be kept
 /// resident. In test mode this is a no-op — just verify no error.
-#[cfg_attr(test, test)]
 fn vmo_op_range_always_need() {
     let _ctx = TestContext::new();
 
@@ -713,7 +676,6 @@ fn vmo_op_range_always_need() {
 ///
 /// op_range DONT_NEED hints that pages can be evicted. In test mode
 /// this is a no-op — pages remain committed.
-#[cfg_attr(test, test)]
 fn vmo_op_range_dont_need() {
     let _ctx = TestContext::new();
 
@@ -733,7 +695,6 @@ fn vmo_op_range_dont_need() {
     assert_eq!(buf[0], 99);
 }
 
-#[cfg_attr(test, test)]
 fn vmo_read_write_multiple_sizes() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -748,7 +709,6 @@ fn vmo_read_write_multiple_sizes() {
     }
 }
 
-#[cfg_attr(test, test)]
 fn vmo_read_write_offset() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -769,7 +729,6 @@ fn vmo_read_write_offset() {
 /// In Fuchsia, reads/writes past VMO end return OUT_OF_RANGE.
 /// In zCore, VMO read/write auto-commits pages without range checking,
 /// so this test is currently ignored.
-#[cfg_attr(test, test)]
 fn vmo_read_write_beyond_end() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -781,7 +740,6 @@ fn vmo_read_write_beyond_end() {
     assert!(result.is_err(), "read well past end should fail");
 }
 
-#[cfg_attr(test, test)]
 fn vmo_create_invalid_args() {
     let _ctx = TestContext::new();
 
@@ -791,7 +749,6 @@ fn vmo_create_invalid_args() {
     assert_eq!(vmo.len(), 0);
 }
 
-#[cfg_attr(test, test)]
 fn vmo_create_with_options() {
     let _ctx = TestContext::new();
 
@@ -811,7 +768,6 @@ fn vmo_create_with_options() {
     );
 }
 
-#[cfg_attr(test, test)]
 fn vmo_duplicate_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -840,7 +796,6 @@ fn vmo_duplicate_handle() {
     assert_eq!(&buf, data);
 }
 
-#[cfg_attr(test, test)]
 fn vmo_signal_user() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -857,7 +812,6 @@ fn vmo_signal_user() {
     assert!(!vmo.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-#[cfg_attr(test, test)]
 fn vmo_resize_no_memory() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged_with_resizable(true, 1);
@@ -868,7 +822,6 @@ fn vmo_resize_no_memory() {
     assert!(result.is_err(), "resize to huge size should fail");
 }
 
-#[cfg_attr(test, test)]
 fn vmo_decommit_range() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -897,7 +850,6 @@ fn vmo_decommit_range() {
     assert_eq!(buf, [0xAA; 4]);
 }
 
-#[cfg_attr(test, test)]
 fn vmo_write_commits() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -912,7 +864,6 @@ fn vmo_write_commits() {
     assert_eq!(buf, data);
 }
 
-#[cfg_attr(test, test)]
 fn vmo_commit_range() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -929,7 +880,6 @@ fn vmo_commit_range() {
     assert_eq!(buf, [0; 4], "committed page should be zero-filled");
 }
 
-#[cfg_attr(test, test)]
 fn vmo_map_rights() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -943,7 +893,6 @@ fn vmo_map_rights() {
     let _ = result;
 }
 
-#[cfg_attr(test, test)]
 fn vmo_info_not_paged() {
     let _ctx = TestContext::new();
     // Create a regular (paged) VMO and check info.
@@ -956,7 +905,6 @@ fn vmo_info_not_paged() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     vmo_create();
     vmo_read_write();

@@ -24,7 +24,6 @@ use crate::helpers::TestContext;
 /// Queries CPU features via VdsoConstants (the kernel-side source of truth
 /// that backs the vDSO `zx_system_get_features` function).
 /// The C++ test is `#ifdef __aarch64__` — guarded here with cfg.
-#[cfg_attr(test, test)]
 fn arm_mops() {
     let _ctx = TestContext::new();
 
@@ -64,7 +63,6 @@ fn arm_mops() {
 /// Tests that corrupting the C flag between MOPS instructions causes a fault.
 /// Cannot safely test in test mode (ASSERT_DEATH would kill the test process).
 /// The C++ test is `#ifdef __aarch64__` — guarded here with cfg.
-#[cfg_attr(test, test)]
 fn arm_mops_exception() {
     let _ctx = TestContext::new();
 
@@ -91,7 +89,6 @@ fn arm_mops_exception() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     arm_mops();
     arm_mops_exception();

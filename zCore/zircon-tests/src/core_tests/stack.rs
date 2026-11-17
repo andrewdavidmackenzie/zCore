@@ -20,7 +20,6 @@ use zircon_object::object::KernelObject;
 ///
 /// We verify the page-distinctness concept: stack, heap, and
 /// thread-local storage occupy different memory regions.
-#[cfg_attr(test, test)]
 fn main_thread_stack() {
     let _ctx = crate::helpers::TestContext::new();
 
@@ -64,7 +63,6 @@ fn main_thread_stack() {
 /// Clang sanitizer builtins. We verify the Zircon thread creation
 /// infrastructure works and that the VMO used for thread stacks has
 /// the expected page alignment.
-#[cfg_attr(test, test)]
 fn thread_stack() {
     let _ctx = crate::helpers::TestContext::new();
 
@@ -93,7 +91,6 @@ fn thread_stack() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     main_thread_stack();
     thread_stack();

@@ -30,7 +30,6 @@ use zircon_object::ZxError;
 /// - child job → ZX_ERR_ACCESS_DENIED (not root job)
 /// - root job with bad kind → ZX_ERR_INVALID_ARGS
 /// - root job with valid kind → ZX_OK
-#[cfg_attr(test, test)]
 fn retrieve_oom() {
     let ctx = TestContext::new();
 
@@ -67,7 +66,6 @@ fn retrieve_oom() {
 ///
 /// We verify that attempting to use an event handle without SIGNAL
 /// rights is rejected.
-#[cfg_attr(test, test)]
 fn cannot_signal_oom_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -93,7 +91,6 @@ fn cannot_signal_oom_from_userspace() {
 }
 
 /// C++: TEST(SystemEvent, RetrieveImminentOom)
-#[cfg_attr(test, test)]
 fn retrieve_imminent_oom() {
     let ctx = TestContext::new();
 
@@ -115,7 +112,6 @@ fn retrieve_imminent_oom() {
 }
 
 /// C++: TEST(SystemEvent, CannotSignalImminentOomFromUserspace)
-#[cfg_attr(test, test)]
 fn cannot_signal_imminent_oom_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -130,7 +126,6 @@ fn cannot_signal_imminent_oom_from_userspace() {
 }
 
 /// C++: TEST(SystemEvent, RetrieveMempressureCritical)
-#[cfg_attr(test, test)]
 fn retrieve_mempressure_critical() {
     let ctx = TestContext::new();
     assert_eq!(
@@ -149,7 +144,6 @@ fn retrieve_mempressure_critical() {
 }
 
 /// C++: TEST(SystemEvent, CannotSignalMempressureCriticalFromUserspace)
-#[cfg_attr(test, test)]
 fn cannot_signal_mempressure_critical_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -165,7 +159,6 @@ fn cannot_signal_mempressure_critical_from_userspace() {
 
 /// C++: TEST(SystemEvent, RetreiveMempressureWarning)
 /// Note: the C++ test has a typo "Retreive" — we preserve it.
-#[cfg_attr(test, test)]
 fn retreive_mempressure_warning() {
     let ctx = TestContext::new();
     assert_eq!(
@@ -184,7 +177,6 @@ fn retreive_mempressure_warning() {
 }
 
 /// C++: TEST(SystemEvent, CannotSignalMempressureWarningFromUserspace)
-#[cfg_attr(test, test)]
 fn cannot_signal_mempressure_warning_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -199,7 +191,6 @@ fn cannot_signal_mempressure_warning_from_userspace() {
 }
 
 /// C++: TEST(SystemEvent, RetrieveMempressureNormal)
-#[cfg_attr(test, test)]
 fn retrieve_mempressure_normal() {
     let ctx = TestContext::new();
     assert_eq!(
@@ -218,7 +209,6 @@ fn retrieve_mempressure_normal() {
 }
 
 /// C++: TEST(SystemEvent, CannotSignalMempressureNormalFromUserspace)
-#[cfg_attr(test, test)]
 fn cannot_signal_mempressure_normal_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -235,7 +225,6 @@ fn cannot_signal_mempressure_normal_from_userspace() {
 /// C++: TEST(SystemEvent, ExactlyOneMemoryEventSignaled)
 /// Retrieve all 5 memory pressure events, wait on all with wait_many,
 /// verify exactly one is signaled.
-#[cfg_attr(test, test)]
 fn exactly_one_memory_event_signaled() {
     let _ctx = TestContext::new();
 
@@ -255,7 +244,6 @@ fn exactly_one_memory_event_signaled() {
     assert_eq!(events_signaled, 1, "exactly one memory event signaled");
 }
 /// C++: TEST(SystemEvent, CannotSignalMemoryStallEventFromUserspace)
-#[cfg_attr(test, test)]
 fn cannot_signal_memory_stall_event_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -276,7 +264,6 @@ fn cannot_signal_memory_stall_event_from_userspace() {
 /// C++: TEST(SystemEvent, MemoryStallThresholds)
 /// Tests zx_system_watch_memory_stall with various valid/invalid
 /// parameters. zCore does not implement this syscall.
-#[cfg_attr(test, test)]
 fn memory_stall_thresholds() {
     let _ctx = TestContext::new();
 
@@ -310,7 +297,6 @@ fn memory_stall_thresholds() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     retrieve_oom();
     cannot_signal_oom_from_userspace();

@@ -11,7 +11,6 @@ use zircon_object::ZxError;
 
 /// C++: TEST(FifoTest, DequeueSignalsWriteable)
 /// Full signal lifecycle: write fills, read drains, signal transitions.
-#[cfg_attr(test, test)]
 fn dequeue_signals_writeable() {
     let _ctx = TestContext::new();
     let (fa, fb) = Fifo::create(8, 8); // 8 elements of 8 bytes
@@ -48,7 +47,6 @@ fn dequeue_signals_writeable() {
 
 /// C++: TEST(FifoTest, NonPowerOfTwoCountSupported)
 /// FIFO with non-power-of-2 count works correctly.
-#[cfg_attr(test, test)]
 fn non_power_of_two_count_supported() {
     let _ctx = TestContext::new();
     let (fa, fb) = Fifo::create(10, 4); // 10 elements
@@ -75,7 +73,6 @@ fn non_power_of_two_count_supported() {
 
 /// C++: TEST(FifoTest, SingleElementCapacity)
 /// FIFO with capacity=1, signal transitions on single element.
-#[cfg_attr(test, test)]
 fn single_element_capacity() {
     let _ctx = TestContext::new();
     let (fa, fb) = Fifo::create(1, 8);
@@ -99,7 +96,6 @@ fn single_element_capacity() {
 
 /// C++: TEST(FifoTest, UserSignalsAndSignalPeer)
 /// User signals on FIFO endpoints.
-#[cfg_attr(test, test)]
 fn user_signals_and_signal_peer() {
     let _ctx = TestContext::new();
     let (fa, fb) = Fifo::create(8, 4);
@@ -117,7 +113,6 @@ fn user_signals_and_signal_peer() {
 
 /// C++: TEST(FifoTest, DefaultRightsAndType)
 /// Create a FIFO pair, verify type_name and initial signals.
-#[cfg_attr(test, test)]
 fn default_rights_and_type() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4);
@@ -134,7 +129,6 @@ fn default_rights_and_type() {
 
 /// C++: TEST(FifoTest, EndpointsAreRelated)
 /// Create a FIFO pair, verify related_koid links the two endpoints.
-#[cfg_attr(test, test)]
 fn endpoints_are_related() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4);
@@ -146,7 +140,6 @@ fn endpoints_are_related() {
 
 /// C++: TEST(FifoTest, FifoOrderIsPreserved)
 /// Write N elements, read all back in one call, verify FIFO order.
-#[cfg_attr(test, test)]
 fn fifo_order_is_preserved() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4);
@@ -173,7 +166,6 @@ fn fifo_order_is_preserved() {
 
 /// C++: TEST(FifoTest, IndividualReadsPreserveOrder)
 /// Write N elements, read one at a time, verify FIFO order.
-#[cfg_attr(test, test)]
 fn individual_reads_preserve_order() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(16, 4);
@@ -194,7 +186,6 @@ fn individual_reads_preserve_order() {
 
 /// C++: TEST(FifoTest, InvalidHandleAndWrongType)
 /// Using a bad handle returns BAD_HANDLE; using wrong type returns WRONG_TYPE.
-#[cfg_attr(test, test)]
 fn invalid_handle_and_wrong_type() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::object::{Handle, Rights};
@@ -249,7 +240,6 @@ fn invalid_handle_and_wrong_type() {
 /// C++: TEST(FifoTest, ReadBadBuffer)
 /// Reading with a null/bad buffer pointer at the syscall level.
 /// In test mode, null UserOutPtr writes will fail.
-#[cfg_attr(test, test)]
 fn read_bad_buffer() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::object::{Handle, Rights};
@@ -288,7 +278,6 @@ fn read_bad_buffer() {
 
 /// C++: TEST(FifoTest, ReadNullBuffer)
 /// Reading with null output buffer pointer.
-#[cfg_attr(test, test)]
 fn read_null_buffer() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::object::{Handle, Rights};
@@ -326,7 +315,6 @@ fn read_null_buffer() {
 /// C++: TEST(FifoTest, ReadPartialBadBuffer)
 /// Read with buffer too small for the requested count.
 /// The syscall layer reads as many elements as the buffer can hold.
-#[cfg_attr(test, test)]
 fn read_partial_bad_buffer() {
     use crate::core_tests::syscall_fifo::syscall_fifo_create;
     use hal_impl::user::{UserInPtr, UserOutPtr};
@@ -363,7 +351,6 @@ fn read_partial_bad_buffer() {
 
 /// C++: TEST(FifoTest, ReadRollbackOnWrapAroundFault)
 /// Read with wrap-around in circular buffer. Verify FIFO ordering.
-#[cfg_attr(test, test)]
 fn read_rollback_on_wrap_around_fault() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(4, 4); // small capacity
@@ -394,7 +381,6 @@ fn read_rollback_on_wrap_around_fault() {
 
 /// C++: TEST(FifoTest, ReadWriteBadActualCount)
 /// Null actual_count pointer at syscall level.
-#[cfg_attr(test, test)]
 fn read_write_bad_actual_count() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::object::{Handle, Rights};
@@ -428,7 +414,6 @@ fn read_write_bad_actual_count() {
 
 /// C++: TEST(FifoTest, ReadWriteBadActualCountReturnsInvalidArgs)
 /// Test with null actual_count at syscall level.
-#[cfg_attr(test, test)]
 fn read_write_bad_actual_count_returns_invalid_args() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::object::{Handle, Rights};
@@ -488,7 +473,6 @@ fn read_write_bad_actual_count_returns_invalid_args() {
 /// C++: TEST(FifoTest, ReadWriteKernelAddressBufferReturnsInvalidArgs)
 /// Using a kernel-space address as a user buffer. In test mode,
 /// this isn't distinguishable, but we verify the syscall doesn't panic.
-#[cfg_attr(test, test)]
 fn read_write_kernel_address_buffer_returns_invalid_args() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::object::{Handle, Rights};
@@ -514,7 +498,6 @@ fn read_write_kernel_address_buffer_returns_invalid_args() {
 
 /// C++: TEST(FifoTest, WriteBadBuffer)
 /// Write with null buffer pointer at the syscall level.
-#[cfg_attr(test, test)]
 fn write_bad_buffer() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::object::{Handle, Rights};
@@ -538,7 +521,6 @@ fn write_bad_buffer() {
 
 /// C++: TEST(FifoTest, WriteNullBuffer)
 /// Write with null data buffer.
-#[cfg_attr(test, test)]
 fn write_null_buffer() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::object::{Handle, Rights};
@@ -562,7 +544,6 @@ fn write_null_buffer() {
 
 /// C++: TEST(FifoTest, WritePartialBadBuffer)
 /// Write more elements than capacity allows — partial write via syscall.
-#[cfg_attr(test, test)]
 fn write_partial_bad_buffer() {
     use crate::core_tests::syscall_fifo::syscall_fifo_create;
     use hal_impl::user::{UserInPtr, UserOutPtr};
@@ -599,7 +580,6 @@ fn write_partial_bad_buffer() {
 
 /// C++: TEST(FifoTest, WriteRollbackOnWrapAroundFault)
 /// Write with circular buffer wrap-around. Verify data integrity.
-#[cfg_attr(test, test)]
 fn write_rollback_on_wrap_around_fault() {
     let _ctx = TestContext::new();
     let (f0, f1) = Fifo::create(4, 4); // capacity 4
@@ -630,7 +610,6 @@ fn write_rollback_on_wrap_around_fault() {
 
 /// C++: TEST(FifoTest, CreateArithmeticOverflow)
 /// Overflow in elem_count * elem_size returns OUT_OF_RANGE at syscall level.
-#[cfg_attr(test, test)]
 fn create_arithmetic_overflow() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -682,7 +661,6 @@ fn create_arithmetic_overflow() {
 
 /// C++: TEST(FifoTest, CreateMaxBufferBoundary)
 /// Exact maximum (512*8=4096) succeeds; exceeding it returns OUT_OF_RANGE.
-#[cfg_attr(test, test)]
 fn create_max_buffer_boundary() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -731,7 +709,6 @@ fn create_max_buffer_boundary() {
 
 /// C++: TEST(FifoTest, CreateMinAndMaxSizes)
 /// Minimum valid sizes (1,1) and maximum buffer boundary (4096 bytes).
-#[cfg_attr(test, test)]
 fn create_min_and_max_sizes() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -796,7 +773,6 @@ fn create_min_and_max_sizes() {
 
 /// C++: TEST(FifoTest, CreateZeroSize)
 /// Zero count or zero elem_size returns OUT_OF_RANGE.
-#[cfg_attr(test, test)]
 fn create_zero_size() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -835,7 +811,6 @@ fn create_zero_size() {
 
 /// C++: TEST(FifoTest, EmptyQueueReturnsErrShouldWait)
 /// Reading from an empty FIFO returns SHOULD_WAIT.
-#[cfg_attr(test, test)]
 fn empty_queue_returns_err_should_wait() {
     let _ctx = TestContext::new();
     let (_fa, fb) = Fifo::create(8, 8);
@@ -849,7 +824,6 @@ fn empty_queue_returns_err_should_wait() {
 /// C++: TEST(FifoTest, EndpointCloseSignalsPeerClosed)
 /// Closing one endpoint signals PEER_CLOSED on the other, but queued
 /// data can still be read before getting PEER_CLOSED on subsequent reads.
-#[cfg_attr(test, test)]
 fn endpoint_close_signals_peer_closed() {
     let _ctx = TestContext::new();
     let (fa, fb) = Fifo::create(8, 8);
@@ -883,7 +857,6 @@ fn endpoint_close_signals_peer_closed() {
 /// C++: TEST(FifoTest, PartialWriteQueuesElementsThatFit)
 /// When the FIFO is partially full, writing more elements than fit
 /// succeeds with only the fitting elements queued.
-#[cfg_attr(test, test)]
 fn partial_write_queues_elements_that_fit() {
     let _ctx = TestContext::new();
     let (fa, _fb) = Fifo::create(8, 8); // 8 elements of 8 bytes
@@ -900,7 +873,6 @@ fn partial_write_queues_elements_that_fit() {
 
 /// C++: TEST(FifoTest, WritePeerClosedReturnsPeerClosed)
 /// Writing to a FIFO whose peer has been closed returns PEER_CLOSED.
-#[cfg_attr(test, test)]
 fn write_peer_closed_returns_peer_closed() {
     let _ctx = TestContext::new();
     let (fa, fb) = Fifo::create(8, 8);
@@ -915,7 +887,6 @@ fn write_peer_closed_returns_peer_closed() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     dequeue_signals_writeable();
     non_power_of_two_count_supported();

@@ -4,7 +4,6 @@ use zircon_object::vm::PAGE_SIZE;
 
 /// Page size mask for alignment checks.
 /// (No direct C++ binary equivalent — additional coverage.)
-#[cfg_attr(test, test)]
 fn page_size_mask() {
     let _ctx = crate::helpers::TestContext::new();
     let mask = PAGE_SIZE - 1;
@@ -22,7 +21,6 @@ fn page_size_mask() {
 
 /// PAGE_SIZE is a compile-time constant.
 /// (No direct C++ binary equivalent — additional coverage.)
-#[cfg_attr(test, test)]
 fn page_size_const() {
     let _ctx = crate::helpers::TestContext::new();
     // PAGE_SIZE should be usable as a const expression.
@@ -33,7 +31,6 @@ fn page_size_const() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     page_size_mask();
     page_size_const();

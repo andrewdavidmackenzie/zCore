@@ -15,7 +15,6 @@ type HandleValue = u32;
 
 ///
 /// zx_clock_get_monotonic should return a non-zero value.
-#[cfg_attr(test, test)]
 fn monotonic_non_zero() {
     let _ctx = TestContext::new();
     let now = hal_impl::timer::timer_now();
@@ -29,7 +28,6 @@ fn monotonic_non_zero() {
 ///
 /// Two consecutive calls to zx_clock_get_monotonic should return
 /// increasing values.
-#[cfg_attr(test, test)]
 fn monotonic_increasing() {
     let _ctx = TestContext::new();
     let first = hal_impl::timer::timer_now();
@@ -45,7 +43,6 @@ fn monotonic_increasing() {
 ///
 /// zx_clock_get_boot should return a non-zero value.
 /// In test mode, boot time equals monotonic time.
-#[cfg_attr(test, test)]
 fn boot_time_non_zero() {
     let _ctx = TestContext::new();
     // In test mode, boot time == monotonic time.
@@ -59,7 +56,6 @@ fn boot_time_non_zero() {
 
 ///
 /// Create a user-space UTC clock object. Verify it has a non-zero id.
-#[cfg_attr(test, test)]
 fn utc_clock_create() {
     let _ctx = TestContext::new();
     let clock = Clock::new(ZX_CLOCK_OPT_AUTO_START).expect("failed to create clock");
@@ -69,7 +65,6 @@ fn utc_clock_create() {
 
 ///
 /// Update a UTC clock object's value, then read it back.
-#[cfg_attr(test, test)]
 fn utc_clock_update() {
     let _ctx = TestContext::new();
     let clock = Clock::new(0).expect("failed to create clock");
@@ -93,7 +88,6 @@ fn utc_clock_update() {
 
 ///
 /// Read the current value of an auto-start UTC clock object.
-#[cfg_attr(test, test)]
 fn utc_clock_read() {
     let _ctx = TestContext::new();
     let clock = Clock::new(ZX_CLOCK_OPT_AUTO_START).expect("failed to create clock");
@@ -108,7 +102,6 @@ fn utc_clock_read() {
 ///
 /// Get the details (mono_to_synthetic transform, error bounds) of
 /// a UTC clock object.
-#[cfg_attr(test, test)]
 fn utc_clock_get_details() {
     let _ctx = TestContext::new();
     let clock = Clock::new(ZX_CLOCK_OPT_AUTO_START).expect("failed to create clock");
@@ -132,7 +125,6 @@ fn utc_clock_get_details() {
 
 ///
 /// Read a clock with an invalid handle. Should return BAD_HANDLE.
-#[cfg_attr(test, test)]
 fn clock_invalid_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -149,7 +141,6 @@ fn clock_invalid_handle() {
 
 ///
 /// Read a clock without READ right. Should return ACCESS_DENIED.
-#[cfg_attr(test, test)]
 fn clock_no_read_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -173,7 +164,6 @@ fn clock_no_read_right() {
 ///
 /// Create a clock with a backstop time. Verify the clock can be
 /// created and updated with a specific value.
-#[cfg_attr(test, test)]
 fn clock_backstop_time() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -209,7 +199,6 @@ fn clock_backstop_time() {
 ///
 /// Query ticks per second. In Fuchsia, ticks_per_second = 1_000_000_000
 /// (nanoseconds). Verify this constant.
-#[cfg_attr(test, test)]
 fn ticks_per_second() {
     let _ctx = TestContext::new();
     // In zCore (like Fuchsia), ticks are nanoseconds, so
@@ -224,7 +213,6 @@ fn ticks_per_second() {
 
 ///
 /// Get the current ticks value. Should be non-zero.
-#[cfg_attr(test, test)]
 fn ticks_get() {
     let _ctx = TestContext::new();
     let ticks = hal_impl::timer::timer_now().as_nanos();
@@ -232,7 +220,6 @@ fn ticks_get() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     monotonic_non_zero();
     monotonic_increasing();

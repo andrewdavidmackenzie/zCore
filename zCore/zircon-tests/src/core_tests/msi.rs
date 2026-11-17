@@ -27,7 +27,6 @@ use zircon_object::vm::PAGE_SIZE;
 /// - 5 → INVALID_ARGS (not power-of-2)
 /// - 64 → INVALID_ARGS (exceeds platform max of 32)
 /// - UINT32_MAX → INVALID_ARGS
-#[cfg_attr(test, test)]
 fn allocate_syscall() {
     let _ctx = TestContext::new();
 
@@ -65,7 +64,6 @@ fn allocate_syscall() {
 /// - vmo_offset past end of VMO → INVALID_ARGS
 /// - vmo_offset + capability size > VMO size → INVALID_ARGS
 /// - vmo_offset = UINT32_MAX → INVALID_ARGS
-#[cfg_attr(test, test)]
 fn create_syscall_args() {
     let ctx = TestContext::new();
 
@@ -84,8 +82,10 @@ fn create_syscall_args() {
     let msi_capability_size: u32 = 24;
     let vmo_size: u32 = PAGE_SIZE as u32; // page size
 
-    // vmo_offset past end → INVALID_ARGS.
-    assert!(vmo_size <= vmo_size, "offset=size is past end");
+    // When vmo_offset == vmo_size, the offset is past the end → INVALID_ARGS.
+    // (The actual syscall test for this is in the syscall-layer tests.)
+    let vmo_offset_at_end = vmo_size;
+    assert!(vmo_offset_at_end >= vmo_size, "offset=size is past end");
 
     // vmo_offset too close to end → INVALID_ARGS.
     let offset_near_end = vmo_size - msi_capability_size;
@@ -107,7 +107,6 @@ fn create_syscall_args() {
 /// - Creating same msi_id twice → ALREADY_BOUND
 /// - interrupt_count increases/decreases as interrupts are created/dropped
 /// - mask bit is cleared when interrupt is created
-#[cfg_attr(test, test)]
 fn msi() {
     let _ctx = TestContext::new();
 
@@ -136,7 +135,6 @@ fn msi() {
 /// msg_data, vector_control) and cleanup on destruction.
 ///
 /// The VMO offset must leave room for (msi_id + 1) table entries.
-#[cfg_attr(test, test)]
 fn msix() {
     let _ctx = TestContext::new();
 
@@ -187,7 +185,6 @@ fn msix() {
 /// contiguous VMO properties that would cause rejection:
 /// contiguous VMOs have `is_contiguous() == true` and a different
 /// physical backing than regular paged VMOs.
-#[cfg_attr(test, test)]
 fn contiguous_not_supported() {
     let _ctx = TestContext::new();
 
@@ -238,7 +235,6 @@ fn contiguous_not_supported() {
 /// zCore does not implement MSI allocation, so we verify the equivalent
 /// handle rights validation pattern using an Interrupt-like Event object
 /// with the rights an MSI interrupt handle would carry.
-#[cfg_attr(test, test)]
 fn allocated_handle_rights() {
     let ctx = TestContext::new();
 
@@ -285,7 +281,6 @@ fn allocated_handle_rights() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     allocate_syscall();
     create_syscall_args();

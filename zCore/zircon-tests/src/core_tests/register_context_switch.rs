@@ -12,7 +12,6 @@
 /// A floating-point computation that takes longer than one quantum,
 /// meant to test FPU register save/restore across context switches.
 /// The computation is architecture-independent, so we port it directly.
-#[cfg_attr(test, test)]
 fn fpu_long_compute_loop() {
     // Port of fpu_test_loop(5, 100) from fpu_basic.cc
     fn fpu_test_loop(ex_loops: i32, factor: i32) -> f64 {
@@ -54,7 +53,7 @@ fn fpu_long_compute_loop() {
 /// which is not available in test mode user mode. On bare-metal x86, IRET
 /// resets segment selectors when returning from kernel to userland.
 /// Faithfully skip here, matching C++ behavior.
-#[cfg_attr(test, test)]
+#[cfg(target_arch = "x86_64")]
 fn segment_selectors_zeroed_on_interrupt() {
     // C++: ZXTEST_SKIP() — this test is disabled even upstream.
     // Requires x86 set_ds/set_es/set_gs inline asm and interrupt delivery.
@@ -83,7 +82,7 @@ fn segment_selectors_zeroed_on_interrupt() {
 /// segment selector manipulation) and real context switches via
 /// `zx_nanosleep`. Not available in test mode user mode where the host OS
 /// manages context switches and segment registers.
-#[cfg_attr(test, test)]
+#[cfg(target_arch = "x86_64")]
 fn segment_selectors_zeroed_on_context_switch() {
     // Requires x86 fsgsbase instructions and hardware segment selectors.
     // In test mode, the host kernel manages context switches and segment
@@ -100,10 +99,7 @@ fn segment_selectors_zeroed_on_context_switch() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
-    // FPU and segment selector tests are x86-specific
-    #[cfg(target_arch = "x86_64")]
     fpu_long_compute_loop();
     #[cfg(target_arch = "x86_64")]
     segment_selectors_zeroed_on_interrupt();

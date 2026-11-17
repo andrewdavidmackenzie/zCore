@@ -26,9 +26,9 @@ struct RustTest {
     is_stub: bool, // contains `unimplemented!()`
 }
 
-/// Parse all `#[test]` / `#[async_std::test]` / `#[tokio::test]` functions
-/// from a single Rust source file. Extracts the `/// C++: TEST(Suite, Name)`
-/// or `/// C++: TEST_F(Suite, Name)` doc comment, `#[ignore]` attribute,
+/// Parse all test functions from a single Rust source file.
+/// A test function is any `fn` preceded by a `/// C++: TEST(Suite, Name)`
+/// or `/// C++: TEST_F(Suite, Name)` doc comment. Extracts the C++ reference,
 /// and whether the body contains `unimplemented!()`.
 fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
     let content = match fs::read_to_string(path) {
@@ -48,24 +48,19 @@ fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
     while i < lines.len() {
         let trimmed = lines[i].trim();
 
-        // Detect test attributes: #[test], #[async_std::test], #[tokio::test]
-        let is_test_attr = trimmed == "#[test]"
-            || trimmed == "#[async_std::test]"
-            || trimmed == "#[tokio::test]"
-            || trimmed == "#[cfg_attr(test, test)]"
-            || trimmed == "#[cfg_attr(test, async_std::test)]";
-
-        if !is_test_attr {
+        // Look for fn declarations (test functions are plain fns)
+        let fn_name = if let Some(name) = extract_fn_name(trimmed) {
+            name
+        } else {
             i += 1;
             continue;
-        }
-
-        let test_attr_line = i;
+        };
+        let fn_line = i;
 
         // Look backward for `/// C++: TEST(Suite, Name)` or `/// C++: TEST_F(Suite, Name)`
         let mut cpp_ref = None;
         {
-            let mut j = test_attr_line;
+            let mut j = fn_line;
             while j > 0 {
                 j -= 1;
                 let prev = lines[j].trim();
@@ -73,8 +68,8 @@ fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
                     if let Some(ref_str) = extract_cpp_ref(prev) {
                         cpp_ref = Some(ref_str);
                     }
-                } else if prev.starts_with("#[") || prev.is_empty() {
-                    // attributes or blank lines between doc and #[test] are ok
+                } else if prev.starts_with("#[") || prev.starts_with("//") || prev.is_empty() {
+                    // attributes, comments, blank lines between doc and fn are ok
                     continue;
                 } else {
                     break;
@@ -82,64 +77,29 @@ fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
             }
         }
 
-        // Look forward for #[ignore] and fn name
-        let mut is_ignored = false;
-        let mut fn_name = None;
-        let mut fn_line = test_attr_line;
-
-        let mut k = test_attr_line + 1;
-        while k < lines.len() && k < test_attr_line + 8 {
-            let fwd = lines[k].trim();
-            if fwd.starts_with("#[ignore") {
-                is_ignored = true;
-            } else if let Some(name) = extract_fn_name(fwd) {
-                fn_name = Some(name);
-                fn_line = k;
-                break;
-            } else if !fwd.starts_with("#[") && !fwd.starts_with("//") && !fwd.is_empty() {
-                break; // unexpected line
-            }
-            k += 1;
+        // Skip functions without a C++ reference — they're helpers, not tests
+        if cpp_ref.is_none() {
+            i += 1;
+            continue;
         }
 
-        // Also check for #[ignore] BEFORE #[test] (some tests have it above)
-        if !is_ignored {
-            let mut j = test_attr_line;
-            while j > 0 {
-                j -= 1;
-                let prev = lines[j].trim();
-                if prev.starts_with("#[ignore") {
-                    is_ignored = true;
-                    break;
-                } else if prev.starts_with("///") || prev.starts_with("#[") || prev.is_empty() {
-                    continue;
-                } else {
-                    break;
-                }
-            }
-        }
+        let is_ignored = false;
 
         // Check if body contains `unimplemented!()`
-        let is_stub = if fn_name.is_some() {
-            lines[fn_line..std::cmp::min(lines.len(), fn_line + 6)]
-                .iter()
-                .any(|l| l.contains("unimplemented!"))
-        } else {
-            false
-        };
+        let is_stub = lines[fn_line..std::cmp::min(lines.len(), fn_line + 6)]
+            .iter()
+            .any(|l| l.contains("unimplemented!"));
 
-        if let Some(name) = fn_name {
-            tests.push(RustTest {
-                file: file_name.clone(),
-                fn_name: name,
-                line: fn_line + 1, // 1-indexed
-                cpp_ref,
-                is_ignored,
-                is_stub,
-            });
-        }
+        tests.push(RustTest {
+            file: file_name.clone(),
+            fn_name,
+            line: fn_line + 1, // 1-indexed
+            cpp_ref,
+            is_ignored,
+            is_stub,
+        });
 
-        i = k + 1;
+        i = fn_line + 1;
     }
 
     tests

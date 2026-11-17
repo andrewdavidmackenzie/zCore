@@ -12,7 +12,6 @@ use zircon_object::ZxError;
 
 /// C++: TEST(HandleCloseTest, Many) — syscall level
 /// Close many handles at once.
-#[cfg_attr(test, test)]
 fn close_many_handles() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -47,7 +46,6 @@ fn close_many_handles() {
 }
 
 /// C++: TEST(HandleDup, ReplaceSuccessOrigInvalid) — syscall level
-#[cfg_attr(test, test)]
 fn replace_success_orig_invalid() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -75,7 +73,6 @@ fn replace_success_orig_invalid() {
 }
 
 /// C++: TEST(HandleDup, ReplaceFailureBothInvalid) — syscall level
-#[cfg_attr(test, test)]
 fn replace_failure_both_invalid() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -100,7 +97,6 @@ fn replace_failure_both_invalid() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     close_many_handles();
     replace_success_orig_invalid();

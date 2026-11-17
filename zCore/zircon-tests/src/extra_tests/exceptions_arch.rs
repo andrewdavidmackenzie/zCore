@@ -11,7 +11,6 @@ use zircon_object::task::{Job, Thread};
 
 /// C++: TEST(ExceptionsTest, DataAbort)
 /// Verify exception channel can be created on a process.
-#[cfg_attr(test, test)]
 fn data_abort() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -30,7 +29,6 @@ fn data_abort() {
 
 /// C++: TEST(ExceptionsTest, InstructionAbort)
 /// Verify exception channel can be created on a job.
-#[cfg_attr(test, test)]
 fn instruction_abort() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -50,7 +48,6 @@ fn instruction_abort() {
 
 /// C++: TEST(ExceptionsTest, PCAlignmentFault)
 /// Verify exception channel can be created on a thread.
-#[cfg_attr(test, test)]
 fn pc_alignment_fault() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -66,7 +63,6 @@ fn pc_alignment_fault() {
 
 /// C++: TEST(ExceptionsTest, SPMisalignment)
 /// Verify debugger exception channel creation on a process.
-#[cfg_attr(test, test)]
 fn sp_misalignment() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -84,7 +80,6 @@ fn sp_misalignment() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     data_abort();
     instruction_abort();

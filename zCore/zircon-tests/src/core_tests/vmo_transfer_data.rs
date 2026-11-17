@@ -32,7 +32,6 @@ fn read_vmo(vmo: &Arc<VmObject>, size: usize) -> Vec<u8> {
 
 /// C++: TEST(VmoTransferDataTestCase, Basic)
 /// Transfer first 3 pages of src into last 3 pages of dst.
-#[cfg_attr(test, test)]
 fn basic() {
     let _ctx = TestContext::new();
     let size = PAGE_COUNT * PAGE_SIZE;
@@ -64,7 +63,6 @@ fn basic() {
 
 /// C++: TEST(VmoTransferDataTestCase, SameSrcAndDst)
 /// Same VMO as both source and destination (different offsets).
-#[cfg_attr(test, test)]
 fn same_src_and_dst() {
     let _ctx = TestContext::new();
     let size = PAGE_COUNT * PAGE_SIZE;
@@ -92,7 +90,6 @@ fn same_src_and_dst() {
 /// C++: TEST(VmoTransferDataTestCase, EmptyOverwritesParentContent)
 /// Transfer from an empty (zero) VMO into a snapshot child that sees
 /// non-zero parent content. The dst should become zero.
-#[cfg_attr(test, test)]
 fn empty_overwrites_parent_content() {
     let _ctx = TestContext::new();
 
@@ -130,7 +127,6 @@ fn empty_overwrites_parent_content() {
 
 /// C++: TEST(VmoTransferDataTestCase, DestroyedParentWithNonZeroOffset)
 /// Transfer from a snapshot child whose parent was deleted with non-zero offset.
-#[cfg_attr(test, test)]
 fn destroyed_parent_with_non_zero_offset() {
     let _ctx = TestContext::new();
 
@@ -172,7 +168,6 @@ fn destroyed_parent_with_non_zero_offset() {
 
 /// C++: TEST(VmoTransferDataTestCase, ChildSliceDst)
 /// Transfer data into a VMO that is a SLICE child.
-#[cfg_attr(test, test)]
 fn child_slice_dst() {
     let _ctx = TestContext::new();
 
@@ -209,7 +204,6 @@ fn child_slice_dst() {
 
 /// C++: TEST(VmoTransferDataTestCase, ChildSliceSrc)
 /// Transfer data from a VMO that is a SLICE child.
-#[cfg_attr(test, test)]
 fn child_slice_src() {
     let _ctx = TestContext::new();
 
@@ -249,7 +243,6 @@ fn child_slice_src() {
 
 /// C++: TEST(VmoTransferDataTestCase, SnapshotChildSrc)
 /// Transfer from a SNAPSHOT child (without pager, which we can test).
-#[cfg_attr(test, test)]
 fn snapshot_child_src() {
     let _ctx = TestContext::new();
 
@@ -290,7 +283,6 @@ fn snapshot_child_src() {
 
 /// C++: TEST(VmoTransferDataTestCase, SnapshotChildDst)
 /// Transfer into a SNAPSHOT child (without pager).
-#[cfg_attr(test, test)]
 fn snapshot_child_dst() {
     let _ctx = TestContext::new();
 
@@ -335,7 +327,6 @@ fn snapshot_child_dst() {
 /// so a true race cannot occur. We verify the sequential scenario:
 /// create a snapshot child, drop the parent, then transfer from child.
 /// The child must survive parent deletion and produce correct data.
-#[cfg_attr(test, test)]
 fn racy_drop_parent() {
     let _ctx = TestContext::new();
 
@@ -388,7 +379,6 @@ fn racy_drop_parent() {
 /// Transfer data FROM a REFERENCE child (full-VMO alias). After transfer,
 /// both the reference child and its parent should see zeros in the
 /// transferred range, and the destination should have the source data.
-#[cfg_attr(test, test)]
 fn reference_child_src() {
     let _ctx = TestContext::new();
     let transfer_pages = 3;
@@ -444,7 +434,6 @@ fn reference_child_src() {
 /// Transfer data INTO a REFERENCE child (full-VMO alias). After transfer,
 /// both the reference child and its parent should see the source data,
 /// and the source should be zeroed.
-#[cfg_attr(test, test)]
 fn reference_child_dst() {
     let _ctx = TestContext::new();
     let transfer_pages = 3;
@@ -497,7 +486,6 @@ fn reference_child_dst() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     basic();
     same_src_and_dst();

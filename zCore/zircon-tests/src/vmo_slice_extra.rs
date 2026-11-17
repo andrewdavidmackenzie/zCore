@@ -7,7 +7,6 @@ use crate::helpers::TestContext;
 use zircon_object::vm::{VmObject, PAGE_SIZE};
 
 /// Slice write-through: writes to slice visible in parent.
-#[cfg_attr(test, test)]
 fn slice_write_through() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(4);
@@ -28,7 +27,6 @@ fn slice_write_through() {
 }
 
 /// Nested slices.
-#[cfg_attr(test, test)]
 fn slice_nested() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -48,7 +46,6 @@ fn slice_nested() {
 }
 
 /// Decommit through parent affects slice.
-#[cfg_attr(test, test)]
 fn slice_decommit_parent() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -64,7 +61,6 @@ fn slice_decommit_parent() {
 }
 
 /// Zero-sized slice.
-#[cfg_attr(test, test)]
 fn slice_zero_sized() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -78,7 +74,6 @@ fn slice_zero_sized() {
 }
 
 /// Slice populated_bytes should be zero (attributed to parent).
-#[cfg_attr(test, test)]
 fn slice_attributed_counts() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -94,7 +89,6 @@ fn slice_attributed_counts() {
 }
 
 /// Slice of non-resizable parent.
-#[cfg_attr(test, test)]
 fn slice_non_resizable() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -103,7 +97,6 @@ fn slice_non_resizable() {
 }
 
 /// Slice cannot exceed parent bounds.
-#[cfg_attr(test, test)]
 fn slice_out_of_bounds() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -114,7 +107,6 @@ fn slice_out_of_bounds() {
 }
 
 /// Deep hierarchy of slices.
-#[cfg_attr(test, test)]
 fn slice_deep_hierarchy() {
     let _ctx = TestContext::new();
     let mut current = VmObject::new_paged(1);
@@ -129,7 +121,6 @@ fn slice_deep_hierarchy() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     slice_write_through();
     slice_nested();

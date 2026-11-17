@@ -20,7 +20,6 @@ use zircon_object::object::KernelObject;
 /// VMO, write data, map it into a process VMAR, and read it back via
 /// process.vmar_read_memory(). This exercises the kernel code path
 /// that shared processes would use for the shared mapping half.
-#[cfg_attr(test, test)]
 fn map_in_prototype() {
     let _ctx = TestContext::new();
 
@@ -62,7 +61,6 @@ fn map_in_prototype() {
 /// zCore does not implement shared processes. We verify that two
 /// separate processes have independent VMARs: mapping a VMO into one
 /// process's VMAR does not make it visible in the other's.
-#[cfg_attr(test, test)]
 fn restricted_vmar_not_shared() {
     let _ctx = TestContext::new();
 
@@ -104,7 +102,6 @@ fn restricted_vmar_not_shared() {
 /// regular (non-shared) process, and that attempting to use it as a
 /// prototype would be invalid. We verify process creation with
 /// invalid arguments fails with the expected error.
-#[cfg_attr(test, test)]
 fn invalid_prototype() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -150,7 +147,6 @@ fn invalid_prototype() {
 /// properties (debug_addr, break_on_load) are per-process by setting
 /// them on one process and confirming a separate process has
 /// independent values.
-#[cfg_attr(test, test)]
 fn properties_copied() {
     let _ctx = TestContext::new();
 
@@ -185,7 +181,6 @@ fn properties_copied() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     map_in_prototype();
     restricted_vmar_not_shared();

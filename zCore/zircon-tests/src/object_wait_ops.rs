@@ -10,7 +10,6 @@ use zircon_object::signal::{Event, EventPair, Port};
 ///
 /// Wait on an object that is already signaled. Should return
 /// immediately.
-#[cfg_attr(test, test)]
 fn wait_one_already_signaled() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -23,7 +22,6 @@ fn wait_one_already_signaled() {
 ///
 /// Wait for any of multiple signals. Should return when any one
 /// is asserted.
-#[cfg_attr(test, test)]
 fn wait_one_multiple_signals() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -36,7 +34,6 @@ fn wait_one_multiple_signals() {
 ///
 /// Wait on an event pair endpoint for a peer signal. The signal
 /// should be visible after the peer sets it.
-#[cfg_attr(test, test)]
 fn event_pair_wait() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -47,7 +44,6 @@ fn event_pair_wait() {
 ///
 /// Wait for a channel to become readable. Writing to the peer
 /// should make it readable.
-#[cfg_attr(test, test)]
 fn channel_wait_readable() {
     use zircon_object::ipc::{Channel, MessagePacket};
     let _ctx = TestContext::new();
@@ -66,7 +62,6 @@ fn channel_wait_readable() {
 ///
 /// Wait for a socket to become readable. Writing to the peer
 /// should make it readable.
-#[cfg_attr(test, test)]
 fn socket_wait_readable() {
     use zircon_object::ipc::Socket;
     let _ctx = TestContext::new();
@@ -80,7 +75,6 @@ fn socket_wait_readable() {
 ///
 /// Set up a wait_async on a port for an event signal. When the
 /// signal fires, the port should receive a packet.
-#[cfg_attr(test, async_std::test)]
 async fn wait_async_port() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -101,7 +95,6 @@ async fn wait_async_port() {
 ///
 /// Set up a wait_async then cancel it before the signal fires.
 /// No packet should be delivered to the port.
-#[cfg_attr(test, test)]
 fn wait_async_cancel_before_signal() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -125,7 +118,6 @@ fn wait_async_cancel_before_signal() {
 ///
 /// Wait on multiple events simultaneously. The first to be signaled
 /// should be detected.
-#[cfg_attr(test, test)]
 fn wait_many_events() {
     let _ctx = TestContext::new();
     let e1 = Event::new();
@@ -142,7 +134,6 @@ fn wait_many_events() {
 
 ///
 /// Waiting on a channel whose peer is closed should see PEER_CLOSED.
-#[cfg_attr(test, test)]
 fn wait_on_closed_channel() {
     use zircon_object::ipc::Channel;
     let _ctx = TestContext::new();
@@ -153,7 +144,6 @@ fn wait_on_closed_channel() {
 
 ///
 /// Waiting on a socket whose peer is closed should see PEER_CLOSED.
-#[cfg_attr(test, test)]
 fn wait_on_closed_socket() {
     use zircon_object::ipc::Socket;
     let _ctx = TestContext::new();
@@ -164,7 +154,6 @@ fn wait_on_closed_socket() {
 
 ///
 /// Wait for a FIFO to become readable after writing to the peer.
-#[cfg_attr(test, test)]
 fn wait_on_fifo() {
     use zircon_object::ipc::Fifo;
     let _ctx = TestContext::new();
@@ -177,7 +166,6 @@ fn wait_on_fifo() {
 ///
 /// Set up wait_async with ONCE flag. After the signal fires and the
 /// packet is delivered, re-signaling should not deliver another packet.
-#[cfg_attr(test, async_std::test)]
 async fn wait_async_once_repeated() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -201,7 +189,6 @@ async fn wait_async_once_repeated() {
 
 ///
 /// Wait on an event pair for PEER_CLOSED after dropping the peer.
-#[cfg_attr(test, test)]
 fn event_pair_peer_closed_wait() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -212,7 +199,6 @@ fn event_pair_peer_closed_wait() {
 ///
 /// Wait for a timer to be signaled. Setting a past deadline should
 /// signal immediately.
-#[cfg_attr(test, test)]
 fn timer_wait_signaled() {
     use zircon_object::signal::Timer;
     let _ctx = TestContext::new();
@@ -228,7 +214,6 @@ fn timer_wait_signaled() {
 extern crate alloc;
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     wait_one_already_signaled();
     wait_one_multiple_signals();

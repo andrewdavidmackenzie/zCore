@@ -46,7 +46,6 @@ use zircon_object::task::{Job, Process, Thread, ThreadState};
 /// We verify that the exception delivery infrastructure exists:
 /// threads can be created and would receive exceptions through
 /// exception channels if they executed faulting instructions.
-#[cfg_attr(test, test)]
 fn test_int_crashes() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -75,7 +74,6 @@ fn test_int_crashes() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     test_int_crashes();
 }

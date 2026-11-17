@@ -8,7 +8,6 @@ use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::ZxError;
 
-#[cfg_attr(test, test)]
 fn write_and_read() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_fifo_create(&ctx, 16, 4);
@@ -43,7 +42,6 @@ fn write_and_read() {
     assert_eq!(&buf[8..12], &3u32.to_ne_bytes());
 }
 
-#[cfg_attr(test, test)]
 fn elem_size_mismatch() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_fifo_create(&ctx, 16, 4);
@@ -61,7 +59,6 @@ fn elem_size_mismatch() {
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 
-#[cfg_attr(test, test)]
 fn peer_closed() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_fifo_create(&ctx, 16, 4);
@@ -82,7 +79,6 @@ fn peer_closed() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     write_and_read();
     elem_size_mismatch();

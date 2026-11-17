@@ -9,7 +9,6 @@ use zircon_object::object::KernelObject;
 
 ///
 /// Create a resource with valid kind and verify it has a valid KOID.
-#[cfg_attr(test, test)]
 fn resource_create() {
     let _ctx = TestContext::new();
     let res = Resource::create(
@@ -27,7 +26,6 @@ fn resource_create() {
 /// kind). Creating a resource with COUNT is allowed at the kernel
 /// object level — validation happens at the syscall layer. This test
 /// documents that create() doesn't reject COUNT.
-#[cfg_attr(test, test)]
 fn resource_create_invalid() {
     let _ctx = TestContext::new();
     // COUNT (6) is not a real kind, but Resource::create doesn't
@@ -38,7 +36,6 @@ fn resource_create_invalid() {
 
 ///
 /// Create a resource with the EXCLUSIVE flag.
-#[cfg_attr(test, test)]
 fn resource_create_exclusive() {
     let _ctx = TestContext::new();
     let res = Resource::create(
@@ -55,7 +52,6 @@ fn resource_create_exclusive() {
 ///
 /// Two non-exclusive resources with overlapping ranges should both
 /// pass the overlap check (only exclusive resources block overlap).
-#[cfg_attr(test, test)]
 fn resource_create_overlapping() {
     let _ctx = TestContext::new();
     let res1 = Resource::create(
@@ -82,7 +78,6 @@ fn resource_create_overlapping() {
 
 ///
 /// Verify resource info fields match creation parameters.
-#[cfg_attr(test, test)]
 fn resource_get_info() {
     let _ctx = TestContext::new();
     let res = Resource::create(
@@ -104,7 +99,6 @@ fn resource_get_info() {
 
 ///
 /// A resource validates against its own kind and rejects other kinds.
-#[cfg_attr(test, test)]
 fn resource_validate() {
     let _ctx = TestContext::new();
     let res = Resource::create("mmio", ResourceKind::MMIO, 0, 0x100, ResourceFlags::empty());
@@ -122,7 +116,6 @@ fn resource_validate() {
 
 ///
 /// validate_ranged_resource checks both kind and range coverage.
-#[cfg_attr(test, test)]
 fn resource_validate_ranged() {
     let _ctx = TestContext::new();
     let res = Resource::create(
@@ -170,7 +163,6 @@ fn resource_validate_ranged() {
 ///
 /// A root resource can create child sub-resources of any kind because
 /// ROOT bypasses kind and range checks.
-#[cfg_attr(test, test)]
 fn resource_create_child() {
     let _ctx = TestContext::new();
     let root = Resource::create(
@@ -201,7 +193,6 @@ fn resource_create_child() {
 
 ///
 /// A child resource validates only against its own kind.
-#[cfg_attr(test, test)]
 fn resource_child_validation() {
     let _ctx = TestContext::new();
     let child = Resource::create(
@@ -226,7 +217,6 @@ fn resource_child_validation() {
 ///
 /// Creating an exclusive resource that overlaps an existing resource
 /// (or vice versa) should be rejected.
-#[cfg_attr(test, test)]
 fn resource_exclusive_overlap_fails() {
     let _ctx = TestContext::new();
     // Register a non-exclusive resource.
@@ -282,7 +272,6 @@ fn resource_exclusive_overlap_fails() {
 
 ///
 /// ROOT resources bypass range checks in validate_ranged_resource.
-#[cfg_attr(test, test)]
 fn resource_root_bypasses_range() {
     let _ctx = TestContext::new();
     let root = Resource::create("root", ResourceKind::ROOT, 0, 0, ResourceFlags::empty());
@@ -302,7 +291,6 @@ fn resource_root_bypasses_range() {
 ///
 /// A SYSTEM resource validates as SYSTEM and covers the system
 /// sub-resource base IDs.
-#[cfg_attr(test, test)]
 fn resource_system_resource() {
     let _ctx = TestContext::new();
     use zircon_object::dev::{
@@ -338,7 +326,6 @@ fn resource_system_resource() {
 /// A resource with a kind beyond COUNT is not representable by the
 /// ResourceKind enum. Attempting to create one via numeric_enum would
 /// fail. This test verifies COUNT is the boundary.
-#[cfg_attr(test, test)]
 fn resource_invalid_kind() {
     let _ctx = TestContext::new();
     // COUNT (6) is valid as an enum variant but semantically invalid.
@@ -350,7 +337,6 @@ fn resource_invalid_kind() {
 
 ///
 /// Resource name is stored and returned in info.
-#[cfg_attr(test, test)]
 fn resource_name_support() {
     let _ctx = TestContext::new();
     let res = Resource::create(
@@ -372,7 +358,6 @@ fn resource_name_support() {
 /// Registering a region and then checking overlap works correctly.
 /// Region cleanup happens via on_zero_handles (handle table lifecycle),
 /// not via Drop. This test verifies registration and overlap checking.
-#[cfg_attr(test, test)]
 fn resource_register_region() {
     let _ctx = TestContext::new();
     // Use a unique address range unlikely to collide with other tests.
@@ -440,7 +425,6 @@ fn resource_register_region() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     resource_create();
     resource_create_invalid();

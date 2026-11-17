@@ -11,7 +11,6 @@ use zircon_object::task::Task;
 /// Create an exception channel on a process. Verify the channel is
 /// created successfully. Exception delivery requires real execution,
 /// but channel creation is testable at the object level.
-#[cfg_attr(test, test)]
 fn create_exception_channel() {
     let ctx = TestContext::new();
     let exceptionate = ctx.proc.exceptionate();
@@ -37,7 +36,6 @@ fn create_exception_channel() {
 ///
 /// Create an exception channel on a specific thread. Verify the
 /// channel is created successfully at the object level.
-#[cfg_attr(test, test)]
 fn thread_exception_channel() {
     let ctx = TestContext::new();
     // The current thread's inner Thread object
@@ -57,7 +55,6 @@ fn thread_exception_channel() {
 ///
 /// Create an exception channel on a job. Verify the channel is
 /// created successfully at the object level.
-#[cfg_attr(test, test)]
 fn job_exception_channel() {
     let ctx = TestContext::new();
     let job = ctx.proc.job();
@@ -77,7 +74,6 @@ fn job_exception_channel() {
 /// Trigger an architecture-specific exception (e.g., illegal
 /// instruction). The exception channel should receive the correct
 /// exception type. Requires real thread execution to generate a fault.
-#[cfg_attr(test, test)]
 fn exception_type_architecture() {
     let ctx = TestContext::new();
     let exceptionate = ctx.proc.exceptionate();
@@ -93,7 +89,6 @@ fn exception_type_architecture() {
 ///
 /// Receive an exception and resume the thread with TRIED disposition.
 /// Without real faulting thread, verify exception channel creation.
-#[cfg_attr(test, test)]
 fn exception_resume_tried() {
     let ctx = TestContext::new();
     let exceptionate = ctx.proc.exceptionate();
@@ -104,7 +99,6 @@ fn exception_resume_tried() {
 ///
 /// Receive an exception and resume the thread with HANDLED disposition.
 /// Without real faulting thread, verify channel binding and unbinding.
-#[cfg_attr(test, test)]
 fn exception_resume_handled() {
     let ctx = TestContext::new();
     let exceptionate = ctx.proc.exceptionate();
@@ -120,7 +114,6 @@ fn exception_resume_handled() {
 /// An unhandled exception (no handler closes the channel) should
 /// propagate up the exception chain (thread -> process -> job).
 /// Verify the exception chain can be set up: thread, process, job.
-#[cfg_attr(test, test)]
 fn unhandled_exception() {
     let ctx = TestContext::new();
     let thread = ctx.current.inner();
@@ -149,7 +142,6 @@ fn unhandled_exception() {
 /// Close an exception channel while an exception is pending. The
 /// exception should propagate to the next handler. Verify that
 /// dropping a channel allows re-binding.
-#[cfg_attr(test, test)]
 fn exception_channel_close() {
     let ctx = TestContext::new();
     let exceptionate = ctx.proc.exceptionate();
@@ -169,7 +161,6 @@ fn exception_channel_close() {
 /// Register exception handlers at thread, process, and job level.
 /// Exceptions should be delivered to the most specific handler first.
 /// Verify all three can be bound simultaneously.
-#[cfg_attr(test, test)]
 fn multiple_exception_handlers() {
     let ctx = TestContext::new();
     let thread = ctx.current.inner();
@@ -220,7 +211,6 @@ fn multiple_exception_handlers() {
 ///
 /// Get the thread handle from an exception object.
 /// Without real exception, verify thread can be accessed.
-#[cfg_attr(test, test)]
 fn exception_get_thread() {
     use zircon_object::object::KernelObject;
     let ctx = TestContext::new();
@@ -231,7 +221,6 @@ fn exception_get_thread() {
 ///
 /// Get the process handle from an exception object.
 /// Without real exception, verify process can be accessed.
-#[cfg_attr(test, test)]
 fn exception_get_process() {
     use zircon_object::object::KernelObject;
     let ctx = TestContext::new();
@@ -242,7 +231,6 @@ fn exception_get_process() {
 ///
 /// Trigger a debug exception (breakpoint).
 /// Without real execution, verify debug exception channel creation.
-#[cfg_attr(test, test)]
 fn debug_exception() {
     let ctx = TestContext::new();
     let exceptionate = ctx.proc.debug_exceptionate();
@@ -253,7 +241,6 @@ fn debug_exception() {
 ///
 /// Trigger a policy exception.
 /// Without real execution, verify exception channel at job level.
-#[cfg_attr(test, test)]
 fn policy_exception() {
     let ctx = TestContext::new();
     let job = ctx.proc.job();
@@ -266,7 +253,6 @@ fn policy_exception() {
 ///
 /// An exception not handled at the debug level gets a second chance
 /// at the process/job level. Verify multi-level channel setup.
-#[cfg_attr(test, test)]
 fn second_chance_exception() {
     let ctx = TestContext::new();
     let thread = ctx.current.inner();
@@ -292,7 +278,6 @@ fn second_chance_exception() {
 ///
 /// While a thread is in an exception, its state should be
 /// BLOCKED_IN_EXCEPTION. Verify thread state query works.
-#[cfg_attr(test, test)]
 fn exception_thread_state() {
     let ctx = TestContext::new();
     let thread = ctx.current.inner();
@@ -303,7 +288,6 @@ fn exception_thread_state() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     create_exception_channel();
     thread_exception_channel();

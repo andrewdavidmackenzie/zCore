@@ -28,7 +28,6 @@ type HandleValue = u32;
 /// mode the `copy_from_user` address-range validation rejects addresses
 /// in the low guard region (first 64 KiB), producing the same result
 /// without an actual SIGSEGV.
-#[cfg_attr(test, test)]
 fn invalid_mapped_address_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -75,7 +74,6 @@ fn invalid_mapped_address_fails() {
 /// In test mode, `copy_from_user` rejects addresses at or above
 /// the kernel address-space base (0xffff_8000_0000_0000), matching
 /// the bare-metal MMU behavior.
-#[cfg_attr(test, test)]
 fn kernel_mapped_address_channel_write_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -133,7 +131,6 @@ fn kernel_mapped_address_channel_write_fails() {
 /// ```
 ///
 /// Writing from a valid stack address should succeed.
-#[cfg_attr(test, test)]
 fn normal_mapped_address_channel_write_succeeds() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -176,7 +173,6 @@ fn normal_mapped_address_channel_write_succeeds() {
 /// dispatch returns NOT_SUPPORTED for unknown numbers. We can't test
 /// ASSERT_DEATH in Rust unit tests, so we verify the dispatch path
 /// rejects invalid handle values (exercising the same code path).
-#[cfg_attr(test, test)]
 fn syscall_num_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -211,7 +207,6 @@ fn syscall_num_test() {
 /// Reading handles into an unmapped address should return INVALID_ARGS.
 /// In test mode, `copy_to_user` rejects addresses in the low guard
 /// region, producing an error without an actual SIGSEGV.
-#[cfg_attr(test, test)]
 fn channel_read_handle() {
     use zircon_object::object::{Handle, Rights};
 
@@ -273,7 +268,6 @@ fn channel_read_handle() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     invalid_mapped_address_fails();
     kernel_mapped_address_channel_write_fails();

@@ -12,7 +12,6 @@ extern crate alloc;
 ///
 /// Commit pages in a VMO. The committed pages should be backed by
 /// physical memory.
-#[cfg_attr(test, test)]
 fn commit_pages() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -25,7 +24,6 @@ fn commit_pages() {
 ///
 /// Decommit pages from a VMO. The pages are returned to the kernel
 /// and read as zeroes on next access.
-#[cfg_attr(test, test)]
 fn decommit_pages() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -38,7 +36,6 @@ fn decommit_pages() {
 
 ///
 /// Zero a range of a VMO. The zeroed range should read as all zeroes.
-#[cfg_attr(test, test)]
 fn zero_range() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -51,7 +48,6 @@ fn zero_range() {
 
 ///
 /// Zero only part of a page. The rest should be untouched.
-#[cfg_attr(test, test)]
 fn zero_partial() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -67,7 +63,6 @@ fn zero_partial() {
 
 ///
 /// Commit pages that are already committed. Should be a no-op.
-#[cfg_attr(test, test)]
 fn commit_already_committed() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -81,7 +76,6 @@ fn commit_already_committed() {
 ///
 /// Decommit pages then write new data. The new data should be
 /// readable.
-#[cfg_attr(test, test)]
 fn decommit_and_rewrite() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -95,7 +89,6 @@ fn decommit_and_rewrite() {
 
 ///
 /// Commit a large range of pages at once.
-#[cfg_attr(test, test)]
 fn commit_large_range() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(32);
@@ -110,7 +103,6 @@ fn commit_large_range() {
 ///
 /// Decommit only some pages of a multi-page VMO. Non-decommitted
 /// pages should retain their data.
-#[cfg_attr(test, test)]
 fn decommit_partial() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(3);
@@ -131,7 +123,6 @@ fn decommit_partial() {
 ///
 /// Get and set content_size on a VMO. Content size tracks the
 /// logical data size within the VMO.
-#[cfg_attr(test, test)]
 fn vmo_content_size() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -146,7 +137,6 @@ fn vmo_content_size() {
 ///
 /// Query the committed bytes of a VMO. Should reflect how many
 /// pages are actually backed by physical memory.
-#[cfg_attr(test, test)]
 fn vmo_committed_bytes() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -161,7 +151,6 @@ fn vmo_committed_bytes() {
 
 ///
 /// Every VMO should have a unique non-zero KOID.
-#[cfg_attr(test, test)]
 fn vmo_koid() {
     let _ctx = TestContext::new();
     let v1 = VmObject::new_paged(1);
@@ -173,7 +162,6 @@ fn vmo_koid() {
 
 ///
 /// VMO length should be page-aligned and match the requested size.
-#[cfg_attr(test, test)]
 fn vmo_len() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(5);
@@ -182,7 +170,6 @@ fn vmo_len() {
 
 ///
 /// Create a resizable VMO, resize it, and verify the new length.
-#[cfg_attr(test, test)]
 fn resizable_vmo() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged_with_resizable(true, 2);
@@ -193,7 +180,6 @@ fn resizable_vmo() {
 
 ///
 /// Shrink a resizable VMO. Data beyond the new end is lost.
-#[cfg_attr(test, test)]
 fn resize_shrink() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged_with_resizable(true, 4);
@@ -204,7 +190,6 @@ fn resize_shrink() {
 
 ///
 /// A non-resizable VMO should reject resize with UNAVAILABLE.
-#[cfg_attr(test, test)]
 fn non_resizable_reject_resize() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -217,7 +202,6 @@ fn non_resizable_reject_resize() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     commit_pages();
     decommit_pages();

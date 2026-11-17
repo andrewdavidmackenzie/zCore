@@ -10,7 +10,6 @@ use zircon_object::signal::Event;
 
 ///
 /// Set a user signal on an event and verify it is visible.
-#[cfg_attr(test, test)]
 fn event_set_signal() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -20,7 +19,6 @@ fn event_set_signal() {
 
 ///
 /// Clear a user signal on an event and verify it is gone.
-#[cfg_attr(test, test)]
 fn event_clear_signal() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -31,7 +29,6 @@ fn event_clear_signal() {
 
 ///
 /// Set multiple signals on an event and verify all are visible.
-#[cfg_attr(test, test)]
 fn event_multiple_signals() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -44,7 +41,6 @@ fn event_multiple_signals() {
 
 ///
 /// Set multiple signals, clear a subset, verify remaining.
-#[cfg_attr(test, test)]
 fn event_clear_subset() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -59,7 +55,6 @@ fn event_clear_subset() {
 ///
 /// Channel endpoints have default signals (WRITABLE). Writing makes
 /// the peer READABLE. Closing sets PEER_CLOSED.
-#[cfg_attr(test, test)]
 fn channel_signals() {
     use zircon_object::ipc::{Channel, MessagePacket};
     let _ctx = TestContext::new();
@@ -81,7 +76,6 @@ fn channel_signals() {
 ///
 /// Socket signals: WRITABLE by default, READABLE after write,
 /// PEER_CLOSED on close.
-#[cfg_attr(test, test)]
 fn socket_signals() {
     use zircon_object::ipc::Socket;
     let _ctx = TestContext::new();
@@ -97,7 +91,6 @@ fn socket_signals() {
 
 ///
 /// A port with queued packets should be READABLE.
-#[cfg_attr(test, test)]
 fn port_queue_signals() {
     use zircon_object::signal::{PayloadRepr, Port, PortPacket, PortPacketRepr};
     let _ctx = TestContext::new();
@@ -115,7 +108,6 @@ fn port_queue_signals() {
 ///
 /// A timer starts with no signals. Setting a deadline may signal
 /// SIGNALED when the deadline passes. Canceling clears SIGNALED.
-#[cfg_attr(test, test)]
 fn timer_signals() {
     use zircon_object::signal::Timer;
     let _ctx = TestContext::new();
@@ -128,7 +120,6 @@ fn timer_signals() {
 ///
 /// FIFO signals: WRITABLE by default, READABLE after write,
 /// PEER_CLOSED on close.
-#[cfg_attr(test, test)]
 fn fifo_signals() {
     use zircon_object::ipc::Fifo;
     let _ctx = TestContext::new();
@@ -142,7 +133,6 @@ fn fifo_signals() {
 
 ///
 /// Setting a signal that is already set should be a no-op.
-#[cfg_attr(test, test)]
 fn set_signal_idempotent() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -153,7 +143,6 @@ fn set_signal_idempotent() {
 
 ///
 /// Clearing a signal that is not set should be a no-op.
-#[cfg_attr(test, test)]
 fn clear_unset_signal() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -164,7 +153,6 @@ fn clear_unset_signal() {
 
 ///
 /// Set all 8 user signals and verify all are set.
-#[cfg_attr(test, test)]
 fn all_user_signals() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -183,7 +171,6 @@ fn all_user_signals() {
 
 ///
 /// Set all user signals then clear all. Should be empty.
-#[cfg_attr(test, test)]
 fn clear_all_signals() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -204,7 +191,6 @@ fn clear_all_signals() {
 
 ///
 /// A newly created event should have no user signals set.
-#[cfg_attr(test, test)]
 fn signal_on_new_event() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -213,7 +199,6 @@ fn signal_on_new_event() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     event_set_signal();
     event_clear_signal();

@@ -27,7 +27,6 @@ extern crate alloc;
 /// At the kernel level, each thread has distinct register state
 /// (including the thread pointer for TLS). We verify distinct KOIDs
 /// and the ability to create/join multiple threads.
-#[cfg_attr(test, async_std::test)]
 #[inline(never)]
 async fn thread_local_errno() {
     log::warn!("c11_thread: ENTER thread_local_errno");
@@ -75,7 +74,6 @@ async fn thread_local_errno() {
 ///
 /// Creates a thread with NULL name and joins it.
 /// At kernel level: Thread::create with empty name should succeed.
-#[cfg_attr(test, test)]
 fn null_name_thread_should_succeed() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -101,7 +99,6 @@ fn null_name_thread_should_succeed() {
 /// 6. Stops the thread and joins, verifies return value
 ///
 /// Kernel primitives: zx_handle_duplicate, zx_handle_close
-#[cfg_attr(test, test)]
 fn create_and_verify_thread_handle() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -144,7 +141,6 @@ fn create_and_verify_thread_handle() {
 /// means the handle is not joined (the thread continues running).
 /// We verify the kernel-level semantics: dropping a thread reference
 /// does not kill it if the process still holds it.
-#[cfg_attr(test, test)]
 fn detached_thread_keeps_running() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -165,7 +161,6 @@ fn detached_thread_keeps_running() {
 ///
 /// Creates a thread with a name longer than ZX_MAX_NAME_LEN (32).
 /// Thread creation should succeed (name is truncated).
-#[cfg_attr(test, test)]
 fn long_name_succeeds() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -198,7 +193,6 @@ fn long_name_succeeds() {
 /// This is a stress test for thread creation and detach. It requires
 /// concurrent execution of 1000 threads. We test the kernel-level
 /// primitive: creating many threads in the same process.
-#[cfg_attr(test, test)]
 fn self_detach_and_free() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -228,7 +222,6 @@ fn self_detach_and_free() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     thread_local_errno().await;
     null_name_thread_should_succeed();

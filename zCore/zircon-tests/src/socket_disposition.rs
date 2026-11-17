@@ -11,7 +11,6 @@ use zircon_object::ZxError;
 ///
 /// Disable writes on a socket using set_disposition. Writing should
 /// fail with BAD_STATE.
-#[cfg_attr(test, test)]
 fn set_disposition_write_disabled() {
     let _ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -26,7 +25,6 @@ fn set_disposition_write_disabled() {
 
 ///
 /// Disable then re-enable writes on a socket.
-#[cfg_attr(test, test)]
 fn set_disposition_write_enabled() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -53,7 +51,6 @@ fn set_disposition_write_enabled() {
 ///
 /// Disable writes on one end via disposition_peer, verify the peer
 /// sees the correct signals.
-#[cfg_attr(test, test)]
 fn peer_write_disabled() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -71,7 +68,6 @@ fn peer_write_disabled() {
 
 ///
 /// Set disposition with invalid bits. Should return INVALID_ARGS.
-#[cfg_attr(test, test)]
 fn disposition_invalid_bits() {
     let _ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -90,7 +86,6 @@ fn disposition_invalid_bits() {
 ///
 /// Set disposition on a datagram socket. Should work the same as
 /// stream sockets.
-#[cfg_attr(test, test)]
 fn disposition_on_datagram_socket() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(1).unwrap(); // flags=1 => DATAGRAM
@@ -122,7 +117,6 @@ fn disposition_on_datagram_socket() {
 ///
 /// Set disposition after the peer is closed. disposition_peer != 0
 /// should return PEER_CLOSED.
-#[cfg_attr(test, test)]
 fn disposition_peer_closed() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -140,7 +134,6 @@ fn disposition_peer_closed() {
 ///
 /// Disable writes, but data written before disable should still
 /// be readable.
-#[cfg_attr(test, test)]
 fn read_after_write_disabled() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -165,7 +158,6 @@ fn read_after_write_disabled() {
 
 ///
 /// Disable writes on both ends. Neither end should be writable.
-#[cfg_attr(test, test)]
 fn both_ends_disabled() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -186,7 +178,6 @@ fn both_ends_disabled() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     set_disposition_write_disabled();
     set_disposition_write_enabled();

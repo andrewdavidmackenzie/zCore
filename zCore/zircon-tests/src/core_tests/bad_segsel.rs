@@ -80,7 +80,6 @@ fn assert_death_segsel(proc: &alloc::sync::Arc<Process>, name: &str, segsel: u16
 /// Loading segment selector 0xfffb (last GDT entry, RPL=3) into any
 /// segment register should fault with #GP. On a real kernel the thread
 /// dies; we simulate by creating + killing a thread per register.
-#[cfg_attr(test, test)]
 fn load_last_gdt_entry() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -104,7 +103,6 @@ fn load_last_gdt_entry() {
 ///
 /// Loading segment selector 0x0007 (first LDT entry, RPL=3) should fault
 /// because Zircon doesn't set up an LDT.
-#[cfg_attr(test, test)]
 fn load_first_ldt_entry() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -125,7 +123,6 @@ fn load_first_ldt_entry() {
 /// Far-jumping to the last GDT entry should fault. The C++ code constructs
 /// a packed `far_jmp` struct {offset=0, segsel=0xfffb} and executes
 /// `ljmp *<addr>`. This causes a #GP because the GDT entry is invalid.
-#[cfg_attr(test, test)]
 fn jump_to_last_gdt_entry() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -143,7 +140,6 @@ fn jump_to_last_gdt_entry() {
 /// ```
 ///
 /// Far-jumping to the first LDT entry should fault.
-#[cfg_attr(test, test)]
 fn jump_to_first_ldt_entry() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -170,7 +166,6 @@ fn jump_to_first_ldt_entry() {
 ///
 /// On x86_64, we can execute LAR safely even in test mode.
 /// On other architectures, we verify the iteration logic matches C++.
-#[cfg_attr(test, test)]
 fn test_all_gdt_selectors() {
     // C++ iterates: for (uint32_t i = 3; i < 0xFFFF; i += 0x8)
     // This covers all GDT selectors with RPL=3 (bits 0-1 = 3) and TI=0 (bit 2 = 0).
@@ -216,7 +211,6 @@ fn test_all_gdt_selectors() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     load_last_gdt_entry();
     load_first_ldt_entry();

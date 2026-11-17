@@ -13,7 +13,6 @@ extern crate alloc;
 
 ///
 /// Create and immediately drop an event. Should not leak or panic.
-#[cfg_attr(test, test)]
 fn event_create_drop() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -23,7 +22,6 @@ fn event_create_drop() {
 
 ///
 /// Create and immediately drop both channel endpoints.
-#[cfg_attr(test, test)]
 fn channel_create_drop() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -33,7 +31,6 @@ fn channel_create_drop() {
 
 ///
 /// Create and immediately drop both socket endpoints.
-#[cfg_attr(test, test)]
 fn socket_create_drop() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -43,7 +40,6 @@ fn socket_create_drop() {
 
 ///
 /// Create and immediately drop a VMO.
-#[cfg_attr(test, test)]
 fn vmo_create_drop() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -53,7 +49,6 @@ fn vmo_create_drop() {
 
 ///
 /// Create and immediately drop a port.
-#[cfg_attr(test, test)]
 fn port_create_drop() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -63,7 +58,6 @@ fn port_create_drop() {
 
 ///
 /// Create and immediately drop a timer.
-#[cfg_attr(test, test)]
 fn timer_create_drop() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -73,7 +67,6 @@ fn timer_create_drop() {
 
 ///
 /// Create and immediately drop both event pair endpoints.
-#[cfg_attr(test, test)]
 fn event_pair_create_drop() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -84,7 +77,6 @@ fn event_pair_create_drop() {
 ///
 /// Create multiple handles to the same object. The object should
 /// only be destroyed when the last handle is dropped.
-#[cfg_attr(test, test)]
 fn handle_ref_count() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -104,7 +96,6 @@ fn handle_ref_count() {
 
 ///
 /// Create many objects of different types. None should leak.
-#[cfg_attr(test, test)]
 fn many_objects() {
     let _ctx = TestContext::new();
     for _ in 0..100 {
@@ -116,7 +107,6 @@ fn many_objects() {
 
 ///
 /// Drop one channel endpoint. The other should get PEER_CLOSED.
-#[cfg_attr(test, test)]
 fn drop_one_channel_end() {
     use zircon_object::object::Signal;
     let _ctx = TestContext::new();
@@ -127,7 +117,6 @@ fn drop_one_channel_end() {
 
 ///
 /// Drop one socket endpoint. The other should get PEER_CLOSED.
-#[cfg_attr(test, test)]
 fn drop_one_socket_end() {
     use zircon_object::object::Signal;
     let _ctx = TestContext::new();
@@ -138,7 +127,6 @@ fn drop_one_socket_end() {
 
 ///
 /// Drop one event pair endpoint. The other should get PEER_CLOSED.
-#[cfg_attr(test, test)]
 fn drop_one_event_pair_end() {
     use zircon_object::object::Signal;
     let _ctx = TestContext::new();
@@ -149,7 +137,6 @@ fn drop_one_event_pair_end() {
 
 ///
 /// Write data to a VMO then drop it. Should not leak memory.
-#[cfg_attr(test, test)]
 fn vmo_with_data_drop() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -162,7 +149,6 @@ fn vmo_with_data_drop() {
 ///
 /// Write messages to a channel then drop both endpoints. Queued
 /// messages and handles should be cleaned up.
-#[cfg_attr(test, test)]
 fn channel_with_messages_drop() {
     use zircon_object::ipc::MessagePacket;
     let _ctx = TestContext::new();
@@ -180,7 +166,6 @@ fn channel_with_messages_drop() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     event_create_drop();
     channel_create_drop();

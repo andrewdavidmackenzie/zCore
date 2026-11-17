@@ -51,7 +51,6 @@ struct TestChannelCallEtcArgs {
 /// syscall that checks whether the calling thread is in BlockedChannel
 /// state. Since no channel_call is in progress, the thread is not in
 /// BlockedChannel state, so the syscall returns BAD_STATE.
-#[cfg_attr(test, test)]
 fn call_finish_without_previously_calling_call_returns_bad_state() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::ZxError;
@@ -91,7 +90,6 @@ fn call_finish_without_previously_calling_call_returns_bad_state() {
 /// Calls `sys_channel_call_etc_finish` without a prior interrupted
 /// channel_call. The thread is not in BlockedChannel state, so the
 /// syscall returns BAD_STATE.
-#[cfg_attr(test, test)]
 fn call_etc_finish_without_previously_calling_call_returns_bad_state() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::ZxError;
@@ -138,7 +136,6 @@ fn call_etc_finish_without_previously_calling_call_returns_bad_state() {
 ///
 /// This test requires concurrent threads with preemptive scheduling.
 /// We can verify the basic channel transfer mechanics in zCore:
-#[cfg_attr(test, test)]
 fn transfer_channel_with_pending_call() {
     use zircon_object::object::{Handle, Rights};
 
@@ -214,7 +211,6 @@ fn transfer_channel_with_pending_call() {
 ///    This exercises the same kernel invariant: calling call_finish
 ///    when the thread is not in BlockedChannel state must return
 ///    BAD_STATE without panicking.
-#[cfg_attr(test, async_std::test)]
 async fn channel_call_finish_after_failed_call() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::ZxError;
@@ -286,7 +282,6 @@ async fn channel_call_finish_after_failed_call() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub async fn run_all() {
     call_finish_without_previously_calling_call_returns_bad_state();
     call_etc_finish_without_previously_calling_call_returns_bad_state();

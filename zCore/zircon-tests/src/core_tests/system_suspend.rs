@@ -28,7 +28,6 @@ use zircon_object::signal::Event;
 ///
 /// We test the resource/handle type validation that would gate
 /// the syscall.
-#[cfg_attr(test, test)]
 fn resource_validation() {
     let ctx = TestContext::new();
 
@@ -68,7 +67,6 @@ fn resource_validation() {
 /// wake source (KOID = ZX_KOID_KERNEL = 1).
 ///
 /// Tests 3 deadline values: almost_now, INFINITE_PAST, and 0.
-#[cfg_attr(test, test)]
 fn timeout_is_past() {
     let _ctx = TestContext::new();
 
@@ -108,7 +106,6 @@ fn timeout_is_past() {
 ///
 /// zCore does not support system suspend. We verify the timer
 /// deadline pattern the test uses.
-#[cfg_attr(test, test)]
 fn suspend_and_resume_by_timer() {
     let _ctx = TestContext::new();
 
@@ -133,7 +130,6 @@ fn suspend_and_resume_by_timer() {
 /// OK or TIMED_OUT.
 ///
 /// Without system suspend, we verify the concurrent pattern.
-#[cfg_attr(test, test)]
 fn concurrent_suspend() {
     let _ctx = TestContext::new();
 
@@ -159,7 +155,6 @@ fn concurrent_suspend() {
 ///
 /// The test spins a thread, then attempts 5 suspend operations with
 /// 100ms deadline and DISCARD option.
-#[cfg_attr(test, test)]
 fn failure_to_enter_suspend_regression_test() {
     let _ctx = TestContext::new();
 
@@ -183,7 +178,6 @@ fn failure_to_enter_suspend_regression_test() {
 ///
 /// Without system suspend or wake vectors, we verify the state
 /// machine pattern used in the test.
-#[cfg_attr(test, test)]
 fn virtual_wake_event_racing_with_suspend_op_panic_repro() {
     let _ctx = TestContext::new();
 
@@ -226,7 +220,6 @@ fn virtual_wake_event_racing_with_suspend_op_panic_repro() {
 }
 
 /// Run all tests in this module.
-#[cfg(not(test))]
 pub fn run_all() {
     resource_validation();
     timeout_is_past();

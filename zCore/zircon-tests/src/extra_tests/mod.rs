@@ -15,7 +15,6 @@ mod rseq;
 mod thread_extra;
 
 /// Run all extra tests.
-#[cfg(not(test))]
 pub async fn run_all() {
     // Kernel API tests
     address_tagging_tbi::run_all();
