@@ -74,3 +74,7 @@ path = "src/bin/user_exceptions_test.rs"
 [[bin]]
 name = "clock-test"
 path = "src/bin/clock_test.rs"
+
+[[bin]]
+name = "bad-access-test"
+path = "src/bin/bad_access_test.rs"
