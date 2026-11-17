@@ -234,3 +234,7 @@ path = "src/bin/timer_extra_test.rs"
 [[bin]]
 name = "vmo-extra-test"
 path = "src/bin/vmo_extra_test.rs"
+
+[[bin]]
+name = "exception-extra-test"
+path = "src/bin/exception_extra_test.rs"
