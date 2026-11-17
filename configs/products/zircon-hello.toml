@@ -1,0 +1,22 @@
+# zircon-hello: minimal Zircon bringup product.
+#
+# Boots a single petal hello program as init — the smallest end-to-end
+# proof that the kernel, userstart, and petal userspace all work.
+
+flavour = ""
+root-proc = "/bin/hello"
+log = "info"
+rootfs-contents = "petal"
+
+# Zircon-only products cannot run on riscv64 boards: zircon-abi has
+# compile_error! for 8-arg syscalls there.
+supported-boards = [
+    "qemu-aarch64",
+    "qemu-aarch64-uefi",
+    "qemu-x86_64",
+    "raspi400",
+    "raspi400-uefi",
+    "x86-laptop",
+    "jolla-c2",
+    "libos",
+]

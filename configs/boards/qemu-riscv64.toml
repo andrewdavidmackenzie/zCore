@@ -1,9 +1,22 @@
-# Allwinner Nezha D1 RISC-V board (not actively tested)
-default-flavour = "linux"
+# QEMU riscv64 virt machine
+#
+# Standard QEMU virtual machine with 16550 UART (via device tree),
+# RISC-V PLIC interrupt controller.
+#
+# Note: Zircon-only products are not supported on riscv64 (zircon-abi
+# has compile_error! for 8-arg syscalls); use a Linux-flavour product
+# (e.g. busybox.qemu-riscv64).
+
 arch = "riscv64"
+cores = 1
 linker-script = "zCore/hal-impl/src/bare/arch/riscv/platform/linker.ld"
-drivers = ["riscv-intc", "riscv-plic"]
-features = ["allwinner-drivers"]
+drivers = ["uart-16550", "riscv-intc", "riscv-plic", "pci"]
+boot-method = "raw"
+default-product = "busybox"
+
+[qemu]
+machine = "virt"
+memory = "2G"
 
 [rustc-target]
 llvm-target = "riscv64"

@@ -1,0 +1,9 @@
+# petal: Zircon-only product with the petal shell as init.
+#
+# ROOTPROC=/bin/shell starts the interactive petal shell; the petal
+# test programs (hello, channel-test, vmo-test, ...) are available in
+# the rootfs. On real-hardware boards that ship no rootfs, the shell
+# boots from the ZBI embedded in the kernel image.
+
+extends = "zircon-hello"
+root-proc = "/bin/shell"

@@ -1,14 +1,21 @@
-# QEMU x86_64 q35 machine -- Linux or Zircon
+# QEMU x86_64 q35 machine
 #
 # Standard QEMU virtual machine with 16550 UART, APIC, PCI.
 # Serial console provides both input and output in QEMU.
+# Boots via UEFI (OVMF) firmware, same as real x86 hardware.
+#
+# `dynamic-linking` (vDSO support for prebuilt shared-lib binaries) is
+# kept on this board: it is currently only enabled for the QEMU x86_64
+# board (not x86-laptop) and is required by the prebuilt Fuchsia test
+# binaries used with the core-tests product.
 
-default-flavour = "linux"
 arch = "x86_64"
 cores = 8
 linker-script = "zCore/hal-impl/src/bare/arch/x86_64/platform/linker.ld"
 drivers = ["uart-16550", "apic", "pci"]
 features = ["dynamic-linking"]
+boot-method = "uefi"
+default-product = "busybox"
 
 [qemu]
 machine = "q35"

@@ -1,17 +1,19 @@
 # Raspberry Pi 400 -- Zircon mode
 #
 # Real hardware: BCM2711 SoC, PL011 UART, GIC-400 (non-secure),
-# no VirtIO, no PCI. Boots from SD card.
+# no VirtIO, no PCI. Boots from SD card via extlinux (U-Boot).
+#
+# The board ships no rootfs; Zircon-only products boot the petal shell
+# from the ZBI embedded in the kernel image.
 
 arch = "aarch64"
 cores = 4
 linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker_raspi400.ld"
 drivers = ["pl011-uart", "gic-400"]
 features = ["board-raspi400"]
-
-[cmdline]
-log = "info"
-root-proc = "/bin/sh"
+boot-method = "sdcard"
+flash-method = "sd"
+default-product = "petal"
 
 # No [qemu] section -- this is real hardware only.
 # Use `make raspi400-run` for QEMU emulation with raspi4b machine.

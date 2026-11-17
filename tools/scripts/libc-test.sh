@@ -18,20 +18,25 @@
 
 set -euo pipefail
 
-ARCH="${1:?Usage: $0 <arch>}"
+CONFIG="${1:?Usage: $0 <product.board> <arch>}"
+ARCH="${2:?Usage: $0 <product.board> <arch>}"
+BOARD="${CONFIG##*.}"
 # Timeout for the entire QEMU session (all tests combined).
 # Should be generous enough for boot + all tests. Some tests (socket,
 # pthread) may hang on unimplemented syscalls, so this is a hard limit.
 SESSION_TIMEOUT=120
 
-# Read core count from target config
+# Read core count from board config
 source "$(dirname "$0")/get-target-cores.sh"
-CORES=$(get_target_cores "$ARCH")
+CORES=$(get_target_cores "$BOARD")
+
+# Resolve the rootfs image for the selection's product manifest.
+ROOTFS_IMG=$(cargo xtask rootfs-image -m "$CONFIG" --print-path)
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/qemu-aarch64/release/kernel.bin"
-    IMAGE="target/qemu-aarch64/release/aarch64-linux.img"
+    KERNEL="target/${CONFIG}/release/kernel.bin"
+    IMAGE="$ROOTFS_IMG"
     CROSS_COMPILE="aarch64-linux-musl-"
     # Find musl cross-compiler: macOS uses Homebrew, Linux has it in PATH
     MUSL_BIN=""
@@ -51,9 +56,9 @@ case "$ARCH" in
     )
     ;;
   x86_64)
-    KERNEL_ELF="target/qemu-x86_64/release/kernel"
-    BOOT_IMG="target/qemu-x86_64/release/boot.img"
-    IMAGE="target/qemu-x86_64/release/x86_64-linux.img"
+    KERNEL_ELF="target/${CONFIG}/release/kernel"
+    BOOT_IMG="target/${CONFIG}/release/boot.img"
+    IMAGE="$ROOTFS_IMG"
     CROSS_COMPILE="x86_64-linux-musl-"
     # Find musl cross-compiler: macOS uses Homebrew, Linux has it in PATH
     MUSL_BIN=""
@@ -162,7 +167,7 @@ fi
 
 # Step 4: Verify kernel exists
 if [ ! -f "$KERNEL" ]; then
-  echo "ERROR: $KERNEL not found. Run 'make build ARCH=$ARCH' first."
+  echo "ERROR: $KERNEL not found. Run 'make build CONFIG=$CONFIG' first."
   exit 1
 fi
 

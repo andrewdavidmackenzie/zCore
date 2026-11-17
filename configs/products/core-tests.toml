@@ -1,0 +1,16 @@
+# core-tests: Fuchsia core-tests-standalone runner.
+#
+# Boots the prebuilt Fuchsia core-tests-standalone binary as init on a
+# Zircon-only kernel (no linux feature, to avoid interference between
+# the Linux init_spawn and the Zircon rootfs boot path).
+#
+# Debugging syscalls are required by the test binary.
+
+flavour = ""
+root-proc = "/bin/core-tests-standalone?--gtest_shuffle=false"
+log = "warn"
+rootfs-contents = "core-tests"
+extra-cmdline = ["kernel.enable-debugging-syscalls=true"]
+
+# The prebuilt test binary is x86_64-only.
+supported-boards = ["qemu-x86_64"]

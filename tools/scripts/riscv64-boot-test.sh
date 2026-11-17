@@ -4,16 +4,20 @@
 # verify early SBI console output works (proves console_write_early
 # and the SBI timer/IPI path are functional).
 #
-# Usage: tools/scripts/riscv64-boot-test.sh
+# Usage: tools/scripts/riscv64-boot-test.sh [product.board]
+#   selection: defaults to busybox.qemu-riscv64
 #
 # Exit code 0 = test passed
 # Exit code 1 = test failed
 
 set -euo pipefail
 
-# Read core count from target config (hardcoded riscv64)
+CONFIG="${1:-busybox.qemu-riscv64}"
+BOARD="${CONFIG##*.}"
+
+# Read core count from board config
 source "$(dirname "$0")/get-target-cores.sh"
-CORES=$(get_target_cores "riscv64")
+CORES=$(get_target_cores "$BOARD")
 
 TIMEOUT=30
 
@@ -22,10 +26,10 @@ if ! command -v qemu-system-riscv64 &>/dev/null; then
   exit 0
 fi
 
-echo "==> Building riscv64 kernel..."
-ZCORE_CMDLINE="LOG=info" cargo bin -m qemu-riscv64
+echo "==> Building riscv64 kernel ($CONFIG)..."
+ZCORE_CMDLINE="LOG=info" cargo bin -m "$CONFIG"
 
-KERNEL="target/qemu-riscv64/release/kernel.bin"
+KERNEL="target/${CONFIG}/release/kernel.bin"
 
 if [ ! -f "$KERNEL" ]; then
   echo "FAIL: kernel not found at $KERNEL"

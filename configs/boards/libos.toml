@@ -3,11 +3,12 @@
 # No QEMU, no custom target spec. Builds with the host's native
 # toolchain. Used for development and testing without a VM.
 
-default-flavour = "linux"
 arch = "host"
 linker-script = ""
 drivers = ["mock-uart"]
 features = ["libos"]
+boot-method = "host"
+default-product = "busybox"
 
 # No [qemu] section -- runs natively.
 # No [rustc-target] section -- uses host default target.

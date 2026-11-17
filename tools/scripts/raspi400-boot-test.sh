@@ -10,9 +10,9 @@
 
 set -euo pipefail
 
-# Read core count from target config (hardcoded aarch64 for raspi400)
+# Read core count from board config
 source "$(dirname "$0")/get-target-cores.sh"
-CORES=$(get_target_cores "aarch64")
+CORES=$(get_target_cores "raspi400")
 
 TIMEOUT=30
 QEMU_PID=""
@@ -39,8 +39,8 @@ trap 'exit 143' TERM
 
 echo "==> Raspberry Pi 400 boot smoke test (Zircon mode)..."
 
-# Build using the Makefile target (Zircon mode with petal shell)
-make raspi400-build 2>&1 | tail -5
+# Build the petal product for the raspi400 board
+cargo bin -m petal.raspi400 2>&1 | tail -5
 
 echo "Running in QEMU raspi4b..."
 OUTPUT=$(mktemp)
@@ -49,7 +49,7 @@ qemu-system-aarch64 \
   -machine raspi4b -m 2G -smp "$CORES" \
   -display none -no-reboot -nographic \
   -serial mon:stdio \
-  -kernel target/raspi400/release/kernel.bin > "$OUTPUT" 2>&1 &
+  -kernel target/petal.raspi400/release/kernel.bin > "$OUTPUT" 2>&1 &
 QEMU_PID=$!
 
 ELAPSED=0

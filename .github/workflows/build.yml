@@ -56,12 +56,12 @@ jobs:
         with:
           key: bare-metal-${{ matrix.arch }}-macos
 
-      - name: Build ${{ matrix.arch }} bare-metal linux
-        run: cargo bin -m qemu-${{ matrix.arch }}
+      - name: Build ${{ matrix.arch }} bare-metal (busybox product)
+        run: cargo bin -m busybox.qemu-${{ matrix.arch }}
 
-      - name: Build ${{ matrix.arch }} bare-metal (Zircon only)
+      - name: Build ${{ matrix.arch }} bare-metal (petal product, Zircon only)
         if: matrix.arch == 'x86_64'
-        run: cargo bin -m qemu-${{ matrix.arch }}
+        run: cargo bin -m petal.qemu-${{ matrix.arch }}
 
   libos:
     name: LibOS build
@@ -78,11 +78,11 @@ jobs:
         with:
           key: libos
 
-      - name: Build libos (Linux mode)
-        run: cargo zcore-build -m libos --flavour linux
+      - name: Build libos (busybox product, Linux mode)
+        run: cargo zcore-build -m busybox.libos
 
-      - name: Build libos (Zircon mode)
-        run: cargo zcore-build -m libos
+      - name: Build libos (petal product, Zircon mode)
+        run: cargo zcore-build -m petal.libos
 
   clippy:
     name: Clippy (all targets)
@@ -115,14 +115,14 @@ jobs:
         with:
           key: hardware-targets
 
-      - name: Build raspi400
-        run: cargo bin -m raspi400
+      - name: Build raspi400 (petal product)
+        run: cargo bin -m petal.raspi400
 
-      - name: Build x86-laptop
-        run: cargo bin -m x86-laptop
+      - name: Build x86-laptop (petal product)
+        run: cargo bin -m petal.x86-laptop
 
       - name: Build with Linux emulation (aarch64)
-        run: cargo bin -m qemu-aarch64 --flavour linux
+        run: cargo bin -m busybox.qemu-aarch64
 
   docs:
     name: Documentation build

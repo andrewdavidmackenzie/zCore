@@ -1,0 +1,9 @@
+# petal-linux: Zircon + Linux product with the petal shell as init.
+#
+# The kernel includes both syscall personalities; the shell can run
+# petal programs as well as Linux binaries (busybox, linux-hello,
+# wasi-runner) from the full rootfs.
+
+extends = "petal"
+flavour = "linux"
+rootfs-contents = "full"

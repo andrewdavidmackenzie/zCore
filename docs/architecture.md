@@ -222,8 +222,8 @@ See [#79](https://github.com/andrewdavidmackenzie/zCore/issues/79).
 **Workspace dependencies:** `hal-impl`, `loader`, `zircon-object`,
 `executor`, `linux-object` (optional)
 
-**Status:** Actively used. This is the primary build target (`cargo qemu --arch
-aarch64`).
+**Status:** Actively used. This is the primary build target (`cargo qemu -m
+busybox.qemu-aarch64`).
 
 ---
 

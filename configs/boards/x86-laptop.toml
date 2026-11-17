@@ -1,4 +1,4 @@
-# x86_64 laptop (e.g., ThinkPad P1 Gen 3) -- Linux or Zircon
+# x86_64 laptop (e.g., ThinkPad P1 Gen 3)
 #
 # Real hardware: no serial/COM port, framebuffer console output,
 # PS/2 keyboard input via i8042 controller, APIC, PCI.
@@ -12,14 +12,13 @@ arch = "x86_64"
 cores = 8
 linker-script = "zCore/hal-impl/src/bare/arch/x86_64/platform/linker.ld"
 drivers = ["apic", "ps2-keyboard", "fb-console"]
-
-[cmdline]
-log = "info"
-root-proc = "/bin/sh"
+boot-method = "usb"
+flash-method = "usb"
+default-product = "petal"
 
 # No [qemu] section -- this is real hardware.
-# Use `make x86-uefi-usb-linux` or `make x86-uefi-usb-zircon` to
-# build a UEFI boot image and write it to a USB drive.
+# Use `make image CONFIG=<product>.x86-laptop` to build a UEFI boot
+# image and write it to a USB drive.
 
 [rustc-target]
 llvm-target = "x86_64-unknown-none-elf"

@@ -45,5 +45,5 @@ debug = false
 opt-level = "s"
 debug = false
 
-# Target definitions are in targets/<name>.toml.
-# See targets/ directory for available build targets.
+# Target definitions are in configs/<name>.toml.
+# See configs/ directory for available build targets.

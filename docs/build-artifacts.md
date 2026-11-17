@@ -38,10 +38,10 @@ SFS (Simple File System) images for QEMU, built by `cargo image`.
 
 | Path | Generator |
 |------|-----------|
-| `target/qemu-aarch64/release/aarch64-linux.img` | `cargo image --arch aarch64` |
+| `target/rootfs/images/full-aarch64.img` | `cargo image --arch aarch64` |
 | `target/qemu-riscv64/release/riscv64-linux.img` | `cargo image --arch riscv64` |
-| `target/qemu-aarch64/release/aarch64-zircon.img` | `cargo qemu --zircon` |
-| `target/qemu-x86_64/release/x86_64-zircon.img` | `cargo qemu --zircon` |
+| `target/rootfs/images/petal-aarch64.img` | `cargo qemu --zircon` |
+| `target/rootfs/images/petal-x86_64.img` | `cargo qemu --zircon` |
 
 ### Rootfs Directories: `target/rootfs/`
 

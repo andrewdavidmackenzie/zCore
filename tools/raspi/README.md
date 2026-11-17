@@ -67,6 +67,6 @@ Key settings:
 ## Build Manually
 
 ```bash
-make raspi400-build
+make build CONFIG=petal.raspi400
 cp target/aarch64-raspi400/release/zcore.bin /path/to/sd/kernel8.img
 ```

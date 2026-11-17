@@ -3,8 +3,10 @@
 # Run a petal test binary on bare-metal QEMU.
 #
 # Usage: tools/scripts/petal-test.sh <arch> <binary_name>
-#   arch: aarch64
+#   arch: aarch64, x86_64
 #   binary_name: e.g., vmar_test, vmo_test
+#
+# Uses the zircon-hello product (Zircon-only) on the qemu-<arch> board.
 #
 # Builds the petal binary, creates a rootfs with it, boots QEMU,
 # and checks for PASS/FAIL output.
@@ -15,15 +17,16 @@ ARCH="${1:?Usage: $0 <arch> <binary_name>}"
 BIN="${2:?Usage: $0 <arch> <binary_name>}"
 TIMEOUT="${PETAL_TEST_TIMEOUT:-30}"
 
+CONFIG="zircon-hello.qemu-${ARCH}"
 source "$(dirname "$0")/get-target-cores.sh"
-CORES=$(get_target_cores "$ARCH")
+CORES=$(get_target_cores "qemu-${ARCH}")
 
 echo "==> Building petal $BIN for $ARCH..."
 
 case "$ARCH" in
   aarch64)
     RUST_TARGET="aarch64-unknown-none-softfloat"
-    KERNEL="target/qemu-aarch64/release/kernel.bin"
+    KERNEL="target/${CONFIG}/release/kernel.bin"
     QEMU_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
@@ -33,7 +36,7 @@ case "$ARCH" in
     ;;
   x86_64)
     RUST_TARGET="x86_64-unknown-none"
-    KERNEL="target/qemu-x86_64/release/boot.img"
+    KERNEL="target/${CONFIG}/release/boot.img"
     QEMU_CMD=(
       qemu-system-x86_64
       -m 4G -display none -no-reboot -nographic
@@ -44,7 +47,7 @@ case "$ARCH" in
     ;;
   riscv64)
     RUST_TARGET="riscv64gc-unknown-none-elf"
-    KERNEL="target/qemu-riscv64/release/kernel.bin"
+    KERNEL="target/${CONFIG}/release/kernel.bin"
     QEMU_CMD=(
       qemu-system-riscv64
       -m 2G -display none -no-reboot -nographic
@@ -65,15 +68,15 @@ cargo petal-zbi --arch "$ARCH" --bin "$BIN"
 cargo clean -p kernel 2>/dev/null || true
 PETAL_ZBI="$(pwd)/target/petal/$ARCH/petal.zbi" \
   ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/$BIN" \
-  cargo zcore-build -m "qemu-$ARCH" --flavour ""
+  cargo zcore-build -m "$CONFIG"
 
 # Strip kernel ELF to raw binary for QEMU
 if [ "$ARCH" != "x86_64" ]; then
   OBJCOPY=$(find "$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1)
   if [ -n "$OBJCOPY" ]; then
-    "$OBJCOPY" -O binary "target/qemu-$ARCH/release/kernel" "$KERNEL"
+    "$OBJCOPY" -O binary "target/${CONFIG}/release/kernel" "$KERNEL"
   elif command -v llvm-objcopy >/dev/null 2>&1; then
-    llvm-objcopy -O binary "target/qemu-$ARCH/release/kernel" "$KERNEL"
+    llvm-objcopy -O binary "target/${CONFIG}/release/kernel" "$KERNEL"
   fi
 fi
 

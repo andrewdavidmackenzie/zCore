@@ -8,7 +8,8 @@
 # x86_64:  builds kernel per-petal (UEFI has no -append equivalent).
 #          With rust-cache, the relink is near-instant.
 #
-# Usage: tools/scripts/zircon-boot-test.sh <arch>
+# Usage: tools/scripts/zircon-boot-test.sh <product.board> <arch>
+#   selection: e.g. zircon-hello.qemu-aarch64
 #   arch: aarch64, x86_64
 #
 # Exit code 0 = all tests passed
@@ -16,7 +17,9 @@
 
 set -euo pipefail
 
-ARCH="${1:?Usage: $0 <arch>}"
+CONFIG="${1:?Usage: $0 <product.board> <arch>}"
+ARCH="${2:?Usage: $0 <product.board> <arch>}"
+BOARD="${CONFIG##*.}"
 # On macOS, QEMU runs x86_64 via emulation (no KVM) on aarch64 hosts,
 # which is significantly slower. Increase timeout to avoid flaky failures.
 if [ "$(uname -s)" = "Darwin" ]; then
@@ -25,21 +28,20 @@ else
   TIMEOUT=72
 fi
 
-# Read core count from target config
+# Read core count from board config
 source "$(dirname "$0")/get-target-cores.sh"
-CORES=$(get_target_cores "$ARCH")
+CORES=$(get_target_cores "$BOARD")
 
 # Per-architecture configuration.
 case "$ARCH" in
   aarch64)
     RUST_TARGET="aarch64-unknown-none-softfloat"
-    KERNEL="target/qemu-aarch64/release/kernel"
-    KERNEL_BIN="target/qemu-aarch64/release/kernel.bin"
-    ROOTFS_IMG="target/qemu-${ARCH}/release/${ARCH}-zircon.img"
+    KERNEL="target/${CONFIG}/release/kernel"
+    KERNEL_BIN="target/${CONFIG}/release/kernel.bin"
     ;;
   x86_64)
     RUST_TARGET="x86_64-unknown-none"
-    KERNEL="target/qemu-x86_64/release/kernel"
+    KERNEL="target/${CONFIG}/release/kernel"
     ;;
   *)
     echo "ERROR: zircon-boot-test.sh does not support arch '$ARCH'"
@@ -79,6 +81,8 @@ if [ "$ARCH" = "aarch64" ]; then
   # Build all petal binaries into the rootfs
   cargo xtask zircon-rootfs --arch "$ARCH"
 
+  ROOTFS_IMG=$(cargo xtask rootfs-image -m "$CONFIG" --print-path)
+
   # Build one petal ZBI (needed as fallback, but rootfs overrides)
   cargo petal-zbi --arch "$ARCH" --bin hello 2>&1 | tail -1
 
@@ -88,7 +92,7 @@ if [ "$ARCH" = "aarch64" ]; then
   USERSTART_ELF="$(pwd)/$USERSTART" \
     PETAL_ZBI="$(pwd)/$ZBI" \
     ZCORE_CMDLINE="LOG=${LOG:-info} ROOTPROC=/bin/hello" \
-    cargo zcore-build -m "qemu-${ARCH}"
+    cargo zcore-build -m "$CONFIG"
 
   # Strip ELF to raw binary (QEMU needs raw binary for DTB passthrough)
   OBJCOPY=$(find "$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1)
@@ -124,7 +128,7 @@ launch_qemu() {
     x86_64)
       if ! tools/x86-bootimage/target/release/x86-bootimage \
         "$KERNEL" \
-        target/qemu-x86_64/release/boot.img; then
+        target/${CONFIG}/release/boot.img; then
         echo "ERROR: x86-bootimage failed" >&2
         return 1
       fi
@@ -134,7 +138,7 @@ launch_qemu() {
         -cpu qemu64,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
         -serial mon:stdio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF" \
-        -drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
+        -drive "format=raw,file=target/${CONFIG}/release/boot.img" \
         > "$output" 2>&1 &
       ;;
   esac
@@ -158,7 +162,7 @@ run_test() {
     if ! USERSTART_ELF="$(pwd)/$USERSTART" \
       PETAL_ZBI="$(pwd)/$ZBI" \
       ZCORE_CMDLINE="LOG=${LOG:-info}" \
-      cargo zcore-build -m "qemu-${ARCH}"; then
+      cargo zcore-build -m "$CONFIG"; then
       echo "FAIL: kernel build failed for '$bin_name'"
       return 1
     fi

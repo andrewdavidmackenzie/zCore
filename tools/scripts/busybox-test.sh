@@ -16,18 +16,23 @@
 
 set -euo pipefail
 
-ARCH="${1:?Usage: $0 <arch>}"
+CONFIG="${1:?Usage: $0 <product.board> <arch>}"
+ARCH="${2:?Usage: $0 <product.board> <arch>}"
+BOARD="${CONFIG##*.}"
 BOOT_TIMEOUT=60
 CMD_TIMEOUT=10
 
-# Read core count from target config
+# Read core count from board config
 source "$(dirname "$0")/get-target-cores.sh"
-CORES=$(get_target_cores "$ARCH")
+CORES=$(get_target_cores "$BOARD")
+
+# Resolve the rootfs image for the selection's product manifest.
+ROOTFS_IMG=$(cargo xtask rootfs-image -m "$CONFIG" --print-path)
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/qemu-aarch64/release/kernel.bin"
-    IMAGE="target/qemu-aarch64/release/aarch64-linux.img"
+    KERNEL="target/${CONFIG}/release/kernel.bin"
+    IMAGE="$ROOTFS_IMG"
     QEMU_CMD=(
       qemu-system-aarch64
       -m 2G -smp "$CORES" -display none -no-reboot -nographic
@@ -38,9 +43,8 @@ case "$ARCH" in
     )
     ;;
   x86_64)
-    KERNEL_ELF="target/qemu-x86_64/release/kernel"
-    BOOT_IMG="target/qemu-x86_64/release/boot.img"
-    ROOTFS_IMG="target/qemu-x86_64/release/x86_64-linux.img"
+    KERNEL_ELF="target/${CONFIG}/release/kernel"
+    BOOT_IMG="target/${CONFIG}/release/boot.img"
     BOOTIMAGE_TOOL="tools/x86-bootimage/target/release/x86-bootimage"
 
     if [ ! -f "$BOOTIMAGE_TOOL" ]; then
@@ -73,7 +77,7 @@ esac
 
 # Verify required files exist
 if [ ! -f "$KERNEL" ]; then
-  echo "ERROR: $KERNEL not found. Run 'make build ARCH=$ARCH' first."
+  echo "ERROR: $KERNEL not found. Run 'make build CONFIG=$CONFIG' first."
   exit 1
 fi
 

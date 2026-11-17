@@ -7,13 +7,13 @@ DISK="${1:?Usage: $0 /dev/diskN}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-KERNEL="$ROOT/target/jolla-c2/release/kernel.bin"
+KERNEL="$ROOT/target/petal.jolla-c2/release/kernel.bin"
 DTB="$ROOT/prebuilt/jolla-c2/ums9230-reeder-s19mps.dtb"
 EXTLINUX="$ROOT/tools/jolla-c2/extlinux.conf"
-IMG="$ROOT/target/jolla-c2/release/sdcard-boot.img"
+IMG="$ROOT/target/petal.jolla-c2/release/sdcard-boot.img"
 
 if [ ! -f "$KERNEL" ]; then
-    echo "Error: kernel not found at $KERNEL -- run 'make jollac2-build' first" >&2
+    echo "Error: kernel not found at $KERNEL -- run 'make build CONFIG=petal.jolla-c2' first" >&2
     exit 1
 fi
 if [ ! -f "$DTB" ]; then

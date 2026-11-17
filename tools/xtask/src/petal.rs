@@ -348,12 +348,16 @@ pub fn copy_petal_to_linux_rootfs(arch: Arch) {
 /// Build all petal programs and create a Zircon rootfs directory.
 /// The directory layout mirrors the Linux rootfs: `bin/hello`,
 /// `bin/channel-test`, `bin/vmo-test`.
-/// Returns the path to the rootfs directory.
-pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
+///
+/// `fuchsia` controls whether the prebuilt Fuchsia test binaries and
+/// shared libraries are included (the `core-tests` manifest); without
+/// them this stages the `petal` manifest. Returns the rootfs directory.
+pub fn build_zircon_rootfs(arch: Arch, fuchsia: bool) -> PathBuf {
+    let sub = if fuchsia { "core-tests" } else { "zircon" };
     let rootfs_dir = PROJECT_DIR
         .join("target")
         .join("rootfs")
-        .join("zircon")
+        .join(sub)
         .join(arch.name());
     let bin_dir = rootfs_dir.join("bin");
 
@@ -368,12 +372,14 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
         "exception-test",
     ];
 
-    // Include prebuilt core-tests-standalone if available for this arch.
-    let prebuilt_cts = PROJECT_DIR
-        .join("prebuilt/zircon-test")
-        .join(arch.name())
-        .join("core-tests-standalone");
-    let has_cts = prebuilt_cts.is_file();
+    // Include prebuilt core-tests-standalone if requested and available
+    // for this arch.
+    let has_cts = fuchsia
+        && PROJECT_DIR
+            .join("prebuilt/zircon-test")
+            .join(arch.name())
+            .join("core-tests-standalone")
+            .is_file();
 
     // Always run the build steps below. Cargo handles caching
     // internally (skipping compilation if sources haven't changed),
@@ -427,15 +433,13 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
 }
 
 /// Create an SFS image from the Zircon rootfs directory.
-/// Returns the path to the image file.
-pub fn build_zircon_rootfs_image(arch: Arch) -> PathBuf {
-    let rootfs_dir = build_zircon_rootfs(arch);
-    let dir = PROJECT_DIR
-        .join("target")
-        .join(format!("qemu-{}", arch.name()))
-        .join("release");
-    std::fs::create_dir_all(&dir).ok();
-    let image = dir.join(format!("{}-zircon.img", arch.name()));
+///
+/// `fuchsia` selects the `core-tests` manifest (petal + prebuilt
+/// Fuchsia binaries); otherwise the `petal` manifest. The image is
+/// written to `image`. Returns the path to the image file.
+pub fn build_zircon_rootfs_image(arch: Arch, fuchsia: bool, image: PathBuf) -> PathBuf {
+    let rootfs_dir = build_zircon_rootfs(arch, fuchsia);
+    std::fs::create_dir_all(image.parent().unwrap_or(&image)).ok();
 
     // Skip if image exists and is newer than all rootfs files.
     // Check bin/, lib/, and etc/ directories so that updated prebuilt

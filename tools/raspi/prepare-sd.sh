@@ -54,9 +54,9 @@ fi
 # --- Step 2: Build the kernel ---
 echo "==> Building zCore kernel for Raspberry Pi 4..."
 cd "$PROJECT_DIR"
-make raspi400-build
+make build CONFIG=petal.raspi400
 
-KERNEL_BIN="$PROJECT_DIR/target/raspi400/release/kernel.bin"
+KERNEL_BIN="$PROJECT_DIR/target/petal.raspi400/release/kernel.bin"
 if [ ! -f "$KERNEL_BIN" ]; then
     echo "ERROR: Kernel binary not found at $KERNEL_BIN"
     exit 1
@@ -102,7 +102,7 @@ cp "$SCRIPT_DIR/config.txt" "$BOOT_DIR/"
 cp "$KERNEL_BIN" "$BOOT_DIR/kernel8.img"
 
 # Rootfs (initrd) — contains busybox, petal binaries, etc.
-ROOTFS_IMG="$PROJECT_DIR/target/qemu-aarch64/release/aarch64-linux.img"
+ROOTFS_IMG="$PROJECT_DIR/target/rootfs/images/full-aarch64.img"
 if [ ! -f "$ROOTFS_IMG" ]; then
     echo "==> Building rootfs image..."
     cd "$PROJECT_DIR"
