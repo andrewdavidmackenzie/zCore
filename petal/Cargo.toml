@@ -106,3 +106,7 @@ path = "src/bin/syscall_socket_test.rs"
 [[bin]]
 name = "fifo-test"
 path = "src/bin/fifo_test.rs"
+
+[[bin]]
+name = "timer-test"
+path = "src/bin/timer_test.rs"
