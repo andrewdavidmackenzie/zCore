@@ -40,17 +40,8 @@ unsafe extern "C" fn secondary_hart_start(hartid: usize) -> ! {
 /// Boot page table
 static mut BOOT_PAGE_TABLE: BootPageTable = BootPageTable::ZERO;
 
-/// Print a string using SBI console putchar (works before page table setup).
-fn sbi_print(s: &[u8]) {
-    for &b in s {
-        #[allow(deprecated)]
-        sbi_rt::legacy::console_putchar(b as usize);
-    }
-}
-
 /// Primary hart boot.
 extern "C" fn primary_rust_main(hartid: usize, device_tree_paddr: usize) -> ! {
-    sbi_print(b"[RV] primary_rust_main entered\n");
     // Zero the BSS segment.
     // Use inline asm to reference linker symbols directly, avoiding
     // Rust extern statics which LTO can rename (causing .1/.2 suffix
@@ -68,14 +59,11 @@ extern "C" fn primary_rust_main(hartid: usize, device_tree_paddr: usize) -> ! {
             end = out(reg) _,
         );
     }
-    sbi_print(b"[RV] BSS zeroed\n");
     // Enable the boot page table
     let sstatus = unsafe {
         BOOT_PAGE_TABLE.init();
-        sbi_print(b"[RV] boot page table init done\n");
         BOOT_PAGE_TABLE.launch()
     };
-    sbi_print(b"[RV] boot page table launched\n");
     let mem_info = kernel_mem_info();
     // Verify the device tree
     let dtb = unsafe {
@@ -104,7 +92,6 @@ device tree:       {device_tree_paddr:016x}..{:016x}
         &dtb,
         secondary_hart_start as *const () as usize - mem_info.offset(),
     );
-    sbi_print(b"[RV] calling primary_core_init\n");
     // Transfer control to the kernel's primary_core_init
     unsafe {
         kernel_entry::primary_core_init(KernelConfig {

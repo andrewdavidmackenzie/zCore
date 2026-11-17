@@ -32,31 +32,18 @@ fn main() {
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 
-/// Early boot trace output — writes directly to the hardware console,
-/// bypassing the log crate (which needs heap for formatting).
-#[inline]
-fn boot_trace(msg: &str) {
-    hal_impl::console::console_write_str(msg);
-}
-
 /// Primary boot entry point, called by platform-specific entry code in hal-impl.
 #[no_mangle]
 pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
-    boot_trace("[BOOT] logging::init\n");
     logging::init(logging::parse_log_level(config.cmdline));
-    boot_trace("[BOOT] memory::init\n");
     hal_impl::memory::init();
-    boot_trace("[BOOT] primary_init_early\n");
     hal_impl::primary_init_early(config, &handler::ZcoreKernelHandler);
 
-    boot_trace("[BOOT] insert_regions\n");
     hal_impl::memory::insert_regions(&hal_impl::mem::free_pmem_regions());
-    boot_trace("[BOOT] primary_init\n");
     hal_impl::primary_init();
 
     #[cfg(feature = "baremetal-test")]
     {
-        boot_trace("[BOOT] run_builtin_tests\n");
         STARTED.store(true, Ordering::SeqCst);
         run_builtin_tests()
     }
@@ -204,13 +191,10 @@ fn load_zbi() -> impl AsRef<[u8]> {
 /// CPU core starts.
 #[no_mangle]
 pub extern "Rust" fn secondary_core_init() -> ! {
-    boot_trace("[BOOT] secondary_core_init waiting\n");
     while !STARTED.load(Ordering::SeqCst) {
         core::hint::spin_loop();
     }
-    boot_trace("[BOOT] secondary_init\n");
     hal_impl::secondary_init();
-    boot_trace("[BOOT] secondary entering executor\n");
     info!("secondary core {} initialized", hal_impl::cpu::cpu_id());
     wait_for_exit(None)
 }
