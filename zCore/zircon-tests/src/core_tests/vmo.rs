@@ -78,7 +78,11 @@ async fn vmo_read_write_bad_len() {
     let result = sc
         .sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, len)
         .await;
-    assert!(result.is_ok(), "exact-size read should succeed");
+    assert!(
+        result.is_ok(),
+        "exact-size read should succeed: {:?}",
+        result
+    );
     let result = sc
         .sys_vmo_write(h, UserInPtr::from(buf.as_ptr() as usize), 0, len)
         .await;
