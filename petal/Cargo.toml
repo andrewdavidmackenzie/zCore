@@ -78,3 +78,7 @@ path = "src/bin/clock_test.rs"
 [[bin]]
 name = "bad-access-test"
 path = "src/bin/bad_access_test.rs"
+
+[[bin]]
+name = "syscall-handle-test"
+path = "src/bin/syscall_handle_test.rs"
