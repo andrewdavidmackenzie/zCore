@@ -242,3 +242,11 @@ path = "src/bin/exception_extra_test.rs"
 [[bin]]
 name = "syscall-channel-test"
 path = "src/bin/syscall_channel_test.rs"
+
+[[bin]]
+name = "thread-test"
+path = "src/bin/thread_test.rs"
+
+[[bin]]
+name = "port-test"
+path = "src/bin/port_test.rs"
