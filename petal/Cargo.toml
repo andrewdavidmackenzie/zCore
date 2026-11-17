@@ -50,3 +50,7 @@ embedded-io = "0.6"
 [[bin]]
 name = "debuglog-test"
 path = "src/bin/debuglog_test.rs"
+
+[[bin]]
+name = "counter-test"
+path = "src/bin/counter_test.rs"

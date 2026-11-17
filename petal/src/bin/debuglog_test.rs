@@ -48,16 +48,12 @@ fn invalid_handle_allowed_only_for_write() {
     let mut buf = [0u8; DLOG_MAX_LEN];
 
     // Read with invalid handle -> BAD_HANDLE
-    let status = unsafe {
-        zx_debuglog_read(0xDEAD, 0, buf.as_mut_ptr(), buf.len())
-    };
+    let status = unsafe { zx_debuglog_read(0xDEAD, 0, buf.as_mut_ptr(), buf.len()) };
     assert_status(status, ZX_ERR_BAD_HANDLE, name, b"read bad handle");
 
     // Write with invalid handle -> BAD_HANDLE
     let data = b"test write";
-    let status = unsafe {
-        zx_debuglog_write(0xDEAD, 0, data.as_ptr(), data.len())
-    };
+    let status = unsafe { zx_debuglog_write(0xDEAD, 0, data.as_ptr(), data.len()) };
     assert_status(status, ZX_ERR_BAD_HANDLE, name, b"write bad handle");
 
     pass(name);
@@ -69,15 +65,11 @@ fn invalid_options() {
     let mut h: HandleValue = 0;
 
     // options=0x1 is invalid
-    let status = unsafe {
-        zx_debuglog_create(0, 0x1, &mut h)
-    };
+    let status = unsafe { zx_debuglog_create(0, 0x1, &mut h) };
     assert_status(status, ZX_ERR_INVALID_ARGS, name, b"options 0x1");
 
     // options=0xFFFF is invalid
-    let status = unsafe {
-        zx_debuglog_create(0, 0xFFFF, &mut h)
-    };
+    let status = unsafe { zx_debuglog_create(0, 0xFFFF, &mut h) };
     assert_status(status, ZX_ERR_INVALID_ARGS, name, b"options 0xFFFF");
 
     pass(name);
@@ -94,9 +86,7 @@ fn invalid_resource_handle_returns_wrong_type() {
 
     // Use event handle as resource for debuglog_create -> WRONG_TYPE
     let mut h: HandleValue = 0;
-    let status = unsafe {
-        zx_debuglog_create(event_h, 0, &mut h)
-    };
+    let status = unsafe { zx_debuglog_create(event_h, 0, &mut h) };
     if status != ZX_ERR_WRONG_TYPE && status != ZX_ERR_BAD_HANDLE {
         fail(name, b"expected WRONG_TYPE or BAD_HANDLE");
     }
@@ -111,9 +101,7 @@ fn read_errors() {
 
     // Create a readable debuglog (need root resource - use handle 0 for now)
     let mut dlog_h: HandleValue = 0;
-    let status = unsafe {
-        zx_debuglog_create(0, FLAG_READABLE, &mut dlog_h)
-    };
+    let status = unsafe { zx_debuglog_create(0, FLAG_READABLE, &mut dlog_h) };
     // If creation fails (no root resource in user mode), skip
     if status != ZX_OK {
         zx::debug_write(b"  debuglog_test: read_errors SKIP (no root resource)\n");
@@ -123,15 +111,11 @@ fn read_errors() {
     let mut buf = [0u8; DLOG_MAX_LEN];
 
     // Invalid options
-    let status = unsafe {
-        zx_debuglog_read(dlog_h, 0x1, buf.as_mut_ptr(), buf.len())
-    };
+    let status = unsafe { zx_debuglog_read(dlog_h, 0x1, buf.as_mut_ptr(), buf.len()) };
     assert_status(status, ZX_ERR_INVALID_ARGS, name, b"invalid options");
 
     // Bad handle
-    let status = unsafe {
-        zx_debuglog_read(0xDEAD, 0, buf.as_mut_ptr(), buf.len())
-    };
+    let status = unsafe { zx_debuglog_read(0xDEAD, 0, buf.as_mut_ptr(), buf.len()) };
     assert_status(status, ZX_ERR_BAD_HANDLE, name, b"bad handle");
 
     unsafe { zx_handle_close(dlog_h) };
@@ -144,23 +128,17 @@ fn write_errors() {
 
     // Create a write-only debuglog
     let mut dlog_h: HandleValue = 0;
-    let status = unsafe {
-        zx_debuglog_create(0, 0, &mut dlog_h)
-    };
+    let status = unsafe { zx_debuglog_create(0, 0, &mut dlog_h) };
     assert_status(status, ZX_OK, name, b"create");
 
     let data = b"write-error-test";
 
     // Invalid options
-    let status = unsafe {
-        zx_debuglog_write(dlog_h, 0x20, data.as_ptr(), data.len())
-    };
+    let status = unsafe { zx_debuglog_write(dlog_h, 0x20, data.as_ptr(), data.len()) };
     assert_status(status, ZX_ERR_INVALID_ARGS, name, b"invalid options");
 
     // Bad handle
-    let status = unsafe {
-        zx_debuglog_write(0xDEAD, 0, data.as_ptr(), data.len())
-    };
+    let status = unsafe { zx_debuglog_write(0xDEAD, 0, data.as_ptr(), data.len()) };
     assert_status(status, ZX_ERR_BAD_HANDLE, name, b"bad handle");
 
     unsafe { zx_handle_close(dlog_h) };
@@ -173,9 +151,7 @@ fn write_read() {
 
     // Create a readable debuglog
     let mut dlog_h: HandleValue = 0;
-    let status = unsafe {
-        zx_debuglog_create(0, FLAG_READABLE, &mut dlog_h)
-    };
+    let status = unsafe { zx_debuglog_create(0, FLAG_READABLE, &mut dlog_h) };
     if status != ZX_OK {
         zx::debug_write(b"  debuglog_test: write_read SKIP (no root resource)\n");
         return;
@@ -183,18 +159,14 @@ fn write_read() {
 
     // Write a message
     let msg = b"Debuglog petal test.\n";
-    let status = unsafe {
-        zx_debuglog_write(dlog_h, 0, msg.as_ptr(), msg.len())
-    };
+    let status = unsafe { zx_debuglog_write(dlog_h, 0, msg.as_ptr(), msg.len()) };
     assert_status(status, ZX_OK, name, b"write");
 
     // Read back — drain until we find our message
     let mut buf = [0u8; DLOG_MAX_LEN];
     let mut found = false;
     for _ in 0..1000 {
-        let status = unsafe {
-            zx_debuglog_read(dlog_h, 0, buf.as_mut_ptr(), buf.len())
-        };
+        let status = unsafe { zx_debuglog_read(dlog_h, 0, buf.as_mut_ptr(), buf.len()) };
         if status <= 0 {
             break;
         }
@@ -222,9 +194,7 @@ fn read_data_copy_fault() {
     let name = b"read_data_copy_fault";
 
     let mut dlog_h: HandleValue = 0;
-    let status = unsafe {
-        zx_debuglog_create(0, FLAG_READABLE, &mut dlog_h)
-    };
+    let status = unsafe { zx_debuglog_create(0, FLAG_READABLE, &mut dlog_h) };
     if status != ZX_OK {
         zx::debug_write(b"  debuglog_test: read_data_copy_fault SKIP (no root resource)\n");
         return;
@@ -232,15 +202,11 @@ fn read_data_copy_fault() {
 
     // Write something so there's data to read
     let data = b"fault-test";
-    let status = unsafe {
-        zx_debuglog_write(dlog_h, 0, data.as_ptr(), data.len())
-    };
+    let status = unsafe { zx_debuglog_write(dlog_h, 0, data.as_ptr(), data.len()) };
     assert_status(status, ZX_OK, name, b"write");
 
     // Read with null buffer — should fail
-    let status = unsafe {
-        zx_debuglog_read(dlog_h, 0, core::ptr::null_mut(), DLOG_MAX_LEN)
-    };
+    let status = unsafe { zx_debuglog_read(dlog_h, 0, core::ptr::null_mut(), DLOG_MAX_LEN) };
     if status >= 0 {
         fail(name, b"null buffer read should fail");
     }
