@@ -166,3 +166,7 @@ path = "src/bin/syscall_socket_extra_test.rs"
 [[bin]]
 name = "socket-test"
 path = "src/bin/socket_test.rs"
+
+[[bin]]
+name = "channel-internal-test"
+path = "src/bin/channel_internal_test.rs"
