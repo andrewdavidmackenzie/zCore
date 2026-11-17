@@ -1555,6 +1555,12 @@ impl Future for ThreadSwitchFuture {
         // no real page tables, so table_phys is always 0; skip the check.
         #[cfg(target_os = "none")]
         if table_phys == 0 {
+            use crate::object::KernelObject;
+            log::warn!(
+                "ThreadSwitchFuture: table_phys=0 for thread {:?} ({}), skipping poll",
+                self.thread.name(),
+                self.thread.id()
+            );
             return Poll::Ready(());
         }
         cfg_if! {
