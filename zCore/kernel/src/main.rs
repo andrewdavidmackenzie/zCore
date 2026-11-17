@@ -41,7 +41,7 @@ fn boot_trace(msg: &str) {
 
 /// Primary boot entry point, called by platform-specific entry code in hal-impl.
 #[no_mangle]
-pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) {
+pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
     boot_trace("[BOOT] logging::init\n");
     logging::init(logging::parse_log_level(config.cmdline));
     boot_trace("[BOOT] memory::init\n");

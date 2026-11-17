@@ -18,7 +18,7 @@ use hal::KernelConfig;
 unsafe extern "C" fn _start(hartid: usize, device_tree_paddr: usize) -> ! {
     naked_asm!(
         "call {select_stack}", // set up boot stack
-        "j    {main}",         // enter Rust
+        "tail {main}",         // enter Rust (tail call, ±2 GiB range)
         select_stack = sym select_stack,
         main         = sym primary_rust_main)
 }
@@ -32,7 +32,7 @@ unsafe extern "C" fn _start(hartid: usize, device_tree_paddr: usize) -> ! {
 unsafe extern "C" fn secondary_hart_start(hartid: usize) -> ! {
     naked_asm!(
         "call {select_stack}", // set up boot stack
-        "j    {main}",         // enter Rust
+        "tail {main}",         // enter Rust (tail call, ±2 GiB range)
         select_stack = sym select_stack,
         main         = sym secondary_rust_main)
 }
