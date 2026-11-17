@@ -3,6 +3,16 @@
 //! These use hardware trap instructions to enter the kernel:
 //! - `svc #0` on aarch64 (syscall number in x16)
 //! - `syscall` on x86_64 (syscall number in rax)
+//!
+//! # Safety
+//!
+//! All `unsafe` functions in this module require that pointer arguments
+//! are valid (non-dangling, properly aligned, pointing to sufficient
+//! memory) for the duration of the syscall. The kernel validates user
+//! pointers and returns an error for invalid addresses rather than
+//! causing undefined behavior.
+#![allow(clippy::missing_safety_doc)]
+#![allow(clippy::too_many_arguments)]
 //! - `ecall` on riscv64 (syscall number in a7)
 //!
 //! # Safety
@@ -1619,4 +1629,492 @@ pub unsafe fn zx_task_create_exception_channel(
 /// obtain the page size at runtime without hardcoding it.
 pub fn zx_system_get_page_size() -> usize {
     unsafe { syscall0(crate::consts::SYS_SYSTEM_GET_PAGE_SIZE) as usize }
+}
+
+// ── Missing syscall stubs for petal test ports ──────────────────────
+// These are needed by the 62 syscall-layer test modules being ported
+// from zircon-tests to petal user-mode binaries (#821).
+
+/// Read from a FIFO.
+pub unsafe fn zx_fifo_read(
+    handle: HandleValue,
+    elem_size: usize,
+    data: *mut u8,
+    count: usize,
+    actual_count: *mut usize,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_FIFO_READ,
+        handle as u64,
+        elem_size as u64,
+        data as u64,
+        count as u64,
+        actual_count as u64,
+    )
+}
+
+/// Write to a FIFO.
+pub unsafe fn zx_fifo_write(
+    handle: HandleValue,
+    elem_size: usize,
+    data: *const u8,
+    count: usize,
+    actual_count: *mut usize,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_FIFO_WRITE,
+        handle as u64,
+        elem_size as u64,
+        data as u64,
+        count as u64,
+        actual_count as u64,
+    )
+}
+
+/// Create a job.
+pub unsafe fn zx_job_create(parent: HandleValue, options: u32, out: *mut HandleValue) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_JOB_CREATE,
+        parent as u64,
+        options as u64,
+        out as u64,
+    )
+}
+
+/// Set job policy.
+pub unsafe fn zx_job_set_policy(
+    handle: HandleValue,
+    options: u32,
+    topic: u32,
+    policy: *const u8,
+    count: u32,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_JOB_SET_POLICY,
+        handle as u64,
+        options as u64,
+        topic as u64,
+        policy as u64,
+        count as u64,
+    )
+}
+
+/// Set a process as critical to a job.
+pub unsafe fn zx_job_set_critical(
+    job: HandleValue,
+    options: u32,
+    process: HandleValue,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_JOB_SET_CRITICAL,
+        job as u64,
+        options as u64,
+        process as u64,
+    )
+}
+
+/// Create a counter.
+pub unsafe fn zx_counter_create(options: u64, out: *mut HandleValue) -> ZxStatus {
+    syscall2(crate::consts::SYS_COUNTER_CREATE, options, out as u64)
+}
+
+/// Add to a counter.
+pub unsafe fn zx_counter_add(handle: HandleValue, value: i64) -> ZxStatus {
+    syscall2(crate::consts::SYS_COUNTER_ADD, handle as u64, value as u64)
+}
+
+/// Read a counter value.
+pub unsafe fn zx_counter_read(handle: HandleValue, value: *mut i64) -> ZxStatus {
+    syscall2(crate::consts::SYS_COUNTER_READ, handle as u64, value as u64)
+}
+
+/// Write a counter value.
+pub unsafe fn zx_counter_write(handle: HandleValue, value: i64) -> ZxStatus {
+    syscall2(
+        crate::consts::SYS_COUNTER_WRITE,
+        handle as u64,
+        value as u64,
+    )
+}
+
+/// Create a clock.
+pub unsafe fn zx_clock_create(options: u64, args: *const u8, out: *mut HandleValue) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_CLOCK_CREATE,
+        options,
+        args as u64,
+        out as u64,
+    )
+}
+
+/// Read a clock.
+pub unsafe fn zx_clock_read(handle: HandleValue, now: *mut i64) -> ZxStatus {
+    syscall2(crate::consts::SYS_CLOCK_READ, handle as u64, now as u64)
+}
+
+/// Get clock details.
+pub unsafe fn zx_clock_get_details(
+    handle: HandleValue,
+    options: u64,
+    details: *mut u8,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_CLOCK_GET_DETAILS,
+        handle as u64,
+        options,
+        details as u64,
+    )
+}
+
+/// Update a clock.
+pub unsafe fn zx_clock_update(handle: HandleValue, options: u64, args: *const u8) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_CLOCK_UPDATE,
+        handle as u64,
+        options,
+        args as u64,
+    )
+}
+
+/// Adjust a clock.
+pub unsafe fn zx_clock_adjust(resource: HandleValue, clock_id: u32, offset: i64) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_CLOCK_ADJUST,
+        resource as u64,
+        clock_id as u64,
+        offset as u64,
+    )
+}
+
+/// Get monotonic time via kernel (not vDSO).
+pub unsafe fn zx_clock_get_monotonic_via_kernel() -> i64 {
+    syscall0(crate::consts::SYS_CLOCK_GET_MONOTONIC_VIA_KERNEL) as i64
+}
+
+/// Add entropy to the CPRNG.
+pub unsafe fn zx_cprng_add_entropy(buffer: *const u8, buffer_size: usize) -> ZxStatus {
+    syscall2(
+        crate::consts::SYS_CPRNG_ADD_ENTROPY,
+        buffer as u64,
+        buffer_size as u64,
+    )
+}
+
+/// Send a debug command.
+pub unsafe fn zx_debug_send_command(
+    resource: HandleValue,
+    buffer: *const u8,
+    buffer_size: usize,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_DEBUG_SEND_COMMAND,
+        resource as u64,
+        buffer as u64,
+        buffer_size as u64,
+    )
+}
+
+/// Check if a handle is valid.
+pub unsafe fn zx_handle_check_valid(handle: HandleValue) -> ZxStatus {
+    syscall1(crate::consts::SYS_HANDLE_CHECK_VALID, handle as u64)
+}
+
+/// Create a profile.
+pub unsafe fn zx_profile_create(
+    root_job: HandleValue,
+    options: u32,
+    profile_info: *const u8,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_PROFILE_CREATE,
+        root_job as u64,
+        options as u64,
+        profile_info as u64,
+        out as u64,
+    )
+}
+
+/// Set a profile on a thread.
+pub unsafe fn zx_object_set_profile(
+    handle: HandleValue,
+    profile: HandleValue,
+    options: u32,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_OBJECT_SET_PROFILE,
+        handle as u64,
+        profile as u64,
+        options as u64,
+    )
+}
+
+/// Cancel port notifications.
+pub unsafe fn zx_port_cancel(port: HandleValue, source: HandleValue, key: u64) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_PORT_CANCEL,
+        port as u64,
+        source as u64,
+        key,
+    )
+}
+
+/// Cancel port notifications by key.
+pub unsafe fn zx_port_cancel_key(port: HandleValue, options: u32, key: u64) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_PORT_CANCEL_KEY,
+        port as u64,
+        options as u64,
+        key,
+    )
+}
+
+/// Shutdown a socket.
+pub unsafe fn zx_socket_shutdown(handle: HandleValue, options: u32) -> ZxStatus {
+    syscall2(
+        crate::consts::SYS_SOCKET_SHUTDOWN,
+        handle as u64,
+        options as u64,
+    )
+}
+
+/// Set socket disposition.
+pub unsafe fn zx_socket_set_disposition(
+    handle: HandleValue,
+    disposition: u32,
+    disposition_peer: u32,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_SOCKET_SET_DISPOSITION,
+        handle as u64,
+        disposition as u64,
+        disposition_peer as u64,
+    )
+}
+
+/// Suspend a task, returning a suspend token.
+pub unsafe fn zx_task_suspend_token(handle: HandleValue, token: *mut HandleValue) -> ZxStatus {
+    syscall2(
+        crate::consts::SYS_TASK_SUSPEND_TOKEN,
+        handle as u64,
+        token as u64,
+    )
+}
+
+/// VMO op_range.
+pub unsafe fn zx_vmo_op_range(
+    handle: HandleValue,
+    op: u32,
+    offset: u64,
+    size: u64,
+    buffer: *mut u8,
+    buffer_size: usize,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_VMO_OP_RANGE,
+        handle as u64,
+        op as u64,
+        offset,
+        size,
+        buffer as u64,
+        buffer_size as u64,
+    )
+}
+
+/// Get VMO stream size.
+pub unsafe fn zx_vmo_get_stream_size(handle: HandleValue, size: *mut u64) -> ZxStatus {
+    syscall2(
+        crate::consts::SYS_VMO_GET_STREAM_SIZE,
+        handle as u64,
+        size as u64,
+    )
+}
+
+/// Set VMO stream size.
+pub unsafe fn zx_vmo_set_stream_size(handle: HandleValue, size: u64) -> ZxStatus {
+    syscall2(crate::consts::SYS_VMO_SET_STREAM_SIZE, handle as u64, size)
+}
+
+/// Transfer data between VMOs.
+pub unsafe fn zx_vmo_transfer_data(
+    dst_vmo: HandleValue,
+    options: u32,
+    offset: u64,
+    length: u64,
+    src_vmo: HandleValue,
+    src_offset: u64,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_VMO_TRANSFER_DATA,
+        dst_vmo as u64,
+        options as u64,
+        offset,
+        length,
+        src_vmo as u64,
+        src_offset,
+    )
+}
+
+/// Create a physical VMO.
+pub unsafe fn zx_vmo_create_physical(
+    resource: HandleValue,
+    paddr: u64,
+    size: u64,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_VMO_CREATE_PHYSICAL,
+        resource as u64,
+        paddr,
+        size,
+        out as u64,
+    )
+}
+
+/// Map a clock VMO into a VMAR.
+pub unsafe fn zx_vmar_map_clock(
+    vmar: HandleValue,
+    options: u32,
+    offset: u64,
+    clock: HandleValue,
+    size: u64,
+    mapped_addr: *mut usize,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_VMAR_MAP,
+        vmar as u64,
+        options as u64,
+        offset,
+        clock as u64,
+        size,
+        mapped_addr as u64,
+    )
+}
+
+/// Create a sampler.
+pub unsafe fn zx_sampler_create(
+    resource: HandleValue,
+    options: u32,
+    config: *const u8,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_SAMPLER_CREATE,
+        resource as u64,
+        options as u64,
+        config as u64,
+        out as u64,
+    )
+}
+
+/// Start a sampler.
+pub unsafe fn zx_sampler_start(handle: HandleValue) -> ZxStatus {
+    syscall1(crate::consts::SYS_SAMPLER_START, handle as u64)
+}
+
+/// Stop a sampler.
+pub unsafe fn zx_sampler_stop(handle: HandleValue) -> ZxStatus {
+    syscall1(crate::consts::SYS_SAMPLER_STOP, handle as u64)
+}
+
+/// Read sampler data.
+pub unsafe fn zx_sampler_read(
+    handle: HandleValue,
+    buffer: *mut u8,
+    buffer_size: usize,
+    actual: *mut usize,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_SAMPLER_READ,
+        handle as u64,
+        buffer as u64,
+        buffer_size as u64,
+        actual as u64,
+    )
+}
+
+/// Get system performance info.
+pub unsafe fn zx_system_get_performance_info(
+    resource: HandleValue,
+    topic: u32,
+    count: usize,
+    info: *mut u8,
+    output_count: *mut usize,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_SYSTEM_GET_PERFORMANCE_INFO,
+        resource as u64,
+        topic as u64,
+        count as u64,
+        info as u64,
+        output_count as u64,
+    )
+}
+
+/// Set system performance info.
+pub unsafe fn zx_system_set_performance_info(
+    resource: HandleValue,
+    topic: u32,
+    info: *const u8,
+    count: usize,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_SYSTEM_SET_PERFORMANCE_INFO,
+        resource as u64,
+        topic as u64,
+        info as u64,
+        count as u64,
+    )
+}
+
+/// Channel call (finish phase).
+pub unsafe fn zx_channel_call_finish(
+    deadline: i64,
+    args: *const u8,
+    actual_bytes: *mut u32,
+    actual_handles: *mut u32,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_CHANNEL_CALL_FINISH,
+        deadline as u64,
+        args as u64,
+        actual_bytes as u64,
+        actual_handles as u64,
+    )
+}
+
+/// Channel call etc (no-retry phase).
+pub unsafe fn zx_channel_call_etc_noretry(
+    handle: HandleValue,
+    options: u32,
+    deadline: i64,
+    args: *const u8,
+    actual_bytes: *mut u32,
+    actual_handles: *mut u32,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_CHANNEL_CALL_ETC_NORETRY,
+        handle as u64,
+        options as u64,
+        deadline as u64,
+        args as u64,
+        actual_bytes as u64,
+        actual_handles as u64,
+    )
+}
+
+/// Channel call etc (finish phase).
+pub unsafe fn zx_channel_call_etc_finish(
+    deadline: i64,
+    args: *const u8,
+    actual_bytes: *mut u32,
+    actual_handles: *mut u32,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_CHANNEL_CALL_ETC_FINISH,
+        deadline as u64,
+        args as u64,
+        actual_bytes as u64,
+        actual_handles as u64,
+    )
 }

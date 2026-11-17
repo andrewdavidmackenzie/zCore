@@ -9,15 +9,15 @@
 
 #![no_std]
 #![no_main]
+#![allow(dead_code)]
 
 extern crate petal;
 
 use zx::sys::{
     zx_system_get_page_size, zx_vmar_map, zx_vmar_protect, zx_vmar_unmap, zx_vmo_create,
-    zx_vmo_create_child, zx_vmo_write, HandleValue, ZxStatus,
+    zx_vmo_create_child, zx_vmo_write, HandleValue, ZxStatus, ZX_OK,
 };
 
-const ZX_OK: ZxStatus = 0;
 const ZX_VM_PERM_READ: u32 = 1;
 const ZX_VM_PERM_WRITE: u32 = 2;
 const ZX_VMO_CHILD_SNAPSHOT: u32 = 1 << 0; // SNAPSHOT (full CoW)

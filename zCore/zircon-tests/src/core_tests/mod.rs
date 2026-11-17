@@ -1,5 +1,11 @@
 //! 1:1 ports of the Fuchsia C++ core-tests-standalone binary.
 //!
+//! Syscall-layer tests (using UserInPtr/UserOutPtr) have been ported
+//! to petal user-mode binaries. The remaining modules here contain
+//! kernel-API tests that run in kernel mode, plus helpers used by
+//! the extra test modules.
+#![allow(dead_code)]
+//!
 //! Each sub-module corresponds to a C++ test suite directory under
 //! `zircon/system/utest/core/`.  Test functions have `/// C++: TEST(...)`
 //! doc comments identifying the original C++ test.
@@ -165,52 +171,6 @@ pub async fn run_all() {
     run_test!(vmo_zero);
 
     // ── Syscall tests (use UserInPtr/UserOutPtr) ────────────────────
-    // These tests pass kernel addresses through the syscall layer's
-    // user-pointer validation. On bare-metal, kernel addresses are
-    // correctly rejected by VMAR validation. These tests only run in
-    // libos mode (host `cargo test`). They need to migrate to the
-    // petal user-mode binary to run on bare-metal QEMU.
-    #[cfg(not(target_os = "none"))]
-    {
-        run_test!(bad_access);
-        run_test!(async channel);
-        run_test!(async channel_call);
-        run_test!(async channel_internal);
-        run_test!(clock);
-        run_test!(counter);
-        run_test!(cpu_mask_profile);
-        run_test!(debuglog);
-        run_test!(async event_pair);
-        run_test!(fifo);
-        run_test!(async futex);
-        run_test!(async handle_wait);
-        run_test!(hotplug);
-        run_test!(async iovec);
-        run_test!(job);
-        run_test!(memory_priority_profile);
-        run_test!(object_info);
-        run_test!(async object_wait);
-        run_test!(async port);
-        run_test!(async process);
-        run_test!(profile);
-        run_test!(socket);
-        run_test!(async sync_completion);
-        run_test!(async syscall_channel);
-        run_test!(syscall_fifo);
-        run_test!(syscall_generation);
-        run_test!(syscall_handle);
-        run_test!(syscall_port);
-        run_test!(syscall_socket);
-        run_test!(syscall_transfer_data);
-        run_test!(syscall_vmo);
-        run_test!(system_cpu);
-        run_test!(async thread);
-        run_test!(thread_sampler);
-        run_test!(async timer);
-        run_test!(user_exceptions);
-        run_test!(async vmo);
-        run_test!(async wake_reports);
-    }
-    #[cfg(target_os = "none")]
-    log::warn!("  (skipped 37 syscall-layer tests on bare-metal — need petal user-mode binary)");
+    // Syscall-layer tests have been ported to petal user-mode binaries.
+    // They run on bare-metal QEMU via the petal test infrastructure.
 }

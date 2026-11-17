@@ -24,7 +24,6 @@ case "$ARCH" in
   aarch64)
     RUST_TARGET="aarch64-unknown-none-softfloat"
     KERNEL="target/qemu-aarch64/release/kernel.bin"
-    ROOTFS_IMG="target/qemu-aarch64/release/aarch64-zircon.img"
     QEMU_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
@@ -35,7 +34,6 @@ case "$ARCH" in
   x86_64)
     RUST_TARGET="x86_64-unknown-none"
     KERNEL="target/qemu-x86_64/release/boot.img"
-    ROOTFS_IMG="target/qemu-x86_64/release/x86_64-zircon.img"
     QEMU_CMD=(
       qemu-system-x86_64
       -m 4G -display none -no-reboot -nographic
@@ -47,7 +45,6 @@ case "$ARCH" in
   riscv64)
     RUST_TARGET="riscv64gc-unknown-none-elf"
     KERNEL="target/qemu-riscv64/release/kernel.bin"
-    ROOTFS_IMG="target/qemu-riscv64/release/riscv64-zircon.img"
     QEMU_CMD=(
       qemu-system-riscv64
       -m 2G -display none -no-reboot -nographic
@@ -87,7 +84,9 @@ trap "rm -f $LOG" EXIT
 if [ "$ARCH" = "x86_64" ]; then
   QEMU_CMD+=(-drive "format=raw,file=$KERNEL")
 else
-  QEMU_CMD+=(-kernel "$KERNEL" -initrd "$ROOTFS_IMG")
+  # The petal ZBI is embedded in the kernel binary (via PETAL_ZBI env var
+  # during build). No separate initrd needed.
+  QEMU_CMD+=(-kernel "$KERNEL")
 fi
 
 "${QEMU_CMD[@]}" > "$LOG" 2>&1 &

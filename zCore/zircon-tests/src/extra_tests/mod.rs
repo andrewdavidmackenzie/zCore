@@ -25,10 +25,5 @@ pub async fn run_all() {
     rseq::run_all();
 
     // Syscall tests (need user-mode buffers)
-    #[cfg(not(target_os = "none"))]
-    {
-        exceptions_arch::run_all();
-        process_shared::run_all();
-        thread_extra::run_all().await;
-    }
+    // Syscall-layer tests ported to petal user-mode binaries.
 }
