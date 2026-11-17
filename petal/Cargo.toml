@@ -70,3 +70,7 @@ path = "src/bin/syscall_vmo_test.rs"
 [[bin]]
 name = "user-exceptions-test"
 path = "src/bin/user_exceptions_test.rs"
+
+[[bin]]
+name = "clock-test"
+path = "src/bin/clock_test.rs"
