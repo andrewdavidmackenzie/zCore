@@ -118,3 +118,11 @@ path = "src/bin/cprng_test.rs"
 [[bin]]
 name = "bad-syscall-test"
 path = "src/bin/bad_syscall_test.rs"
+
+[[bin]]
+name = "debug-test"
+path = "src/bin/debug_test.rs"
+
+[[bin]]
+name = "clock-ops-test"
+path = "src/bin/clock_ops_test.rs"
