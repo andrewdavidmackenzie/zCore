@@ -30,13 +30,29 @@ case "$ARCH" in
     ;;
   x86_64)
     KERNEL="target/qemu-x86_64/release/boot.img"
+    # Find OVMF firmware — location varies by distro
+    OVMF=""
+    for candidate in \
+      /usr/share/ovmf/OVMF.fd \
+      /usr/share/OVMF/OVMF_CODE.fd \
+      /usr/share/edk2/ovmf/OVMF_CODE.fd \
+      /usr/share/qemu/OVMF.fd; do
+      if [ -f "$candidate" ]; then
+        OVMF="$candidate"
+        break
+      fi
+    done
+    if [ -z "$OVMF" ]; then
+      echo "ERROR: OVMF firmware not found"
+      exit 1
+    fi
     QEMU_CMD=(
       qemu-system-x86_64
       -m 4G -display none -no-reboot -nographic
       -machine q35 -cpu qemu64,+fsgsbase -smp "$CORES"
       -drive "format=raw,file=$KERNEL"
       -serial mon:stdio
-      -bios /usr/share/ovmf/OVMF.fd
+      -bios "$OVMF"
     )
     ;;
   riscv64)

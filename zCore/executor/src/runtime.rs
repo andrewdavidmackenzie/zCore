@@ -261,12 +261,16 @@ pub fn spawn_with_priority(
     if enable {
         crate::arch::intr_off();
     }
-    // Pin tasks to the current CPU. Cross-CPU task distribution
-    // requires reliable IPI wakeup and cross-CPU waker propagation,
-    // which is not fully working (#684). Pinning to the current CPU
-    // ensures all tasks spawned by a test run on the same executor
-    // as the test runner, matching the aarch64 behavior.
-    let cpu = Some(crate::arch::cpu_id());
+    // Distribute tasks across CPUs on x86_64. On aarch64/riscv64,
+    // hardware interrupts (serial, timer) are routed to CPU 0 and
+    // the waker system doesn't propagate cross-CPU (#684). Tasks
+    // on secondary CPUs can't be woken by IRQs on the BSP.
+    // x86_64 uses polled serial I/O so this isn't an issue there.
+    let cpu = if cfg!(target_arch = "x86_64") && CPU_RUNTIMES.get().is_some() {
+        None
+    } else {
+        Some(crate::arch::cpu_id())
+    };
     let result = spawn_task(future, Some(priority), cpu);
     if enable {
         crate::arch::intr_on();
