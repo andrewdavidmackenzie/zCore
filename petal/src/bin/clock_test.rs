@@ -12,9 +12,6 @@ extern crate petal;
 use alloc::vec::Vec;
 use zx::sys::*;
 
-const ZX_OK: ZxStatus = 0;
-const ZX_ERR_INVALID_ARGS: ZxStatus = -10;
-
 // Clock options
 const ZX_CLOCK_OPT_MAPPABLE: u64 = 1 << 4;
 

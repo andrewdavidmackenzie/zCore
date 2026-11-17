@@ -14,11 +14,6 @@ extern crate petal;
 
 use zx::sys::*;
 
-const ZX_OK: ZxStatus = 0;
-const ZX_ERR_INVALID_ARGS: ZxStatus = -10;
-const ZX_ERR_BAD_HANDLE: ZxStatus = -11;
-const ZX_ERR_WRONG_TYPE: ZxStatus = -12;
-
 const FLAG_READABLE: u32 = 0x4000_0000;
 const DLOG_MAX_LEN: usize = 256;
 

@@ -11,11 +11,6 @@ extern crate petal;
 
 use zx::sys::*;
 
-const ZX_OK: ZxStatus = 0;
-const ZX_ERR_INVALID_ARGS: ZxStatus = -10;
-const ZX_ERR_BAD_HANDLE: ZxStatus = -11;
-const ZX_ERR_ACCESS_DENIED: ZxStatus = -30;
-const ZX_RIGHT_SAME_RIGHTS: u32 = 1 << 31;
 const ZX_USER_SIGNAL_7: u32 = 1 << 31;
 
 fn pass(name: &[u8]) {

@@ -10,20 +10,6 @@ extern crate petal;
 
 use zx::sys::*;
 
-const ZX_OK: ZxStatus = 0;
-const ZX_ERR_INVALID_ARGS: ZxStatus = -10;
-const ZX_ERR_OUT_OF_RANGE: ZxStatus = -14;
-const ZX_ERR_ACCESS_DENIED: ZxStatus = -30;
-const ZX_ERR_PEER_CLOSED: ZxStatus = -24;
-
-const ZX_RIGHT_READ: u32 = 1 << 2;
-const ZX_RIGHT_WRITE: u32 = 1 << 3;
-const ZX_RIGHT_TRANSFER: u32 = 1 << 1;
-const ZX_RIGHT_WAIT: u32 = 1 << 11;
-const ZX_RIGHT_INSPECT: u32 = 1 << 14;
-const ZX_RIGHT_SIGNAL: u32 = 1 << 7;
-const ZX_RIGHT_SIGNAL_PEER: u32 = 1 << 8;
-
 fn pass(name: &[u8]) {
     zx::debug_write(b"  syscall_fifo_test: ");
     zx::debug_write(name);

@@ -10,10 +10,6 @@ extern crate petal;
 
 use zx::sys::*;
 
-const ZX_OK: ZxStatus = 0;
-const ZX_ERR_INVALID_ARGS: ZxStatus = -10;
-const ZX_ERR_BAD_HANDLE: ZxStatus = -11;
-
 const PA_PROC_SELF: u32 = 0x01;
 
 fn pass(name: &[u8]) {

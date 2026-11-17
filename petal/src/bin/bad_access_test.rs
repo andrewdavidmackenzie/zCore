@@ -12,10 +12,6 @@ extern crate petal;
 
 use zx::sys::*;
 
-const ZX_OK: ZxStatus = 0;
-const ZX_ERR_INVALID_ARGS: ZxStatus = -10;
-const ZX_ERR_BAD_HANDLE: ZxStatus = -11;
-
 fn pass(name: &[u8]) {
     zx::debug_write(b"  bad_access_test: ");
     zx::debug_write(name);

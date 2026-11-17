@@ -12,25 +12,11 @@ extern crate petal;
 
 use zx::sys::*;
 
-const ZX_OK: ZxStatus = 0;
-const ZX_ERR_INVALID_ARGS: ZxStatus = -10;
-const ZX_ERR_BAD_HANDLE: ZxStatus = -11;
-const ZX_ERR_WRONG_TYPE: ZxStatus = -12;
-const ZX_ERR_OUT_OF_RANGE: ZxStatus = -14;
-const ZX_ERR_ACCESS_DENIED: ZxStatus = -30;
-
 // Signal bits (from zircon-object Signal bitflags)
 const ZX_COUNTER_NON_POSITIVE: u32 = 1 << 5; // __ZX_OBJECT_SIGNAL_5
 const ZX_USER_SIGNAL_0: u32 = 1 << 24;
 
 // Rights bits from Fuchsia ABI
-const ZX_RIGHT_DUPLICATE: u32 = 1 << 0;
-const ZX_RIGHT_TRANSFER: u32 = 1 << 1;
-const ZX_RIGHT_READ: u32 = 1 << 2;
-const ZX_RIGHT_WRITE: u32 = 1 << 3;
-const ZX_RIGHT_SIGNAL: u32 = 1 << 7;
-const ZX_RIGHT_WAIT: u32 = 1 << 11;
-const ZX_RIGHT_INSPECT: u32 = 1 << 14;
 const ZX_RIGHTS_DEFAULT_COUNTER: u32 = ZX_RIGHT_DUPLICATE
     | ZX_RIGHT_TRANSFER
     | ZX_RIGHT_READ

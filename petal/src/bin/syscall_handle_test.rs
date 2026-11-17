@@ -12,13 +12,6 @@ extern crate petal;
 use alloc::vec::Vec;
 use zx::sys::*;
 
-const ZX_OK: ZxStatus = 0;
-const ZX_ERR_BAD_HANDLE: ZxStatus = -11;
-const ZX_ERR_NOT_FOUND: ZxStatus = -25;
-const ZX_RIGHT_SAME_RIGHTS: u32 = 1 << 31;
-const ZX_RIGHT_READ: u32 = 1 << 2;
-const ZX_RIGHT_WRITE: u32 = 1 << 3;
-
 fn pass(name: &[u8]) {
     zx::debug_write(b"  syscall_handle_test: ");
     zx::debug_write(name);

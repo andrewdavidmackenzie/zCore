@@ -10,14 +10,6 @@ extern crate petal;
 
 use zx::sys::*;
 
-const ZX_OK: ZxStatus = 0;
-const ZX_ERR_TIMED_OUT: ZxStatus = -21;
-const ZX_ERR_INVALID_ARGS: ZxStatus = -10;
-const ZX_ERR_BAD_HANDLE: ZxStatus = -11;
-const ZX_ERR_NOT_SUPPORTED: ZxStatus = -2;
-const ZX_ERR_ACCESS_DENIED: ZxStatus = -30;
-const ZX_ERR_PEER_CLOSED: ZxStatus = -24;
-
 // Signal bits
 const ZX_USER_SIGNAL_0: u32 = 1 << 24;
 const ZX_USER_SIGNAL_1: u32 = 1 << 25;
@@ -28,13 +20,6 @@ const ZX_EVENTPAIR_SIGNALED: u32 = 1 << 3;
 const ZX_EVENTPAIR_PEER_CLOSED: u32 = 1 << 2;
 
 // Rights
-const ZX_RIGHT_SAME_RIGHTS: u32 = 1 << 31;
-const ZX_RIGHT_DUPLICATE: u32 = 1 << 0;
-const ZX_RIGHT_TRANSFER: u32 = 1 << 1;
-const ZX_RIGHT_SIGNAL: u32 = 1 << 7;
-const ZX_RIGHT_SIGNAL_PEER: u32 = 1 << 8;
-const ZX_RIGHT_WAIT: u32 = 1 << 11;
-const ZX_RIGHT_INSPECT: u32 = 1 << 14;
 
 // ZX_INFO_HANDLE_BASIC
 const ZX_INFO_HANDLE_BASIC: u32 = 2;

@@ -10,7 +10,6 @@ extern crate petal;
 
 use zx::sys::*;
 
-const ZX_OK: ZxStatus = 0;
 const PA_RESOURCE: u32 = 0x3F;
 
 fn pass(name: &[u8]) {

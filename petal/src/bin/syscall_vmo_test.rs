@@ -10,8 +10,6 @@ extern crate petal;
 
 use zx::sys::*;
 
-const ZX_OK: ZxStatus = 0;
-
 fn pass(name: &[u8]) {
     zx::debug_write(b"  syscall_vmo_test: ");
     zx::debug_write(name);
