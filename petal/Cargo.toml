@@ -194,3 +194,7 @@ path = "src/bin/memory_priority_profile_test.rs"
 [[bin]]
 name = "thread-sampler-test"
 path = "src/bin/thread_sampler_test.rs"
+
+[[bin]]
+name = "profile-test"
+path = "src/bin/profile_test.rs"
