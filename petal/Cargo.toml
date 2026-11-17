@@ -58,3 +58,7 @@ path = "src/bin/counter_test.rs"
 [[bin]]
 name = "hotplug-test"
 path = "src/bin/hotplug_test.rs"
+
+[[bin]]
+name = "syscall-transfer-data-test"
+path = "src/bin/syscall_transfer_data_test.rs"

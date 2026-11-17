@@ -12,11 +12,11 @@ extern crate petal;
 use zx::sys::*;
 
 const ZX_OK: ZxStatus = 0;
-const ZX_ERR_BAD_HANDLE: ZxStatus = -11;
 const ZX_ERR_INVALID_ARGS: ZxStatus = -10;
-const ZX_ERR_WRONG_TYPE: ZxStatus = -54;
+const ZX_ERR_BAD_HANDLE: ZxStatus = -11;
+const ZX_ERR_WRONG_TYPE: ZxStatus = -12;
+const ZX_ERR_OUT_OF_RANGE: ZxStatus = -14;
 const ZX_ERR_ACCESS_DENIED: ZxStatus = -30;
-const ZX_ERR_OUT_OF_RANGE: ZxStatus = -35;
 
 // Signal bits (from zircon-object Signal bitflags)
 const ZX_COUNTER_POSITIVE: u32 = 1 << 4;      // __ZX_OBJECT_SIGNAL_4
