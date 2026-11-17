@@ -4,6 +4,7 @@
 
 #![no_std]
 #![no_main]
+#![allow(dead_code)]
 
 extern crate alloc;
 extern crate petal;
@@ -34,7 +35,9 @@ fn fail(name: &[u8], msg: &[u8]) {
 }
 
 fn assert_ok(s: ZxStatus, name: &[u8], msg: &[u8]) {
-    if s != ZX_OK { fail(name, msg); }
+    if s != ZX_OK {
+        fail(name, msg);
+    }
 }
 
 /// C++: TEST(HandleCloseTest, Many)
@@ -45,7 +48,11 @@ fn close_many_handles() {
     for _ in 0..5 {
         let mut h0: HandleValue = 0;
         let mut h1: HandleValue = 0;
-        assert_ok(unsafe { zx_eventpair_create(0, &mut h0, &mut h1) }, name, b"eventpair create");
+        assert_ok(
+            unsafe { zx_eventpair_create(0, &mut h0, &mut h1) },
+            name,
+            b"eventpair create",
+        );
         handles.push(h0);
         handles.push(h1);
     }
@@ -53,14 +60,17 @@ fn close_many_handles() {
     // Close all at once
     assert_ok(
         unsafe { zx_handle_close_many(handles.as_ptr(), handles.len()) },
-        name, b"close_many",
+        name,
+        b"close_many",
     );
 
     // All should be gone
     for &h in &handles {
         let s = unsafe { zx_handle_check_valid(h) };
         // Should return NOT_FOUND or BAD_HANDLE
-        if s == ZX_OK { fail(name, b"handle still valid after close_many"); }
+        if s == ZX_OK {
+            fail(name, b"handle still valid after close_many");
+        }
     }
 
     pass(name);
@@ -76,16 +86,25 @@ fn replace_success_orig_invalid() {
     let mut h2: HandleValue = 0;
     assert_ok(
         unsafe { zx_handle_replace(h, ZX_RIGHT_SAME_RIGHTS, &mut h2) },
-        name, b"replace",
+        name,
+        b"replace",
     );
-    if h2 == 0 { fail(name, b"replacement handle is 0"); }
+    if h2 == 0 {
+        fail(name, b"replacement handle is 0");
+    }
 
     // Original should be invalid
     let s = unsafe { zx_handle_check_valid(h) };
-    if s == ZX_OK { fail(name, b"original should be invalid after replace"); }
+    if s == ZX_OK {
+        fail(name, b"original should be invalid after replace");
+    }
 
     // New handle should be valid
-    assert_ok(unsafe { zx_handle_check_valid(h2) }, name, b"new handle invalid");
+    assert_ok(
+        unsafe { zx_handle_check_valid(h2) },
+        name,
+        b"new handle invalid",
+    );
 
     unsafe { zx_handle_close(h2) };
     pass(name);
@@ -102,17 +121,24 @@ fn replace_failure_both_invalid() {
     let mut read_only: HandleValue = 0;
     assert_ok(
         unsafe { zx_handle_duplicate(h, ZX_RIGHT_READ, &mut read_only) },
-        name, b"duplicate with READ",
+        name,
+        b"duplicate with READ",
     );
     unsafe { zx_handle_close(h) };
 
     // Try to replace with rights that include WRITE (escalation) — should fail
     let mut h2: HandleValue = 0;
     let s = unsafe { zx_handle_replace(read_only, ZX_RIGHT_READ | ZX_RIGHT_WRITE, &mut h2) };
-    if s == ZX_OK { fail(name, b"escalation should fail"); }
+    if s == ZX_OK {
+        fail(name, b"escalation should fail");
+    }
 
     // In zCore, replace does NOT consume the source on failure
-    assert_ok(unsafe { zx_handle_check_valid(read_only) }, name, b"source still valid");
+    assert_ok(
+        unsafe { zx_handle_check_valid(read_only) },
+        name,
+        b"source still valid",
+    );
 
     unsafe { zx_handle_close(read_only) };
     pass(name);

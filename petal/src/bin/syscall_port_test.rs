@@ -4,6 +4,7 @@
 
 #![no_std]
 #![no_main]
+#![allow(dead_code)]
 
 extern crate petal;
 
@@ -43,17 +44,23 @@ fn fail(name: &[u8], msg: &[u8]) {
 }
 
 fn assert_ok(s: ZxStatus, name: &[u8], msg: &[u8]) {
-    if s != ZX_OK { fail(name, msg); }
+    if s != ZX_OK {
+        fail(name, msg);
+    }
 }
 
 fn assert_status(got: ZxStatus, expected: ZxStatus, name: &[u8], msg: &[u8]) {
-    if got != expected { fail(name, msg); }
+    if got != expected {
+        fail(name, msg);
+    }
 }
 
 fn port_create() -> HandleValue {
     let mut h: HandleValue = 0;
     let s = unsafe { zx_port_create(0, &mut h) };
-    if s != ZX_OK { fail(b"port_create", b"failed"); }
+    if s != ZX_OK {
+        fail(b"port_create", b"failed");
+    }
     h
 }
 
@@ -63,7 +70,9 @@ fn port_create_invalid_options() {
     let mut h: HandleValue = 0;
     assert_status(
         unsafe { zx_port_create(0xFF, &mut h) },
-        ZX_ERR_INVALID_ARGS, name, b"",
+        ZX_ERR_INVALID_ARGS,
+        name,
+        b"",
     );
     pass(name);
 }
@@ -74,12 +83,18 @@ fn port_queue_wrong_type() {
     // Create a channel (not a port)
     let mut ch0: HandleValue = 0;
     let mut ch1: HandleValue = 0;
-    assert_ok(unsafe { zx_channel_create(0, &mut ch0, &mut ch1) }, name, b"channel create");
+    assert_ok(
+        unsafe { zx_channel_create(0, &mut ch0, &mut ch1) },
+        name,
+        b"channel create",
+    );
 
     let packet = [0u8; PORT_PACKET_SIZE];
     assert_status(
         unsafe { zx_port_queue(ch0, packet.as_ptr()) },
-        ZX_ERR_WRONG_TYPE, name, b"",
+        ZX_ERR_WRONG_TYPE,
+        name,
+        b"",
     );
 
     unsafe { zx_handle_close(ch0) };
@@ -95,14 +110,23 @@ fn port_queue_access_denied() {
     // Duplicate with READ only (no WRITE)
     let mut read_only: HandleValue = 0;
     assert_ok(
-        unsafe { zx_handle_duplicate(port_h, ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT, &mut read_only) },
-        name, b"dup read-only",
+        unsafe {
+            zx_handle_duplicate(
+                port_h,
+                ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
+                &mut read_only,
+            )
+        },
+        name,
+        b"dup read-only",
     );
 
     let packet = [0u8; PORT_PACKET_SIZE];
     assert_status(
         unsafe { zx_port_queue(read_only, packet.as_ptr()) },
-        ZX_ERR_ACCESS_DENIED, name, b"",
+        ZX_ERR_ACCESS_DENIED,
+        name,
+        b"",
     );
 
     unsafe { zx_handle_close(read_only) };
@@ -115,7 +139,9 @@ fn port_cancel_bad_source() {
     let name = b"port_cancel_bad_source";
     let port_h = port_create();
     let s = unsafe { zx_port_cancel(port_h, 0xDEAD_BEEF, 0) };
-    if s == ZX_OK { fail(name, b"should fail with bad source handle"); }
+    if s == ZX_OK {
+        fail(name, b"should fail with bad source handle");
+    }
     unsafe { zx_handle_close(port_h) };
     pass(name);
 }
@@ -126,11 +152,17 @@ fn port_cancel_key_wrong_type() {
     // Use channel as "port"
     let mut ch0: HandleValue = 0;
     let mut ch1: HandleValue = 0;
-    assert_ok(unsafe { zx_channel_create(0, &mut ch0, &mut ch1) }, name, b"channel create");
+    assert_ok(
+        unsafe { zx_channel_create(0, &mut ch0, &mut ch1) },
+        name,
+        b"channel create",
+    );
 
     assert_status(
         unsafe { zx_port_cancel_key(ch0, 0, 0) },
-        ZX_ERR_WRONG_TYPE, name, b"",
+        ZX_ERR_WRONG_TYPE,
+        name,
+        b"",
     );
 
     unsafe { zx_handle_close(ch0) };
@@ -143,7 +175,9 @@ fn port_queue_null_ptr() {
     let name = b"port_queue_null_ptr";
     let port_h = port_create();
     let s = unsafe { zx_port_queue(port_h, core::ptr::null()) };
-    if s == ZX_OK { fail(name, b"null packet should fail"); }
+    if s == ZX_OK {
+        fail(name, b"null packet should fail");
+    }
     unsafe { zx_handle_close(port_h) };
     pass(name);
 }
@@ -153,11 +187,17 @@ fn port_async_wait_invalid_option() {
     let name = b"port_async_wait_invalid_option";
     let port_h = port_create();
     let mut event_h: HandleValue = 0;
-    assert_ok(unsafe { zx_event_create(0, &mut event_h) }, name, b"event create");
+    assert_ok(
+        unsafe { zx_event_create(0, &mut event_h) },
+        name,
+        b"event create",
+    );
 
     assert_status(
         unsafe { zx_object_wait_async(event_h, port_h, 0, ZX_EVENT_SIGNALED, 0xFF) },
-        ZX_ERR_INVALID_ARGS, name, b"",
+        ZX_ERR_INVALID_ARGS,
+        name,
+        b"",
     );
 
     unsafe { zx_handle_close(event_h) };
@@ -171,14 +211,24 @@ fn port_cancel_wrong_type() {
     // Use channel as "port"
     let mut ch0: HandleValue = 0;
     let mut ch1: HandleValue = 0;
-    assert_ok(unsafe { zx_channel_create(0, &mut ch0, &mut ch1) }, name, b"channel create");
+    assert_ok(
+        unsafe { zx_channel_create(0, &mut ch0, &mut ch1) },
+        name,
+        b"channel create",
+    );
 
     let mut event_h: HandleValue = 0;
-    assert_ok(unsafe { zx_event_create(0, &mut event_h) }, name, b"event create");
+    assert_ok(
+        unsafe { zx_event_create(0, &mut event_h) },
+        name,
+        b"event create",
+    );
 
     assert_status(
         unsafe { zx_port_cancel(ch0, event_h, 0) },
-        ZX_ERR_WRONG_TYPE, name, b"",
+        ZX_ERR_WRONG_TYPE,
+        name,
+        b"",
     );
 
     unsafe { zx_handle_close(ch0) };
@@ -195,16 +245,29 @@ fn port_cancel_access_denied() {
     // Dup port with READ only
     let mut read_only: HandleValue = 0;
     assert_ok(
-        unsafe { zx_handle_duplicate(port_h, ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT, &mut read_only) },
-        name, b"dup read-only",
+        unsafe {
+            zx_handle_duplicate(
+                port_h,
+                ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
+                &mut read_only,
+            )
+        },
+        name,
+        b"dup read-only",
     );
 
     let mut event_h: HandleValue = 0;
-    assert_ok(unsafe { zx_event_create(0, &mut event_h) }, name, b"event create");
+    assert_ok(
+        unsafe { zx_event_create(0, &mut event_h) },
+        name,
+        b"event create",
+    );
 
     assert_status(
         unsafe { zx_port_cancel(read_only, event_h, 0) },
-        ZX_ERR_ACCESS_DENIED, name, b"",
+        ZX_ERR_ACCESS_DENIED,
+        name,
+        b"",
     );
 
     unsafe { zx_handle_close(read_only) };
@@ -220,16 +283,29 @@ fn port_wait_async_port_access_denied() {
 
     let mut read_only: HandleValue = 0;
     assert_ok(
-        unsafe { zx_handle_duplicate(port_h, ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT, &mut read_only) },
-        name, b"dup read-only port",
+        unsafe {
+            zx_handle_duplicate(
+                port_h,
+                ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
+                &mut read_only,
+            )
+        },
+        name,
+        b"dup read-only port",
     );
 
     let mut event_h: HandleValue = 0;
-    assert_ok(unsafe { zx_event_create(0, &mut event_h) }, name, b"event create");
+    assert_ok(
+        unsafe { zx_event_create(0, &mut event_h) },
+        name,
+        b"event create",
+    );
 
     assert_status(
         unsafe { zx_object_wait_async(event_h, read_only, 0, ZX_EVENT_SIGNALED, 0) },
-        ZX_ERR_ACCESS_DENIED, name, b"",
+        ZX_ERR_ACCESS_DENIED,
+        name,
+        b"",
     );
 
     unsafe { zx_handle_close(read_only) };
@@ -243,14 +319,24 @@ fn port_wait_async_port_wrong_type() {
     let name = b"port_wait_async_port_wrong_type";
     let mut ch0: HandleValue = 0;
     let mut ch1: HandleValue = 0;
-    assert_ok(unsafe { zx_channel_create(0, &mut ch0, &mut ch1) }, name, b"channel create");
+    assert_ok(
+        unsafe { zx_channel_create(0, &mut ch0, &mut ch1) },
+        name,
+        b"channel create",
+    );
 
     let mut event_h: HandleValue = 0;
-    assert_ok(unsafe { zx_event_create(0, &mut event_h) }, name, b"event create");
+    assert_ok(
+        unsafe { zx_event_create(0, &mut event_h) },
+        name,
+        b"event create",
+    );
 
     assert_status(
         unsafe { zx_object_wait_async(event_h, ch0, 0, ZX_EVENT_SIGNALED, 0) },
-        ZX_ERR_WRONG_TYPE, name, b"",
+        ZX_ERR_WRONG_TYPE,
+        name,
+        b"",
     );
 
     unsafe { zx_handle_close(ch0) };
@@ -265,18 +351,25 @@ fn port_wait_async_target_access_denied() {
     let port_h = port_create();
 
     let mut event_h: HandleValue = 0;
-    assert_ok(unsafe { zx_event_create(0, &mut event_h) }, name, b"event create");
+    assert_ok(
+        unsafe { zx_event_create(0, &mut event_h) },
+        name,
+        b"event create",
+    );
 
     // Dup event with SIGNAL only (no WAIT)
     let mut no_wait: HandleValue = 0;
     assert_ok(
         unsafe { zx_handle_duplicate(event_h, ZX_RIGHT_SIGNAL | ZX_RIGHT_INSPECT, &mut no_wait) },
-        name, b"dup no-wait event",
+        name,
+        b"dup no-wait event",
     );
 
     assert_status(
         unsafe { zx_object_wait_async(no_wait, port_h, 0, ZX_EVENT_SIGNALED, 0) },
-        ZX_ERR_ACCESS_DENIED, name, b"",
+        ZX_ERR_ACCESS_DENIED,
+        name,
+        b"",
     );
 
     unsafe { zx_handle_close(no_wait) };

@@ -4,6 +4,7 @@
 
 #![no_std]
 #![no_main]
+#![allow(dead_code)]
 
 extern crate petal;
 
@@ -31,15 +32,24 @@ fn fail(name: &[u8], msg: &[u8]) {
 }
 
 fn write_u32(mut val: u32) {
-    if val == 0 { zx::debug_write(b"0"); return; }
+    if val == 0 {
+        zx::debug_write(b"0");
+        return;
+    }
     let mut buf = [0u8; 10];
     let mut i = buf.len();
-    while val > 0 { i -= 1; buf[i] = b'0' + (val % 10) as u8; val /= 10; }
+    while val > 0 {
+        i -= 1;
+        buf[i] = b'0' + (val % 10) as u8;
+        val /= 10;
+    }
     zx::debug_write(&buf[i..]);
 }
 
 fn assert_status(got: ZxStatus, expected: ZxStatus, name: &[u8], msg: &[u8]) {
-    if got != expected { fail(name, msg); }
+    if got != expected {
+        fail(name, msg);
+    }
 }
 
 /// C++: TEST(UserExceptionsTest, Delivered)
@@ -47,8 +57,12 @@ fn delivered(proc_h: HandleValue) {
     let name = b"delivered";
     let mut channel_h: HandleValue = 0;
     let s = unsafe { zx_task_create_exception_channel(proc_h, 0, &mut channel_h) };
-    if s != ZX_OK { fail(name, b"create exception channel"); }
-    if channel_h == 0 { fail(name, b"channel handle is 0"); }
+    if s != ZX_OK {
+        fail(name, b"create exception channel");
+    }
+    if channel_h == 0 {
+        fail(name, b"channel handle is 0");
+    }
     unsafe { zx_handle_close(channel_h) };
     pass(name);
 }
@@ -61,14 +75,18 @@ fn invalid_args(proc_h: HandleValue) {
     let mut channel_h: HandleValue = 0;
     assert_status(
         unsafe { zx_task_create_exception_channel(0xDEAD, 0, &mut channel_h) },
-        ZX_ERR_BAD_HANDLE, name, b"bad handle",
+        ZX_ERR_BAD_HANDLE,
+        name,
+        b"bad handle",
     );
 
     // Invalid option
     let mut channel_h2: HandleValue = 0;
     assert_status(
         unsafe { zx_task_create_exception_channel(proc_h, 99, &mut channel_h2) },
-        ZX_ERR_INVALID_ARGS, name, b"invalid option",
+        ZX_ERR_INVALID_ARGS,
+        name,
+        b"invalid option",
     );
 
     pass(name);
@@ -83,15 +101,25 @@ fn non_fatal(proc_h: HandleValue) {
     let mut thread_h: HandleValue = 0;
     let thread_name = b"exc-thread\0";
     let s = unsafe {
-        zx_thread_create(proc_h, thread_name.as_ptr(), thread_name.len() - 1, 0, &mut thread_h)
+        zx_thread_create(
+            proc_h,
+            thread_name.as_ptr(),
+            thread_name.len() - 1,
+            0,
+            &mut thread_h,
+        )
     };
-    if s != ZX_OK { fail(name, b"thread create"); }
+    if s != ZX_OK {
+        fail(name, b"thread create");
+    }
 
     // Debugger option (1) on thread should fail
     let mut channel_h: HandleValue = 0;
     assert_status(
         unsafe { zx_task_create_exception_channel(thread_h, 1, &mut channel_h) },
-        ZX_ERR_INVALID_ARGS, name, b"debugger on thread should fail",
+        ZX_ERR_INVALID_ARGS,
+        name,
+        b"debugger on thread should fail",
     );
 
     unsafe { zx_handle_close(thread_h) };

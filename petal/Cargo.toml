@@ -94,3 +94,7 @@ path = "src/bin/syscall_port_test.rs"
 [[bin]]
 name = "syscall-generation-test"
 path = "src/bin/syscall_generation_test.rs"
+
+[[bin]]
+name = "event-pair-test"
+path = "src/bin/event_pair_test.rs"

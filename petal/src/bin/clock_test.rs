@@ -4,6 +4,7 @@
 
 #![no_std]
 #![no_main]
+#![allow(dead_code)]
 
 extern crate alloc;
 extern crate petal;
@@ -39,25 +40,37 @@ fn fail(name: &[u8], msg: &[u8]) {
 }
 
 fn assert_ok(status: ZxStatus, name: &[u8], msg: &[u8]) {
-    if status != ZX_OK { fail(name, msg); }
+    if status != ZX_OK {
+        fail(name, msg);
+    }
 }
 
 fn clock_create(options: u64) -> Result<HandleValue, ZxStatus> {
     let mut h: HandleValue = 0;
     let s = unsafe { zx_clock_create(options, core::ptr::null(), &mut h) };
-    if s == ZX_OK { Ok(h) } else { Err(s) }
+    if s == ZX_OK {
+        Ok(h)
+    } else {
+        Err(s)
+    }
 }
 
 /// C++: TEST(ClockTest, ClockMonotonic)
 fn clock_monotonic() {
     let name = b"clock_monotonic";
     let mut previous = unsafe { zx_clock_get_monotonic_via_kernel() };
-    if previous <= 0 { fail(name, b"initial time not positive"); }
+    if previous <= 0 {
+        fail(name, b"initial time not positive");
+    }
 
     for _ in 0..100 {
         let current = unsafe { zx_clock_get_monotonic_via_kernel() };
-        if current <= 0 { fail(name, b"time not positive"); }
-        if current < previous { fail(name, b"time went backwards"); }
+        if current <= 0 {
+            fail(name, b"time not positive");
+        }
+        if current < previous {
+            fail(name, b"time went backwards");
+        }
         previous = current;
     }
     pass(name);
@@ -72,8 +85,12 @@ fn deadline_after() {
         let before = unsafe { zx_clock_get_monotonic_via_kernel() }.saturating_add(offset);
         let deadline = unsafe { zx_clock_get_monotonic_via_kernel() }.saturating_add(offset);
         let after = unsafe { zx_clock_get_monotonic_via_kernel() }.saturating_add(offset);
-        if deadline < before { fail(name, b"deadline < before"); }
-        if deadline > after { fail(name, b"deadline > after"); }
+        if deadline < before {
+            fail(name, b"deadline < before");
+        }
+        if deadline > after {
+            fail(name, b"deadline > after");
+        }
     }
     pass(name);
 }
@@ -82,17 +99,27 @@ fn deadline_after() {
 fn fault_beyond_stream_size_returns_error(root_vmar: HandleValue) {
     let name = b"fault_beyond_stream_size_returns_error";
 
-    let clock_h = clock_create(ZX_CLOCK_OPT_MAPPABLE)
-        .unwrap_or_else(|_| { fail(name, b"clock create"); 0 });
+    let clock_h = clock_create(ZX_CLOCK_OPT_MAPPABLE).unwrap_or_else(|_| {
+        fail(name, b"clock create");
+        0
+    });
 
-    let options = ZX_VM_PERM_READ | ZX_VM_FAULT_BEYOND_STREAM_SIZE
-        | ZX_VM_ALLOW_FAULTS | ZX_VM_MAP_RANGE;
+    let options =
+        ZX_VM_PERM_READ | ZX_VM_FAULT_BEYOND_STREAM_SIZE | ZX_VM_ALLOW_FAULTS | ZX_VM_MAP_RANGE;
     let page_size = zx_system_get_page_size();
     let mut mapped_addr: usize = 0;
 
     // This should fail with INVALID_ARGS
     let s = unsafe {
-        zx_vmar_map(root_vmar, options, 0, clock_h, 0, page_size, &mut mapped_addr)
+        zx_vmar_map(
+            root_vmar,
+            options,
+            0,
+            clock_h,
+            0,
+            page_size,
+            &mut mapped_addr,
+        )
     };
     if s != ZX_ERR_INVALID_ARGS {
         fail(name, b"expected INVALID_ARGS for FAULT_BEYOND_STREAM_SIZE");
@@ -106,23 +133,36 @@ fn fault_beyond_stream_size_returns_error(root_vmar: HandleValue) {
 fn mappable_clock_padding_leak(root_vmar: HandleValue) {
     let name = b"mappable_clock_padding_leak";
 
-    let clock_h = clock_create(ZX_CLOCK_OPT_MAPPABLE)
-        .unwrap_or_else(|_| { fail(name, b"clock create"); 0 });
+    let clock_h = clock_create(ZX_CLOCK_OPT_MAPPABLE).unwrap_or_else(|_| {
+        fail(name, b"clock create");
+        0
+    });
 
     let options = ZX_VM_PERM_READ | ZX_VM_MAP_RANGE;
     let page_size = zx_system_get_page_size();
     let mut mapped_addr: usize = 0;
 
     assert_ok(
-        unsafe { zx_vmar_map(root_vmar, options, 0, clock_h, 0, page_size, &mut mapped_addr) },
-        name, b"map_clock",
+        unsafe {
+            zx_vmar_map(
+                root_vmar,
+                options,
+                0,
+                clock_h,
+                0,
+                page_size,
+                &mut mapped_addr,
+            )
+        },
+        name,
+        b"map_clock",
     );
-    if mapped_addr == 0 { fail(name, b"mapped address is 0"); }
+    if mapped_addr == 0 {
+        fail(name, b"mapped address is 0");
+    }
 
     // Read the mapped page (now in user space — safe to dereference)
-    let mapped_slice = unsafe {
-        core::slice::from_raw_parts(mapped_addr as *const u8, page_size)
-    };
+    let mapped_slice = unsafe { core::slice::from_raw_parts(mapped_addr as *const u8, page_size) };
 
     // Search for ZX_CLOCK_UNKNOWN_ERROR (u64::MAX)
     const ZX_CLOCK_UNKNOWN_ERROR: u64 = u64::MAX;
@@ -138,16 +178,25 @@ fn mappable_clock_padding_leak(root_vmar: HandleValue) {
 
     let error_off = match error_offset {
         Some(o) => o,
-        None => { fail(name, b"ZX_CLOCK_UNKNOWN_ERROR not found"); 0 }
+        None => {
+            fail(name, b"ZX_CLOCK_UNKNOWN_ERROR not found");
+            0
+        }
     };
 
     // Padding at offset 36 from error_bound should be zero
     let padding_off = error_off + 36;
-    if padding_off + 4 > page_size { fail(name, b"padding offset out of range"); }
+    if padding_off + 4 > page_size {
+        fail(name, b"padding offset out of range");
+    }
     let padding = u32::from_ne_bytes(
-        mapped_slice[padding_off..padding_off + 4].try_into().unwrap()
+        mapped_slice[padding_off..padding_off + 4]
+            .try_into()
+            .unwrap(),
     );
-    if padding != 0 { fail(name, b"padding contains garbage"); }
+    if padding != 0 {
+        fail(name, b"padding contains garbage");
+    }
 
     // Unmap
     unsafe { zx_vmar_unmap(root_vmar, mapped_addr, page_size) };

@@ -4,6 +4,7 @@
 
 #![no_std]
 #![no_main]
+#![allow(dead_code)]
 
 extern crate petal;
 
@@ -34,7 +35,10 @@ fn k_hotplug_test() {
 
     let bootstrap = match petal::Bootstrap::read() {
         Some(b) => b,
-        None => { fail(name, b"no bootstrap"); return; }
+        None => {
+            fail(name, b"no bootstrap");
+            return;
+        }
     };
 
     // Get the root resource from bootstrap
@@ -46,15 +50,15 @@ fn k_hotplug_test() {
 
     // Send "ut hotplug" command
     let cmd = b"ut hotplug";
-    let status = unsafe {
-        zx_debug_send_command(resource_h, cmd.as_ptr(), cmd.len())
-    };
+    let status = unsafe { zx_debug_send_command(resource_h, cmd.as_ptr(), cmd.len()) };
     // The C++ test expects ZX_OK because Fuchsia runs in-kernel unit
     // tests. zCore accepts "ut <name>" as a stub returning OK. If the
     // resource validation or command parsing fails, that's the real bug.
     // Accept both OK and NOT_SUPPORTED (-2) since the kernel may not
     // implement "ut hotplug" but should accept the syscall itself.
-    if status != ZX_OK && status != -2 /* NOT_SUPPORTED */ {
+    if status != ZX_OK && status != -2
+    /* NOT_SUPPORTED */
+    {
         fail(name, b"debug command returned unexpected error");
     }
 

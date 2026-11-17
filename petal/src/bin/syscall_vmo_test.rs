@@ -4,6 +4,7 @@
 
 #![no_std]
 #![no_main]
+#![allow(dead_code)]
 
 extern crate petal;
 
@@ -27,7 +28,9 @@ fn fail(name: &[u8], msg: &[u8]) {
 }
 
 fn assert_ok(status: ZxStatus, name: &[u8], msg: &[u8]) {
-    if status != ZX_OK { fail(name, msg); }
+    if status != ZX_OK {
+        fail(name, msg);
+    }
 }
 
 /// C++: TEST(VmoTestCase, StreamSize) -- syscall level
@@ -39,20 +42,23 @@ fn stream_size_via_syscall() {
     let mut h: HandleValue = 0;
     assert_ok(
         unsafe { zx_vmo_create((page_size * 4) as u64, 0, &mut h) },
-        name, b"vmo create",
+        name,
+        b"vmo create",
     );
 
     // Set stream size to 2 pages
     assert_ok(
         unsafe { zx_vmo_set_stream_size(h, (page_size * 2) as u64) },
-        name, b"set stream size",
+        name,
+        b"set stream size",
     );
 
     // Get stream size -- should be 2 pages
     let mut size: u64 = 0;
     assert_ok(
         unsafe { zx_vmo_get_stream_size(h, &mut size) },
-        name, b"get stream size",
+        name,
+        b"get stream size",
     );
     if size != (page_size * 2) as u64 {
         fail(name, b"stream size mismatch");

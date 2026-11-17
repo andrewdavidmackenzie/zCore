@@ -3,6 +3,16 @@
 //! These use hardware trap instructions to enter the kernel:
 //! - `svc #0` on aarch64 (syscall number in x16)
 //! - `syscall` on x86_64 (syscall number in rax)
+//!
+//! # Safety
+//!
+//! All `unsafe` functions in this module require that pointer arguments
+//! are valid (non-dangling, properly aligned, pointing to sufficient
+//! memory) for the duration of the syscall. The kernel validates user
+//! pointers and returns an error for invalid addresses rather than
+//! causing undefined behavior.
+#![allow(clippy::missing_safety_doc)]
+#![allow(clippy::too_many_arguments)]
 //! - `ecall` on riscv64 (syscall number in a7)
 //!
 //! # Safety

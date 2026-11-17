@@ -4,6 +4,7 @@
 
 #![no_std]
 #![no_main]
+#![allow(dead_code)]
 
 extern crate petal;
 
@@ -91,7 +92,9 @@ fn status_name(s: ZxStatus) -> &'static [u8] {
 fn vmo_create(size: u64) -> HandleValue {
     let mut h: HandleValue = 0;
     let s = unsafe { zx_vmo_create(size, 0, &mut h) };
-    if s != ZX_OK { fail(b"vmo_create", b"failed"); }
+    if s != ZX_OK {
+        fail(b"vmo_create", b"failed");
+    }
     h
 }
 
@@ -105,51 +108,69 @@ fn invalid_inputs() {
     // Non-zero options -> INVALID_ARGS
     assert_status(
         unsafe { zx_vmo_transfer_data(dst, 1, 0, page_size, src, 0) },
-        ZX_ERR_INVALID_ARGS, name, b"non-zero options",
+        ZX_ERR_INVALID_ARGS,
+        name,
+        b"non-zero options",
     );
 
     // Non-aligned dst offset -> INVALID_ARGS
     assert_status(
         unsafe { zx_vmo_transfer_data(dst, 0, 1, page_size, src, 0) },
-        ZX_ERR_INVALID_ARGS, name, b"non-aligned dst offset",
+        ZX_ERR_INVALID_ARGS,
+        name,
+        b"non-aligned dst offset",
     );
 
     // Non-aligned src offset -> INVALID_ARGS
     assert_status(
         unsafe { zx_vmo_transfer_data(dst, 0, 0, page_size, src, 1) },
-        ZX_ERR_INVALID_ARGS, name, b"non-aligned src offset",
+        ZX_ERR_INVALID_ARGS,
+        name,
+        b"non-aligned src offset",
     );
 
     // Non-aligned length -> INVALID_ARGS
     assert_status(
         unsafe { zx_vmo_transfer_data(dst, 0, 0, 1, src, 0) },
-        ZX_ERR_INVALID_ARGS, name, b"non-aligned length",
+        ZX_ERR_INVALID_ARGS,
+        name,
+        b"non-aligned length",
     );
 
     // Zero length -> OK (no-op)
     let s = unsafe { zx_vmo_transfer_data(dst, 0, 0, 0, src, 0) };
-    if s != ZX_OK { fail(name, b"zero length should succeed"); }
+    if s != ZX_OK {
+        fail(name, b"zero length should succeed");
+    }
 
     // Out-of-range dst offset
     assert_status(
         unsafe { zx_vmo_transfer_data(dst, 0, 5 * page_size, page_size, src, 0) },
-        ZX_ERR_OUT_OF_RANGE, name, b"dst offset past end",
+        ZX_ERR_OUT_OF_RANGE,
+        name,
+        b"dst offset past end",
     );
 
     // Out-of-range src offset
     assert_status(
         unsafe { zx_vmo_transfer_data(dst, 0, 0, page_size, src, 5 * page_size) },
-        ZX_ERR_OUT_OF_RANGE, name, b"src offset past end",
+        ZX_ERR_OUT_OF_RANGE,
+        name,
+        b"src offset past end",
     );
 
     // Bad handle
     assert_status(
         unsafe { zx_vmo_transfer_data(0xDEAD, 0, 0, page_size, src, 0) },
-        ZX_ERR_BAD_HANDLE, name, b"bad dst handle",
+        ZX_ERR_BAD_HANDLE,
+        name,
+        b"bad dst handle",
     );
     assert_status(
         unsafe { zx_vmo_transfer_data(dst, 0, 0, page_size, 0xDEAD, 0) },
-        ZX_ERR_BAD_HANDLE, name, b"bad src handle",
+        ZX_ERR_BAD_HANDLE,
+        name,
+        b"bad src handle",
     );
 
     unsafe { zx_handle_close(src) };
