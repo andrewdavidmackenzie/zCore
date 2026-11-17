@@ -214,3 +214,11 @@ path = "src/bin/iovec_test.rs"
 [[bin]]
 name = "process-test"
 path = "src/bin/process_test.rs"
+
+[[bin]]
+name = "process-shared-test"
+path = "src/bin/process_shared_test.rs"
+
+[[bin]]
+name = "object-info-test"
+path = "src/bin/object_info_test.rs"
