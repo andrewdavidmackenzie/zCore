@@ -186,3 +186,11 @@ path = "src/bin/system_cpu_test.rs"
 [[bin]]
 name = "cpu-mask-profile-test"
 path = "src/bin/cpu_mask_profile_test.rs"
+
+[[bin]]
+name = "memory-priority-profile-test"
+path = "src/bin/memory_priority_profile_test.rs"
+
+[[bin]]
+name = "thread-sampler-test"
+path = "src/bin/thread_sampler_test.rs"
