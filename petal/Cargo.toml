@@ -150,3 +150,15 @@ path = "src/bin/syscall_vmo_extra_test.rs"
 [[bin]]
 name = "syscall-channel-extra-test"
 path = "src/bin/syscall_channel_extra_test.rs"
+
+[[bin]]
+name = "syscall-fifo-extra-test"
+path = "src/bin/syscall_fifo_extra_test.rs"
+
+[[bin]]
+name = "syscall-port-extra-test"
+path = "src/bin/syscall_port_extra_test.rs"
+
+[[bin]]
+name = "syscall-socket-extra-test"
+path = "src/bin/syscall_socket_extra_test.rs"
