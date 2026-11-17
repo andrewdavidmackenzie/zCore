@@ -17,13 +17,19 @@ mod thread_extra;
 /// Run all extra tests.
 #[cfg(not(test))]
 pub async fn run_all() {
+    // Kernel API tests
     address_tagging_tbi::run_all();
     cpu_features::run_all();
-    exceptions_arch::run_all();
     iob::run_all();
     iob_shared_region::run_all();
-    process_shared::run_all();
     restricted_mode::run_all();
     rseq::run_all();
-    thread_extra::run_all().await;
+
+    // Syscall tests (need user-mode buffers)
+    #[cfg(not(target_os = "none"))]
+    {
+        exceptions_arch::run_all();
+        process_shared::run_all();
+        thread_extra::run_all().await;
+    }
 }
