@@ -134,3 +134,11 @@ path = "src/bin/syscall_handle_extra_test.rs"
 [[bin]]
 name = "syscall-signal-extra-test"
 path = "src/bin/syscall_signal_extra_test.rs"
+
+[[bin]]
+name = "syscall-transfer-data-extra-test"
+path = "src/bin/syscall_transfer_data_extra_test.rs"
+
+[[bin]]
+name = "syscall-object-test"
+path = "src/bin/syscall_object_test.rs"
