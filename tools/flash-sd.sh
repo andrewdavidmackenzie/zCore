@@ -4,22 +4,24 @@
 # (the board's flash-method = "sd" routes here).
 #
 # Usage: tools/flash-sd.sh <sd-mount-point> <product.board>
-#   SD mount point: the mounted FAT32 boot partition of the SD card.
-#
-# Boards:
-#   raspi400  — pftf UEFI firmware + zCore stub + kernel on the ESP
-#   jolla-c2  — writes an ext4 boot image (needs DISK=, see
-#               tools/jolla-c2/make-sdcard-image.sh)
+#   raspi400: the SD mount point is required (FAT32 boot partition).
+#   jolla-c2: SD is unused; DISK=<raw-disk-device> is required instead
+#             (see tools/jolla-c2/make-sdcard-image.sh).
 
 set -euo pipefail
 
-SD="${1:?Usage: $0 <sd-mount-point> <product.board>}"
+SD="${1:-}"
 CONFIG="${2:?Usage: $0 <sd-mount-point> <product.board>}"
 BOARD="${CONFIG##*.}"
 
 case "$BOARD" in
   raspi400)
-    exec "$(dirname "$0")/raspi/prepare-sd-uefi.sh" "$SD"
+    if [ -z "$SD" ]; then
+      echo "ERROR: raspi400 needs SD=<mount-point-of-FAT32-partition>" >&2
+      echo "Usage: make flash CONFIG=<product>.raspi400 SD=/Volumes/boot" >&2
+      exit 1
+    fi
+    exec "$(dirname "$0")/raspi/prepare-sd-uefi.sh" "$SD" "$CONFIG"
     ;;
   jolla-c2)
     if [ -z "${DISK:-}" ]; then

@@ -345,6 +345,19 @@ pub fn copy_petal_to_linux_rootfs(arch: Arch) {
     }
 }
 
+/// All petal program binary names. Used to build the Zircon rootfs and
+/// to decide which program the embedded petal ZBI carries.
+pub const PETAL_BINS: &[&str] = &[
+    "hello",
+    "channel-test",
+    "vmo-test",
+    "vdso-test",
+    "alloc-test",
+    "shell",
+    "process-mem-test",
+    "exception-test",
+];
+
 /// Build all petal programs and create a Zircon rootfs directory.
 /// The directory layout mirrors the Linux rootfs: `bin/hello`,
 /// `bin/channel-test`, `bin/vmo-test`.
@@ -361,25 +374,21 @@ pub fn build_zircon_rootfs(arch: Arch, fuchsia: bool) -> PathBuf {
         .join(arch.name());
     let bin_dir = rootfs_dir.join("bin");
 
-    const PETAL_BINS: &[&str] = &[
-        "hello",
-        "channel-test",
-        "vmo-test",
-        "vdso-test",
-        "alloc-test",
-        "shell",
-        "process-mem-test",
-        "exception-test",
-    ];
-
-    // Include prebuilt core-tests-standalone if requested and available
-    // for this arch.
-    let has_cts = fuchsia
-        && PROJECT_DIR
+    // The core-tests manifest is defined to include the prebuilt
+    // Fuchsia test binaries: fail early (instead of at boot time) when
+    // they are missing.
+    let has_cts = fuchsia;
+    if has_cts {
+        let cts = PROJECT_DIR
             .join("prebuilt/zircon-test")
             .join(arch.name())
-            .join("core-tests-standalone")
-            .is_file();
+            .join("core-tests-standalone");
+        assert!(
+            cts.is_file(),
+            "the core-tests manifest requires {} (see prebuilt/zircon-test/README.md)",
+            cts.display()
+        );
+    }
 
     // Always run the build steps below. Cargo handles caching
     // internally (skipping compilation if sources haven't changed),
@@ -484,6 +493,28 @@ pub fn build_zircon_rootfs_image(arch: Arch, fuchsia: bool, image: PathBuf) -> P
     image
 }
 
+/// Decide which petal program the embedded ZBI carries for a product's
+/// `root-proc` value.
+///
+/// The embedded ZBI boots on boards that ship no rootfs (raspi400,
+/// jolla-c2) when ROOTPROC cannot be resolved from a filesystem, so it
+/// must carry the product's init program when that program is a petal
+/// binary. Root processes that are not petal programs (busybox,
+/// core-tests-standalone) need a rootfs; those boards fall back to the
+/// petal shell in the embedded ZBI.
+pub fn zbi_bin_for(root_proc: &str) -> &'static str {
+    let name = root_proc
+        .split('?')
+        .next()
+        .unwrap_or("")
+        .trim_start_matches("/bin/");
+    PETAL_BINS
+        .iter()
+        .find(|&&bin| bin == name)
+        .copied()
+        .unwrap_or("shell")
+}
+
 /// Build a petal program and package it into a ZBI file.
 /// Returns the path to the ZBI file.
 pub fn build_petal_zbi(arch: Arch, bin_name: &str) -> PathBuf {
@@ -516,4 +547,27 @@ pub fn build_petal_zbi(arch: Arch, bin_name: &str) -> PathBuf {
         zbi_data.len()
     );
     zbi_path
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The embedded ZBI must carry the product's init program when it
+    /// is a petal binary, so rootfs-less boards boot what the product
+    /// declares (e.g. zircon-hello boots hello, not the shell).
+    #[test]
+    fn zbi_bin_matches_product_root_proc() {
+        assert_eq!(zbi_bin_for("/bin/hello"), "hello");
+        assert_eq!(zbi_bin_for("/bin/shell"), "shell");
+        assert_eq!(zbi_bin_for("/bin/vmo-test"), "vmo-test");
+        // Non-petal root processes need a rootfs; the ZBI falls back to
+        // the petal shell (the args after '?' are not part of the name).
+        assert_eq!(zbi_bin_for("/bin/busybox?sh"), "shell");
+        assert_eq!(
+            zbi_bin_for("/bin/core-tests-standalone?--gtest_shuffle=false"),
+            "shell"
+        );
+        assert_eq!(zbi_bin_for(""), "shell");
+    }
 }

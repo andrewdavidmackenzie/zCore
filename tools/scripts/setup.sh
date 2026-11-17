@@ -57,7 +57,7 @@ case "$OS" in
             sudo apt-get update
             sudo apt-get install -y \
                 qemu-system-x86 qemu-system-arm qemu-system-misc qemu-utils \
-                ovmf qemu-efi-aarm64 \
+                ovmf qemu-efi-aarch64 \
                 mtools e2fsprogs
         elif command -v pacman >/dev/null 2>&1; then
             echo "==> Installing packages via pacman (Arch)..."

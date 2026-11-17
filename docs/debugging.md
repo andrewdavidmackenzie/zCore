@@ -124,7 +124,7 @@ b hal_impl::imp::timer::timer_set
 2. Start QEMU: `make debug-x86-core-tests CORE_TESTS_FILTER='...'`
 3. In RustRover: **Run > Attach to Process > Remote GDB Server**
    - Host: `localhost`, Port: `1234`
-   - Symbol file: `target/busybox.qemu-x86_64/release/kernel`
+   - Symbol file: `target/core-tests.qemu-x86_64/release/kernel`
 
 ## Notes
 

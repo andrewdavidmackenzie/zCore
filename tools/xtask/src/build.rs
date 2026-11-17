@@ -198,7 +198,10 @@ impl BuildConfig {
             if let Ok(val) = std::env::var("PETAL_ZBI") {
                 env.insert("PETAL_ZBI".into(), val.into());
             } else {
-                let zbi_path = crate::petal::build_petal_zbi(arch, "shell");
+                // See petal::zbi_bin_for: boards without a rootfs boot
+                // the product's init program from the embedded ZBI.
+                let zbi_bin = crate::petal::zbi_bin_for(&selection.product.root_proc);
+                let zbi_path = crate::petal::build_petal_zbi(arch, zbi_bin);
                 env.insert("PETAL_ZBI".into(), zbi_path.into_os_string());
             }
         }
@@ -631,7 +634,7 @@ impl QemuArgs {
                     "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
                     "/usr/share/qemu/edk2-aarch64-code.fd",
                     "/usr/share/AAVMF/AAVMF_CODE.fd",
-                    // Ubuntu's qemu-efi-aarm64 package (installed by make setup)
+                    // Ubuntu's qemu-efi-aarch64 package (installed by make setup)
                     "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
                 ];
                 let edk2 = edk2_paths

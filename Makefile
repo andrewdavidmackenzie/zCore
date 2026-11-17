@@ -12,12 +12,22 @@
 # ARCH keys arch-specific operations (rootfs images, musl toolchains).
 
 CONFIG ?= busybox.qemu-aarch64
-ARCH ?= aarch64
 XTASK ?= 1
 
 # Split the selection into product and board parts.
 PRODUCT := $(word 1,$(subst ., ,$(CONFIG)))
 BOARD := $(word 2,$(subst ., ,$(CONFIG)))
+
+# Architecture for arch-keyed operations (rootfs images, musl
+# toolchains). Derived from the selected board's TOML unless explicitly
+# overridden on the command line, so e.g. `make boot-test
+# CONFIG=busybox.qemu-x86_64` cannot accidentally test with the aarch64
+# default. The boot/busybox/libc test targets reject a conflicting
+# explicit ARCH.
+BOARD_ARCH := $(shell awk -F'"' '/^arch/ {print $$2}' configs/boards/$(BOARD).toml 2>/dev/null)
+ifeq ($(origin ARCH),undefined)
+ARCH := $(if $(BOARD_ARCH),$(BOARD_ARCH),aarch64)
+endif
 
 # Selection-derived artifact paths (keyed by the full selection).
 KERNEL_DIR := target/$(CONFIG)/release
@@ -116,20 +126,24 @@ debug-lldb:
 
 # --- x86_64 debugging ---
 # Start x86_64 Zircon QEMU paused with GDB server on :1234.
-# Build first with: make build CONFIG=petal.qemu-x86_64
-debug-x86-qemu: build
+# Defaults to the petal product on the x86_64 QEMU board; pass an
+# explicit CONFIG=<x86_64 selection> to debug another one.
+DEBUG_X86_CONFIG = $(if $(filter command line,$(origin CONFIG)),$(CONFIG),petal.qemu-x86_64)
+debug-x86-qemu:
+	$(MAKE) build CONFIG=$(DEBUG_X86_CONFIG) ARCH=x86_64
 	@echo "==> Starting x86_64 Zircon QEMU in debug mode (paused, :1234)..."
 	@echo "    Connect with: make debug-x86-gdb"
-	@echo "    Kernel symbols: $(KERNEL)"
+	@echo "    Kernel symbols: target/$(DEBUG_X86_CONFIG)/release/kernel"
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
-	ROOTFS_IMG=$$(cargo xtask rootfs-image -m $(CONFIG) --print-path); \
+	ROOTFS_IMG=$$(cargo xtask rootfs-image -m $(DEBUG_X86_CONFIG) --print-path); \
 	tools/x86-bootimage/target/release/x86-bootimage \
-		$(KERNEL) $(KERNEL_DIR)/kernel-zircon.img; \
+		target/$(DEBUG_X86_CONFIG)/release/kernel \
+		target/$(DEBUG_X86_CONFIG)/release/kernel-zircon.img; \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
 		-machine q35 -smp $(X86_CORES) -cpu qemu64,+rdrand \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
-		-drive format=raw,file=$(KERNEL_DIR)/kernel-zircon.img \
+		-drive format=raw,file=target/$(DEBUG_X86_CONFIG)/release/kernel-zircon.img \
 		-S -gdb tcp:127.0.0.1:1234
 
 # Start x86_64 core-tests QEMU paused with GDB server on :1234.
@@ -149,10 +163,11 @@ debug-x86-core-tests: core-tests-build
 		-S -gdb tcp:127.0.0.1:1234
 
 # Connect GDB to a running x86_64 QEMU debug session.
+# Uses the same selection default as debug-x86-qemu.
 GDB ?= gdb
 debug-x86-gdb:
 	@echo "==> Connecting GDB to QEMU on :1234..."
-	@$(GDB) $(KERNEL) \
+	@$(GDB) target/$(DEBUG_X86_CONFIG)/release/kernel \
 		-ex "target remote :1234"
 
 # ── Rootfs image ────────────────────────────────────────────────────────
@@ -250,11 +265,12 @@ endif
 
 # Backwards-compatible aliases for the old per-board targets.
 # The raspi400 board is UEFI-only (the raspi400-uefi board was merged
-# into it); both old SD targets now flash via the UEFI preparation.
+# into it); both old SD targets now flash via the UEFI preparation,
+# which builds the kernel for the selection it is given.
 raspi400-build:
 	cargo bin -m petal.raspi400
-raspi400-sd: raspi400-build
-	@tools/raspi/prepare-sd-uefi.sh "$(SD)"
+raspi400-sd:
+	$(MAKE) flash CONFIG=petal.raspi400 SD=$(SD)
 raspi400-uefi-sd:
 	$(MAKE) flash CONFIG=busybox.raspi400 SD=$(SD)
 jollac2-build:
@@ -296,6 +312,11 @@ x86-zircon-run:
 # Create a UEFI-bootable disk image for x86_64 real hardware.
 # Uses the x86-laptop board (no PCI, no UART -- uses framebuffer console).
 # The image can be written to a USB drive with `make flash USB=`.
+# The ramdisk decision follows the product's rootfs-contents manifest
+# (visible in the image path printed by `rootfs-image --print-path`):
+# full/core-tests images are embedded as the ramdisk; petal-manifest
+# products boot their userspace from the embedded ZBI (no ramdisk),
+# like the old MODE=zircon image.
 # Usage: make image CONFIG=busybox.x86-laptop OUTPUT=/tmp/zcore-uefi.img
 #        make image CONFIG=petal.x86-laptop OUTPUT=/tmp/zcore-uefi.img
 OUTPUT ?= target/$(CONFIG)/release/kernel-uefi.img
@@ -303,9 +324,13 @@ image-uefi:
 ifeq ($(BOARD),x86-laptop)
 	cargo xtask rootfs-image -m $(CONFIG)
 	cargo zcore-build -m $(CONFIG)
-	@KERNEL_ELF=$(KERNEL) \
-		ROOTFS_IMG=$$(cargo xtask rootfs-image -m $(CONFIG) --print-path) \
-		tools/scripts/x86-uefi-image.sh $(OUTPUT) $(if $(filter petal%,$(PRODUCT)),none,)
+	@ROOTFS_IMG=$$(cargo xtask rootfs-image -m $(CONFIG) --print-path); \
+	RAMDISK=auto; \
+	case "$$ROOTFS_IMG" in \
+		*/petal-*) RAMDISK=none ;; \
+	esac; \
+	KERNEL_ELF=$(KERNEL) ROOTFS_IMG="$$ROOTFS_IMG" \
+		tools/scripts/x86-uefi-image.sh $(OUTPUT) $$RAMDISK
 else
 	$(error image-uefi supports x86-laptop boards (got CONFIG=$(CONFIG)))
 endif
@@ -621,8 +646,17 @@ rust-tests: rust-tests-build
 # Boot smoke test: start QEMU, wait for the "/ # " shell prompt, exit.
 # Proves: boot assembly, MMU, HAL, VirtIO, filesystem, ELF loader, and
 # busybox shell all work end-to-end. Timeout is 60 seconds.
-boot-test: build
-	@echo "==> Boot smoke test ($(CONFIG))..."
+# ARCH is derived from the selected board; a conflicting explicit ARCH
+# is rejected before building (busybox-test and libc-test inherit this).
+.PHONY: check-arch
+check-arch:
+	@if [ -n "$(BOARD_ARCH)" ] && [ "$(BOARD_ARCH)" != "host" ] && [ "$(ARCH)" != "$(BOARD_ARCH)" ]; then \
+		echo "ERROR: ARCH=$(ARCH) conflicts with board '$(BOARD)' (arch $(BOARD_ARCH)) — omit ARCH, it is derived from CONFIG"; \
+		exit 1; \
+	fi
+
+boot-test: check-arch build
+	@echo "==> Boot smoke test ($(CONFIG), $(ARCH))..."
 	@tools/scripts/boot-test.sh $(CONFIG) $(ARCH)
 
 # SMP testing is now integrated into boot-test and other CI targets
