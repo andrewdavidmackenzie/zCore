@@ -276,9 +276,15 @@ fn multithreaded_contention_clock_monotonic() {
 /// Run all tests in this module.
 #[cfg(feature = "baremetal-test")]
 pub fn run_all() {
+    log::warn!("    clock: clock_monotonic");
     clock_monotonic();
+    log::warn!("    clock: deadline_after");
     deadline_after();
+    log::warn!("    clock: fault_beyond_stream_size_returns_error");
     fault_beyond_stream_size_returns_error();
+    log::warn!("    clock: mappable_clock_padding_leak");
     mappable_clock_padding_leak();
+    log::warn!("    clock: multithreaded_contention_clock_monotonic");
     multithreaded_contention_clock_monotonic();
+    log::warn!("    clock: all done");
 }
