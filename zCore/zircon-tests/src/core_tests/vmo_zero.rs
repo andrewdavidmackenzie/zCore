@@ -522,7 +522,7 @@ fn allocate_after_merge() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     unaligned_uncommitted();
     content_in_parent_and_child();

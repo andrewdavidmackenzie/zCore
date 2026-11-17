@@ -195,7 +195,7 @@ fn mprotect_test() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     address_space_limits_test();
     mmap_flags_test();

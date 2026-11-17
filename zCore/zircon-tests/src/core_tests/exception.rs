@@ -90,7 +90,7 @@ fn unhandled_policy_exception() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     unhandled_hardware_exception();
     unhandled_policy_exception();

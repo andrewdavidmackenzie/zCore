@@ -100,7 +100,7 @@ fn replace_failure_both_invalid() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     close_many_handles();
     replace_success_orig_invalid();

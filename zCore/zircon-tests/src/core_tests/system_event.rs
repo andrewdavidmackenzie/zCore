@@ -310,7 +310,7 @@ fn memory_stall_thresholds() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     retrieve_oom();
     cannot_signal_oom_from_userspace();

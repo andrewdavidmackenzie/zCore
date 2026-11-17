@@ -516,7 +516,7 @@ fn set_performance_info_near_zero() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     set_performance_info_argument_validation();
     get_performance_info_argument_validation();

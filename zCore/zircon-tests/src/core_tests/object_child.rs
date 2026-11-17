@@ -32,7 +32,7 @@ fn invalid_handle_returns_bad_handle() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     invalid_handle_returns_bad_handle();
 }

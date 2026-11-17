@@ -151,7 +151,7 @@ async fn timeout_test() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     condition_test().await;
     timeout_test().await;

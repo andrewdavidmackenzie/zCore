@@ -146,7 +146,7 @@ async fn wait_one_transient_signals_not_returned() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     wait_many_transient_signals_not_returned().await;
     wait_one_transient_signals_not_returned().await;

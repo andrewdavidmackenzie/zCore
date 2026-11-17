@@ -34,7 +34,7 @@ fn futex_koid() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     futex_wake_no_waiters();
     futex_wake_zero_count();

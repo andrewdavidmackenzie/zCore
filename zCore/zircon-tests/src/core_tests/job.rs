@@ -1110,7 +1110,7 @@ fn create_missing_rights_test() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     basic_test();
     create_test();

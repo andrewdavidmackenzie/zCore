@@ -208,7 +208,7 @@ async fn timeout_elapsed() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     multi_threaded_contention().await;
     try_mutex_multi_threaded_contention();

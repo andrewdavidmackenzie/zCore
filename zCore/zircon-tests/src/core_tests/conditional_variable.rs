@@ -219,7 +219,7 @@ async fn conditional_variables_timeout() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     broadcast_signal_thread_wait().await;
     signal_thread_wait().await;

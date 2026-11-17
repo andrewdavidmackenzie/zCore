@@ -29,7 +29,7 @@ fn read_write_round_trip() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     read_write_round_trip();
 }

@@ -155,7 +155,7 @@ fn fifo_koid() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     create_various_sizes();
     write_and_read_back();

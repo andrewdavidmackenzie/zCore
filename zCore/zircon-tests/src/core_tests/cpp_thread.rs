@@ -75,7 +75,7 @@ fn create_and_verify_thread_handle() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     create_and_verify_thread_handle();
 }

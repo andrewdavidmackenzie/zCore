@@ -440,7 +440,7 @@ fn resource_register_region() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     resource_create();
     resource_create_invalid();

@@ -2545,7 +2545,7 @@ async fn yield_with_zero_option_is_ok() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     bad_syscall_caller().await;
     bad_syscall_number().await;

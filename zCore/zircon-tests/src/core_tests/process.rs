@@ -1111,7 +1111,7 @@ fn info_process_no_process_handles() {
 extern crate alloc;
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     process_get_info_runtime().await;
     process_get_info_runtime_v1().await;

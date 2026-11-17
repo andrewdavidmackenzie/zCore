@@ -492,7 +492,7 @@ async fn wait_thread_functions_after_suspend_resume() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     bind_port();
     bind_triggered_irq_to_port().await;

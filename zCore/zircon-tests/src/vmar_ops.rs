@@ -179,7 +179,7 @@ fn vmar_info() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     allocate_sub_vmar();
     map_vmo();

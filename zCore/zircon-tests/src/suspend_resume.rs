@@ -351,7 +351,7 @@ async fn suspend_process() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     suspend_thread().await;
     resume_thread().await;

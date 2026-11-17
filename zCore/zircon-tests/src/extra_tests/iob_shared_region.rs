@@ -154,7 +154,7 @@ fn shared_region_with_non_ring_buffer_discipline() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     invalid_args();
     out_of_range();

@@ -417,7 +417,7 @@ fn job_no_children() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     job_root();
     job_create_child();

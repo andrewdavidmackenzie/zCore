@@ -156,7 +156,7 @@ fn contiguous_zero_size() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     create_contiguous();
     read_write_contiguous();

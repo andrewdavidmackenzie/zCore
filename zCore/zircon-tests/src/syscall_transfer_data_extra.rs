@@ -149,7 +149,7 @@ async fn basic_transfer() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     missing_write_right_on_dst();
     missing_read_right_on_src();

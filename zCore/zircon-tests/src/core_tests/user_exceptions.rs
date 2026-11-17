@@ -77,7 +77,7 @@ fn non_fatal() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     delivered();
     invalid_args();

@@ -66,7 +66,7 @@ fn k_hotplug_test() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     k_hotplug_test();
 }

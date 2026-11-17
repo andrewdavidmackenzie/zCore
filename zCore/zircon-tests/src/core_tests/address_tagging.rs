@@ -31,7 +31,7 @@ fn address_tagging_get_system_features_x86_64() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     address_tagging_get_system_features_x86_64();
 }

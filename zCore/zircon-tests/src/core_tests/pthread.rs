@@ -280,7 +280,7 @@ async fn getstack_other_thread_explicit_size() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     basic().await;
     self_main_thread();

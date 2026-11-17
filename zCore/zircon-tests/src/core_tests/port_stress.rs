@@ -932,7 +932,7 @@ fn queue_packet_after_port_closed_concurrent_race() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     cancel_key_active_observer_race();
     cancel_key_during_match_race();

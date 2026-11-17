@@ -201,7 +201,7 @@ fn rights() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     invalid_priorities();
     memory_or_thread();

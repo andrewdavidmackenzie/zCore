@@ -65,7 +65,7 @@ fn single_thread_wins_barrier_object_resets_between_iterations() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     init_with_no_threads_returns_inval();
     single_thread_wins_barrier_object();

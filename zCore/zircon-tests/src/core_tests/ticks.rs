@@ -44,7 +44,7 @@ fn time_values_padding_leak() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     elapsed_time_using_ticks();
     time_values_padding_leak();

@@ -1131,7 +1131,7 @@ async fn wait_wrong_type() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     port_queue_wait_verify_user_packet().await;
     port_queue_and_close();

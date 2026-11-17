@@ -956,7 +956,7 @@ fn vmo_info_not_paged() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     vmo_create();
     vmo_read_write();

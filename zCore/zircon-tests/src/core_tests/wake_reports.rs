@@ -626,7 +626,7 @@ fn thread_bound_multiple_signals() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     port_bound_bad_report_requests();
     port_bound_single_wake_source().await;

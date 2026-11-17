@@ -177,7 +177,7 @@ fn port_cancel_by_key_not_found() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     port_create();
     port_queue_user_packet();

@@ -457,7 +457,7 @@ fn bidirectional_stream_verify() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     socket_create_stream();
     socket_write_read();

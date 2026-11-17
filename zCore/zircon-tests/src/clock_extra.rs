@@ -132,7 +132,7 @@ fn clock_adjust_needs_resource() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     clock_create_auto_start_and_read();
     clock_read_before_start_fails();

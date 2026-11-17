@@ -157,7 +157,7 @@ fn debug_send_command_oversized_buffer() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     debug_write_basic();
     debug_write_empty();

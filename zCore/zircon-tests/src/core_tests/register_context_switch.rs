@@ -100,7 +100,7 @@ fn segment_selectors_zeroed_on_context_switch() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     // FPU and segment selector tests are x86-specific
     #[cfg(target_arch = "x86_64")]

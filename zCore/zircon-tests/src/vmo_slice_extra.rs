@@ -129,7 +129,7 @@ fn slice_deep_hierarchy() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     slice_write_through();
     slice_nested();

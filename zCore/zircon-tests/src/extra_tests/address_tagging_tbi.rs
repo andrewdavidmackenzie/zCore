@@ -656,7 +656,7 @@ fn process_start_tagged_address() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     address_tagging_get_system_features_a_arch64();
     vmar_tagged_address();

@@ -54,7 +54,7 @@ async fn mutex_held_across_call_chain() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     mutex_held_across_call_chain().await;
 }

@@ -176,7 +176,7 @@ fn koids_are_unique() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     set_name();
     get_default_name();

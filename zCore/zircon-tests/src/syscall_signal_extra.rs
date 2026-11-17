@@ -85,7 +85,7 @@ fn eventpair_invalid_signal_bits_full() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     event_create_via_syscall();
     event_signal_self();

@@ -228,7 +228,7 @@ fn timer_wait_signaled() {
 extern crate alloc;
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     wait_one_already_signaled();
     wait_one_multiple_signals();

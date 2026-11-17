@@ -106,7 +106,7 @@ fn op_range_out_of_bounds() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     op_range_commit_decommit();
     op_range_zero().await;

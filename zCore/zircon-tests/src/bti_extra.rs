@@ -254,7 +254,7 @@ fn pin_large_vmo() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     pin_and_info();
     pin_and_unpin();

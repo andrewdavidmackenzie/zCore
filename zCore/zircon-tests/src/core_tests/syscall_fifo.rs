@@ -216,7 +216,7 @@ fn write_to_closed_peer_returns_peer_closed() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     invalid_parameters();
     write_no_write_rights();

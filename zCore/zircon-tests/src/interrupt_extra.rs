@@ -95,7 +95,7 @@ fn interrupt_virtual_interrupt_wait() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     interrupt_create();
     interrupt_create_invalid();

@@ -735,7 +735,7 @@ async fn call_null_buffer_nonnull_size() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     write_zero_iovecs();
     write_few_large_iovecs();

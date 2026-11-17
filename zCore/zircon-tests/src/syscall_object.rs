@@ -176,7 +176,7 @@ fn handle_check_valid() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     get_info_handle_basic();
     get_info_bad_handle();

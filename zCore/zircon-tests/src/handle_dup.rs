@@ -165,7 +165,7 @@ fn duplicate_and_drop_original() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     duplicate_event_handle();
     duplicate_with_reduced_rights();

@@ -15,7 +15,7 @@ mod rseq;
 mod thread_extra;
 
 /// Run all extra tests.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     address_tagging_tbi::run_all();
     cpu_features::run_all();

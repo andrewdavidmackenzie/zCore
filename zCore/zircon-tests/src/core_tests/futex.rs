@@ -871,7 +871,7 @@ fn wait_timeout_elapsed() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     wait_value_mismatch().await;
     wait_bad_address();

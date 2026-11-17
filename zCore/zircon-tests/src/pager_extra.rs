@@ -3686,7 +3686,7 @@ fn clone_chain_commit_attribution() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     pager_create();
     pager_create_vmo();

@@ -228,7 +228,7 @@ fn self_detach_and_free() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     thread_local_errno().await;
     null_name_thread_should_succeed();

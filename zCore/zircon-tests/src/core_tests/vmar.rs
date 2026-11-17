@@ -1413,7 +1413,7 @@ fn write_read_only_memory() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     alignment_vmar_allocate_test();
     alignment_vmar_map_test();

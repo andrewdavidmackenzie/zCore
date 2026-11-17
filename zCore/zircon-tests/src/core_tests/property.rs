@@ -643,7 +643,7 @@ fn vmo_name() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     job_name();
     name_wrong_type();

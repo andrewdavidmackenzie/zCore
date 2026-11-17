@@ -130,7 +130,7 @@ fn invalid_operation() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     flush_data_cache();
     flush_instruction_cache();

@@ -480,7 +480,7 @@ fn invalid_handle_and_wrong_type() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     handles_not_invalid();
     handle_rights_are_correct();

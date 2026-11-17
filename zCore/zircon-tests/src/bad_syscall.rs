@@ -126,7 +126,7 @@ fn bad_syscall_negative_handle() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     bad_syscall_invalid_number();
     bad_syscall_too_few_args();

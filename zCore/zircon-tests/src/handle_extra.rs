@@ -281,7 +281,7 @@ fn handle_replace_invalid_rights() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     handle_close();
     handle_duplicate();

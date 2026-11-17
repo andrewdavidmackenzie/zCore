@@ -46,7 +46,7 @@ fn thread_identity_for_tls() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     thread_identity_for_tls();
 }

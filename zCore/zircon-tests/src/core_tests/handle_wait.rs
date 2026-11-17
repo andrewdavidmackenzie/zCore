@@ -323,7 +323,7 @@ async fn wait_for_event_timeout_pre_signal_clear() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     handle_wait_test().await;
     handle_wait_multiple_threads().await;

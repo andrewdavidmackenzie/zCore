@@ -14,8 +14,7 @@ host = [
     "zircon-object/aspace-separate",
     "hal-impl/libos",
 ]
-# baremetal-test: tests compiled as a library for kernel integration.
-baremetal-test = ["zircon-syscall/baremetal-test"]
+
 
 [dependencies]
 zircon-object = { path = "../zircon-object", default-features = false, features = ["testing", "elf"] }

@@ -429,7 +429,7 @@ fn zero_sized() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     non_slice();
     non_resizable_parent();

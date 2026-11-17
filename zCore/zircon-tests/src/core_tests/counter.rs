@@ -466,7 +466,7 @@ fn read_invalid_pointer() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     create_initial();
     create_invalid_options();

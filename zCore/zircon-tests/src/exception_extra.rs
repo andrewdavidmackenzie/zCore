@@ -470,7 +470,7 @@ fn exception_double_bind_process() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     create_exception_channel_process();
     create_debug_exception_channel_process();

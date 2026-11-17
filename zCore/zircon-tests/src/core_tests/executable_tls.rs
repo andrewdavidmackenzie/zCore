@@ -344,7 +344,7 @@ fn array_initializier_spam_main() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     basic_initalizers_in_thread();
     basic_initalizers_in_main();

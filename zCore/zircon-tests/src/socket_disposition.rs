@@ -186,7 +186,7 @@ fn both_ends_disabled() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     set_disposition_write_disabled();
     set_disposition_write_enabled();

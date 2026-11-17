@@ -4135,7 +4135,7 @@ fn resource_info_on_self() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     info_handle_valid();
     info_handle_basic_event();

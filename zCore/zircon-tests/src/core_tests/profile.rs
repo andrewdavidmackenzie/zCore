@@ -498,7 +498,7 @@ fn sched_profile_set_thread_priority_is_ok() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     profile_test_apply_scheduling_profile_to_vmar_is_ok();
     profile_test_create_profile_with_default_initialized_profile_info_is_error();

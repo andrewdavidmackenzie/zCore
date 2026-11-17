@@ -677,7 +677,7 @@ fn datagram_socket_bad_buffer_test_read_3() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     write_without_write_right();
     read_without_read_right();

@@ -216,7 +216,7 @@ fn test_all_gdt_selectors() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     load_last_gdt_entry();
     load_first_ldt_entry();

@@ -1246,7 +1246,7 @@ fn channel_full_exception() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     create_is_ok_and_endpoints_are_related();
     is_writeable_by_default();

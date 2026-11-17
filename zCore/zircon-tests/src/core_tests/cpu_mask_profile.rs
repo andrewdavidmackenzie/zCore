@@ -126,7 +126,7 @@ fn apply_profile() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     empty_mask_is_valid();
     apply_profile();

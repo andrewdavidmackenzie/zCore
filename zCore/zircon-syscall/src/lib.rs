@@ -82,55 +82,34 @@ impl Syscall<'_> {
     ///   lacks read permissions. Fuchsia returns INVALID_ARGS for all
     ///   bad user pointer errors at the syscall boundary.
     #[allow(dead_code)]
-    fn check_user_buffer_read(
-        &self,
-        #[allow(unused)] addr: usize,
-        #[allow(unused)] len: usize,
-    ) -> ZxResult {
+    fn check_user_buffer_read(&self, addr: usize, len: usize) -> ZxResult {
         if len == 0 {
             return Ok(());
         }
-        #[cfg(feature = "baremetal-test")]
-        return Ok(());
-        #[cfg(not(feature = "baremetal-test"))]
-        {
-            let vmar = self.thread.proc().vmar();
-            match vmar.check_user_access(addr, len, MMUFlags::READ) {
-                Ok(()) => Ok(()),
-                Err(ZxError::ACCESS_DENIED) => Err(ZxError::INVALID_ARGS),
-                #[cfg(not(target_os = "none"))]
-                Err(ZxError::NOT_FOUND) => Ok(()),
-                Err(_) => Err(ZxError::INVALID_ARGS),
-            }
+        let vmar = self.thread.proc().vmar();
+        match vmar.check_user_access(addr, len, MMUFlags::READ) {
+            Ok(()) => Ok(()),
+            Err(ZxError::ACCESS_DENIED) => Err(ZxError::INVALID_ARGS),
+            #[cfg(not(target_os = "none"))]
+            Err(ZxError::NOT_FOUND) => Ok(()),
+            Err(_) => Err(ZxError::INVALID_ARGS),
         }
     }
 
     /// Validate that a user-space buffer is fully mapped with write
     /// permissions. Returns `INVALID_ARGS` for bad pointers.
     #[allow(dead_code)]
-    fn check_user_buffer_write(
-        &self,
-        #[allow(unused)] addr: usize,
-        #[allow(unused)] len: usize,
-    ) -> ZxResult {
+    fn check_user_buffer_write(&self, addr: usize, len: usize) -> ZxResult {
         if len == 0 {
             return Ok(());
         }
-        // In kernel-mode test execution, skip VMAR validation — kernel
-        // addresses are valid buffers. In normal execution (host or
-        // bare-metal with user processes), validate properly.
-        #[cfg(feature = "baremetal-test")]
-        return Ok(());
-        #[cfg(not(feature = "baremetal-test"))]
-        {
-            let vmar = self.thread.proc().vmar();
-            match vmar.check_user_access(addr, len, MMUFlags::WRITE) {
-                Ok(()) => Ok(()),
-                Err(ZxError::ACCESS_DENIED) => Err(ZxError::INVALID_ARGS),
-                #[cfg(not(target_os = "none"))]
-                Err(ZxError::NOT_FOUND) => Ok(()),
-                Err(_) => Err(ZxError::INVALID_ARGS),
-            }
+        let vmar = self.thread.proc().vmar();
+        match vmar.check_user_access(addr, len, MMUFlags::WRITE) {
+            Ok(()) => Ok(()),
+            Err(ZxError::ACCESS_DENIED) => Err(ZxError::INVALID_ARGS),
+            #[cfg(not(target_os = "none"))]
+            Err(ZxError::NOT_FOUND) => Ok(()),
+            Err(_) => Err(ZxError::INVALID_ARGS),
         }
     }
 

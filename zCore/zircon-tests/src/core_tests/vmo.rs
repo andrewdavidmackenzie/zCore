@@ -1862,7 +1862,7 @@ fn vmo_read_write_sync() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     log::warn!("    vmo: vmo_read_write_bad_len");
     vmo_read_write_bad_len().await;

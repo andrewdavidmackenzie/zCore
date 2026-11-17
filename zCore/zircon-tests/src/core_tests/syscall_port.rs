@@ -268,7 +268,7 @@ fn port_wait_async_target_access_denied() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     port_create_invalid_options();
     port_queue_wrong_type();

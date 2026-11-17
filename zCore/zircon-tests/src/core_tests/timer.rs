@@ -469,7 +469,7 @@ fn basic_info() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     deadline_after();
     set_negative_deadline();

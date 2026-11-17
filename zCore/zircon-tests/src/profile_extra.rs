@@ -229,7 +229,7 @@ fn profile_name_support() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     profile_create_invalid();
     profile_set_on_thread();

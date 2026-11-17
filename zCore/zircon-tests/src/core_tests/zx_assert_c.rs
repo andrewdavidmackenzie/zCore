@@ -242,7 +242,7 @@ fn zx_assert_cpp_debug_msg_invalid_predicate_fails() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     zx_assert_c_valid_predicate_passes();
     zx_assert_c_msg_valid_predicate_passes();

@@ -90,7 +90,7 @@ fn port_cancel_key_bad_handle() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     port_create_bind_to_interrupt();
     port_queue_user_packet();

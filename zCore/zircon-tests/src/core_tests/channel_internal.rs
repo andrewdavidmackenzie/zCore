@@ -286,7 +286,7 @@ async fn channel_call_finish_after_failed_call() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     call_finish_without_previously_calling_call_returns_bad_state();
     call_etc_finish_without_previously_calling_call_returns_bad_state();

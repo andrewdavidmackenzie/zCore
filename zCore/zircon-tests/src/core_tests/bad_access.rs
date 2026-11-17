@@ -273,7 +273,7 @@ fn channel_read_handle() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     invalid_mapped_address_fails();
     kernel_mapped_address_channel_write_fails();

@@ -152,7 +152,7 @@ fn std_u8_string_view() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     zx_string_view();
     std_string_view();

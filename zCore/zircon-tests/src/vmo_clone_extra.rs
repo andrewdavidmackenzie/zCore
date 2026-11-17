@@ -248,7 +248,7 @@ fn clone_name() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     clone_sees_parent_data();
     clone_parent_write_isolation();

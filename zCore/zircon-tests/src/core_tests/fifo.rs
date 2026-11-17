@@ -915,7 +915,7 @@ fn write_peer_closed_returns_peer_closed() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     dequeue_signals_writeable();
     non_power_of_two_count_supported();

@@ -552,7 +552,7 @@ fn writing_arm_flags_register() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     kill_suspended_immediately().await;
     kill_suspended_thread().await;

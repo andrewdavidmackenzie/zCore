@@ -398,7 +398,7 @@ async fn wait_one_channel_peer_closed() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     wait_one_already_signaled().await;
     wait_one_timeout().await;

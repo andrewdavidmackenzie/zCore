@@ -196,7 +196,7 @@ fn peer_closed_read_returns_peer_closed() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     fifo_create();
     fifo_write_read();

@@ -4,10 +4,7 @@ impl Syscall<'_> {
     /// Validate that a futex address is mapped in the process address space.
     /// Returns `NOT_FOUND` if the address is unmapped, matching Fuchsia's
     /// behavior (preventing a kernel page fault in `Futex::load_user_value`).
-    fn validate_futex_addr(&self, #[allow(unused)] addr: usize) -> ZxResult {
-        #[cfg(feature = "baremetal-test")]
-        return Ok(());
-        #[cfg(not(feature = "baremetal-test"))]
+    fn validate_futex_addr(&self, addr: usize) -> ZxResult {
         match self.thread.proc().vmar().get_mapping_flags(addr) {
             Ok(_) => Ok(()),
             #[cfg(not(target_os = "none"))]

@@ -225,7 +225,7 @@ fn fifo_ordering() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     channel_pair_creation();
     channel_message_round_trip();

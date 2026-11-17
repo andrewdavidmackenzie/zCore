@@ -195,7 +195,7 @@ fn timer_invalid_args() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     timer_create();
     timer_set_past_deadline_fires_immediately();

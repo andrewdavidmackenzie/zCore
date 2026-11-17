@@ -226,7 +226,7 @@ fn virtual_wake_event_racing_with_suspend_op_panic_repro() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     resource_validation();
     timeout_is_past();

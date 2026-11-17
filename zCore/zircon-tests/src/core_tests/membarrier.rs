@@ -55,7 +55,7 @@ fn membarrier_insn_basic() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     membarrier_data_basic();
     membarrier_insn_basic();

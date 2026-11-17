@@ -481,7 +481,7 @@ fn completion_signaled() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     initializer();
     single_wait().await;

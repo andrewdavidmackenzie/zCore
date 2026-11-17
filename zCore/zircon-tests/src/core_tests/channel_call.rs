@@ -790,7 +790,7 @@ async fn handles_info_validation() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     bytes_only_success_case().await;
     handles_success_case().await;

@@ -274,19 +274,11 @@ fn multithreaded_contention_clock_monotonic() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     clock_monotonic();
     deadline_after();
     fault_beyond_stream_size_returns_error();
-    // mappable_clock_padding_leak reads from a user-space VMAR mapping
-    // via raw pointer. On bare-metal, the mapping only exists in the
-    // process's page table, not the kernel's — the read faults.
-    // This test only works in libos mode where user/kernel share
-    // the same address space.
-    #[cfg(not(target_os = "none"))]
     mappable_clock_padding_leak();
-    #[cfg(target_os = "none")]
-    log::warn!("    (skipped mappable_clock_padding_leak on bare-metal)");
     multithreaded_contention_clock_monotonic();
 }

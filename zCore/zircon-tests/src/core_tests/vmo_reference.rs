@@ -572,7 +572,7 @@ fn child_snapshot_at_least_on_write() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     write();
     zero_children();

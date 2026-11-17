@@ -1048,7 +1048,7 @@ fn write_vector_unmapped_user_buffer_cancels_operation() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     stream_create_verify_properties();
     stream_seek_all_origins();

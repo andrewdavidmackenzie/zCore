@@ -65,7 +65,7 @@ fn page_size_round_up() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     page_size_not_zero();
     page_size_only_4k();

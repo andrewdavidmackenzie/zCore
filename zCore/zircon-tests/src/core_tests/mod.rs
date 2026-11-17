@@ -95,22 +95,12 @@ mod vmo_zero;
 mod wake_reports;
 
 /// Run all core tests.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     log::warn!("  core_test: address_tagging");
     address_tagging::run_all();
-    // bad_access tests deliberately pass invalid user addresses (0x1000,
-    // kernel-space) to syscalls. In baremetal-test mode, buffer validation
-    // is bypassed so copy_from_user dereferences these addresses, causing
-    // a #GP on x86_64. Skip on bare-metal — these tests verify the
-    // user/kernel boundary which doesn't exist in kernel-mode execution.
-    #[cfg(not(target_os = "none"))]
-    {
-        log::warn!("  core_test: bad_access");
-        bad_access::run_all();
-    }
-    #[cfg(target_os = "none")]
-    log::warn!("  core_test: bad_access (SKIPPED on bare-metal)");
+    log::warn!("  core_test: bad_access");
+    bad_access::run_all();
     log::warn!("  core_test: bad_segsel");
     bad_segsel::run_all();
     log::warn!("  core_test: bti");

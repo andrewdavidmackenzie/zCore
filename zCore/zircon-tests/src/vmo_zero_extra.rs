@@ -44,7 +44,7 @@ fn hidden_no_content() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     hidden_no_content();
 }

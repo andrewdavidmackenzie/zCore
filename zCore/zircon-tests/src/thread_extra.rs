@@ -1550,7 +1550,7 @@ async fn thread_read_state_vector() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     thread_create();
     thread_name();

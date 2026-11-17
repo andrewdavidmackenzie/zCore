@@ -320,7 +320,7 @@ fn nested_lock() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     create_discardable();
     lock_unlock();

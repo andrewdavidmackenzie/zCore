@@ -426,7 +426,7 @@ fn policy_batch_application() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     default_policy();
     set_basic_policy();

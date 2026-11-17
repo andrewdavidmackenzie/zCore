@@ -169,7 +169,7 @@ fn add_entropy_no_resource() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     draw_non_zero();
     draw_different();

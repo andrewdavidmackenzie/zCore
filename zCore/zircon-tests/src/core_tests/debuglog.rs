@@ -373,7 +373,7 @@ fn write_read() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     drain_and_signal();
     invalid_handle_allowed_only_for_write();

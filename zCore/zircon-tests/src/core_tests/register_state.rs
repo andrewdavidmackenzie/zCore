@@ -63,7 +63,7 @@ fn context_switch_of_gs_base() {
 extern crate alloc;
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     context_switch_of_gs_base();
 }

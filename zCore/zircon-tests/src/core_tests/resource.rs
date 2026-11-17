@@ -1550,7 +1550,7 @@ fn vmo_replace_as_executable() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     basic_actions();
     create_arithmetic_overflow();

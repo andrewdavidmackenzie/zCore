@@ -458,7 +458,7 @@ fn call_reply_mismatched_txid() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     read_remaining_messages_preserves_signals();
     check_and_read_preserves_message_on_failure();

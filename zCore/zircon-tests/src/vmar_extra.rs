@@ -423,7 +423,7 @@ fn addr_and_size() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     vmar_root_exists();
     vmar_allocate_child();

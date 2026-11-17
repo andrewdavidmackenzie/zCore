@@ -180,7 +180,7 @@ fn channel_with_messages_drop() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     event_create_drop();
     channel_create_drop();

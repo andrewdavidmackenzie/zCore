@@ -1223,7 +1223,7 @@ fn write_move_handles_with_rights_check_failure() {
 /// a pointer suitable for UserInPtr<ChannelCallArgs>.
 ///
 /// ChannelCallArgs layout (all usize-aligned pointers + u32 counts):
-/// ```
+/// ```text
 /// wr_bytes:       UserInPtr<u8>       (usize)
 /// wr_handles:     UserInPtr<u32>      (usize)
 /// rd_bytes:       UserOutPtr<u8>      (usize)
@@ -4417,7 +4417,7 @@ fn write_iovec_unbounded_non_zero_reserved_returns_invalid_args() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     read_without_read_right();
     create_policy_denied_returns_access_denied();

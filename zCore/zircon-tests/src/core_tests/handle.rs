@@ -321,7 +321,7 @@ fn handle_transfer_over_channel_then_read() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     handle_close_many_duplicate_test();
     handle_close_many_invalid_handles_should_not_fail();

@@ -1702,7 +1702,7 @@ fn progressive_clone_truncate() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     read();
     clone_vmo_write();

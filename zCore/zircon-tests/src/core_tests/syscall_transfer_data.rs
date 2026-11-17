@@ -102,7 +102,7 @@ fn invalid_inputs() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     invalid_inputs();
 }

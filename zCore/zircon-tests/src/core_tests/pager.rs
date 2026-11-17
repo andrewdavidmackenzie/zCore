@@ -10810,7 +10810,7 @@ async fn pager_process_kill_after_suspend_usercopy_capture() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub async fn run_all() {
     pager_bulk_odd_length_supply_test_vmo();
     pager_bulk_odd_length_supply_test_vmar();

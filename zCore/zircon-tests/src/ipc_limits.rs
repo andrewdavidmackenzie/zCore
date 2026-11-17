@@ -233,7 +233,7 @@ fn channel_multiple_reads_clears() {
 }
 
 /// Run all tests in this module.
-#[cfg(feature = "baremetal-test")]
+#[cfg(not(test))]
 pub fn run_all() {
     channel_max_handles();
     channel_queue_depth();
