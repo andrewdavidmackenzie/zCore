@@ -90,19 +90,23 @@ impl Syscall<'_> {
             return Err(ZxError::OUT_OF_RANGE);
         }
         // Fuchsia returns NOT_FOUND for null, kernel-space, or
-        // boundary-spanning user buffers.
-        if buf_size > 0 && buf.is_null() {
-            return Err(ZxError::NOT_FOUND);
-        }
-        if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
-            return Err(ZxError::NOT_FOUND);
-        }
-        match buf.as_addr().checked_add(buf_size) {
-            Some(end) if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize => {
+        // boundary-spanning user buffers. In baremetal-test mode, kernel
+        // addresses are valid buffers — skip these checks.
+        #[cfg(not(feature = "baremetal-test"))]
+        {
+            if buf_size > 0 && buf.is_null() {
                 return Err(ZxError::NOT_FOUND);
             }
-            None => return Err(ZxError::NOT_FOUND),
-            _ => {}
+            if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
+                return Err(ZxError::NOT_FOUND);
+            }
+            match buf.as_addr().checked_add(buf_size) {
+                Some(end) if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize => {
+                    return Err(ZxError::NOT_FOUND);
+                }
+                None => return Err(ZxError::NOT_FOUND),
+                _ => {}
+            }
         }
         // For pager-backed VMOs, interleave demand-paging with data copy.
         // Send one batched request for all uncommitted pages, then wait
@@ -337,18 +341,21 @@ impl Syscall<'_> {
         if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        if buf_size > 0 && buf.is_null() {
-            return Err(ZxError::NOT_FOUND);
-        }
-        if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
-            return Err(ZxError::NOT_FOUND);
-        }
-        match buf.as_addr().checked_add(buf_size) {
-            Some(end) if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize => {
+        #[cfg(not(feature = "baremetal-test"))]
+        {
+            if buf_size > 0 && buf.is_null() {
                 return Err(ZxError::NOT_FOUND);
             }
-            None => return Err(ZxError::NOT_FOUND),
-            _ => {}
+            if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
+                return Err(ZxError::NOT_FOUND);
+            }
+            match buf.as_addr().checked_add(buf_size) {
+                Some(end) if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize => {
+                    return Err(ZxError::NOT_FOUND);
+                }
+                None => return Err(ZxError::NOT_FOUND),
+                _ => {}
+            }
         }
         // For clones in a pager tree, writing triggers COW resolution
         // which may need to demand-page parent pages from the pager.
