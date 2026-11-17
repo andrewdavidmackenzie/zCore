@@ -250,3 +250,19 @@ path = "src/bin/thread_test.rs"
 [[bin]]
 name = "port-test"
 path = "src/bin/port_test.rs"
+
+[[bin]]
+name = "thread-extra-test"
+path = "src/bin/thread_extra_test.rs"
+
+[[bin]]
+name = "object-info-extra-test"
+path = "src/bin/object_info_extra_test.rs"
+
+[[bin]]
+name = "handle-wait-test"
+path = "src/bin/handle_wait_test.rs"
+
+[[bin]]
+name = "object-wait-test"
+path = "src/bin/object_wait_test.rs"
