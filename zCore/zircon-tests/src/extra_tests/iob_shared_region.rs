@@ -18,7 +18,6 @@ use crate::helpers::TestContext;
 /// zCore does not implement IOB. We verify the same validation rules
 /// using the VMO creation API (which IOB shared regions are backed by):
 /// zero size and non-page-aligned sizes should be rejected or rounded.
-#[test]
 fn invalid_args() {
     let _ctx = TestContext::new();
     let page_size = zircon_object::vm::PAGE_SIZE;
@@ -48,7 +47,6 @@ fn invalid_args() {
 ///
 /// zCore does not implement IOB. We verify the VMO size limits that
 /// would apply to IOB shared region backing VMOs.
-#[test]
 fn out_of_range() {
     let _ctx = TestContext::new();
     let page_size = zircon_object::vm::PAGE_SIZE;
@@ -85,7 +83,6 @@ fn out_of_range() {
 /// zCore does not implement IOB. We verify that creating the backing
 /// VMO (which an IOB shared region uses internally) succeeds with
 /// valid arguments and can be mapped into a VMAR.
-#[test]
 fn create_succeeds() {
     let _ctx = TestContext::new();
     let page_size = zircon_object::vm::PAGE_SIZE;
@@ -119,7 +116,6 @@ fn create_succeeds() {
 /// zCore does not implement IOB. We verify the concept: shared regions
 /// require ring-buffer discipline. The IOB discipline type constants
 /// are validated and documented here.
-#[test]
 fn shared_region_with_non_ring_buffer_discipline() {
     let _ctx = TestContext::new();
 
@@ -151,4 +147,12 @@ fn shared_region_with_non_ring_buffer_discipline() {
         "ring-buffer is the only valid discipline for shared regions"
     );
     assert_eq!(ZX_IOB_REGION_TYPE_SHARED, 2);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    invalid_args();
+    out_of_range();
+    create_succeeds();
+    shared_region_with_non_ring_buffer_discipline();
 }

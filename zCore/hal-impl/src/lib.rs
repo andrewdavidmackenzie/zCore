@@ -57,8 +57,8 @@ pub mod libos_frame {
     pub use crate::imp::mem::{frame_alloc, frame_alloc_contiguous, frame_dealloc};
 }
 
-/// LibOS-specific COW handler.
+/// Host-mode COW fault handler (signal-based page fault handling).
 #[cfg(feature = "libos")]
-pub mod libos_cow {
+pub mod cow {
     pub use crate::imp::cow_handler::{install_cow_handler, register_cow_callback};
 }

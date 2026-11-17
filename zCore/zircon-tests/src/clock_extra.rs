@@ -8,7 +8,6 @@ use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 
 /// Create an auto-start clock and read it.
-#[test]
 fn clock_create_auto_start_and_read() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -25,7 +24,6 @@ fn clock_create_auto_start_and_read() {
 }
 
 /// Create a non-auto-start clock — read before start should fail.
-#[test]
 fn clock_read_before_start_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -43,7 +41,6 @@ fn clock_read_before_start_fails() {
 }
 
 /// Update a clock to start it, then read.
-#[test]
 fn clock_update_starts_clock() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -72,7 +69,6 @@ fn clock_update_starts_clock() {
 }
 
 /// Get clock details.
-#[test]
 fn clock_get_details() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -102,7 +98,6 @@ fn clock_get_details() {
 }
 
 /// Clock adjust with root resource — UTC offset.
-#[test]
 fn clock_adjust_utc() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -121,7 +116,6 @@ fn clock_adjust_utc() {
 }
 
 /// Clock adjust without resource fails.
-#[test]
 fn clock_adjust_needs_resource() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -129,4 +123,14 @@ fn clock_adjust_needs_resource() {
     // No resource handle → BAD_HANDLE.
     let result = sc.sys_clock_adjust(0xDEAD, 1, 0);
     assert_eq!(result, Err(zircon_object::ZxError::BAD_HANDLE));
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    clock_create_auto_start_and_read();
+    clock_read_before_start_fails();
+    clock_update_starts_clock();
+    clock_get_details();
+    clock_adjust_utc();
+    clock_adjust_needs_resource();
 }

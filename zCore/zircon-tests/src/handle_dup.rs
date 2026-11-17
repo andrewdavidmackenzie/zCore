@@ -14,7 +14,6 @@ extern crate alloc;
 ///
 /// Duplicate an event handle. Both handles should reference the
 /// same underlying object.
-#[test]
 fn duplicate_event_handle() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -30,7 +29,6 @@ fn duplicate_event_handle() {
 ///
 /// Duplicate a handle with fewer rights. The duplicate should have
 /// only the requested rights.
-#[test]
 fn duplicate_with_reduced_rights() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -44,7 +42,6 @@ fn duplicate_with_reduced_rights() {
 
 ///
 /// Duplicate a channel handle. Both handles should be usable.
-#[test]
 fn duplicate_channel_handle() {
     let _ctx = TestContext::new();
     let (local, _remote) = Channel::create();
@@ -57,7 +54,6 @@ fn duplicate_channel_handle() {
 
 ///
 /// Duplicate a job handle. Both should reference the same job.
-#[test]
 fn duplicate_job_handle() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -72,7 +68,6 @@ fn duplicate_job_handle() {
 ///
 /// Replace a handle with new rights. The original handle should be
 /// invalidated and the new one should have the requested rights.
-#[test]
 fn replace_handle() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -89,7 +84,6 @@ fn replace_handle() {
 ///
 /// Two handles from duplication should have the same object identity
 /// (same KOID).
-#[test]
 fn duplicate_preserves_object_identity() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -105,7 +99,6 @@ fn duplicate_preserves_object_identity() {
 
 ///
 /// Duplicate with Rights::all() — should preserve all possible rights.
-#[test]
 fn duplicate_all_rights() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -119,7 +112,6 @@ fn duplicate_all_rights() {
 
 ///
 /// Duplicate with empty rights. The duplicate should have no rights.
-#[test]
 fn duplicate_empty_rights() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -131,7 +123,6 @@ fn duplicate_empty_rights() {
 ///
 /// Create many duplicates of the same handle. All should share the
 /// same object identity.
-#[test]
 fn many_duplicates() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -151,7 +142,6 @@ fn many_duplicates() {
 ///
 /// Duplicate a handle, then drop the original. The duplicate should
 /// still be valid and usable.
-#[test]
 fn duplicate_and_drop_original() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -162,4 +152,18 @@ fn duplicate_and_drop_original() {
 
     // h2 should still be valid
     assert_eq!(h2.object.id(), event_id);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    duplicate_event_handle();
+    duplicate_with_reduced_rights();
+    duplicate_channel_handle();
+    duplicate_job_handle();
+    replace_handle();
+    duplicate_preserves_object_identity();
+    duplicate_all_rights();
+    duplicate_empty_rights();
+    many_duplicates();
+    duplicate_and_drop_original();
 }

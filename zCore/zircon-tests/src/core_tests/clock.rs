@@ -3,6 +3,9 @@
 //! Tests for the monotonic clock (vDSO path) and clock kernel objects
 //! (sys_clock_create / sys_clock_read / sys_clock_update / sys_clock_get_details).
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 
 use hal_impl::user::{UserInPtr, UserOutPtr};
@@ -14,7 +17,6 @@ type HandleValue = u32;
 
 /// C++: TEST(ClockTest, ClockMonotonic)
 /// Monotonic time should be positive and non-decreasing.
-#[test]
 fn clock_monotonic() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -39,7 +41,6 @@ fn clock_monotonic() {
 /// deadline_after(offset) should equal monotonic + offset (approximately).
 /// Since deadline_after is a vDSO function, we test the equivalent:
 /// compute `now + offset` and verify it's within a reasonable range.
-#[test]
 fn deadline_after() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -101,7 +102,6 @@ pub(crate) fn syscall_clock_create(
 ///
 /// zCore's sys_vmar_map_clock rejects FAULT_BEYOND_STREAM_SIZE with
 /// INVALID_ARGS, exactly matching Fuchsia's behavior.
-#[test]
 fn fault_beyond_stream_size_returns_error() {
     use zircon_object::ZxError;
 
@@ -151,7 +151,6 @@ fn fault_beyond_stream_size_returns_error() {
 /// zCore's create_state_vmo zero-fills the entire page before writing
 /// the clock details struct, which guarantees all padding is zero.
 /// We verify this by mapping the clock and checking the mapped memory.
-#[test]
 fn mappable_clock_padding_leak() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -234,7 +233,6 @@ fn mappable_clock_padding_leak() {
 /// invariant (monotonicity of consecutive readings) within a single
 /// thread doing many rapid reads, which exercises the same kernel
 /// clock path (sys_clock_get_monotonic_via_kernel).
-#[test]
 fn multithreaded_contention_clock_monotonic() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -268,4 +266,13 @@ fn multithreaded_contention_clock_monotonic() {
             );
         }
     }
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    clock_monotonic();
+    deadline_after();
+    fault_beyond_stream_size_returns_error();
+    mappable_clock_padding_leak();
+    multithreaded_contention_clock_monotonic();
 }

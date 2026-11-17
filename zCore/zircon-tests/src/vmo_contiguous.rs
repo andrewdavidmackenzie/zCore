@@ -14,7 +14,6 @@ extern crate alloc;
 
 /// Create a regular VMO (contiguous requires BTI, which is unavailable).
 /// Verify basic VMO creation works.
-#[test]
 fn create_contiguous() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -24,7 +23,6 @@ fn create_contiguous() {
 
 /// Read and write to a VMO. Contiguous VMOs use the same
 /// read/write interface.
-#[test]
 fn read_write_contiguous() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -40,7 +38,6 @@ fn read_write_contiguous() {
 /// Pin a VMO's pages (simulated). Contiguous VMOs guarantee
 /// physically contiguous pinned pages. Without BTI, verify
 /// VMO commit works.
-#[test]
 fn pin_contiguous() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -59,7 +56,6 @@ fn pin_contiguous() {
 
 /// Large VMO allocation. Contiguous VMOs need large physically
 /// contiguous blocks. Verify large paged VMO works.
-#[test]
 fn contiguous_large_alloc() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(64);
@@ -76,7 +72,6 @@ fn contiguous_large_alloc() {
 
 /// Contiguous VMOs should not be resizable. Regular VMOs with
 /// resizable=false also reject resize.
-#[test]
 fn contiguous_not_resizable() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1); // Not resizable by default.
@@ -91,7 +86,6 @@ fn contiguous_not_resizable() {
 
 /// Contiguous VMOs should not be clonable (snapshot). Regular VMOs
 /// do support cloning — document the difference.
-#[test]
 fn contiguous_not_clonable() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -105,7 +99,6 @@ fn contiguous_not_clonable() {
 
 /// Decommit pages. Contiguous VMOs cannot have gaps.
 /// Regular VMOs support decommit.
-#[test]
 fn contiguous_decommit() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -123,7 +116,6 @@ fn contiguous_decommit() {
 
 /// Contiguous VMO with alignment. Without BTI, verify VMO creation
 /// with specific page counts.
-#[test]
 fn contiguous_alignment() {
     let _ctx = TestContext::new();
     // Create VMOs of various sizes (alignment would be at page boundary).
@@ -137,7 +129,6 @@ fn contiguous_alignment() {
 /// Create contiguous VMO without BTI. Without BTI infrastructure,
 /// we cannot create truly contiguous VMOs. Verify regular VMO
 /// creation succeeds.
-#[test]
 fn contiguous_no_resource() {
     let _ctx = TestContext::new();
     // No BTI handle available — regular VMO creation works.
@@ -148,9 +139,22 @@ fn contiguous_no_resource() {
 
 /// Create a zero-size VMO. Both regular and contiguous VMOs
 /// should handle this case.
-#[test]
 fn contiguous_zero_size() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(0);
     assert_eq!(vmo.len(), 0);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    create_contiguous();
+    read_write_contiguous();
+    pin_contiguous();
+    contiguous_large_alloc();
+    contiguous_not_resizable();
+    contiguous_not_clonable();
+    contiguous_decommit();
+    contiguous_alignment();
+    contiguous_no_resource();
+    contiguous_zero_size();
 }

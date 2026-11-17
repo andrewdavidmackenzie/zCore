@@ -13,6 +13,7 @@
 //! C++ source: zircon/system/utest/core/sync-mutex/mutex.cc
 
 use crate::helpers::TestContext;
+use crate::prelude::*;
 use core::sync::atomic::{AtomicI32, Ordering};
 use zircon_object::signal::Futex;
 
@@ -30,10 +31,9 @@ extern crate alloc;
 /// execution with blocking futex_wait.
 /// 3 threads concurrently lock/unlock a mutex, each incrementing
 /// a shared counter. The total should be the sum of all iterations.
-#[async_std::test]
 async fn mutexes() {
     use crate::helpers::{mutex_contender_thread_fn, MutexContenderState, SyncMutex};
-    use std::sync::Arc;
+    use alloc::sync::Arc;
     use zircon_object::task::Thread;
 
     let ctx = TestContext::new();
@@ -44,7 +44,7 @@ async fn mutexes() {
 
     // C++: 3 threads with 300, 150, 100 iterations — scale down for speed
     let iterations = [30, 15, 10];
-    let mut threads = std::vec::Vec::new();
+    let mut threads = alloc::vec::Vec::new();
     for &iters in &iterations {
         let state = MutexContenderState::new(mutex.clone(), counter.clone(), iters);
         let thread = Thread::create_with_ext(&proc, "mutex-contender", state.clone()).unwrap();
@@ -53,28 +53,28 @@ async fn mutexes() {
     }
 
     // Wait for all threads to finish
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     for (_, state) in &threads {
         while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
             assert!(
-                std::time::Instant::now() < deadline,
+                hal_impl::timer::timer_now() < deadline,
                 "mutex contender thread timed out"
             );
-            async_std::task::yield_now().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 
     // Wait for threads to terminate
     for (thread, _) in &threads {
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= deadline {
+            if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
-            async_std::task::yield_now().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 
@@ -100,7 +100,6 @@ async fn mutexes() {
 /// at least once (got_lock_1/2/3 == true).
 ///
 /// In single-threaded mode, we can test the CAS semantics of trylock.
-#[test]
 fn try_mutexes() {
     let _ctx = TestContext::new();
     let mutex = AtomicI32::new(0);
@@ -162,8 +161,7 @@ fn try_mutexes() {
 ///
 /// At kernel level: sync_mutex_timedlock calls futex_wait with a deadline.
 /// In single-threaded mode, we test the value-mismatch fast path.
-#[test]
-fn timeout_elapsed() {
+async fn timeout_elapsed() {
     let _ctx = TestContext::new();
     // Mutex is "locked" (non-zero value, simulating another thread holding it)
     let mutex = Box::new(AtomicI32::new(1));
@@ -174,7 +172,7 @@ fn timeout_elapsed() {
     // At kernel level: futex_wait(expected=0, deadline) but value is 1
     // → immediate BAD_STATE (value mismatch)
     for _i in 0..5 {
-        let result = async_std::task::block_on(futex.wait(0));
+        let result = futex.wait(0).await;
         assert_eq!(
             result.unwrap_err(),
             zircon_object::ZxError::BAD_STATE,
@@ -192,7 +190,6 @@ fn timeout_elapsed() {
 /// At kernel level: the second sync_mutex_lock on an already-held
 /// mutex detects the deadlock (owner == current thread) and aborts.
 /// In our test, we verify that the CAS for the second lock fails.
-#[test]
 fn no_recursion() {
     let _ctx = TestContext::new();
     let mutex = AtomicI32::new(0);
@@ -220,7 +217,6 @@ fn no_recursion() {
 ///
 /// At kernel level: assert_held checks that the mutex value equals
 /// the current thread's KOID. We check the value is non-zero (held).
-#[test]
 fn assert_held() {
     let _ctx = TestContext::new();
     let mutex = AtomicI32::new(0);
@@ -247,4 +243,13 @@ fn assert_held() {
         0,
         "mutex should be unheld (zero) — assert_held would abort"
     );
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    mutexes().await;
+    try_mutexes();
+    timeout_elapsed().await;
+    no_recursion();
+    assert_held();
 }

@@ -22,7 +22,6 @@ fn check_info(timer: &Timer, expected_options: u32, expected_deadline: i64, expe
 /// C++ tests `zx::deadline_after()` arithmetic (clamping, overflow).
 /// In Rust, deadline_after is equivalent to monotonic_now + offset.
 /// We verify the timer fires for a past deadline.
-#[test]
 fn deadline_after() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -36,7 +35,6 @@ fn deadline_after() {
 /// Setting deadline to -1 (past) fires immediately. In Rust,
 /// Duration can't be negative, so we use 0 (also past). Verify
 /// get_info before and after.
-#[test]
 fn set_negative_deadline() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -58,7 +56,6 @@ fn set_negative_deadline() {
 /// Note: C++ expects slack=0 after firing (cleared by wait_one).
 /// zCore retains the slack value after firing since there's no
 /// wait_one to clear it. We verify deadline=0 and signal.
-#[test]
 fn set_negative_deadline_max() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -79,7 +76,6 @@ fn set_negative_deadline_max() {
 /// C++ sets slack to -1 which returns ZX_ERR_OUT_OF_RANGE.
 /// In Rust, Duration can't be negative, so we test at the syscall
 /// layer with an invalid slack value.
-#[test]
 fn set_negative_slack() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -103,8 +99,7 @@ fn set_negative_slack() {
 ///
 /// Set deadline to past, wait_one returns immediately with SIGNALED.
 /// Verify get_info before and after wait_one.
-#[test]
-fn already_passed_deadline_on_wait_one() {
+async fn already_passed_deadline_on_wait_one() {
     use hal_impl::user::UserOutPtr;
 
     let ctx = TestContext::new();
@@ -122,12 +117,14 @@ fn already_passed_deadline_on_wait_one() {
     // wait_one with zero timeout — already SIGNALED, should succeed.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::SIGNALED.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        out,
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::SIGNALED.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out,
+        )
+        .await;
     assert!(result.is_ok());
     assert!(observed.contains(Signal::SIGNALED));
 
@@ -139,10 +136,9 @@ fn already_passed_deadline_on_wait_one() {
 ///
 /// Basic timer lifecycle. C++ first does a wait_one with zero timeout
 /// to verify ZX_ERR_TIMED_OUT and pending==0, then loops 3 times with
-/// 10ms future deadlines and calls wait_one. In libos mode we test
+/// 10ms future deadlines and calls wait_one. In test mode we test
 /// with past deadlines (fire immediately) and use syscall-layer wait_one.
-#[test]
-fn basic() {
+async fn basic() {
     use hal_impl::user::UserOutPtr;
 
     let ctx = TestContext::new();
@@ -155,12 +151,14 @@ fn basic() {
     // Initially not signaled — wait_one with zero timeout returns TIMED_OUT.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::SIGNALED.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        out,
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::SIGNALED.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out,
+        )
+        .await;
     assert_eq!(result, Err(zircon_object::ZxError::TIMED_OUT));
     assert_eq!(observed, Signal::empty());
 
@@ -171,12 +169,14 @@ fn basic() {
         // wait_one should succeed immediately (already SIGNALED).
         let mut observed = Signal::empty();
         let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-        let result = async_std::task::block_on(sc.sys_object_wait_one(
-            h,
-            Signal::SIGNALED.bits(),
-            zircon_syscall::Deadline::from(0usize),
-            out,
-        ));
+        let result = sc
+            .sys_object_wait_one(
+                h,
+                Signal::SIGNALED.bits(),
+                zircon_syscall::Deadline::from(0usize),
+                out,
+            )
+            .await;
         assert!(result.is_ok(), "wait_one should succeed for fired timer");
         assert!(observed.contains(Signal::SIGNALED));
 
@@ -191,7 +191,6 @@ fn basic() {
 ///
 /// Set a far-future timer, verify get_info shows the deadline,
 /// then replace with a past deadline. Verify it fires.
-#[test]
 fn restart() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -217,7 +216,6 @@ fn restart() {
 /// C++: TEST(Timer, InvalidCalls)
 ///
 /// Creating a timer with an invalid clock should return INVALID_ARGS.
-#[test]
 fn invalid_calls() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -243,7 +241,6 @@ fn invalid_calls() {
 /// C++ just does `timer.set(zx::time(), zx::nsec(0))` — a single call.
 /// We test additional edge cases: cancel without set, double cancel,
 /// set after cancel.
-#[test]
 fn edge_cases() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -270,7 +267,6 @@ fn edge_cases() {
 ///
 /// Rapid set cycles to look for race conditions. C++ spins for 5ms
 /// with 100us deadlines. We do 100 iterations with past deadlines.
-#[test]
 fn restart_race() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -288,8 +284,7 @@ fn restart_race() {
 /// If the timer is already due when set, SIGNALED is asserted
 /// immediately. Canceling deasserts it immediately. Verify via
 /// wait_one with zero timeout.
-#[test]
-fn signals_asserted_immediately() {
+async fn signals_asserted_immediately() {
     use hal_impl::user::UserOutPtr;
 
     let ctx = TestContext::new();
@@ -305,12 +300,14 @@ fn signals_asserted_immediately() {
         // wait_one should succeed immediately.
         let mut observed = Signal::empty();
         let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-        let result = async_std::task::block_on(sc.sys_object_wait_one(
-            h,
-            Signal::SIGNALED.bits(),
-            zircon_syscall::Deadline::from(0usize),
-            out,
-        ));
+        let result = sc
+            .sys_object_wait_one(
+                h,
+                Signal::SIGNALED.bits(),
+                zircon_syscall::Deadline::from(0usize),
+                out,
+            )
+            .await;
         assert!(result.is_ok());
         assert!(observed.contains(Signal::SIGNALED));
 
@@ -319,12 +316,14 @@ fn signals_asserted_immediately() {
         // After cancel, wait_one should time out.
         let mut observed2 = Signal::empty();
         let out2 = UserOutPtr::from(&mut observed2 as *mut _ as usize);
-        let result2 = async_std::task::block_on(sc.sys_object_wait_one(
-            h,
-            Signal::SIGNALED.bits(),
-            zircon_syscall::Deadline::from(0usize),
-            out2,
-        ));
+        let result2 = sc
+            .sys_object_wait_one(
+                h,
+                Signal::SIGNALED.bits(),
+                zircon_syscall::Deadline::from(0usize),
+                out2,
+            )
+            .await;
         assert_eq!(result2, Err(zircon_object::ZxError::TIMED_OUT));
     }
 }
@@ -338,7 +337,6 @@ fn signals_asserted_immediately() {
 /// We verify the timer creation syscall rejects invalid clock IDs
 /// (the validation that would apply to ZX_CLOCK_BOOT) and that
 /// valid timers (ZX_CLOCK_MONOTONIC) work correctly.
-#[test]
 fn boot_timers_elapse_during_suspend() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -366,8 +364,7 @@ fn boot_timers_elapse_during_suspend() {
 ///
 /// User signals can be asserted and cleared on a timer via syscall layer,
 /// independent of the SIGNALED timer signal. C++ also verifies via wait_one.
-#[test]
-fn user_signal() {
+async fn user_signal() {
     use hal_impl::user::UserOutPtr;
 
     let ctx = TestContext::new();
@@ -384,12 +381,14 @@ fn user_signal() {
     // wait_one should succeed immediately with USER_SIGNAL_0.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        out,
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out,
+        )
+        .await;
     assert!(result.is_ok());
     assert!(observed.contains(Signal::USER_SIGNAL_0));
 
@@ -400,12 +399,14 @@ fn user_signal() {
     // wait_one should now time out.
     let mut observed2 = Signal::empty();
     let out2 = UserOutPtr::from(&mut observed2 as *mut _ as usize);
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        out2,
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out2,
+        )
+        .await;
     assert_eq!(result, Err(zircon_object::ZxError::TIMED_OUT));
 }
 
@@ -413,7 +414,6 @@ fn user_signal() {
 ///
 /// Verify ZX_INFO_HANDLE_BASIC fields: type=TIMER (22),
 /// related_koid=INVALID (0), rights=DEFAULT_TIMER.
-#[test]
 fn basic_info() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -452,4 +452,22 @@ fn basic_info() {
     assert_eq!(options, 0);
     assert!(deadline > 0, "deadline should be set");
     assert_eq!(slack, 1000);
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    deadline_after();
+    set_negative_deadline();
+    set_negative_deadline_max();
+    set_negative_slack();
+    already_passed_deadline_on_wait_one().await;
+    basic().await;
+    restart();
+    invalid_calls();
+    edge_cases();
+    restart_race();
+    signals_asserted_immediately().await;
+    boot_timers_elapse_during_suspend();
+    user_signal().await;
+    basic_info();
 }

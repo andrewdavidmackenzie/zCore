@@ -8,7 +8,6 @@ use zircon_object::object::KernelObject;
 use zircon_object::vm::{SeekOrigin, Stream, VmObject};
 
 /// Create a stream on a VMO.
-#[test]
 fn stream_create() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -16,7 +15,6 @@ fn stream_create() {
 }
 
 /// Stream write and read.
-#[test]
 fn stream_write_read() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -36,7 +34,6 @@ fn stream_write_read() {
 }
 
 /// Stream read at specific offset.
-#[test]
 fn stream_read_at() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -51,7 +48,6 @@ fn stream_read_at() {
 }
 
 /// Stream seek.
-#[test]
 fn stream_seek() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -70,7 +66,6 @@ fn stream_seek() {
 }
 
 /// Stream append mode.
-#[test]
 fn stream_append() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -87,7 +82,6 @@ fn stream_append() {
 }
 
 /// Write at specific offset without moving seek position.
-#[test]
 fn stream_write_at() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -108,7 +102,6 @@ fn stream_write_at() {
 }
 
 /// Seek relative to current position.
-#[test]
 fn stream_seek_current() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -135,7 +128,6 @@ fn stream_seek_current() {
 }
 
 /// Seek relative to content end.
-#[test]
 fn stream_seek_end() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -154,7 +146,6 @@ fn stream_seek_end() {
 }
 
 /// Reading beyond content_size returns 0 bytes.
-#[test]
 fn stream_read_beyond_content() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -171,7 +162,6 @@ fn stream_read_beyond_content() {
 }
 
 /// Zero-length write returns Ok(0).
-#[test]
 fn stream_zero_length_write() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -182,7 +172,6 @@ fn stream_zero_length_write() {
 }
 
 /// Stream write updates content_size when it extends past current value.
-#[test]
 fn stream_content_size_tracking() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -203,7 +192,6 @@ fn stream_content_size_tracking() {
 }
 
 /// Stream has a valid koid.
-#[test]
 fn stream_koid() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -212,7 +200,6 @@ fn stream_koid() {
 }
 
 /// Stream name get/set.
-#[test]
 fn stream_name() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -220,4 +207,21 @@ fn stream_name() {
 
     stream.set_name("my-stream");
     assert_eq!(stream.name(), "my-stream");
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    stream_create();
+    stream_write_read();
+    stream_read_at();
+    stream_seek();
+    stream_append();
+    stream_write_at();
+    stream_seek_current();
+    stream_seek_end();
+    stream_read_beyond_content();
+    stream_zero_length_write();
+    stream_content_size_tracking();
+    stream_koid();
+    stream_name();
 }

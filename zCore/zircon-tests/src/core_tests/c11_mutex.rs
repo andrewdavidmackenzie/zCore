@@ -13,6 +13,7 @@
 //! C++ source: zircon/system/utest/core/c11-mutex/mutex.cc
 
 use crate::helpers::TestContext;
+use crate::prelude::*;
 use core::sync::atomic::{AtomicI32, Ordering};
 use zircon_object::signal::Futex;
 
@@ -29,10 +30,9 @@ use zircon_object::signal::Futex;
 /// mutex waits (futex_wait).
 /// 3 threads concurrently lock/unlock a C11 mutex (futex-based).
 /// Each increments a shared counter. Total must match.
-#[async_std::test]
 async fn multi_threaded_contention() {
     use crate::helpers::{mutex_contender_thread_fn, MutexContenderState, SyncMutex};
-    use std::sync::Arc;
+    use alloc::sync::Arc;
     use zircon_object::task::Thread;
 
     let ctx = TestContext::new();
@@ -43,7 +43,7 @@ async fn multi_threaded_contention() {
 
     // C++: 3 threads with 300, 150, 100 iterations — scaled down
     let iterations = [30, 15, 10];
-    let mut threads = std::vec::Vec::new();
+    let mut threads = alloc::vec::Vec::new();
     for &iters in &iterations {
         let state = MutexContenderState::new(mutex.clone(), counter.clone(), iters);
         let thread = Thread::create_with_ext(&proc, "c11-mutex-contender", state.clone()).unwrap();
@@ -51,24 +51,24 @@ async fn multi_threaded_contention() {
         threads.push((thread, state));
     }
 
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     for (_, state) in &threads {
         while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
-            assert!(std::time::Instant::now() < deadline, "timed out");
-            async_std::task::yield_now().await;
+            assert!(hal_impl::timer::timer_now() < deadline, "timed out");
+            hal_impl::thread::yield_now().await;
         }
     }
 
     for (thread, _) in &threads {
-        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let dl = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= dl {
+            if hal_impl::timer::timer_now() >= dl {
                 break;
             }
-            async_std::task::yield_now().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 
@@ -91,7 +91,6 @@ async fn multi_threaded_contention() {
 /// No futex_wait is involved in trylock.
 ///
 /// In single-threaded mode, we can faithfully test the CAS semantics.
-#[test]
 fn try_mutex_multi_threaded_contention() {
     let _ctx = TestContext::new();
     let mutex = AtomicI32::new(0);
@@ -133,7 +132,6 @@ fn try_mutex_multi_threaded_contention() {
 /// and initialized.
 ///
 /// At the kernel level, a mutex is just an AtomicI32 initialized to 0.
-#[test]
 fn initalize_local_mutex() {
     let _ctx = TestContext::new();
     // C++: mtx_init(&auto_mutex, mtx_timed) → thrd_success
@@ -153,7 +151,6 @@ fn initalize_local_mutex() {
 /// has the same byte representation as one initialized with mtx_init.
 ///
 /// At kernel level: both should be zero-initialized AtomicI32.
-#[test]
 fn static_initalizer_same_bytes_as_auto() {
     let _ctx = TestContext::new();
     // C++: static mtx_t static_mutex = MTX_INIT
@@ -184,8 +181,7 @@ fn static_initalizer_same_bytes_as_auto() {
 /// In single-threaded mode: we can test that futex_wait on a locked
 /// mutex (value mismatch) returns BAD_STATE immediately.
 /// The full timeout test requires concurrent threads.
-#[test]
-fn timeout_elapsed() {
+async fn timeout_elapsed() {
     let _ctx = TestContext::new();
     // Mutex is "locked" (value = 1)
     let mutex = Box::new(AtomicI32::new(1));
@@ -197,11 +193,20 @@ fn timeout_elapsed() {
     // (In a real scenario, the expected value would match and the thread
     // would block until the deadline, but we can only test the fast path.)
     for _i in 0..5 {
-        let result = async_std::task::block_on(futex.wait(0));
+        let result = futex.wait(0).await;
         assert_eq!(
             result.unwrap_err(),
             zircon_object::ZxError::BAD_STATE,
             "futex_wait with wrong expected value should fail"
         );
     }
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    multi_threaded_contention().await;
+    try_mutex_multi_threaded_contention();
+    initalize_local_mutex();
+    static_initalizer_same_bytes_as_auto();
+    timeout_elapsed().await;
 }

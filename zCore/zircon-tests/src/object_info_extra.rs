@@ -23,7 +23,6 @@ use zircon_object::vm::{Stream, VmObject};
 
 ///
 /// Query ZX_INFO_HANDLE_VALID on a valid handle. Should succeed.
-#[test]
 fn info_handle_valid() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -32,7 +31,6 @@ fn info_handle_valid() {
 
 ///
 /// Query ZX_INFO_HANDLE_BASIC on an event. Should return type EVENT.
-#[test]
 fn info_handle_basic_event() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -41,7 +39,6 @@ fn info_handle_basic_event() {
 
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a channel. Should return type CHANNEL.
-#[test]
 fn info_handle_basic_channel() {
     use zircon_object::ipc::Channel;
     let _ctx = TestContext::new();
@@ -51,7 +48,6 @@ fn info_handle_basic_channel() {
 
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a socket. Should return type SOCKET.
-#[test]
 fn info_handle_basic_socket() {
     use zircon_object::ipc::Socket;
     let _ctx = TestContext::new();
@@ -61,7 +57,6 @@ fn info_handle_basic_socket() {
 
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a VMO. Should return type VMO.
-#[test]
 fn info_handle_basic_vmo() {
     use zircon_object::vm::VmObject;
     let _ctx = TestContext::new();
@@ -71,7 +66,6 @@ fn info_handle_basic_vmo() {
 
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a port. Should return type PORT.
-#[test]
 fn info_handle_basic_port() {
     use zircon_object::signal::Port;
     let _ctx = TestContext::new();
@@ -81,7 +75,6 @@ fn info_handle_basic_port() {
 
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a timer. Should return type TIMER.
-#[test]
 fn info_handle_basic_timer() {
     use zircon_object::signal::Timer;
     let _ctx = TestContext::new();
@@ -91,7 +84,6 @@ fn info_handle_basic_timer() {
 
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a job. Should return type JOB.
-#[test]
 fn info_handle_basic_job() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -101,7 +93,6 @@ fn info_handle_basic_job() {
 
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a process. Should return type PROCESS.
-#[test]
 fn info_handle_basic_process() {
     use zircon_object::task::Process;
     let _ctx = TestContext::new();
@@ -113,7 +104,6 @@ fn info_handle_basic_process() {
 
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a thread. Should return type THREAD.
-#[test]
 fn info_handle_basic_thread() {
     use zircon_object::task::{Process, Thread};
     let _ctx = TestContext::new();
@@ -126,7 +116,6 @@ fn info_handle_basic_thread() {
 
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a FIFO. Should return type FIFO.
-#[test]
 fn info_handle_basic_fifo() {
     use zircon_object::ipc::Fifo;
     let _ctx = TestContext::new();
@@ -137,7 +126,6 @@ fn info_handle_basic_fifo() {
 ///
 /// Query ZX_INFO_HANDLE_BASIC on an event pair. Should return type
 /// EVENT_PAIR.
-#[test]
 fn info_handle_basic_event_pair() {
     use zircon_object::signal::EventPair;
     let _ctx = TestContext::new();
@@ -147,7 +135,6 @@ fn info_handle_basic_event_pair() {
 
 ///
 /// KOIDs should be unique across different object types.
-#[test]
 fn unique_koids_across_types() {
     use zircon_object::ipc::{Channel, Socket};
     use zircon_object::signal::{Port, Timer};
@@ -179,7 +166,6 @@ fn unique_koids_across_types() {
 ///
 /// Verify handle count tracking via ZX_INFO_HANDLE_COUNT (topic 19).
 /// Adding multiple handles to the same object increases the count.
-#[test]
 fn info_handle_count() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::{Handle, Rights};
@@ -215,7 +201,6 @@ fn info_handle_count() {
 /// Query ZX_INFO_PROCESS_MAPS (topic 12). Returns the memory map of a
 /// process. Cannot inspect own process (would deadlock), so we create
 /// a child process to inspect.
-#[test]
 fn info_process_maps() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::{Handle, Rights};
@@ -254,7 +239,6 @@ fn info_process_maps() {
 ///
 /// Query ZX_INFO_PROCESS_VMOS (topic 13). Returns all VMOs in a process.
 /// Create a child process, add a VMO handle, then query.
-#[test]
 fn info_process_vmos() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::{Handle, Rights};
@@ -306,7 +290,6 @@ fn info_process_vmos() {
 ///
 /// Query ZX_INFO_CPU_STATS (topic 16). Returns per-CPU statistics.
 /// Requires root resource.
-#[test]
 fn info_cpu_stats() {
     use hal_impl::user::UserOutPtr;
 
@@ -339,7 +322,6 @@ fn info_cpu_stats() {
 ///
 /// Query ZX_INFO_KMEM_STATS (topic 17). Returns kernel memory statistics.
 /// Requires root resource.
-#[test]
 fn info_kmem_stats() {
     use hal_impl::user::UserOutPtr;
 
@@ -382,7 +364,6 @@ fn info_kmem_stats() {
 
 // ── Tests extracted from core_tests ──────────────────────────────
 
-#[test]
 fn vmo_info_zero_buffer() {
     let ctx = TestContext::new();
     let vmo = zircon_object::vm::VmObject::new_paged(1);
@@ -393,7 +374,6 @@ fn vmo_info_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn vmo_info_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; 168];
@@ -403,7 +383,6 @@ fn vmo_info_invalid_handle() {
     );
 }
 
-#[test]
 fn job_info_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; JOB_INFO_SIZE];
@@ -413,7 +392,6 @@ fn job_info_invalid_handle() {
     );
 }
 
-#[test]
 fn job_info_zero_buffer() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -424,7 +402,6 @@ fn job_info_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn socket_info_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; SOCKET_INFO_SIZE];
@@ -434,7 +411,6 @@ fn socket_info_invalid_handle() {
     );
 }
 
-#[test]
 fn socket_info_zero_buffer() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -445,7 +421,6 @@ fn socket_info_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn timer_info_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; TIMER_INFO_SIZE];
@@ -455,7 +430,6 @@ fn timer_info_invalid_handle() {
     );
 }
 
-#[test]
 fn timer_info_zero_buffer() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -468,7 +442,6 @@ fn timer_info_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn stream_info_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; STREAM_INFO_SIZE];
@@ -478,7 +451,6 @@ fn stream_info_invalid_handle() {
     );
 }
 
-#[test]
 fn stream_info_zero_buffer() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -492,7 +464,6 @@ fn stream_info_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn bti_info_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; BTI_INFO_SIZE];
@@ -502,7 +473,6 @@ fn bti_info_invalid_handle() {
     );
 }
 
-#[test]
 fn bti_info_zero_buffer() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -514,7 +484,6 @@ fn bti_info_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn resource_info_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; RESOURCE_INFO_SIZE];
@@ -524,7 +493,6 @@ fn resource_info_invalid_handle() {
     );
 }
 
-#[test]
 fn process_info_threads_zero_buffer() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -538,7 +506,6 @@ fn process_info_threads_zero_buffer() {
     assert!(avail >= 1, "avail should report available count");
 }
 
-#[test]
 fn vmo_info_null_avail() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -560,7 +527,6 @@ fn vmo_info_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn vmo_info_null_actual() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -582,7 +548,6 @@ fn vmo_info_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn vmo_info_null_actual_and_avail() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -603,7 +568,6 @@ fn vmo_info_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn vmo_info_invalid_buffer() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -626,7 +590,6 @@ fn vmo_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn vmo_info_bad_actual() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -649,7 +612,6 @@ fn vmo_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn vmo_info_bad_avail() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -672,7 +634,6 @@ fn vmo_info_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn socket_info_null_avail() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -692,7 +653,6 @@ fn socket_info_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn socket_info_null_actual() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -712,7 +672,6 @@ fn socket_info_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn socket_info_null_actual_and_avail() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -731,7 +690,6 @@ fn socket_info_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn socket_info_invalid_buffer() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -752,7 +710,6 @@ fn socket_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn socket_info_bad_actual() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -773,7 +730,6 @@ fn socket_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn socket_info_bad_avail() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -794,7 +750,6 @@ fn socket_info_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn bti_info_null_avail() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -815,7 +770,6 @@ fn bti_info_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn bti_info_null_actual() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -836,7 +790,6 @@ fn bti_info_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn bti_info_null_actual_and_avail() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -856,7 +809,6 @@ fn bti_info_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn bti_info_invalid_buffer() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -878,7 +830,6 @@ fn bti_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn bti_info_bad_actual() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -900,7 +851,6 @@ fn bti_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn bti_info_bad_avail() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -922,7 +872,6 @@ fn bti_info_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn timer_info_null_avail() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -944,7 +893,6 @@ fn timer_info_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn timer_info_null_actual() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -966,7 +914,6 @@ fn timer_info_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn timer_info_null_actual_and_avail() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -987,7 +934,6 @@ fn timer_info_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn timer_info_invalid_buffer() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -1010,7 +956,6 @@ fn timer_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn timer_info_bad_actual() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -1033,7 +978,6 @@ fn timer_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn timer_info_bad_avail() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -1056,7 +1000,6 @@ fn timer_info_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn stream_info_null_avail() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1079,7 +1022,6 @@ fn stream_info_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn stream_info_null_actual() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1102,7 +1044,6 @@ fn stream_info_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn stream_info_null_actual_and_avail() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1124,7 +1065,6 @@ fn stream_info_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn stream_info_invalid_buffer() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1148,7 +1088,6 @@ fn stream_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn stream_info_bad_actual() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1172,7 +1111,6 @@ fn stream_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn stream_info_bad_avail() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1196,7 +1134,6 @@ fn stream_info_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn resource_info_zero_buffer() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -1206,7 +1143,6 @@ fn resource_info_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn resource_info_null_avail() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -1225,7 +1161,6 @@ fn resource_info_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn resource_info_null_actual() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -1244,7 +1179,6 @@ fn resource_info_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn resource_info_null_actual_and_avail() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -1262,7 +1196,6 @@ fn resource_info_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn resource_info_invalid_buffer() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -1282,7 +1215,6 @@ fn resource_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn resource_info_bad_actual() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -1302,7 +1234,6 @@ fn resource_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn resource_info_bad_avail() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -1322,7 +1253,6 @@ fn resource_info_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn handle_count_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_COUNT_SIZE];
@@ -1332,7 +1262,6 @@ fn handle_count_invalid_handle() {
     );
 }
 
-#[test]
 fn handle_count_zero_buffer() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -1345,7 +1274,6 @@ fn handle_count_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn handle_count_null_avail() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -1367,7 +1295,6 @@ fn handle_count_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn handle_count_null_actual() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -1389,7 +1316,6 @@ fn handle_count_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn handle_count_null_actual_and_avail() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -1410,7 +1336,6 @@ fn handle_count_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn handle_count_invalid_buffer() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -1433,7 +1358,6 @@ fn handle_count_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn handle_count_bad_actual() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -1456,7 +1380,6 @@ fn handle_count_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn handle_count_bad_avail() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -1479,7 +1402,6 @@ fn handle_count_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn job_info_null_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1499,7 +1421,6 @@ fn job_info_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn job_info_null_actual() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1519,7 +1440,6 @@ fn job_info_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn job_info_null_actual_and_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1538,7 +1458,6 @@ fn job_info_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn job_info_invalid_buffer() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1559,7 +1478,6 @@ fn job_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn job_info_bad_actual() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1580,7 +1498,6 @@ fn job_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn job_info_bad_avail() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1601,7 +1518,6 @@ fn job_info_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn process_info_handle_stats_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; PROCESS_HANDLE_STATS_SIZE];
@@ -1611,7 +1527,6 @@ fn process_info_handle_stats_invalid_handle() {
     );
 }
 
-#[test]
 fn process_info_handle_stats_zero_buffer() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1624,7 +1539,6 @@ fn process_info_handle_stats_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn process_info_handle_stats_null_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1646,7 +1560,6 @@ fn process_info_handle_stats_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn process_info_handle_stats_null_actual() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1668,7 +1581,6 @@ fn process_info_handle_stats_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn process_info_handle_stats_null_actual_and_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1689,7 +1601,6 @@ fn process_info_handle_stats_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn process_info_handle_stats_invalid_buffer() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1712,7 +1623,6 @@ fn process_info_handle_stats_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn process_info_handle_stats_bad_actual() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1735,7 +1645,6 @@ fn process_info_handle_stats_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn process_info_handle_stats_bad_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1758,7 +1667,6 @@ fn process_info_handle_stats_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn process_info_handle_table_null_actual() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1781,7 +1689,6 @@ fn process_info_handle_table_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn process_info_handle_table_null_actual_and_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1803,7 +1710,6 @@ fn process_info_handle_table_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn process_info_handle_table_bad_actual() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1827,7 +1733,6 @@ fn process_info_handle_table_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn process_info_handle_table_bad_avail() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1851,7 +1756,6 @@ fn process_info_handle_table_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn process_info_handle_table_zero_buffer() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -1869,7 +1773,6 @@ fn process_info_handle_table_zero_buffer() {
 ///
 /// PROCESS_MAPS with zero-length buffer should succeed with actual=0
 /// and avail reporting the number of entries.
-#[test]
 fn process_info_maps_zero_buffer() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1887,7 +1790,6 @@ fn process_info_maps_zero_buffer() {
 ///
 /// PROCESS_VMOS with zero-length buffer should succeed with actual=0
 /// and avail reporting the number of VMOs.
-#[test]
 fn process_info_vmos_zero_buffer() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -1907,7 +1809,6 @@ fn process_info_vmos_zero_buffer() {
     assert!(avail >= 1, "process should have at least 1 VMO entry");
 }
 
-#[test]
 fn event_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -1932,7 +1833,6 @@ fn event_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn event_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -1942,7 +1842,6 @@ fn event_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn event_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -1955,7 +1854,6 @@ fn event_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn event_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -1977,7 +1875,6 @@ fn event_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn event_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -1999,7 +1896,6 @@ fn event_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn event_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -2020,7 +1916,6 @@ fn event_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn event_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -2043,7 +1938,6 @@ fn event_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn event_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -2066,7 +1960,6 @@ fn event_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn event_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -2089,7 +1982,6 @@ fn event_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn eventpair_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let (ep0, _ep1) = zircon_object::signal::EventPair::create();
@@ -2114,7 +2006,6 @@ fn eventpair_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn eventpair_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -2124,7 +2015,6 @@ fn eventpair_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn eventpair_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let (ep0, _ep1) = zircon_object::signal::EventPair::create();
@@ -2137,7 +2027,6 @@ fn eventpair_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn eventpair_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let (ep0, _ep1) = zircon_object::signal::EventPair::create();
@@ -2159,7 +2048,6 @@ fn eventpair_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn eventpair_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let (ep0, _ep1) = zircon_object::signal::EventPair::create();
@@ -2181,7 +2069,6 @@ fn eventpair_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn eventpair_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let (ep0, _ep1) = zircon_object::signal::EventPair::create();
@@ -2202,7 +2089,6 @@ fn eventpair_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn eventpair_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let (ep0, _ep1) = zircon_object::signal::EventPair::create();
@@ -2225,7 +2111,6 @@ fn eventpair_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn eventpair_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let (ep0, _ep1) = zircon_object::signal::EventPair::create();
@@ -2248,7 +2133,6 @@ fn eventpair_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn eventpair_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let (ep0, _ep1) = zircon_object::signal::EventPair::create();
@@ -2271,7 +2155,6 @@ fn eventpair_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn channel_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -2296,7 +2179,6 @@ fn channel_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn channel_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -2306,7 +2188,6 @@ fn channel_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn channel_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -2319,7 +2200,6 @@ fn channel_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn channel_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -2341,7 +2221,6 @@ fn channel_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn channel_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -2363,7 +2242,6 @@ fn channel_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn channel_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -2384,7 +2262,6 @@ fn channel_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn channel_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -2407,7 +2284,6 @@ fn channel_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn channel_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -2430,7 +2306,6 @@ fn channel_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn channel_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -2453,7 +2328,6 @@ fn channel_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn vmo_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -2479,7 +2353,6 @@ fn vmo_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn vmo_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -2489,7 +2362,6 @@ fn vmo_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn vmo_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -2500,7 +2372,6 @@ fn vmo_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn vmo_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -2520,7 +2391,6 @@ fn vmo_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn vmo_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -2540,7 +2410,6 @@ fn vmo_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn vmo_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -2559,7 +2428,6 @@ fn vmo_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn vmo_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -2580,7 +2448,6 @@ fn vmo_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn vmo_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -2601,7 +2468,6 @@ fn vmo_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn vmo_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -2622,7 +2488,6 @@ fn vmo_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn socket_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -2645,7 +2510,6 @@ fn socket_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn socket_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -2655,7 +2519,6 @@ fn socket_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn socket_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -2666,7 +2529,6 @@ fn socket_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn socket_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -2686,7 +2548,6 @@ fn socket_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn socket_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -2706,7 +2567,6 @@ fn socket_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn socket_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -2725,7 +2585,6 @@ fn socket_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn socket_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -2746,7 +2605,6 @@ fn socket_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn socket_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -2767,7 +2625,6 @@ fn socket_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn socket_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -2788,7 +2645,6 @@ fn socket_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn timer_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -2810,7 +2666,6 @@ fn timer_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn timer_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -2832,7 +2687,6 @@ fn timer_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn timer_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -2853,7 +2707,6 @@ fn timer_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn timer_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -2876,7 +2729,6 @@ fn timer_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn timer_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -2899,7 +2751,6 @@ fn timer_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn timer_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -2922,7 +2773,6 @@ fn timer_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn handle_valid_null_avail() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -2933,7 +2783,6 @@ fn handle_valid_null_avail() {
     get_info_raw(&ctx, event_h, TOPIC_HANDLE_VALID, 0, 0, 0, 0).unwrap();
 }
 
-#[test]
 fn handle_valid_null_actual() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -2944,7 +2793,6 @@ fn handle_valid_null_actual() {
     get_info_raw(&ctx, event_h, TOPIC_HANDLE_VALID, 0, 0, 0, 0).unwrap();
 }
 
-#[test]
 fn handle_valid_null_actual_and_avail() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -2955,7 +2803,6 @@ fn handle_valid_null_actual_and_avail() {
     get_info_raw(&ctx, event_h, TOPIC_HANDLE_VALID, 0, 0, 0, 0).unwrap();
 }
 
-#[test]
 fn timer_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -2980,7 +2827,6 @@ fn timer_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn timer_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -2990,7 +2836,6 @@ fn timer_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn timer_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -3003,7 +2848,6 @@ fn timer_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn fifo_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let (fifo, _fifo1) = Fifo::create(16, 4);
@@ -3026,7 +2870,6 @@ fn fifo_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn fifo_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -3036,7 +2879,6 @@ fn fifo_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn fifo_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let (fifo, _fifo1) = Fifo::create(16, 4);
@@ -3047,7 +2889,6 @@ fn fifo_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn fifo_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let (fifo, _fifo1) = Fifo::create(16, 4);
@@ -3067,7 +2908,6 @@ fn fifo_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn fifo_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let (fifo, _fifo1) = Fifo::create(16, 4);
@@ -3087,7 +2927,6 @@ fn fifo_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn fifo_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let (fifo, _fifo1) = Fifo::create(16, 4);
@@ -3106,7 +2945,6 @@ fn fifo_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn fifo_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let (fifo, _fifo1) = Fifo::create(16, 4);
@@ -3127,7 +2965,6 @@ fn fifo_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn fifo_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let (fifo, _fifo1) = Fifo::create(16, 4);
@@ -3148,7 +2985,6 @@ fn fifo_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn fifo_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let (fifo, _fifo1) = Fifo::create(16, 4);
@@ -3169,7 +3005,6 @@ fn fifo_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn port_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -3192,7 +3027,6 @@ fn port_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn port_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -3202,7 +3036,6 @@ fn port_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn port_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -3213,7 +3046,6 @@ fn port_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn port_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -3233,7 +3065,6 @@ fn port_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn port_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -3253,7 +3084,6 @@ fn port_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn port_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -3272,7 +3102,6 @@ fn port_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn port_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -3293,7 +3122,6 @@ fn port_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn port_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -3314,7 +3142,6 @@ fn port_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn port_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -3335,7 +3162,6 @@ fn port_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn counter_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let counter = Counter::new();
@@ -3360,7 +3186,6 @@ fn counter_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn counter_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -3370,7 +3195,6 @@ fn counter_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn counter_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let counter = Counter::new();
@@ -3383,7 +3207,6 @@ fn counter_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn counter_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let counter = Counter::new();
@@ -3405,7 +3228,6 @@ fn counter_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn counter_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let counter = Counter::new();
@@ -3427,7 +3249,6 @@ fn counter_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn counter_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let counter = Counter::new();
@@ -3448,7 +3269,6 @@ fn counter_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn counter_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let counter = Counter::new();
@@ -3471,7 +3291,6 @@ fn counter_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn counter_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let counter = Counter::new();
@@ -3494,7 +3313,6 @@ fn counter_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn counter_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let counter = Counter::new();
@@ -3517,7 +3335,6 @@ fn counter_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn pager_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let pager = Pager::new();
@@ -3542,7 +3359,6 @@ fn pager_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn pager_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -3552,7 +3368,6 @@ fn pager_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn pager_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let pager = Pager::new();
@@ -3565,7 +3380,6 @@ fn pager_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn pager_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let pager = Pager::new();
@@ -3587,7 +3401,6 @@ fn pager_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn pager_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let pager = Pager::new();
@@ -3609,7 +3422,6 @@ fn pager_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn pager_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let pager = Pager::new();
@@ -3630,7 +3442,6 @@ fn pager_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn pager_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let pager = Pager::new();
@@ -3653,7 +3464,6 @@ fn pager_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn pager_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let pager = Pager::new();
@@ -3676,7 +3486,6 @@ fn pager_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn pager_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let pager = Pager::new();
@@ -3699,7 +3508,6 @@ fn pager_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn bti_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -3723,7 +3531,6 @@ fn bti_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn bti_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -3733,7 +3540,6 @@ fn bti_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn bti_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -3745,7 +3551,6 @@ fn bti_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn bti_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -3766,7 +3571,6 @@ fn bti_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn bti_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -3787,7 +3591,6 @@ fn bti_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn bti_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -3807,7 +3610,6 @@ fn bti_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn bti_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -3829,7 +3631,6 @@ fn bti_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn bti_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -3851,7 +3652,6 @@ fn bti_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn bti_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -3873,7 +3673,6 @@ fn bti_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn resource_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let res = Resource::create("test", ResourceKind::MMIO, 0, 0x100, ResourceFlags::empty());
@@ -3898,7 +3697,6 @@ fn resource_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn resource_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
@@ -3908,7 +3706,6 @@ fn resource_info_handle_basic_invalid_handle() {
     );
 }
 
-#[test]
 fn resource_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let res = Resource::create("test", ResourceKind::MMIO, 0, 0x100, ResourceFlags::empty());
@@ -3921,7 +3718,6 @@ fn resource_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-#[test]
 fn resource_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let res = Resource::create("test", ResourceKind::MMIO, 0, 0x100, ResourceFlags::empty());
@@ -3943,7 +3739,6 @@ fn resource_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-#[test]
 fn resource_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let res = Resource::create("test", ResourceKind::MMIO, 0, 0x100, ResourceFlags::empty());
@@ -3965,7 +3760,6 @@ fn resource_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-#[test]
 fn resource_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let res = Resource::create("test", ResourceKind::MMIO, 0, 0x100, ResourceFlags::empty());
@@ -3986,7 +3780,6 @@ fn resource_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-#[test]
 fn resource_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let res = Resource::create("test", ResourceKind::MMIO, 0, 0x100, ResourceFlags::empty());
@@ -4009,7 +3802,6 @@ fn resource_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn resource_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let res = Resource::create("test", ResourceKind::MMIO, 0, 0x100, ResourceFlags::empty());
@@ -4032,7 +3824,6 @@ fn resource_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-#[test]
 fn resource_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let res = Resource::create("test", ResourceKind::MMIO, 0, 0x100, ResourceFlags::empty());
@@ -4057,7 +3848,6 @@ fn resource_info_handle_basic_bad_avail() {
 
 // ── Tests extracted from core_tests/object_info.rs ──────────────────
 
-#[test]
 fn job_info_on_self() {
     let ctx = TestContext::new();
     let job = Job::root();
@@ -4069,7 +3859,6 @@ fn job_info_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn socket_info_on_self() {
     let ctx = TestContext::new();
     let (s0, _s1) = Socket::create(0).unwrap();
@@ -4081,7 +3870,6 @@ fn socket_info_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn timer_info_on_self() {
     let ctx = TestContext::new();
     let timer = Timer::new();
@@ -4095,7 +3883,6 @@ fn timer_info_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn stream_info_on_self() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -4110,7 +3897,6 @@ fn stream_info_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn bti_info_on_self() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -4123,7 +3909,6 @@ fn bti_info_on_self() {
     assert_eq!(avail, 1);
 }
 
-#[test]
 fn resource_info_on_self() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
@@ -4132,4 +3917,223 @@ fn resource_info_on_self() {
     let (actual, avail) = get_info(&ctx, res_h, TOPIC_RESOURCE, &mut buf).unwrap();
     assert_eq!(actual, 1);
     assert_eq!(avail, 1);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    info_handle_valid();
+    info_handle_basic_event();
+    info_handle_basic_channel();
+    info_handle_basic_socket();
+    info_handle_basic_vmo();
+    info_handle_basic_port();
+    info_handle_basic_timer();
+    info_handle_basic_job();
+    info_handle_basic_process();
+    info_handle_basic_thread();
+    info_handle_basic_fifo();
+    info_handle_basic_event_pair();
+    unique_koids_across_types();
+    info_handle_count();
+    info_process_maps();
+    info_process_vmos();
+    info_cpu_stats();
+    info_kmem_stats();
+    vmo_info_zero_buffer();
+    vmo_info_invalid_handle();
+    job_info_invalid_handle();
+    job_info_zero_buffer();
+    socket_info_invalid_handle();
+    socket_info_zero_buffer();
+    timer_info_invalid_handle();
+    timer_info_zero_buffer();
+    stream_info_invalid_handle();
+    stream_info_zero_buffer();
+    bti_info_invalid_handle();
+    bti_info_zero_buffer();
+    resource_info_invalid_handle();
+    process_info_threads_zero_buffer();
+    vmo_info_null_avail();
+    vmo_info_null_actual();
+    vmo_info_null_actual_and_avail();
+    vmo_info_invalid_buffer();
+    vmo_info_bad_actual();
+    vmo_info_bad_avail();
+    socket_info_null_avail();
+    socket_info_null_actual();
+    socket_info_null_actual_and_avail();
+    socket_info_invalid_buffer();
+    socket_info_bad_actual();
+    socket_info_bad_avail();
+    bti_info_null_avail();
+    bti_info_null_actual();
+    bti_info_null_actual_and_avail();
+    bti_info_invalid_buffer();
+    bti_info_bad_actual();
+    bti_info_bad_avail();
+    timer_info_null_avail();
+    timer_info_null_actual();
+    timer_info_null_actual_and_avail();
+    timer_info_invalid_buffer();
+    timer_info_bad_actual();
+    timer_info_bad_avail();
+    stream_info_null_avail();
+    stream_info_null_actual();
+    stream_info_null_actual_and_avail();
+    stream_info_invalid_buffer();
+    stream_info_bad_actual();
+    stream_info_bad_avail();
+    resource_info_zero_buffer();
+    resource_info_null_avail();
+    resource_info_null_actual();
+    resource_info_null_actual_and_avail();
+    resource_info_invalid_buffer();
+    resource_info_bad_actual();
+    resource_info_bad_avail();
+    handle_count_invalid_handle();
+    handle_count_zero_buffer();
+    handle_count_null_avail();
+    handle_count_null_actual();
+    handle_count_null_actual_and_avail();
+    handle_count_invalid_buffer();
+    handle_count_bad_actual();
+    handle_count_bad_avail();
+    job_info_null_avail();
+    job_info_null_actual();
+    job_info_null_actual_and_avail();
+    job_info_invalid_buffer();
+    job_info_bad_actual();
+    job_info_bad_avail();
+    process_info_handle_stats_invalid_handle();
+    process_info_handle_stats_zero_buffer();
+    process_info_handle_stats_null_avail();
+    process_info_handle_stats_null_actual();
+    process_info_handle_stats_null_actual_and_avail();
+    process_info_handle_stats_invalid_buffer();
+    process_info_handle_stats_bad_actual();
+    process_info_handle_stats_bad_avail();
+    process_info_handle_table_null_actual();
+    process_info_handle_table_null_actual_and_avail();
+    process_info_handle_table_bad_actual();
+    process_info_handle_table_bad_avail();
+    process_info_handle_table_zero_buffer();
+    process_info_maps_zero_buffer();
+    process_info_vmos_zero_buffer();
+    event_info_handle_basic_on_self();
+    event_info_handle_basic_invalid_handle();
+    event_info_handle_basic_zero_buffer();
+    event_info_handle_basic_null_avail();
+    event_info_handle_basic_null_actual();
+    event_info_handle_basic_null_actual_and_avail();
+    event_info_handle_basic_invalid_buffer();
+    event_info_handle_basic_bad_actual();
+    event_info_handle_basic_bad_avail();
+    eventpair_info_handle_basic_on_self();
+    eventpair_info_handle_basic_invalid_handle();
+    eventpair_info_handle_basic_zero_buffer();
+    eventpair_info_handle_basic_null_avail();
+    eventpair_info_handle_basic_null_actual();
+    eventpair_info_handle_basic_null_actual_and_avail();
+    eventpair_info_handle_basic_invalid_buffer();
+    eventpair_info_handle_basic_bad_actual();
+    eventpair_info_handle_basic_bad_avail();
+    channel_info_handle_basic_on_self();
+    channel_info_handle_basic_invalid_handle();
+    channel_info_handle_basic_zero_buffer();
+    channel_info_handle_basic_null_avail();
+    channel_info_handle_basic_null_actual();
+    channel_info_handle_basic_null_actual_and_avail();
+    channel_info_handle_basic_invalid_buffer();
+    channel_info_handle_basic_bad_actual();
+    channel_info_handle_basic_bad_avail();
+    vmo_info_handle_basic_on_self();
+    vmo_info_handle_basic_invalid_handle();
+    vmo_info_handle_basic_zero_buffer();
+    vmo_info_handle_basic_null_avail();
+    vmo_info_handle_basic_null_actual();
+    vmo_info_handle_basic_null_actual_and_avail();
+    vmo_info_handle_basic_invalid_buffer();
+    vmo_info_handle_basic_bad_actual();
+    vmo_info_handle_basic_bad_avail();
+    socket_info_handle_basic_on_self();
+    socket_info_handle_basic_invalid_handle();
+    socket_info_handle_basic_zero_buffer();
+    socket_info_handle_basic_null_avail();
+    socket_info_handle_basic_null_actual();
+    socket_info_handle_basic_null_actual_and_avail();
+    socket_info_handle_basic_invalid_buffer();
+    socket_info_handle_basic_bad_actual();
+    socket_info_handle_basic_bad_avail();
+    timer_info_handle_basic_null_avail();
+    timer_info_handle_basic_null_actual();
+    timer_info_handle_basic_null_actual_and_avail();
+    timer_info_handle_basic_invalid_buffer();
+    timer_info_handle_basic_bad_actual();
+    timer_info_handle_basic_bad_avail();
+    handle_valid_null_avail();
+    handle_valid_null_actual();
+    handle_valid_null_actual_and_avail();
+    timer_info_handle_basic_on_self();
+    timer_info_handle_basic_invalid_handle();
+    timer_info_handle_basic_zero_buffer();
+    fifo_info_handle_basic_on_self();
+    fifo_info_handle_basic_invalid_handle();
+    fifo_info_handle_basic_zero_buffer();
+    fifo_info_handle_basic_null_avail();
+    fifo_info_handle_basic_null_actual();
+    fifo_info_handle_basic_null_actual_and_avail();
+    fifo_info_handle_basic_invalid_buffer();
+    fifo_info_handle_basic_bad_actual();
+    fifo_info_handle_basic_bad_avail();
+    port_info_handle_basic_on_self();
+    port_info_handle_basic_invalid_handle();
+    port_info_handle_basic_zero_buffer();
+    port_info_handle_basic_null_avail();
+    port_info_handle_basic_null_actual();
+    port_info_handle_basic_null_actual_and_avail();
+    port_info_handle_basic_invalid_buffer();
+    port_info_handle_basic_bad_actual();
+    port_info_handle_basic_bad_avail();
+    counter_info_handle_basic_on_self();
+    counter_info_handle_basic_invalid_handle();
+    counter_info_handle_basic_zero_buffer();
+    counter_info_handle_basic_null_avail();
+    counter_info_handle_basic_null_actual();
+    counter_info_handle_basic_null_actual_and_avail();
+    counter_info_handle_basic_invalid_buffer();
+    counter_info_handle_basic_bad_actual();
+    counter_info_handle_basic_bad_avail();
+    pager_info_handle_basic_on_self();
+    pager_info_handle_basic_invalid_handle();
+    pager_info_handle_basic_zero_buffer();
+    pager_info_handle_basic_null_avail();
+    pager_info_handle_basic_null_actual();
+    pager_info_handle_basic_null_actual_and_avail();
+    pager_info_handle_basic_invalid_buffer();
+    pager_info_handle_basic_bad_actual();
+    pager_info_handle_basic_bad_avail();
+    bti_info_handle_basic_on_self();
+    bti_info_handle_basic_invalid_handle();
+    bti_info_handle_basic_zero_buffer();
+    bti_info_handle_basic_null_avail();
+    bti_info_handle_basic_null_actual();
+    bti_info_handle_basic_null_actual_and_avail();
+    bti_info_handle_basic_invalid_buffer();
+    bti_info_handle_basic_bad_actual();
+    bti_info_handle_basic_bad_avail();
+    resource_info_handle_basic_on_self();
+    resource_info_handle_basic_invalid_handle();
+    resource_info_handle_basic_zero_buffer();
+    resource_info_handle_basic_null_avail();
+    resource_info_handle_basic_null_actual();
+    resource_info_handle_basic_null_actual_and_avail();
+    resource_info_handle_basic_invalid_buffer();
+    resource_info_handle_basic_bad_actual();
+    resource_info_handle_basic_bad_avail();
+    job_info_on_self();
+    socket_info_on_self();
+    timer_info_on_self();
+    stream_info_on_self();
+    bti_info_on_self();
+    resource_info_on_self();
 }

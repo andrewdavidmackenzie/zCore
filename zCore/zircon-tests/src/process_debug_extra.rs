@@ -5,7 +5,6 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 
 /// Write then read back via memory APIs.
 /// (No direct C++ binary equivalent — additional round-trip coverage.)
-#[test]
 fn read_write_round_trip() {
     let _ctx = crate::helpers::TestContext::new();
     let job = Job::root();
@@ -26,4 +25,9 @@ fn read_write_round_trip() {
     }
 
     vmar.unmap(addr, PAGE_SIZE).unwrap();
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    read_write_round_trip();
 }

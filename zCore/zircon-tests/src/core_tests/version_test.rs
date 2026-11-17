@@ -8,6 +8,9 @@
 //! `VdsoConstants::set_version_string()`. We access it through the
 //! HAL's `vdso_constants()` function.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 
 /// Helper: get the version string from VdsoConstants via the HAL.
@@ -28,7 +31,6 @@ fn get_version_string() -> String {
 /// ```
 ///
 /// Verify the version string length matches the actual string length.
-#[test]
 fn zx_string_view() {
     let _ctx = TestContext::new();
     let constants = hal_impl::vdso::vdso_constants();
@@ -49,7 +51,6 @@ fn zx_string_view() {
 /// ```
 ///
 /// Verify consistent views of the version string (two reads match).
-#[test]
 fn std_string_view() {
     let _ctx = TestContext::new();
     let s1 = get_version_string();
@@ -66,7 +67,6 @@ fn std_string_view() {
 /// ```
 ///
 /// Verify the version string can be copied and compared.
-#[test]
 fn std_string() {
     let _ctx = TestContext::new();
     let original = get_version_string();
@@ -86,7 +86,6 @@ fn std_string() {
 /// ```
 ///
 /// Verify the version string is non-empty, trimmed, and all printable.
-#[test]
 fn non_empty_trimmed_printable_string() {
     let _ctx = TestContext::new();
     let version = get_version_string();
@@ -122,7 +121,6 @@ fn non_empty_trimmed_printable_string() {
 /// std::u8string_view (UTF-8 view). In Rust, strings are natively
 /// UTF-8, so we verify the version string is valid UTF-8 and that
 /// the bytes match across both string and byte representations.
-#[test]
 fn std_u8_string_view() {
     let _ctx = TestContext::new();
     let version = get_version_string();
@@ -146,4 +144,13 @@ fn std_u8_string_view() {
         version.as_bytes(),
         "byte representation should match string"
     );
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    zx_string_view();
+    std_string_view();
+    std_string();
+    non_empty_trimmed_printable_string();
+    std_u8_string_view();
 }

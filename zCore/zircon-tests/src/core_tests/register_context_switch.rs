@@ -6,13 +6,12 @@
 //! x86-segments.cc: x86 segment selector / GS base preservation.
 //!
 //! The FPU test is faithfully ported as a pure computation. The x86
-//! segment tests exercise hardware features not available in libos mode.
+//! segment tests exercise hardware features not available in test mode.
 
 /// C++: TEST(RegisterContextSwitchTests, FpuLongComputeLoop)
 /// A floating-point computation that takes longer than one quantum,
 /// meant to test FPU register save/restore across context switches.
 /// The computation is architecture-independent, so we port it directly.
-#[test]
 fn fpu_long_compute_loop() {
     // Port of fpu_test_loop(5, 100) from fpu_basic.cc
     fn fpu_test_loop(ex_loops: i32, factor: i32) -> f64 {
@@ -51,14 +50,14 @@ fn fpu_long_compute_loop() {
 ///
 /// This test is SKIP'd in the C++ suite itself (ZXTEST_SKIP at the top).
 /// It requires x86 hardware segment selector manipulation via inline asm,
-/// which is not available in libos user mode. On bare-metal x86, IRET
+/// which is not available in test mode user mode. On bare-metal x86, IRET
 /// resets segment selectors when returning from kernel to userland.
 /// Faithfully skip here, matching C++ behavior.
-#[test]
+#[cfg(target_arch = "x86_64")]
 fn segment_selectors_zeroed_on_interrupt() {
     // C++: ZXTEST_SKIP() — this test is disabled even upstream.
     // Requires x86 set_ds/set_es/set_gs inline asm and interrupt delivery.
-    // Not testable in libos mode (no ring-0 segment manipulation).
+    // Not testable in test mode (no ring-0 segment manipulation).
 }
 
 /// C++: TEST(RegisterContextSwitchTests, SegmentSelectorsZeroedOnContextSwitch)
@@ -81,12 +80,12 @@ fn segment_selectors_zeroed_on_interrupt() {
 ///
 /// This requires x86 privilege-level-0 instructions (`wrgsbase`/`rdgsbase`,
 /// segment selector manipulation) and real context switches via
-/// `zx_nanosleep`. Not available in libos user mode where the host OS
+/// `zx_nanosleep`. Not available in test mode user mode where the host OS
 /// manages context switches and segment registers.
-#[test]
+#[cfg(target_arch = "x86_64")]
 fn segment_selectors_zeroed_on_context_switch() {
     // Requires x86 fsgsbase instructions and hardware segment selectors.
-    // In libos mode, the host kernel manages context switches and segment
+    // In test mode, the host kernel manages context switches and segment
     // registers — we cannot set or read x86 segment selectors from
     // userspace Rust code.
     //
@@ -97,4 +96,13 @@ fn segment_selectors_zeroed_on_context_switch() {
     //   EXPECT_EQ(get_es(), 0);    // ES selector cleared
     //   EXPECT_EQ(get_fs(), 0);    // FS selector cleared
     //   EXPECT_EQ(get_gs(), 0);    // GS selector cleared
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    fpu_long_compute_loop();
+    #[cfg(target_arch = "x86_64")]
+    segment_selectors_zeroed_on_interrupt();
+    #[cfg(target_arch = "x86_64")]
+    segment_selectors_zeroed_on_context_switch();
 }

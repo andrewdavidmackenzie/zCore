@@ -20,7 +20,6 @@ fn as_kobject(thread: &Arc<Thread>) -> Arc<dyn KernelObject> {
 ///
 /// Suspend a running thread. The thread should stop executing and
 /// signal THREAD_SUSPENDED.
-#[async_std::test]
 async fn suspend_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -28,8 +27,8 @@ async fn suspend_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend the thread.
     thread.suspend();
@@ -52,7 +51,6 @@ async fn suspend_thread() {
 ///
 /// Suspend then resume a thread. The thread should continue
 /// executing from where it stopped.
-#[async_std::test]
 async fn resume_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -60,8 +58,8 @@ async fn resume_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend.
     thread.suspend();
@@ -88,7 +86,6 @@ async fn resume_thread() {
 ///
 /// Suspend multiple threads in the same process simultaneously.
 /// All should stop and be resumable.
-#[async_std::test]
 async fn suspend_multiple_threads() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -98,8 +95,8 @@ async fn suspend_multiple_threads() {
 
     t1.start(helpers::test_loop_thread_fn).unwrap();
     t2.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend both.
     t1.suspend();
@@ -125,7 +122,6 @@ async fn suspend_multiple_threads() {
 
 ///
 /// Drop a suspend token. The thread should automatically resume.
-#[async_std::test]
 async fn suspend_token_drop() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -133,8 +129,8 @@ async fn suspend_token_drop() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Create a SuspendToken -- this calls thread.suspend().
     let task: Arc<dyn Task> = thread.clone();
@@ -164,7 +160,6 @@ async fn suspend_token_drop() {
 ///
 /// Note: zCore's current suspend/resume uses a counter, so multiple
 /// suspends require matching resumes. We test via SuspendToken.
-#[async_std::test]
 async fn multiple_suspend_tokens() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -172,8 +167,8 @@ async fn multiple_suspend_tokens() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     let task: Arc<dyn Task> = thread.clone();
     let token1 = SuspendToken::create(&task);
@@ -187,7 +182,7 @@ async fn multiple_suspend_tokens() {
     // the second token is still alive.
     drop(token1);
     // Yield to let any pending state changes propagate.
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
     // Thread should still be suspended (second token holds it).
     assert!(
         thread.signal().contains(Signal::THREAD_SUSPENDED),
@@ -210,7 +205,6 @@ async fn multiple_suspend_tokens() {
 
 ///
 /// Kill a suspended thread. The thread should die without resuming.
-#[async_std::test]
 async fn kill_while_suspended() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -218,8 +212,8 @@ async fn kill_while_suspended() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend the thread.
     thread.suspend();
@@ -239,7 +233,6 @@ async fn kill_while_suspended() {
 ///
 /// While a thread is suspended, its state should be SUSPENDED.
 /// Read state should succeed.
-#[async_std::test]
 async fn suspended_thread_state() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -247,8 +240,8 @@ async fn suspended_thread_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -277,7 +270,6 @@ async fn suspended_thread_state() {
 ///
 /// Write to a thread's register state while it is suspended.
 /// The new state should take effect when the thread resumes.
-#[async_std::test]
 async fn write_state_while_suspended() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -285,8 +277,8 @@ async fn write_state_while_suspended() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend the thread.
     thread.suspend();
@@ -316,7 +308,6 @@ async fn write_state_while_suspended() {
 
 ///
 /// Suspend all threads in a process simultaneously.
-#[async_std::test]
 async fn suspend_process() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -326,8 +317,8 @@ async fn suspend_process() {
 
     t1.start(helpers::test_loop_thread_fn).unwrap();
     t2.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend the entire process.
     use zircon_object::task::Task;
@@ -348,4 +339,17 @@ async fn suspend_process() {
     t2.kill();
     as_kobject(&t1).wait_signal(Signal::THREAD_TERMINATED).await;
     as_kobject(&t2).wait_signal(Signal::THREAD_TERMINATED).await;
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    suspend_thread().await;
+    resume_thread().await;
+    suspend_multiple_threads().await;
+    suspend_token_drop().await;
+    multiple_suspend_tokens().await;
+    kill_while_suspended().await;
+    suspended_thread_state().await;
+    write_state_while_suspended().await;
+    suspend_process().await;
 }

@@ -12,7 +12,6 @@ use zircon_object::object::KernelObject;
 ///
 /// Read kernel counter values. Requires root resource.
 /// zCore has no kcounter VMO — verify root resource creation.
-#[test]
 fn read_kcounters() {
     let _ctx = TestContext::new();
     let root = Resource::create("root", ResourceKind::ROOT, 0, 0, ResourceFlags::empty());
@@ -22,7 +21,6 @@ fn read_kcounters() {
 ///
 /// Read kernel counter descriptors (names, types).
 /// Verify resource types are distinct.
-#[test]
 fn kcounter_descriptors() {
     let _ctx = TestContext::new();
     let root = Resource::create("root", ResourceKind::ROOT, 0, 0, ResourceFlags::empty());
@@ -34,7 +32,6 @@ fn kcounter_descriptors() {
 /// Get the kcounter VMO handle. zCore has no kcounter VMO —
 /// verify that VMOs can be created with names (the data format
 /// that kcounters would use).
-#[test]
 fn kcounter_vmo() {
     use zircon_object::vm::VmObject;
 
@@ -47,7 +44,6 @@ fn kcounter_vmo() {
 ///
 /// Get the kcounter descriptor VMO handle.
 /// Verify VMO data round-trip (descriptor format).
-#[test]
 fn kcounter_desc_vmo() {
     use zircon_object::vm::VmObject;
 
@@ -67,7 +63,6 @@ fn kcounter_desc_vmo() {
 ///
 /// Try to get kcounter VMO without root resource.
 /// Verify that handle operations with bad handles return BAD_HANDLE.
-#[test]
 fn kcounter_no_resource() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -75,4 +70,13 @@ fn kcounter_no_resource() {
     // Using a bad handle should return BAD_HANDLE.
     let result = sc.sys_handle_close(0xDEAD);
     assert_eq!(result, Err(zircon_object::ZxError::BAD_HANDLE));
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    read_kcounters();
+    kcounter_descriptors();
+    kcounter_vmo();
+    kcounter_desc_vmo();
+    kcounter_no_resource();
 }

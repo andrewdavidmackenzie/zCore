@@ -6,7 +6,6 @@ use zircon_object::vm::{SeekOrigin, Stream, VmObject, PAGE_SIZE};
 
 /// C++: TEST(StreamTestCase, Create)
 /// Basic stream creation with properties verified.
-#[test]
 fn stream_create_verify_properties() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -21,7 +20,6 @@ fn stream_create_verify_properties() {
 
 /// C++: TEST(StreamTestCase, Seek)
 /// Seek to beginning, current, and end positions.
-#[test]
 fn stream_seek_all_origins() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -56,7 +54,6 @@ fn stream_seek_all_origins() {
 
 /// C++: TEST(StreamTestCase, WriteExtendsContentSize)
 /// Writing extends content_size but not VMO size.
-#[test]
 fn stream_write_extends_content_size() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2); // 2 pages = 8192 bytes
@@ -86,7 +83,6 @@ fn stream_write_extends_content_size() {
 
 /// C++: TEST(StreamTestCase, WriteDoesntExtendVMOSize)
 /// Writing does not extend the VMO size past the original allocation.
-#[test]
 fn stream_write_doesnt_extend_vmo_size() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1); // 1 page
@@ -111,7 +107,6 @@ fn stream_write_doesnt_extend_vmo_size() {
 
 /// C++: TEST(StreamTestCase, ReadV)
 /// Vectored read: multiple buffers filled from the stream.
-#[test]
 fn stream_read_v() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -139,7 +134,6 @@ fn stream_read_v() {
 
 /// C++: TEST(StreamTestCase, WriteV)
 /// Vectored write: multiple buffers written to the stream.
-#[test]
 fn stream_write_v() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -160,7 +154,6 @@ fn stream_write_v() {
 
 /// C++: TEST(StreamTestCase, ReadVAt)
 /// Read at specific offsets without moving seek position.
-#[test]
 fn stream_read_v_at() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -187,7 +180,6 @@ fn stream_read_v_at() {
 
 /// C++: TEST(StreamTestCase, WriteVAt)
 /// Write at specific offsets without moving seek position.
-#[test]
 fn stream_write_v_at() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -211,7 +203,6 @@ fn stream_write_v_at() {
 
 /// C++: TEST(StreamTestCase, SyscallInvalidArgs)
 /// Bad args to stream operations.
-#[test]
 fn stream_syscall_invalid_args() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -230,7 +221,6 @@ fn stream_syscall_invalid_args() {
 /// Cannot create a stream from a contiguous or physical VMO.
 /// This is enforced at the syscall layer, so we test the VMO
 /// properties that the syscall checks.
-#[test]
 fn stream_no_contiguous_or_physical_vmo() {
     let _ctx = TestContext::new();
 
@@ -244,7 +234,7 @@ fn stream_no_contiguous_or_physical_vmo() {
     }
 
     // A physical VMO should not be paged
-    let physical = VmObject::new_physical(PAGE_SIZE, 1);
+    let physical = VmObject::new_physical(crate::helpers::alloc_phys_addr(1), 1);
     assert!(!physical.is_paged());
     // The syscall would return NOT_SUPPORTED
 }
@@ -255,7 +245,6 @@ fn stream_no_contiguous_or_physical_vmo() {
 ///
 /// Append mode writes always go to the end of the content, regardless
 /// of the current seek position.
-#[test]
 fn stream_append_mode() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -284,7 +273,6 @@ fn stream_append_mode() {
 ///
 /// Writing past the current content_size should zero-fill the gap
 /// between old content_size and the write offset.
-#[test]
 fn stream_extend_fills_with_zeros() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -309,7 +297,6 @@ fn stream_extend_fills_with_zeros() {
 ///
 /// Writing with an offset that would overflow usize should fail with
 /// FILE_BIG or OUT_OF_RANGE.
-#[test]
 fn stream_expand_overflow() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -325,7 +312,6 @@ fn stream_expand_overflow() {
 ///
 /// Set the MODE_APPEND property on a stream and verify all writes
 /// go to the end of content.
-#[test]
 fn stream_property_mode_append() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -354,7 +340,6 @@ fn stream_property_mode_append() {
 /// C++: TEST(StreamTestCase, GetInfoReadOnly)
 ///
 /// Get info on a read-only stream (options=0x1 MODE_READ only).
-#[test]
 fn stream_get_info_read_only() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -371,7 +356,6 @@ fn stream_get_info_read_only() {
 /// C++: TEST(StreamTestCase, ZeroLengthVectors)
 ///
 /// Reading and writing with zero-length buffers should return 0.
-#[test]
 fn stream_zero_length_vectors() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -391,7 +375,6 @@ fn stream_zero_length_vectors() {
 ///
 /// write_at with offset + data.len() overflowing usize should return
 /// FILE_BIG error.
-#[test]
 fn stream_vector_capacity_overflow() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -410,7 +393,6 @@ fn stream_vector_capacity_overflow() {
 ///
 /// Append at the VMO boundary where only part of the data fits.
 /// The write should be clamped to the VMO size.
-#[test]
 fn stream_partial_append_at_vmo_boundary() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1); // PAGE_SIZE bytes
@@ -433,7 +415,6 @@ fn stream_partial_append_at_vmo_boundary() {
 ///
 /// Multiple sequential writes with MODE_APPEND — each write should
 /// append after the previous one.
-#[test]
 fn stream_write_vector_with_append_mode() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -480,10 +461,9 @@ fn stream_write_vector_with_append_mode() {
 ///   - Real multi-threaded racing with page faults
 ///   - TestThread::WaitForCrash with specific fault address checking
 ///
-/// None of this is available in libos mode. We implement the faithful
+/// None of this is available in test mode. We implement the faithful
 /// sequential analog: verify that after reducing stream_size, reads
 /// at the seek position beyond stream_size return 0 bytes.
-#[test]
 fn stream_fault_beyond_stream_size_resize_down_race() {
     let _ctx = TestContext::new();
 
@@ -512,7 +492,7 @@ fn stream_fault_beyond_stream_size_resize_down_race() {
         // With ZX_VM_FAULT_BEYOND_STREAM_SIZE, this faults with OUT_OF_RANGE
         // because stream_size is 0 but the access is at test_offset.
         //
-        // In libos mode, we verify that stream reads past content_size
+        // In test mode, we verify that stream reads past content_size
         // return 0 bytes (the stream-level analog of the MMU fault).
         let stream = Stream::create(vmo.clone(), 0, 0x1); // MODE_READ
         stream
@@ -531,7 +511,6 @@ fn stream_fault_beyond_stream_size_resize_down_race() {
 /// Append at an offset beyond current content should zero-fill the gap.
 /// In the original test, this uses pager-backed VMOs with dirty tracking.
 /// Here we test the basic behavior with a regular paged VMO.
-#[test]
 fn append_supplies_zeroes() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -552,9 +531,8 @@ fn append_supplies_zeroes() {
 }
 
 /// C++: TEST(StreamTestCase, AppendWithMultipleThreads)
-/// In libos mode there are no real concurrent threads, so we simulate
+/// In test mode there are no real concurrent threads, so we simulate
 /// sequential appends from "multiple threads" by just doing them in order.
-#[test]
 fn append_with_multiple_threads() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -580,7 +558,6 @@ fn append_with_multiple_threads() {
 /// C++: TEST(StreamTestCase, ContentSizeUpdatedOnPartialWrite)
 /// When a write is clamped to the VMO boundary, content_size should
 /// still be updated to reflect the partial write.
-#[test]
 fn content_size_updated_on_partial_write() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1); // PAGE_SIZE bytes
@@ -619,13 +596,12 @@ fn content_size_updated_on_partial_write() {
 /// This requires pager-backed VMOs with TRAP_DIRTY support — the pager
 /// thread intercepts dirty requests and selectively fails pages, causing
 /// the stream write to partially succeed. This infrastructure (UserPager,
-/// TRAP_DIRTY, async dirty page faults) is not available in libos mode.
+/// TRAP_DIRTY, async dirty page faults) is not available in test mode.
 ///
 /// Faithful port: We create a 3-page VMO and attempt a 2-page write
 /// starting at page_size offset. Without pager TRAP_DIRTY, the write
 /// succeeds fully (both pages get written). We document the gap and
 /// verify the write mechanics are correct.
-#[test]
 fn partial_vmo_dirty() {
     let _ctx = TestContext::new();
 
@@ -668,7 +644,6 @@ fn partial_vmo_dirty() {
 /// resized (large) capacity. Neither should crash.
 ///
 /// Iterations: 50 (matching C++).
-#[test]
 fn race_read_resize_vec_larger() {
     let _ctx = TestContext::new();
     let alphabet = b"abcdefghijklmnopqrstuvwxyz";
@@ -706,7 +681,6 @@ fn race_read_resize_vec_larger() {
 /// buffer is read, or only the reduced capacity. Neither should crash.
 ///
 /// Iterations: 50 (matching C++).
-#[test]
 fn race_read_resize_vec_smaller() {
     let _ctx = TestContext::new();
     let alphabet = b"abcdefghijklmnopqrstuvwxyz";
@@ -747,7 +721,6 @@ fn race_read_resize_vec_smaller() {
 /// used.
 ///
 /// Iterations: 50 (matching C++).
-#[test]
 fn race_write_resize_vec_larger() {
     let _ctx = TestContext::new();
     let alphabet = b"abcdefghijklmnopqrstuvwxyz";
@@ -797,7 +770,6 @@ fn race_write_resize_vec_larger() {
 /// crash.
 ///
 /// Iterations: 50 (matching C++).
-#[test]
 fn race_write_resize_vec_smaller() {
     let _ctx = TestContext::new();
     let alphabet = b"abcdefghijklmnopqrstuvwxyz";
@@ -848,7 +820,6 @@ fn race_write_resize_vec_smaller() {
 /// - Neither outcome crashes.
 ///
 /// Iterations: 10 (matching C++).
-#[test]
 fn read_shrink_race() {
     let _ctx = TestContext::new();
     let initial_vmo_size: usize = 80;
@@ -885,7 +856,6 @@ fn read_shrink_race() {
 /// C++: TEST(StreamTestCase, ReadVectorAlias)
 /// Read data using read_at (simulating iovec aliasing — same data
 /// read into multiple buffers at different offsets).
-#[test]
 fn read_vector_alias() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -909,10 +879,9 @@ fn read_vector_alias() {
 /// a read_at from offset 0. The content_size ends up as either
 /// truncate_to_size or initial_vmo_size depending on ordering.
 ///
-/// In libos mode we simulate both outcomes sequentially.
+/// In test mode we simulate both outcomes sequentially.
 ///
 /// Iterations: 50 (reduced from C++ 500 since no real race).
-#[test]
 fn read_write_shrink_race() {
     let _ctx = TestContext::new();
     let page_size = PAGE_SIZE;
@@ -971,10 +940,9 @@ fn read_write_shrink_race() {
 /// The content_size ends up as either truncate_to_size (truncate last)
 /// or initial_vmo_size (write last).
 ///
-/// In libos mode we simulate both orderings sequentially.
+/// In test mode we simulate both orderings sequentially.
 ///
 /// Iterations: 50 (matching C++).
-#[test]
 fn write_shrink_race() {
     let _ctx = TestContext::new();
     let page_size = PAGE_SIZE;
@@ -1022,18 +990,17 @@ fn write_shrink_race() {
 /// fails mid-operation, and the stream must cancel the pending size
 /// update: content_size and seek must remain at 0.
 ///
-/// In libos mode all buffers live in the same address space, so we
+/// In test mode all buffers live in the same address space, so we
 /// cannot construct a truly unmapped buffer. This test is ignored in
-/// libos mode. We still verify the near-overflow offset path as a
+/// test mode. We still verify the near-overflow offset path as a
 /// basic sanity check.
-#[test]
 fn write_vector_unmapped_user_buffer_cancels_operation() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
     vmo.set_content_size(0).unwrap();
     let stream = Stream::create(vmo.clone(), 0, 0x3); // MODE_READ | MODE_WRITE
 
-    // In non-libos mode this would use actual unmapped memory.
+    // In non-test mode this would use actual unmapped memory.
     // For now, test the overflow path: write_at with near-max offset
     // should fail with FILE_BIG or OUT_OF_RANGE.
     let result = stream.write_at(b"data", usize::MAX - 1);
@@ -1045,4 +1012,41 @@ fn write_vector_unmapped_user_buffer_cancels_operation() {
     // Verify seek was not modified (stream at offset 0).
     let info = stream.get_info();
     assert_eq!(info.seek, 0);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    stream_create_verify_properties();
+    stream_seek_all_origins();
+    stream_write_extends_content_size();
+    stream_write_doesnt_extend_vmo_size();
+    stream_read_v();
+    stream_write_v();
+    stream_read_v_at();
+    stream_write_v_at();
+    stream_syscall_invalid_args();
+    stream_no_contiguous_or_physical_vmo();
+    stream_append_mode();
+    stream_extend_fills_with_zeros();
+    stream_expand_overflow();
+    stream_property_mode_append();
+    stream_get_info_read_only();
+    stream_zero_length_vectors();
+    stream_vector_capacity_overflow();
+    stream_partial_append_at_vmo_boundary();
+    stream_write_vector_with_append_mode();
+    stream_fault_beyond_stream_size_resize_down_race();
+    append_supplies_zeroes();
+    append_with_multiple_threads();
+    content_size_updated_on_partial_write();
+    partial_vmo_dirty();
+    race_read_resize_vec_larger();
+    race_read_resize_vec_smaller();
+    race_write_resize_vec_larger();
+    race_write_resize_vec_smaller();
+    read_shrink_race();
+    read_vector_alias();
+    read_write_shrink_race();
+    write_shrink_race();
+    write_vector_unmapped_user_buffer_cancels_operation();
 }

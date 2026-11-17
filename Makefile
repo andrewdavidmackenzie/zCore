@@ -597,6 +597,54 @@ core-tests: core-tests-build
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
 test: boot-test libc-test
 
+# ── Bare-metal Rust zircon-tests ─────────────────────────────────────
+# Build and run the Rust zircon-tests suite inside QEMU on bare-metal.
+# Usage: make rust-tests ARCH=aarch64
+RUST_TESTS_ARCH ?= aarch64
+
+.PHONY: rust-tests-build rust-tests
+rust-tests-build:
+	@echo "==> Building kernel with baremetal-test for $(RUST_TESTS_ARCH)..."
+	@# Build directly (not via zcore-build) to avoid embedding the
+	@# petal shell ZBI, which would compete with the test runner.
+	@cargo clean -p kernel 2>/dev/null || true
+ifeq ($(RUST_TESTS_ARCH),aarch64)
+	cargo build --package kernel --no-default-features \
+		--features "baremetal-test gic-400 pl011-uart" \
+		--target targets/qemu-aarch64.json \
+		-Z json-target-spec -Z build-std=core,alloc \
+		-Z build-std-features=compiler-builtins-mem --release
+	@OBJCOPY=$$(find "$$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1); \
+		if [ -n "$$OBJCOPY" ]; then "$$OBJCOPY" -O binary target/qemu-aarch64/release/kernel target/qemu-aarch64/release/kernel.bin; \
+		elif command -v llvm-objcopy >/dev/null 2>&1; then llvm-objcopy -O binary target/qemu-aarch64/release/kernel target/qemu-aarch64/release/kernel.bin; \
+		elif command -v rust-objcopy >/dev/null 2>&1; then rust-objcopy -O binary target/qemu-aarch64/release/kernel target/qemu-aarch64/release/kernel.bin; \
+		else echo "ERROR: no objcopy found"; exit 1; fi
+else ifeq ($(RUST_TESTS_ARCH),x86_64)
+	cargo build --package kernel --no-default-features \
+		--features "baremetal-test apic uart-16550 pci" \
+		--target targets/qemu-x86_64.json \
+		-Z json-target-spec -Z build-std=core,alloc \
+		-Z build-std-features=compiler-builtins-mem --release
+	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
+	@tools/x86-bootimage/target/release/x86-bootimage \
+		target/qemu-x86_64/release/kernel \
+		target/qemu-x86_64/release/boot.img
+else ifeq ($(RUST_TESTS_ARCH),riscv64)
+	cargo build --package kernel --no-default-features \
+		--features "baremetal-test uart-16550 riscv-intc riscv-plic pci" \
+		--target targets/qemu-riscv64.json \
+		-Z json-target-spec -Z build-std=core,alloc \
+		-Z build-std-features=compiler-builtins-mem --release
+	@OBJCOPY=$$(find "$$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1); \
+		if [ -n "$$OBJCOPY" ]; then "$$OBJCOPY" -O binary target/qemu-riscv64/release/kernel target/qemu-riscv64/release/kernel.bin; \
+		elif command -v llvm-objcopy >/dev/null 2>&1; then llvm-objcopy -O binary target/qemu-riscv64/release/kernel target/qemu-riscv64/release/kernel.bin; \
+		elif command -v rust-objcopy >/dev/null 2>&1; then rust-objcopy -O binary target/qemu-riscv64/release/kernel target/qemu-riscv64/release/kernel.bin; \
+		else echo "ERROR: no objcopy found"; exit 1; fi
+endif
+
+rust-tests: rust-tests-build
+	@tools/scripts/rust-tests-qemu.sh $(RUST_TESTS_ARCH)
+
 # Boot smoke test: start QEMU, wait for the "/ # " shell prompt, exit.
 # Proves: boot assembly, MMU, HAL, VirtIO, filesystem, ELF loader, and
 # busybox shell all work end-to-end. Timeout is 60 seconds.

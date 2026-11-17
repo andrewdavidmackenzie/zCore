@@ -5,6 +5,7 @@
 //! core-tests pattern.
 
 use crate::helpers::TestContext;
+use crate::prelude::*;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::object::{Handle, HandleValue, KernelObject, Rights, Signal};
 use zircon_object::task::{Job, Process};
@@ -183,7 +184,6 @@ fn set_timer_slack_policy(
 /// C++: TEST(JobTest, BasicTest)
 /// Create child and grandchild jobs, get info, verify creating from
 /// an invalid (killed) parent fails.
-#[test]
 fn basic_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -214,7 +214,6 @@ fn basic_test() {
 /// C++: TEST(JobTest, CreateTest)
 /// Create a child job and verify that processes can be created under
 /// both the parent job and the child job.
-#[test]
 fn create_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -238,7 +237,6 @@ fn create_test() {
 /// Closing a job handle removes it from the parent's child list.
 /// Uses sys_job_create + sys_handle_close, object-level assertion
 /// on parent's children_ids.
-#[test]
 fn job_close_removes_from_tree() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -262,7 +260,6 @@ fn job_close_removes_from_tree() {
 }
 /// C++: TEST(JobTest, JobSignals)
 /// Full signal lifecycle: create process, create child job, close each.
-#[test]
 fn job_signals() {
     let ctx = TestContext::new();
 
@@ -308,7 +305,6 @@ fn job_signals() {
 /// C++: TEST(JobTest, PolicyBasicOverrideDenyTest)
 /// Set policy with OVERRIDE_DENY, verify same policy re-set succeeds,
 /// but changing it with Absolute fails with ALREADY_EXISTS.
-#[test]
 fn policy_basic_override_deny() {
     let ctx = TestContext::new();
     let job_h = add_root_job(&ctx);
@@ -351,7 +347,6 @@ fn policy_basic_override_deny() {
 
 /// C++: TEST(JobTest, PolicyBasicOverrideAllowTest)
 /// Set policy with OVERRIDE_ALLOW, changing it should succeed.
-#[test]
 fn policy_basic_override_allow() {
     let ctx = TestContext::new();
     let job_h = add_root_job(&ctx);
@@ -384,7 +379,6 @@ fn policy_basic_override_allow() {
 
 /// C++: TEST(JobTest, PolicyTimerSlackNonEmptyTest)
 /// Setting timer slack policy on a non-empty job fails with BAD_STATE.
-#[test]
 fn policy_timer_slack_non_empty() {
     let ctx = TestContext::new();
     let job_h = add_root_job(&ctx);
@@ -406,7 +400,6 @@ fn policy_timer_slack_non_empty() {
 
 /// C++: TEST(JobTest, KillJobNoChildTest)
 /// Kill a job with no children — creating new children should fail.
-#[test]
 fn kill_job_no_child() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -444,7 +437,6 @@ fn kill_job_no_child() {
 
 /// C++: TEST(JobTest, KillJobChain)
 /// Kill a chain of nested jobs — all should terminate.
-#[test]
 fn kill_job_chain() {
     let ctx = TestContext::new();
     let root = Job::root();
@@ -472,7 +464,6 @@ fn kill_job_chain() {
 
 /// C++: TEST(JobTest, OneCriticalProcessKillsOneJob)
 /// Killing a process that is critical to a job kills the job.
-#[test]
 fn one_critical_process_kills_one_job() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -494,7 +485,6 @@ fn one_critical_process_kills_one_job() {
 
 /// C++: TEST(JobTest, ManyCriticalProcessesKillOneJob)
 /// Multiple processes critical to same job — killing one kills the job.
-#[test]
 fn many_critical_processes_kill_one_job() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -518,7 +508,6 @@ fn many_critical_processes_kill_one_job() {
 /// C++: TEST(JobTest, OneCriticalProcessKillsJobTree)
 /// Critical process in a child job kills the entire job tree when the
 /// process exits, if the critical binding is at the parent level.
-#[test]
 fn one_critical_process_kills_job_tree() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -550,7 +539,6 @@ fn one_critical_process_kills_job_tree() {
 
 /// C++: TEST(JobTest, CriticalProcessNotInAncestor)
 /// A process not in the job's hierarchy cannot be set as critical.
-#[test]
 fn critical_process_not_in_ancestor() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -569,7 +557,6 @@ fn critical_process_not_in_ancestor() {
 
 /// C++: TEST(JobTest, CriticalProcessAlreadySet)
 /// Setting critical twice on the same process returns ALREADY_BOUND.
-#[test]
 fn critical_process_already_set() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -594,7 +581,6 @@ fn critical_process_already_set() {
 /// C++: TEST(JobTest, InfoTaskStatsFails)
 /// ZX_INFO_TASK_STATS does not apply to jobs. Querying it should fail
 /// with WRONG_TYPE.
-#[test]
 fn info_task_stats_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -618,7 +604,6 @@ fn info_task_stats_fails() {
 
 /// C++: TEST(JobTest, KillJobRemovesFromTree)
 /// Killing a child job removes it from parent's children list.
-#[test]
 fn kill_job_removes_from_tree() {
     let ctx = TestContext::new();
     let root = Job::root();
@@ -643,7 +628,6 @@ fn kill_job_removes_from_tree() {
 
 /// C++: TEST(JobTest, MaxHeightSmoke)
 /// Create jobs up to max depth and verify the deepest cannot create children.
-#[test]
 fn max_height_smoke() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -673,7 +657,6 @@ fn max_height_smoke() {
 
 /// C++: TEST(JobTest, SetJobOomKillBit)
 /// Set and reset the OOM kill bit on a job via sys_object_set_property.
-#[test]
 fn set_job_oom_kill_bit() {
     let ctx = TestContext::new();
 
@@ -711,7 +694,6 @@ fn set_job_oom_kill_bit() {
 /// C++: TEST(JobTest, GetInfoRuntime)
 /// Verify that get_info returns valid JobInfo before and after
 /// the job is killed.
-#[test]
 fn get_info_runtime() {
     let ctx = TestContext::new();
     let root = Job::root();
@@ -735,7 +717,6 @@ fn get_info_runtime() {
 
 /// C++: TEST(JobTest, GetInfoRuntimeV1)
 /// Verifies that the kill_on_oom property is gettable/settable.
-#[test]
 fn get_info_runtime_v1() {
     let ctx = TestContext::new();
     let root = Job::root();
@@ -787,7 +768,6 @@ fn get_info_runtime_v1() {
 /// C++: TEST(JobTest, KillTest)
 /// Killing a job with processes: processes are killed, creating new
 /// children fails, job is terminated.
-#[test]
 fn kill_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -820,7 +800,6 @@ fn kill_test() {
 /// C++: TEST(JobTest, OneCriticalProcessKillsOneJobIfRetcodeNonzero)
 /// A critical process with retcode_nonzero=true (options=1) only kills
 /// the job if the process exits with a non-zero return code.
-#[test]
 fn one_critical_process_kills_one_job_if_retcode_nonzero() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -855,7 +834,6 @@ fn one_critical_process_kills_one_job_if_retcode_nonzero() {
 
 /// C++: TEST(JobTest, PolicyInvalidTopicTest)
 /// Passing an invalid topic number to sys_job_set_policy returns INVALID_ARGS.
-#[test]
 fn policy_invalid_topic_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -879,7 +857,6 @@ fn policy_invalid_topic_test() {
 
 /// C++: TEST(JobTest, PolicyTimerSlackInvalidCountTest)
 /// Passing count != 1 for timer slack fails with INVALID_ARGS.
-#[test]
 fn policy_timer_slack_invalid_count_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -933,7 +910,6 @@ fn policy_timer_slack_invalid_count_test() {
 /// C++: TEST(JobTest, PolicyTimerSlackInvalidOptionsTest)
 /// Timer slack policy with options != ZX_JOB_POL_RELATIVE (i.e. Absolute)
 /// returns INVALID_ARGS.
-#[test]
 fn policy_timer_slack_invalid_options_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -973,7 +949,6 @@ fn policy_timer_slack_invalid_options_test() {
 /// C++: TEST(JobTest, PolicyTimerSlackInvalidPolicyTest)
 /// A timer slack policy with negative min_slack or invalid mode is
 /// rejected with INVALID_ARGS.
-#[test]
 fn policy_timer_slack_invalid_policy_test() {
     let ctx = TestContext::new();
     let root_h = add_root_job(&ctx);
@@ -1014,7 +989,6 @@ fn policy_timer_slack_invalid_policy_test() {
 /// Setting valid timer slack policies on empty jobs should succeed.
 /// Valid modes: Center(0), Early(1), Late(2).
 /// Also tests raising and lowering the minimum slack.
-#[test]
 fn policy_timer_slack_valid() {
     let ctx = TestContext::new();
     let root_h = add_root_job(&ctx);
@@ -1061,7 +1035,6 @@ fn policy_timer_slack_valid() {
 
 /// C++: TEST(JobTest, WaitTest)
 /// A killed job asserts JOB_TERMINATED.
-#[test]
 fn wait_test() {
     let ctx = TestContext::new();
     let root = Job::root();
@@ -1085,7 +1058,6 @@ fn wait_test() {
 /// Duplicate a job handle with reduced rights (no WRITE, no MANAGE_JOB),
 /// then verify that creating a child job via that handle fails with
 /// ACCESS_DENIED.
-#[test]
 fn create_missing_rights_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1106,4 +1078,37 @@ fn create_missing_rights_test() {
         .unwrap_err(),
         ZxError::ACCESS_DENIED
     );
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    basic_test();
+    create_test();
+    job_close_removes_from_tree();
+    job_signals();
+    policy_basic_override_deny();
+    policy_basic_override_allow();
+    policy_timer_slack_non_empty();
+    kill_job_no_child();
+    kill_job_chain();
+    one_critical_process_kills_one_job();
+    many_critical_processes_kill_one_job();
+    one_critical_process_kills_job_tree();
+    critical_process_not_in_ancestor();
+    critical_process_already_set();
+    info_task_stats_fails();
+    kill_job_removes_from_tree();
+    max_height_smoke();
+    set_job_oom_kill_bit();
+    get_info_runtime();
+    get_info_runtime_v1();
+    kill_test();
+    one_critical_process_kills_one_job_if_retcode_nonzero();
+    policy_invalid_topic_test();
+    policy_timer_slack_invalid_count_test();
+    policy_timer_slack_invalid_options_test();
+    policy_timer_slack_invalid_policy_test();
+    policy_timer_slack_valid();
+    wait_test();
+    create_missing_rights_test();
 }

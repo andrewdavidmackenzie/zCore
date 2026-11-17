@@ -5,16 +5,12 @@ impl Syscall<'_> {
     /// Returns `NOT_FOUND` if the address is unmapped, matching Fuchsia's
     /// behavior (preventing a kernel page fault in `Futex::load_user_value`).
     fn validate_futex_addr(&self, addr: usize) -> ZxResult {
-        // In libos mode, host heap addresses are valid memory but
-        // not mapped in the Zircon process VMAR.  Skip the VMAR
-        // check so futex operations work on host-allocated memory.
-        #[cfg(not(target_os = "none"))]
-        let _ = addr;
-        #[cfg(target_os = "none")]
-        if self.thread.proc().vmar().get_mapping_flags(addr).is_err() {
-            return Err(ZxError::NOT_FOUND);
+        match self.thread.proc().vmar().get_mapping_flags(addr) {
+            Ok(_) => Ok(()),
+            #[cfg(not(target_os = "none"))]
+            Err(ZxError::NOT_FOUND) => Ok(()),
+            Err(e) => Err(e),
         }
-        Ok(())
     }
 
     /// Wait on a futex.

@@ -12,6 +12,7 @@
 //! C++ source: zircon/system/utest/core/sync-condition/condition.cc
 
 use crate::helpers::TestContext;
+use crate::prelude::*;
 use core::sync::atomic::{AtomicI32, Ordering};
 use zircon_object::signal::Futex;
 
@@ -31,11 +32,10 @@ use zircon_object::signal::Futex;
 ///
 /// This requires concurrent multi-threaded execution with blocking
 /// futex waits.
-#[async_std::test]
 async fn condition_test() {
     use crate::helpers::{condvar_waiter_thread_fn, CondvarWaiterState, SyncCondition, SyncMutex};
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicBool;
-    use std::sync::Arc;
     use zircon_object::task::Thread;
 
     let ctx = TestContext::new();
@@ -47,7 +47,7 @@ async fn condition_test() {
     let woken_counter = Arc::new(AtomicI32::new(0));
 
     // C++: 3 threads each do cond.wait → broadcast → verify woken
-    let mut threads = std::vec::Vec::new();
+    let mut threads = alloc::vec::Vec::new();
     for _ in 0..3 {
         let state = CondvarWaiterState::new(
             mutex.clone(),
@@ -61,35 +61,38 @@ async fn condition_test() {
     }
 
     // Wait for threads to block
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(100),
+    )
+    .await;
 
     // C++: set predicate, broadcast
     predicate.store(true, Ordering::Release);
     cond.broadcast();
 
     // Wait for all threads to wake and finish
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     while woken_counter.load(Ordering::SeqCst) < 3 {
         assert!(
-            std::time::Instant::now() < deadline,
+            hal_impl::timer::timer_now() < deadline,
             "condvar threads timed out"
         );
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
     assert_eq!(woken_counter.load(Ordering::SeqCst), 3);
 
     // Wait for threads to terminate
     for (thread, _) in &threads {
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= deadline {
+            if hal_impl::timer::timer_now() >= deadline {
                 break;
             }
-            async_std::task::yield_now().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 }
@@ -105,8 +108,7 @@ async fn condition_test() {
 /// At kernel level: timedwait calls futex_wait with a deadline.
 /// In single-threaded mode, we can test the futex_wait value
 /// mismatch path (no actual timeout needed).
-#[test]
-fn timeout_test() {
+async fn timeout_test() {
     let _ctx = TestContext::new();
 
     // sync_condition_timedwait internally:
@@ -130,7 +132,7 @@ fn timeout_test() {
     // futex_wait with value that doesn't match → immediate return
     // (In real code, the value would match and the thread would sleep
     // until the deadline expires, returning TIMED_OUT.)
-    let result = async_std::task::block_on(futex.wait(99));
+    let result = futex.wait(99).await;
     assert_eq!(
         result.unwrap_err(),
         zircon_object::ZxError::BAD_STATE,
@@ -144,4 +146,10 @@ fn timeout_test() {
 
     // Unlock
     mutex.store(0, Ordering::Release);
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    condition_test().await;
+    timeout_test().await;
 }

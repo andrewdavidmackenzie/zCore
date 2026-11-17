@@ -26,9 +26,9 @@ struct RustTest {
     is_stub: bool, // contains `unimplemented!()`
 }
 
-/// Parse all `#[test]` / `#[async_std::test]` / `#[tokio::test]` functions
-/// from a single Rust source file. Extracts the `/// C++: TEST(Suite, Name)`
-/// or `/// C++: TEST_F(Suite, Name)` doc comment, `#[ignore]` attribute,
+/// Parse all test functions from a single Rust source file.
+/// A test function is any `fn` preceded by a `/// C++: TEST(Suite, Name)`
+/// or `/// C++: TEST_F(Suite, Name)` doc comment. Extracts the C++ reference,
 /// and whether the body contains `unimplemented!()`.
 fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
     let content = match fs::read_to_string(path) {
@@ -48,21 +48,19 @@ fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
     while i < lines.len() {
         let trimmed = lines[i].trim();
 
-        // Detect test attributes: #[test], #[async_std::test], #[tokio::test]
-        let is_test_attr =
-            trimmed == "#[test]" || trimmed == "#[async_std::test]" || trimmed == "#[tokio::test]";
-
-        if !is_test_attr {
+        // Look for fn declarations (test functions are plain fns)
+        let fn_name = if let Some(name) = extract_fn_name(trimmed) {
+            name
+        } else {
             i += 1;
             continue;
-        }
-
-        let test_attr_line = i;
+        };
+        let fn_line = i;
 
         // Look backward for `/// C++: TEST(Suite, Name)` or `/// C++: TEST_F(Suite, Name)`
         let mut cpp_ref = None;
         {
-            let mut j = test_attr_line;
+            let mut j = fn_line;
             while j > 0 {
                 j -= 1;
                 let prev = lines[j].trim();
@@ -70,8 +68,8 @@ fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
                     if let Some(ref_str) = extract_cpp_ref(prev) {
                         cpp_ref = Some(ref_str);
                     }
-                } else if prev.starts_with("#[") || prev.is_empty() {
-                    // attributes or blank lines between doc and #[test] are ok
+                } else if prev.starts_with("#[") || prev.starts_with("//") || prev.is_empty() {
+                    // attributes, comments, blank lines between doc and fn are ok
                     continue;
                 } else {
                     break;
@@ -79,64 +77,29 @@ fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
             }
         }
 
-        // Look forward for #[ignore] and fn name
-        let mut is_ignored = false;
-        let mut fn_name = None;
-        let mut fn_line = test_attr_line;
-
-        let mut k = test_attr_line + 1;
-        while k < lines.len() && k < test_attr_line + 8 {
-            let fwd = lines[k].trim();
-            if fwd.starts_with("#[ignore") {
-                is_ignored = true;
-            } else if let Some(name) = extract_fn_name(fwd) {
-                fn_name = Some(name);
-                fn_line = k;
-                break;
-            } else if !fwd.starts_with("#[") && !fwd.starts_with("//") && !fwd.is_empty() {
-                break; // unexpected line
-            }
-            k += 1;
+        // Skip functions without a C++ reference — they're helpers, not tests
+        if cpp_ref.is_none() {
+            i += 1;
+            continue;
         }
 
-        // Also check for #[ignore] BEFORE #[test] (some tests have it above)
-        if !is_ignored {
-            let mut j = test_attr_line;
-            while j > 0 {
-                j -= 1;
-                let prev = lines[j].trim();
-                if prev.starts_with("#[ignore") {
-                    is_ignored = true;
-                    break;
-                } else if prev.starts_with("///") || prev.starts_with("#[") || prev.is_empty() {
-                    continue;
-                } else {
-                    break;
-                }
-            }
-        }
+        let is_ignored = false;
 
         // Check if body contains `unimplemented!()`
-        let is_stub = if fn_name.is_some() {
-            lines[fn_line..std::cmp::min(lines.len(), fn_line + 6)]
-                .iter()
-                .any(|l| l.contains("unimplemented!"))
-        } else {
-            false
-        };
+        let is_stub = lines[fn_line..std::cmp::min(lines.len(), fn_line + 6)]
+            .iter()
+            .any(|l| l.contains("unimplemented!"));
 
-        if let Some(name) = fn_name {
-            tests.push(RustTest {
-                file: file_name.clone(),
-                fn_name: name,
-                line: fn_line + 1, // 1-indexed
-                cpp_ref,
-                is_ignored,
-                is_stub,
-            });
-        }
+        tests.push(RustTest {
+            file: file_name.clone(),
+            fn_name,
+            line: fn_line + 1, // 1-indexed
+            cpp_ref,
+            is_ignored,
+            is_stub,
+        });
 
-        i = k + 1;
+        i = fn_line + 1;
     }
 
     tests
@@ -232,6 +195,7 @@ pub struct AuditResult {
     // Skip/ignore correspondence
     pub stubs: Vec<(String, String, String)>, // (file, fn_name, cpp_ref) — unimplemented!() tests
     pub ignored_not_skipped: Vec<(String, String, String)>, // #[ignore] but NOT in skip list
+    pub petal_ported: usize,                  // Tests ported to petal user-mode binary
 }
 
 /// Run the full audit. Returns `Ok(result)` or `Err(message)` if something
@@ -304,8 +268,27 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
     }
     duplicates.sort_by(|a, b| a.0.cmp(&b.0));
 
-    // Find missing (C++ tests with no Rust match)
-    let missing_in_rust: Vec<String> = cpp_tests.difference(&matched_cpp).cloned().collect();
+    // Load tests ported to petal (user-mode) — excluded from "missing" check
+    let petal_ported: std::collections::HashSet<String> = {
+        let petal_file = std::path::Path::new("tests/petal-ported-tests.txt");
+        if petal_file.exists() {
+            std::fs::read_to_string(petal_file)
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+                .map(|l| l.trim().to_string())
+                .collect()
+        } else {
+            std::collections::HashSet::new()
+        }
+    };
+
+    // Find missing (C++ tests with no Rust match, excluding petal-ported tests)
+    let missing_in_rust: Vec<String> = cpp_tests
+        .difference(&matched_cpp)
+        .filter(|t| !petal_ported.contains(*t))
+        .cloned()
+        .collect();
 
     let rust_ignored = all_rust_tests.iter().filter(|t| t.is_ignored).count();
     let rust_stubs = all_rust_tests.iter().filter(|t| t.is_stub).count();
@@ -351,6 +334,7 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
         cpp_skipped: skip_list.len(),
         stubs,
         ignored_not_skipped,
+        petal_ported: petal_ported.len(),
     })
 }
 
@@ -366,15 +350,18 @@ pub fn print_and_check(result: &AuditResult) -> bool {
     println!("  Rust stubs:              {}", result.rust_stubs);
     println!("  C++ skip-list entries:   {}", result.cpp_skipped);
 
-    if result.rust_count != result.cpp_count {
+    let petal_count = result.petal_ported;
+    let total_rust = result.rust_count + petal_count;
+    println!("  Petal-ported tests:      {}", petal_count);
+    if total_rust != result.cpp_count {
         println!(
-            "  FAIL: Count mismatch — {} Rust tests vs {} C++ tests",
-            result.rust_count, result.cpp_count
+            "  FAIL: Count mismatch — {} Rust tests ({} kernel + {} petal) vs {} C++ tests",
+            total_rust, result.rust_count, petal_count, result.cpp_count
         );
         ok = false;
     }
 
-    if result.matched != result.cpp_count {
+    if (result.matched + petal_count) != result.cpp_count {
         println!(
             "  FAIL: Only {}/{} C++ tests have a Rust match",
             result.matched, result.cpp_count

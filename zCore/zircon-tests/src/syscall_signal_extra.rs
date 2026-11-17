@@ -9,7 +9,6 @@ use hal_impl::user::UserOutPtr;
 use zircon_object::object::HandleValue;
 use zircon_object::ZxError;
 
-#[test]
 fn event_create_via_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -19,7 +18,6 @@ fn event_create_via_syscall() {
     assert_ne!(h, 0);
 }
 
-#[test]
 fn event_signal_self() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -34,7 +32,6 @@ fn event_signal_self() {
     sc.sys_object_signal(h, 1 << 24, 0).unwrap();
 }
 
-#[test]
 fn timer_create_via_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -45,7 +42,6 @@ fn timer_create_via_syscall() {
     assert_ne!(h, 0);
 }
 
-#[test]
 fn timer_cancel_via_syscall() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -57,7 +53,6 @@ fn timer_cancel_via_syscall() {
     sc.sys_timer_cancel(h).unwrap();
 }
 
-#[test]
 fn eventpair_invalid_signal_bits_full() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_eventpair_create(&ctx);
@@ -82,4 +77,13 @@ fn eventpair_invalid_signal_bits_full() {
     // SIGNALED (bit 3) IS allowed on eventpairs
     sc.sys_object_signal(h0, 0, 1 << 3).unwrap();
     sc.sys_object_signal(h0, 1 << 3, 0).unwrap();
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    event_create_via_syscall();
+    event_signal_self();
+    timer_create_via_syscall();
+    timer_cancel_via_syscall();
+    eventpair_invalid_signal_bits_full();
 }

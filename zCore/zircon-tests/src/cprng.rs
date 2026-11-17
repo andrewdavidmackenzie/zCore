@@ -9,7 +9,6 @@ use hal_impl::user::{UserInPtr, UserOutPtr};
 ///
 /// Draw random bytes and verify at least some are non-zero (with
 /// overwhelming probability). Tests zx_cprng_draw basic functionality.
-#[test]
 fn draw_non_zero() {
     let _ctx = TestContext::new();
     let mut buf = [0u8; 32];
@@ -23,7 +22,6 @@ fn draw_non_zero() {
 ///
 /// Draw two buffers and verify they differ (with overwhelming
 /// probability). Tests randomness quality.
-#[test]
 fn draw_different() {
     let _ctx = TestContext::new();
     let mut buf1 = [0u8; 32];
@@ -38,7 +36,6 @@ fn draw_different() {
 
 ///
 /// Draw zero bytes -- should succeed without error (no-op).
-#[test]
 fn draw_zero_length() {
     let _ctx = TestContext::new();
     let mut buf = [0u8; 0];
@@ -49,7 +46,6 @@ fn draw_zero_length() {
 ///
 /// Draw the maximum allowed number of bytes (ZX_CPRNG_DRAW_MAX_LEN = 256).
 /// Should succeed.
-#[test]
 fn draw_max_length() {
     let _ctx = TestContext::new();
     let mut buf = [0u8; 256];
@@ -64,7 +60,6 @@ fn draw_max_length() {
 ///
 /// Draw more than the maximum allowed bytes. Should return
 /// INVALID_ARGS.
-#[test]
 fn draw_exceeds_max_length() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -82,7 +77,6 @@ fn draw_exceeds_max_length() {
 
 ///
 /// Draw with a null buffer pointer. Should return an error.
-#[test]
 fn draw_null_buffer() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -99,7 +93,6 @@ fn draw_null_buffer() {
 ///
 /// Add entropy from a valid buffer. Should succeed (no-op from
 /// kernel perspective -- just mixes into the pool).
-#[test]
 fn add_entropy_valid() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -116,7 +109,6 @@ fn add_entropy_valid() {
 
 ///
 /// Add entropy with a null buffer. Should return an error.
-#[test]
 fn add_entropy_null_buffer() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -132,7 +124,6 @@ fn add_entropy_null_buffer() {
 
 ///
 /// Add zero-length entropy. Should succeed (no-op).
-#[test]
 fn add_entropy_zero_length() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -151,7 +142,6 @@ fn add_entropy_zero_length() {
 /// Add entropy without root resource.
 /// Note: Unlike Fuchsia, zCore's sys_cprng_add_entropy does not require
 /// a root resource. This test verifies the call succeeds.
-#[test]
 fn add_entropy_no_resource() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -166,4 +156,18 @@ fn add_entropy_no_resource() {
         "add_entropy should succeed without root resource in zCore, got {:?}",
         result
     );
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    draw_non_zero();
+    draw_different();
+    draw_zero_length();
+    draw_max_length();
+    draw_exceeds_max_length();
+    draw_null_buffer();
+    add_entropy_valid();
+    add_entropy_null_buffer();
+    add_entropy_zero_length();
+    add_entropy_no_resource();
 }

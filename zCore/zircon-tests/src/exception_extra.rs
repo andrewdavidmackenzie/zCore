@@ -12,7 +12,6 @@ use zircon_object::object::{Handle, Rights};
 use zircon_object::task::{Job, Task};
 
 /// Create an exception channel on a process.
-#[test]
 fn create_exception_channel_process() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -25,7 +24,6 @@ fn create_exception_channel_process() {
 }
 
 /// Create a debugger exception channel on a process.
-#[test]
 fn create_debug_exception_channel_process() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -38,7 +36,6 @@ fn create_debug_exception_channel_process() {
 }
 
 /// Create an exception channel on a job.
-#[test]
 fn create_exception_channel_job() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -51,7 +48,6 @@ fn create_exception_channel_job() {
 }
 
 /// Create a debugger exception channel on a job.
-#[test]
 fn create_debug_exception_channel_job() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -64,7 +60,6 @@ fn create_debug_exception_channel_job() {
 }
 
 /// Create an exception channel on a thread.
-#[test]
 fn create_exception_channel_thread() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -77,7 +72,6 @@ fn create_exception_channel_thread() {
 }
 
 /// Debugger option on a thread should fail with INVALID_ARGS.
-#[test]
 fn debugger_on_thread_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -94,7 +88,6 @@ fn debugger_on_thread_fails() {
 }
 
 /// Invalid option should fail.
-#[test]
 fn invalid_option_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -111,7 +104,6 @@ fn invalid_option_fails() {
 }
 
 /// Bad handle should fail.
-#[test]
 fn bad_handle_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -130,7 +122,6 @@ fn bad_handle_fails() {
 /// Note: the syscall checks rights before type, so an event handle
 /// (which lacks MANAGE_THREAD) fails with ACCESS_DENIED first.
 /// If given full rights, it would fail with WRONG_TYPE on the downcast.
-#[test]
 fn wrong_type_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -155,7 +146,6 @@ fn wrong_type_fails() {
 }
 
 /// Missing rights should fail with ACCESS_DENIED.
-#[test]
 fn missing_rights_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -175,7 +165,6 @@ fn missing_rights_fails() {
 }
 
 /// Process handle missing ENUMERATE should fail.
-#[test]
 fn missing_enumerate_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -195,7 +184,6 @@ fn missing_enumerate_fails() {
 }
 
 /// Double-bind: creating exception channel twice on same task should fail.
-#[test]
 fn double_bind_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -220,7 +208,6 @@ fn double_bind_fails() {
 ///
 /// Creating an exception channel on a dead job should fail. A dead
 /// task (killed job) no longer accepts exception channel bindings.
-#[test]
 fn create_on_dead_task() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -254,7 +241,6 @@ fn create_on_dead_task() {
 /// When a task dies, the exception channel endpoint held by the
 /// kernel should be closed, signaling PEER_CLOSED on the user's end.
 /// This test creates a channel on a job and then kills the job.
-#[test]
 fn channel_closed_on_task_death() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -287,7 +273,6 @@ fn channel_closed_on_task_death() {
 ///
 /// Passing an invalid option value (not 0 or 1) should fail with
 /// INVALID_ARGS.
-#[test]
 fn exception_bad_option() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -317,7 +302,6 @@ fn exception_bad_option() {
 ///
 /// Passing a non-task handle (e.g., an event with full rights) should
 /// fail with WRONG_TYPE for exception channel creation.
-#[test]
 fn exception_wrong_type_thread() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -343,7 +327,6 @@ fn exception_wrong_type_thread() {
 
 ///
 /// A handle without MANAGE_THREAD right should fail with ACCESS_DENIED.
-#[test]
 fn exception_missing_manage_thread() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -365,7 +348,6 @@ fn exception_missing_manage_thread() {
 ///
 /// Creating a debugger exception channel (option=1) on a process
 /// should succeed.
-#[test]
 fn exception_process_debugger_channel() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -380,7 +362,6 @@ fn exception_process_debugger_channel() {
 ///
 /// Creating a debugger exception channel (option=1) on a job should
 /// succeed.
-#[test]
 fn exception_job_debugger_channel() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -395,7 +376,6 @@ fn exception_job_debugger_channel() {
 ///
 /// Threads cannot have debugger exception channels (option=1).
 /// Only processes and jobs support the debugger option.
-#[test]
 fn exception_thread_channel_not_debugger() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -414,7 +394,6 @@ fn exception_thread_channel_not_debugger() {
 ///
 /// Binding an exception channel twice on the same thread should fail
 /// with ALREADY_BOUND.
-#[test]
 fn exception_double_bind_thread() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -440,7 +419,6 @@ fn exception_double_bind_thread() {
 /// Binding an exception channel twice on the same process should fail
 /// with ALREADY_BOUND. This test uses a fresh process handle each time
 /// to ensure the binding check is on the task, not the handle.
-#[test]
 fn exception_double_bind_process() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -467,4 +445,30 @@ fn exception_double_bind_process() {
         Err(zircon_object::ZxError::ALREADY_BOUND),
         "double-bind on process should fail with ALREADY_BOUND"
     );
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    create_exception_channel_process();
+    create_debug_exception_channel_process();
+    create_exception_channel_job();
+    create_debug_exception_channel_job();
+    create_exception_channel_thread();
+    debugger_on_thread_fails();
+    invalid_option_fails();
+    bad_handle_fails();
+    wrong_type_fails();
+    missing_rights_fails();
+    missing_enumerate_fails();
+    double_bind_fails();
+    create_on_dead_task();
+    channel_closed_on_task_death();
+    exception_bad_option();
+    exception_wrong_type_thread();
+    exception_missing_manage_thread();
+    exception_process_debugger_channel();
+    exception_job_debugger_channel();
+    exception_thread_channel_not_debugger();
+    exception_double_bind_thread();
+    exception_double_bind_process();
 }

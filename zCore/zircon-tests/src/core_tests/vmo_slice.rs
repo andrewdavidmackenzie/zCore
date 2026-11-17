@@ -16,7 +16,6 @@ extern crate alloc;
 /// C++: TEST(VmoSliceTestCase, NonSlice)
 /// Invalid slice parameters return appropriate errors.
 /// Tests all 8 cases from C++ including overflow edge cases.
-#[test]
 fn non_slice() {
     let _ctx = TestContext::new();
     // C++ creates a 2-page resizable parent, but we need non-resizable for
@@ -58,7 +57,6 @@ fn non_slice() {
 
 /// C++: TEST(VmoSliceTestCase, NonResizable)
 /// Cannot create a slice of a resizable VMO.
-#[test]
 fn non_resizable_parent() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged_with_resizable(true, 4);
@@ -71,7 +69,6 @@ fn non_resizable_parent() {
 
 /// C++: TEST(VmoSliceTestCase, CommitChild)
 /// Committing through a slice child works.
-#[test]
 fn commit_child() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -88,7 +85,6 @@ fn commit_child() {
 
 /// C++: TEST(VmoSliceTestCase, DecommitChild)
 /// Decommitting through a slice child works.
-#[test]
 fn decommit_child() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -110,7 +106,6 @@ fn decommit_child() {
 
 /// C++: TEST(VmoSliceTestCase, ZeroChildren)
 /// VMO_ZERO_CHILDREN signal tracks slice lifecycle.
-#[test]
 fn zero_children() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -125,7 +120,6 @@ fn zero_children() {
 
 /// C++: TEST(VmoSliceTestCase, ZeroChildrenGrandchildClosedLast)
 /// Signal only restored when ALL descendants are gone.
-#[test]
 fn zero_children_grandchild_closed_last() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -147,7 +141,6 @@ fn zero_children_grandchild_closed_last() {
 
 /// C++: TEST(VmoSliceTestCase, NotCoWType)
 /// Slice does not have IS_COW_CLONE flag.
-#[test]
 fn not_cow_type() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -159,7 +152,6 @@ fn not_cow_type() {
 
 /// C++: TEST(VmoSliceTestCase, RoundUpSize)
 /// Sub-page slice size is rounded up.
-#[test]
 fn round_up_size() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -180,7 +172,6 @@ fn create_iommu_bti() -> (Arc<Iommu>, Arc<BusTransactionInitiator>) {
 
 /// C++: TEST(VmoSliceTestCase, ChildSliceOfContiguousParentIsContiguous)
 /// Slice of a contiguous VMO should inherit the CONTIGUOUS flag.
-#[test]
 fn contiguous_parent_slice_is_contiguous() {
     let _ctx = TestContext::new();
 
@@ -199,7 +190,6 @@ fn contiguous_parent_slice_is_contiguous() {
 
 /// C++: TEST(VmoSliceTestCase, Pin)
 /// Pin a slice via BTI, verify PMT lifecycle.
-#[test]
 fn pin_slice() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -221,7 +211,6 @@ fn pin_slice() {
 
 /// C++: TEST(VmoSliceTestCase, ParentContiguousVmoStaysPinnedWithoutHandle)
 /// Contiguous VMO pages survive parent handle close + zero op via slice.
-#[test]
 fn parent_contiguous_stays_pinned() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -252,13 +241,12 @@ fn parent_contiguous_stays_pinned() {
 
 /// C++: TEST(VmoSliceTestCase, RoundUpSizePhysical)
 /// Physical VMO slice with sub-page size rounds up.
-#[test]
 fn round_up_size_physical() {
     let _ctx = TestContext::new();
 
     // Physical VMOs are contiguous and report is_contiguous() == true,
     // which bypasses the cache policy check in create_slice.
-    let physical = VmObject::new_physical(PAGE_SIZE, 2);
+    let physical = VmObject::new_physical(crate::helpers::alloc_phys_addr(2), 2);
 
     // Create slice with sub-page size — should round up to PAGE_SIZE.
     let slice = physical.create_slice(0, 1).unwrap();
@@ -267,7 +255,6 @@ fn round_up_size_physical() {
 
 /// C++: TEST(VmoSliceTestCase, AttributedCounts)
 /// Slice pages are attributed to the parent, not the slice.
-#[test]
 fn attributed_counts() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -286,7 +273,6 @@ fn attributed_counts() {
 
 /// C++: TEST(VmoSliceTestCase, CowPageSourceThroughSlices)
 /// COW clone of a parent that has slices — data should be visible.
-#[test]
 fn cow_page_source_through_slices() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -309,7 +295,6 @@ fn cow_page_source_through_slices() {
 
 /// C++: TEST(VmoSliceTestCase, DecommitParent)
 /// Decommit a parent page that a slice refers to.
-#[test]
 fn decommit_parent() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -333,7 +318,6 @@ fn decommit_parent() {
 /// Create 64 levels of nested slices (C++ does 1000, we do 64 to match
 /// the "at least 32 levels" requirement while staying fast). Each level
 /// creates a slice of the previous. After dropping the chain, no panic.
-#[test]
 fn deep_hierarchy() {
     let _ctx = TestContext::new();
     let root = VmObject::new_paged(1);
@@ -370,7 +354,6 @@ fn deep_hierarchy() {
 
 /// C++: TEST(VmoSliceTestCase, Nested)
 /// Nested slices at different offsets.
-#[test]
 fn nested() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(4);
@@ -386,7 +369,6 @@ fn nested() {
 
 /// C++: TEST(VmoSliceTestCase, WriteThrough)
 /// Writes through a slice are visible in the parent.
-#[test]
 fn write_through() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -411,7 +393,6 @@ fn write_through() {
 
 /// C++: TEST(VmoSliceTestCase, ZeroSized)
 /// Creating a zero-sized slice should fail or produce an empty VMO.
-#[test]
 fn zero_sized() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -426,4 +407,27 @@ fn zero_sized() {
             // Failing to create a zero-sized slice is acceptable.
         }
     }
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    non_slice();
+    non_resizable_parent();
+    commit_child();
+    decommit_child();
+    zero_children();
+    zero_children_grandchild_closed_last();
+    not_cow_type();
+    round_up_size();
+    contiguous_parent_slice_is_contiguous();
+    pin_slice();
+    parent_contiguous_stays_pinned();
+    round_up_size_physical();
+    attributed_counts();
+    cow_page_source_through_slices();
+    decommit_parent();
+    deep_hierarchy();
+    nested();
+    write_through();
+    zero_sized();
 }

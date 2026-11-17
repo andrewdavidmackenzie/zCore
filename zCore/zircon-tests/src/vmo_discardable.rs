@@ -34,7 +34,6 @@ const VMO_OP_TRY_LOCK: u32 = 11;
 ///
 /// Create a discardable VMO (ZX_VMO_DISCARDABLE flag). The VMO
 /// should be created successfully.
-#[test]
 fn create_discardable() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, ZX_VMO_DISCARDABLE);
@@ -51,7 +50,6 @@ fn create_discardable() {
 ///
 /// Lock a discardable VMO (prevent reclamation), then unlock it.
 /// While locked, the VMO's pages should not be reclaimable.
-#[test]
 fn lock_unlock() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, ZX_VMO_DISCARDABLE);
@@ -83,7 +81,6 @@ fn lock_unlock() {
 ///
 /// Read and write to a locked discardable VMO. Should behave like
 /// a normal VMO while locked.
-#[async_std::test]
 async fn read_write_while_locked() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, ZX_VMO_DISCARDABLE);
@@ -126,7 +123,6 @@ async fn read_write_while_locked() {
 /// NOTE: zCore does not implement kernel memory reclamation, so we
 /// cannot trigger the discard. This test verifies that an unlocked
 /// discardable VMO still reads as zeroed (initial state).
-#[async_std::test]
 async fn read_after_discard() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, ZX_VMO_DISCARDABLE);
@@ -165,7 +161,6 @@ async fn read_after_discard() {
 /// succeed but return a flag indicating the pages were reclaimed.
 /// NOTE: zCore doesn't implement reclamation, so we just verify
 /// re-locking after unlock works.
-#[test]
 fn lock_discarded() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, ZX_VMO_DISCARDABLE);
@@ -207,7 +202,6 @@ fn lock_discarded() {
 ///
 /// Unlock a discardable VMO that is not locked. Should return
 /// BAD_STATE.
-#[test]
 fn double_unlock() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, ZX_VMO_DISCARDABLE);
@@ -224,7 +218,6 @@ fn double_unlock() {
 /// rejects it). Test that resize is NOT blocked by discardability alone.
 /// NOTE: In real Fuchsia, combining RESIZABLE + DISCARDABLE is rejected
 /// at creation. zCore allows it, so this test documents zCore's behavior.
-#[test]
 fn discardable_not_resizable() {
     let ctx = TestContext::new();
     // Create non-resizable discardable VMO (no RESIZABLE flag).
@@ -238,7 +231,6 @@ fn discardable_not_resizable() {
 
 ///
 /// Locking a non-discardable VMO should fail with NOT_SUPPORTED.
-#[test]
 fn lock_non_discardable_fails() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, 0); // regular VMO
@@ -259,7 +251,6 @@ fn lock_non_discardable_fails() {
 ///
 /// Query VMO info on a discardable VMO. Should report the
 /// DISCARDABLE flag in flags.
-#[test]
 fn discardable_info() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, ZX_VMO_DISCARDABLE);
@@ -279,7 +270,6 @@ fn discardable_info() {
 /// Lock a discardable VMO multiple times. Each lock increments
 /// a reference count; the VMO becomes unlockable only after all
 /// locks are released.
-#[test]
 fn nested_lock() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, ZX_VMO_DISCARDABLE);
@@ -317,4 +307,18 @@ fn nested_lock() {
     // Third unlock should fail — lock count is now 0.
     let result = sc.sys_vmo_op_range(h, VMO_OP_UNLOCK, 0, PAGE_SIZE, UserOutPtr::from(0usize), 0);
     assert_eq!(result, Err(ZxError::BAD_STATE));
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    create_discardable();
+    lock_unlock();
+    read_write_while_locked().await;
+    read_after_discard().await;
+    lock_discarded();
+    double_unlock();
+    discardable_not_resizable();
+    lock_non_discardable_fails();
+    discardable_info();
+    nested_lock();
 }

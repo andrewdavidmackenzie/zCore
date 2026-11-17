@@ -22,6 +22,9 @@ pub(crate) struct BuildArgs {
     /// Build as debug mode.
     #[clap(long)]
     pub debug: bool,
+    /// Extra cargo features to enable (comma-separated).
+    #[clap(long)]
+    pub extra_features: Option<String>,
 }
 
 #[derive(Args)]
@@ -111,6 +114,16 @@ impl BuildConfig {
         };
 
         let mut features: HashSet<String> = target.cargo_features().into_iter().collect();
+
+        // Add extra features from CLI.
+        if let Some(extra) = &args.extra_features {
+            for f in extra.split(',').map(str::trim) {
+                if !f.is_empty() {
+                    features.insert(f.to_string());
+                }
+            }
+        }
+
         let mut env = HashMap::new();
 
         // Zircon is always the base. "linux" adds Linux syscall emulation.
@@ -292,6 +305,7 @@ impl QemuArgs {
 
         // Build the kernel -- flavour comes from TOML default or --flavour override.
         let mut build_config = BuildConfig::from_args(BuildArgs {
+            extra_features: None,
             machine: target_name.clone(),
             flavour: self.flavour.clone(),
             debug: self.debug,

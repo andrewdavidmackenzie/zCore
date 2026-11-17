@@ -121,7 +121,6 @@ fn verify_basic_initializers(info: &BasicInitializerInfo, error_message: &str) {
 
 /// C++: TEST(ExecutableTlsTest, BasicInitalizersInThread)
 /// Verify that a child thread sees the correct initial TLS values.
-#[test]
 fn basic_initalizers_in_thread() {
     let handle = std::thread::Builder::new()
         .name("GetInitializers".into())
@@ -136,7 +135,6 @@ fn basic_initalizers_in_thread() {
 
 /// C++: TEST(ExecutableTlsTest, BasicInitalizersInMain)
 /// Verify that the main thread sees the correct initial TLS values.
-#[test]
 fn basic_initalizers_in_main() {
     let info = get_basic_initializers();
     verify_basic_initializers(&info, "MainThread: Unexpected initialized value");
@@ -144,7 +142,6 @@ fn basic_initalizers_in_main() {
 
 /// C++: TEST(ExecutableTlsTest, ArrayInitializerInThread)
 /// Verify that a child thread's TLS array is initialized to 0xFF.
-#[test]
 fn array_initializer_in_thread() {
     let handle = std::thread::Builder::new()
         .name("ArrayInitializers".into())
@@ -168,7 +165,6 @@ fn array_initializer_in_thread() {
 
 /// C++: TEST(ExecutableTlsTest, ArrayInitializerInMain)
 /// Verify that the main thread's TLS array is initialized to 0xFF.
-#[test]
 fn array_initializer_in_main() {
     TLS_ARRAY.with(|arr| {
         let arr = arr.borrow();
@@ -180,7 +176,6 @@ fn array_initializer_in_main() {
 
 /// C++: TEST(ExecutableTlsTest, BigArrayInitializerInThread)
 /// Verify that a child thread's big TLS array (1 MiB) is zero-initialized.
-#[test]
 fn big_array_initializer_in_thread() {
     let handle = std::thread::Builder::new()
         .name("GetBigArray".into())
@@ -202,7 +197,6 @@ fn big_array_initializer_in_thread() {
 
 /// C++: TEST(ExecutableTlsTest, BigArrayInitializerInMain)
 /// Verify that the main thread's big TLS array (1 MiB) is zero-initialized.
-#[test]
 fn big_array_initializer_in_main() {
     TLS_BIG_ARRAY.with(|arr| {
         let arr = arr.borrow();
@@ -216,7 +210,6 @@ fn big_array_initializer_in_main() {
 
 /// C++: TEST(ExecutableTlsTest, StructureInitializerInThread)
 /// Verify that a child thread's TLS struct (with constructor) has the correct value.
-#[test]
 fn structure_initializer_in_thread() {
     let handle = std::thread::Builder::new()
         .name("StructureInitializer".into())
@@ -233,7 +226,6 @@ fn structure_initializer_in_thread() {
 
 /// C++: TEST(ExecutableTlsTest, StructureInitalizierInMain)
 /// Verify that the main thread's TLS struct has the correct initial value.
-#[test]
 fn structure_initalizier_in_main() {
     let val = TLS_CTOR_X.with(|v| v.get());
     assert_eq!(val, u64::MAX, "MainThread: Unexpected initialized value");
@@ -243,7 +235,6 @@ fn structure_initalizier_in_main() {
 /// Verify TLS variable alignment and value in a child thread.
 /// Note: Rust does not support per-variable TLS alignment attributes,
 /// so we only verify the value (123) matches the C++ initializer.
-#[test]
 fn alignment_initializer_in_thread() {
     let handle = std::thread::Builder::new()
         .name("GetInitializers".into())
@@ -256,7 +247,6 @@ fn alignment_initializer_in_thread() {
 
 /// C++: TEST(ExecutableTlsTest, AlignmentInitializierInMain)
 /// Verify TLS variable alignment and value in the main thread.
-#[test]
 fn alignment_initializier_in_main() {
     let val = TLS_ALIGNED_VAR.with(|v| v.get());
     assert_eq!(val, 123, "MainThread: Unexpected initialized value");
@@ -266,7 +256,6 @@ fn alignment_initializier_in_main() {
 /// Spawn 64 threads, each writing and verifying their own TLS array
 /// 100 times with yield() between write and verify, ensuring no
 /// cross-thread TLS corruption.
-#[test]
 fn array_initializer_spam_thread() {
     const THREAD_COUNT: u8 = 64;
 
@@ -314,7 +303,6 @@ fn array_initializer_spam_thread() {
 /// C++: TEST(ExecutableTlsTest, ArrayInitializierSpamMain)
 /// Run the spam test body on the main thread (100 iterations of
 /// write-yield-verify on a TLS array).
-#[test]
 fn array_initializier_spam_main() {
     TLS_SPAM_ARRAY.with(|arr| {
         let mut arr = arr.borrow_mut();
@@ -341,4 +329,20 @@ fn array_initializier_spam_main() {
             }
         }
     });
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    basic_initalizers_in_thread();
+    basic_initalizers_in_main();
+    array_initializer_in_thread();
+    array_initializer_in_main();
+    big_array_initializer_in_thread();
+    big_array_initializer_in_main();
+    structure_initializer_in_thread();
+    structure_initalizier_in_main();
+    alignment_initializer_in_thread();
+    alignment_initializier_in_main();
+    array_initializer_spam_thread();
+    array_initializier_spam_main();
 }

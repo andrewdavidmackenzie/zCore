@@ -15,6 +15,9 @@
 //!
 //! C++ source: zircon/system/utest/core/sync-completion/completion.cc
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use core::sync::atomic::{AtomicI32, Ordering};
 use zircon_object::signal::Futex;
@@ -23,7 +26,6 @@ use zircon_object::signal::Futex;
 ///
 /// Verifies that a zero-initialized completion matches a default-constructed one.
 /// C++: memcmp(&static_completion, &completion, sizeof) == 0
-#[test]
 fn initializer() {
     let _ctx = TestContext::new();
     // C++: static sync_completion_t static_completion (bss-zeroed)
@@ -44,20 +46,22 @@ fn initializer() {
 /// 1 thread blocks on sync_completion_wait_deadline (futex_wait).
 /// Main thread signals (store SIGNALED + futex_wake).
 /// Thread wakes with ZX_OK.
-#[async_std::test]
 async fn single_wait() {
     use crate::helpers::{CompletionTestThread, SyncCompletion};
 
     let _ctx = TestContext::new();
-    let completion = std::sync::Arc::new(SyncCompletion::new());
+    let completion = alloc::sync::Arc::new(SyncCompletion::new());
     let proc = _ctx.proc.clone();
 
     // C++: thread.StartAndBlock("TestWait", &completion)
     let t = CompletionTestThread::start(&proc, &completion);
 
     // C++: WaitForAllBlockedOnFutex(threads)
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: sync_completion_signal(&completion)
     completion.signal();
@@ -71,12 +75,11 @@ async fn single_wait() {
 /// C++: TEST(SyncCompletionTest, MultiWait)
 ///
 /// 16 threads block on the same completion, then all are signaled.
-#[async_std::test]
 async fn multi_wait() {
     use crate::helpers::{CompletionTestThread, SyncCompletion};
 
     let _ctx = TestContext::new();
-    let completion = std::sync::Arc::new(SyncCompletion::new());
+    let completion = alloc::sync::Arc::new(SyncCompletion::new());
     let proc = _ctx.proc.clone();
 
     // C++: kMultiWaitThreadCount = 16 — use 4 to keep test fast
@@ -84,8 +87,11 @@ async fn multi_wait() {
         .map(|_| CompletionTestThread::start(&proc, &completion))
         .collect();
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     completion.signal();
 
@@ -103,7 +109,7 @@ async fn multi_wait() {
 /// 1 thread blocks on a wait with a deadline. No signal is sent.
 /// Thread should wake with TIMED_OUT.
 ///
-/// In libos mode, we exercise the timeout path using an Event and
+/// In test mode, we exercise the timeout path using an Event and
 /// sys_object_wait_one with an immediate deadline. The Event is
 /// never signaled, so the wait returns TIMED_OUT — the same
 /// kernel code path as sync_completion_wait_deadline with a past
@@ -111,8 +117,7 @@ async fn multi_wait() {
 ///
 /// C++ source: zircon/system/utest/core/sync-completion/completion.cc
 ///   sync_completion_wait_deadline(&completion, deadline) → ZX_ERR_TIMED_OUT
-#[test]
-fn timeout_single_wait() {
+async fn timeout_single_wait() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -126,12 +131,14 @@ fn timeout_single_wait() {
     // Wait with an immediate (past) deadline for USER_SIGNAL_0.
     // Since the Event is never signaled, this should return TIMED_OUT.
     let mut observed: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
-        event_handle,
-        zircon_object::object::Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize), // immediate deadline
-        hal_impl::user::UserOutPtr::from(&mut observed as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            event_handle,
+            zircon_object::object::Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize), // immediate deadline
+            hal_impl::user::UserOutPtr::from(&mut observed as *mut _ as usize),
+        )
+        .await;
     assert_eq!(
         result.unwrap_err(),
         zircon_object::ZxError::TIMED_OUT,
@@ -149,8 +156,7 @@ fn timeout_single_wait() {
 /// C++ source: zircon/system/utest/core/sync-completion/completion.cc
 ///   sync_completion_wait_deadline(&completion, deadline) → ZX_ERR_TIMED_OUT
 ///   (for each of 16 threads)
-#[test]
-fn timeout_multi_wait() {
+async fn timeout_multi_wait() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -184,11 +190,13 @@ fn timeout_multi_wait() {
         })
         .collect();
 
-    let result = async_std::task::block_on(sc.sys_object_wait_many(
-        hal_impl::user::UserInOutPtr::from(items.as_mut_ptr() as usize),
-        items.len() as u32,
-        zircon_syscall::Deadline::from(0usize), // immediate deadline
-    ));
+    let result = sc
+        .sys_object_wait_many(
+            hal_impl::user::UserInOutPtr::from(items.as_mut_ptr() as usize),
+            items.len() as u32,
+            zircon_syscall::Deadline::from(0usize), // immediate deadline
+        )
+        .await;
     assert_eq!(
         result.unwrap_err(),
         zircon_object::ZxError::TIMED_OUT,
@@ -204,7 +212,6 @@ fn timeout_multi_wait() {
 /// At kernel level: sync_completion_wait checks the atomic flag
 /// before calling futex_wait. If already signaled, returns ZX_OK
 /// without blocking.
-#[test]
 fn presignal_single_wait() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
@@ -226,7 +233,6 @@ fn presignal_single_wait() {
 /// C++: TEST(SyncCompletionTest, PresignalMultiWait)
 ///
 /// Same as PresignalSingleWait but verifiable by multiple "threads".
-#[test]
 fn presignal_multi_wait() {
     let _ctx = TestContext::new();
     let completion = AtomicI32::new(0);
@@ -250,7 +256,6 @@ fn presignal_multi_wait() {
 /// second signal (first signal was cleared by reset).
 ///
 /// At kernel level: signal stores 1 + futex_wake, reset stores 0.
-#[test]
 fn reset_cycle_single_wait() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
@@ -283,7 +288,6 @@ fn reset_cycle_single_wait() {
 /// C++: TEST(SyncCompletionTest, ResetCycleMultiWait)
 ///
 /// Same as ResetCycleSingleWait but with multiple "waiters".
-#[test]
 fn reset_cycle_multi_wait() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
@@ -309,13 +313,12 @@ fn reset_cycle_multi_wait() {
 ///
 /// Threads block on completion, signal_requeue moves them to a
 /// different futex, then wake the new futex.
-#[async_std::test]
 async fn signal_requeue() {
     use crate::helpers::{CompletionTestThread, SyncCompletion};
     use core::sync::atomic::AtomicI32;
 
     let _ctx = TestContext::new();
-    let completion = std::sync::Arc::new(SyncCompletion::new());
+    let completion = alloc::sync::Arc::new(SyncCompletion::new());
     let proc = _ctx.proc.clone();
 
     // C++: 16 threads — use 4 to keep test fast
@@ -323,17 +326,23 @@ async fn signal_requeue() {
         .map(|_| CompletionTestThread::start(&proc, &completion))
         .collect();
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: zx_futex_t futex = 0; sync_completion_signal_requeue(&completion, &futex, ...)
-    let requeue_value = std::sync::Arc::new(AtomicI32::new(0));
+    let requeue_value = alloc::sync::Arc::new(AtomicI32::new(0));
     let requeue_futex =
-        Futex::new(std::sync::Arc::as_ptr(&requeue_value) as *const AtomicI32 as usize);
+        Futex::new(alloc::sync::Arc::as_ptr(&requeue_value) as *const AtomicI32 as usize);
     completion.signal_requeue(&requeue_futex);
 
     // C++: zx_nanosleep(ZX_MSEC(100)) — verify threads still blocked
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
     for t in &threads {
         assert!(
             !t.has_wait_returned(),
@@ -358,18 +367,20 @@ async fn signal_requeue() {
 ///
 /// 1 thread blocks on completion. Raw futex_wake (spurious) should
 /// NOT cause the thread to exit. Then proper signal → thread exits.
-#[async_std::test]
 async fn spurious_wakeup_handled() {
     use crate::helpers::{CompletionTestThread, SyncCompletion};
 
     let _ctx = TestContext::new();
-    let completion = std::sync::Arc::new(SyncCompletion::new());
+    let completion = alloc::sync::Arc::new(SyncCompletion::new());
     let proc = _ctx.proc.clone();
 
     let t = CompletionTestThread::start(&proc, &completion);
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: zx_futex_wake(&completion.futex, UINT32_MAX) — spurious wake
     // The thread should re-check the signaled flag, see it's still
@@ -377,7 +388,10 @@ async fn spurious_wakeup_handled() {
     completion.futex.wake(usize::MAX);
 
     // C++: zx_nanosleep(ZX_MSEC(100)); ASSERT_FALSE(thread.exited())
-    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(100),
+    )
+    .await;
     assert!(
         !t.has_wait_returned(),
         "thread should NOT have exited after spurious wake"
@@ -403,7 +417,6 @@ async fn spurious_wakeup_handled() {
 /// 5. ASSERT_FALSE(sync_completion_signaled(&sync))
 ///
 /// Pure atomic flag check — no blocking, no threads needed.
-#[test]
 fn completion_signaled() {
     let _ctx = TestContext::new();
     let completion = Box::new(AtomicI32::new(0));
@@ -453,4 +466,20 @@ fn completion_signaled() {
         0,
         "const ref unsignaled after reset"
     );
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    initializer();
+    single_wait().await;
+    multi_wait().await;
+    timeout_single_wait().await;
+    timeout_multi_wait().await;
+    presignal_single_wait();
+    presignal_multi_wait();
+    reset_cycle_single_wait();
+    reset_cycle_multi_wait();
+    signal_requeue().await;
+    spurious_wakeup_handled().await;
+    completion_signaled();
 }

@@ -3,6 +3,9 @@
 //! All tests use the syscall layer (Syscall struct) rather than
 //! direct kernel object methods, matching the C++ core-tests pattern.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::object::{HandleValue, KernelObject, Rights, Signal};
@@ -81,7 +84,6 @@ async fn wait_port(ctx: &TestContext, port_h: HandleValue) -> PortPacket {
 
 /// C++: TEST(PortTest, QueueWaitVerifyUserPacket)
 /// Queue a user packet, dequeue it, and verify all fields round-trip.
-#[async_std::test]
 async fn port_queue_wait_verify_user_packet() {
     let ctx = TestContext::new();
     let port_h = create_port(&ctx);
@@ -109,7 +111,6 @@ async fn port_queue_wait_verify_user_packet() {
 
 /// C++: TEST(PortTest, QueueAndClose)
 /// Packets are lost when the port handle is closed.
-#[test]
 fn port_queue_and_close() {
     let ctx = TestContext::new();
     let port_h = create_port(&ctx);
@@ -133,7 +134,6 @@ fn port_queue_and_close() {
 /// C++: TEST(PortTest, AsyncWaitChannel)
 /// wait_async on a channel: write to the channel, then dequeue the
 /// signal packet from the port.
-#[async_std::test]
 async fn port_async_wait_channel() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -179,7 +179,6 @@ async fn port_async_wait_channel() {
 /// Register 7 wait_async calls on the same event with keys 0..6,
 /// signal the event, dequeue 5 packets (kNumAwaits - 2), verify
 /// key_sum == 20 and each packet has count == 1.
-#[async_std::test]
 async fn port_event_async_signal_wait_single() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -221,7 +220,6 @@ async fn port_event_async_signal_wait_single() {
 
 /// C++: TEST(PortTest, AsyncWaitEventRepeat)
 /// Re-registering wait_async after receiving a signal works.
-#[async_std::test]
 async fn port_async_wait_event_repeat() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -248,7 +246,6 @@ async fn port_async_wait_event_repeat() {
 
 /// C++: TEST(PortTest, AsyncWaitEventManyAllProcessed)
 /// Multiple wait_async registrations on different events all fire.
-#[async_std::test]
 async fn port_async_wait_event_many_all_processed() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -283,7 +280,6 @@ async fn port_async_wait_event_many_all_processed() {
 /// What matters here is not the return values, but that the system doesn't
 /// crash as a result of the close ordering. Tests all 6 permutations of
 /// closing {ChannelA, ChannelB, Port}.
-#[test]
 fn port_async_wait_close_order() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -353,7 +349,6 @@ fn port_async_wait_close_order() {
 /// C++: TEST(PortTest, ChannelAsyncWaitOnExistingStateIsNotified)
 /// If the signal is already set when wait_async is called, a packet
 /// is delivered immediately.
-#[async_std::test]
 async fn port_channel_async_wait_on_existing_state_is_notified() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -402,7 +397,6 @@ async fn port_channel_async_wait_on_existing_state_is_notified() {
 
 /// C++: TEST(PortTest, EdgeTriggerDetected)
 /// Edge-triggered wait_async fires on signal transition.
-#[async_std::test]
 async fn port_edge_trigger_detected() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -431,7 +425,6 @@ async fn port_edge_trigger_detected() {
 
 /// C++: TEST(PortTest, EdgeTriggerCancel)
 /// Cancelling an edge-triggered wait removes the subscription.
-#[test]
 fn port_edge_trigger_cancel() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -467,7 +460,6 @@ fn port_edge_trigger_cancel() {
 /// Register 4 observers with keys [128, 13, 7, 13] (note duplicate key 13).
 /// Cancel key 13 before signaling. Signal twice. Verify only keys 128 and 7
 /// fire: wait_count == 2, key_sum == 128 + 7 = 135.
-#[async_std::test]
 async fn port_cancel_event_key() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -520,7 +512,6 @@ async fn port_cancel_event_key() {
 
 /// C++: TEST(PortTest, CancelEventKeyAfter)
 /// Cancelling after the packet is already delivered returns NOT_FOUND.
-#[async_std::test]
 async fn port_cancel_event_key_after() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -546,7 +537,6 @@ async fn port_cancel_event_key_after() {
 /// C++: TEST(PortTest, AsyncWaitChannelTimedOut)
 /// Register wait_async on a channel that never becomes readable,
 /// then verify cancel works (since we can't time out synchronously).
-#[test]
 fn async_wait_channel_timed_out() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -578,7 +568,6 @@ fn async_wait_channel_timed_out() {
 /// cancel_by_key removes all port subscriptions with a given key.
 /// Multiple objects can be registered with the same key; cancel_by_key
 /// removes them all.
-#[test]
 fn cancel_key() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -613,7 +602,6 @@ fn cancel_key() {
 /// cancel_by_key on a key that has no subscriptions returns NOT_FOUND.
 /// At the syscall level, we also verify that a port handle without
 /// WRITE right returns ACCESS_DENIED.
-#[test]
 fn cancel_key_access_denied() {
     use zircon_object::object::{Handle, Rights};
     use zircon_object::signal::Port;
@@ -655,7 +643,6 @@ fn cancel_key_access_denied() {
 /// C++: TEST(PortTest, CancelKeyInvalidOptions)
 /// Creating a port with invalid options fails. cancel_key with
 /// non-zero options returns INVALID_ARGS.
-#[test]
 fn cancel_key_invalid_options() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -696,7 +683,6 @@ fn cancel_key_invalid_options() {
 /// matching the key (this matches Fuchsia's port_cancel_key behavior).
 /// Queue user packets with different keys, cancel one key, verify
 /// only the matching packets are removed.
-#[async_std::test]
 async fn cancel_key_queued_user_packet() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -733,7 +719,6 @@ async fn cancel_key_queued_user_packet() {
 /// C++: TEST(PortTest, CloseQueueRace)
 /// Closing a port with queued packets should not panic or leak.
 /// This is the synchronous analog of the C++ race test.
-#[test]
 fn close_queue_race() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -774,7 +759,6 @@ fn close_queue_race() {
 /// no packet is delivered (unlike level-triggered). Verify by registering
 /// edge-trigger on an already-signaled event and checking cancel succeeds
 /// (meaning the subscription is still pending, not yet fired).
-#[test]
 fn edge_trigger_timeout() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -812,7 +796,6 @@ fn edge_trigger_timeout() {
 /// C++: TEST(PortTest, ThreadEvents)
 /// Verify that port can receive signal packets from multiple events.
 /// Each event's signal maps to a different key.
-#[async_std::test]
 async fn thread_events() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -858,7 +841,6 @@ async fn thread_events() {
 /// Signal packets should carry a valid timestamp. We verify the
 /// timestamp field is present in the signal payload.
 /// C++ uses options=0 which means timestamp should be 0.
-#[async_std::test]
 async fn timestamp() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -891,7 +873,6 @@ async fn timestamp() {
 /// C++: TEST(PortTest, WaitAsyncBootTimestamp)
 /// With ZX_WAIT_ASYNC_BOOT_TIMESTAMP, the signal packet carries a
 /// non-zero boot timeline timestamp.
-#[async_std::test]
 async fn wait_async_boot_timestamp() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -952,7 +933,6 @@ async fn wait_async_boot_timestamp() {
 /// verifies the exception type and synth_code, then resumes the thread.
 /// When a port exceeds its packet limit (4096), the kernel raises
 /// ZX_EXCP_POLICY_ERROR with synth_code PORT_TOO_MANY_PACKETS (17).
-#[async_std::test]
 async fn queue_packet_limit_exceeded_generates_policy_exception() {
     use crate::helpers::{self, ExceptionTestThread};
     use zircon_object::task::{
@@ -1011,14 +991,13 @@ async fn queue_packet_limit_exceeded_generates_policy_exception() {
 /// Calls wait_async in a loop until the observer limit is reached.
 /// The kernel should return ZX_ERR_NO_MEMORY (not panic) when the
 /// limit is exceeded.
-#[test]
 fn too_many_observers() {
     use zircon_object::signal::Port;
 
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
     let event = zircon_object::signal::Event::new();
-    let event_obj: std::sync::Arc<dyn zircon_object::object::KernelObject> = event.clone();
+    let event_obj: alloc::sync::Arc<dyn zircon_object::object::KernelObject> = event.clone();
 
     // Register wait_async in a loop until we hit the observer limit.
     // The kernel should return NO_MEMORY, not panic.
@@ -1040,25 +1019,25 @@ fn too_many_observers() {
 }
 /// C++: TEST(PortTest, PortTimeout)
 /// Wait on a port with a past deadline and no queued packets — TIMED_OUT.
-#[test]
-fn port_timeout() {
+async fn port_timeout() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let port_h = create_port(&ctx);
 
     let mut packet: zircon_object::signal::PortPacket = unsafe { core::mem::zeroed() };
-    let result = async_std::task::block_on(sc.sys_port_wait(
-        port_h,
-        zircon_syscall::Deadline::from(0usize), // past deadline
-        hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_port_wait(
+            port_h,
+            zircon_syscall::Deadline::from(0usize), // past deadline
+            hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result, Err(ZxError::TIMED_OUT));
 }
 
 /// C++: TEST(PortTest, WaitAccessDenied)
 /// Wait on a port handle without READ right — ACCESS_DENIED.
-#[test]
-fn wait_access_denied() {
+async fn wait_access_denied() {
     use zircon_object::object::{Handle, Rights};
     use zircon_object::signal::Port;
 
@@ -1072,18 +1051,19 @@ fn wait_access_denied() {
         .add_handle(Handle::new(port, Rights::WRITE | Rights::TRANSFER));
 
     let mut packet: zircon_object::signal::PortPacket = unsafe { core::mem::zeroed() };
-    let result = async_std::task::block_on(sc.sys_port_wait(
-        write_only_h,
-        zircon_syscall::Deadline::from(0usize),
-        hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_port_wait(
+            write_only_h,
+            zircon_syscall::Deadline::from(0usize),
+            hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result, Err(ZxError::ACCESS_DENIED));
 }
 
 /// C++: TEST(PortTest, WaitNullPacket)
 /// Wait with a null/zero packet pointer — should return error (INVALID_ARGS).
-#[test]
-fn wait_null_packet() {
+async fn wait_null_packet() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let port_h = create_port(&ctx);
@@ -1093,28 +1073,63 @@ fn wait_null_packet() {
     queue_packet(&ctx, port_h, &pkt);
 
     // Null output pointer
-    let result = async_std::task::block_on(sc.sys_port_wait(
-        port_h,
-        zircon_syscall::Deadline::from(0usize),
-        hal_impl::user::UserOutPtr::from(0usize),
-    ));
+    let result = sc
+        .sys_port_wait(
+            port_h,
+            zircon_syscall::Deadline::from(0usize),
+            hal_impl::user::UserOutPtr::from(0usize),
+        )
+        .await;
     // Should fail because we can't write to a null pointer
     assert!(result.is_err());
 }
 
 /// C++: TEST(PortTest, WaitWrongType)
 /// Wait on a handle that is not a port (e.g. an event) — WRONG_TYPE.
-#[test]
-fn wait_wrong_type() {
+async fn wait_wrong_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
     let event_h = create_event(&ctx);
 
     let mut packet: zircon_object::signal::PortPacket = unsafe { core::mem::zeroed() };
-    let result = async_std::task::block_on(sc.sys_port_wait(
-        event_h,
-        zircon_syscall::Deadline::from(0usize),
-        hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_port_wait(
+            event_h,
+            zircon_syscall::Deadline::from(0usize),
+            hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result, Err(ZxError::WRONG_TYPE));
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    port_queue_wait_verify_user_packet().await;
+    port_queue_and_close();
+    port_async_wait_channel().await;
+    port_event_async_signal_wait_single().await;
+    port_async_wait_event_repeat().await;
+    port_async_wait_event_many_all_processed().await;
+    port_async_wait_close_order();
+    port_channel_async_wait_on_existing_state_is_notified().await;
+    port_edge_trigger_detected().await;
+    port_edge_trigger_cancel();
+    port_cancel_event_key().await;
+    port_cancel_event_key_after().await;
+    async_wait_channel_timed_out();
+    cancel_key();
+    cancel_key_access_denied();
+    cancel_key_invalid_options();
+    cancel_key_queued_user_packet().await;
+    close_queue_race();
+    edge_trigger_timeout();
+    thread_events().await;
+    timestamp().await;
+    wait_async_boot_timestamp().await;
+    queue_packet_limit_exceeded_generates_policy_exception().await;
+    too_many_observers();
+    port_timeout().await;
+    wait_access_denied().await;
+    wait_null_packet().await;
+    wait_wrong_type().await;
 }

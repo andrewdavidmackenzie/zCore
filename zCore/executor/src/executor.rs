@@ -31,7 +31,7 @@ pub struct Executor {
 }
 
 /// Executor coroutine stack size (128 KiB).
-const STACK_SIZE: usize = 128 * 1024;
+const STACK_SIZE: usize = 512 * 1024;
 const STACK_LAYOUT: Layout = Layout::new::<[u8; STACK_SIZE]>();
 
 fn executor_alloc_id() -> usize {
@@ -176,7 +176,7 @@ impl Executor {
                 let task_num = runtime.task_num();
                 let weak_executor = runtime.weak_executor_num();
                 drop(runtime);
-                if cfg!(feature = "baremetal-test") && task_num == 0 {
+                if task_num == 0 {
                     crate::runtime::sched_yield();
                 } else if weak_executor != 0 {
                     crate::runtime::sched_yield();

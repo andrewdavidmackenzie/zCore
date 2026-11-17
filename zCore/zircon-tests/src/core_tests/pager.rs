@@ -49,7 +49,7 @@ pub(crate) fn create_pager_and_port() -> (Arc<Pager>, Arc<Port>) {
 
 // ── Bulk-ported pager tests (batch 3) ───────────────────────────────
 //
-// Tests for eviction (decommit), pinning (not supported in libos),
+// Tests for eviction (decommit), pinning (not supported in test mode),
 // dirty traps, writeback lifecycle, page requests, and VMO info.
 
 // ── Bulk-ported pager tests (from pager.cc) ─────────────────────────
@@ -63,7 +63,6 @@ pub(crate) fn create_pager_and_port() -> (Arc<Pager>, Arc<Port>) {
 /// The C++ test supplies pages in chunks of unusual lengths
 /// [2, 3, 5, 7, 37, 5, 13, 23] with src_offset=0, and verifies
 /// each chunk is readable. We replicate the same pattern.
-#[test]
 fn pager_bulk_odd_length_supply_test_vmo() {
     let _ctx = TestContext::new();
     let supply_lengths: &[u64] = &[2, 3, 5, 7, 37, 5, 13, 23];
@@ -89,8 +88,7 @@ fn pager_bulk_odd_length_supply_test_vmo() {
 
 /// C++: TEST(Pager, BulkOddLengthSupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_bulk_odd_length_supply_test_vmar() {
     let _ctx = TestContext::new();
     let supply_lengths: &[u64] = &[2, 3, 5, 7, 37, 5, 13, 23];
@@ -118,7 +116,6 @@ fn pager_bulk_odd_length_supply_test_vmar() {
 /// The C++ test supplies pages in chunks of unusual lengths
 /// [2, 3, 5, 7, 37, 5, 13, 23] with src_offset=page_offset (non-zero),
 /// and verifies each chunk is readable.
-#[test]
 fn pager_bulk_odd_offset_supply_test_vmo() {
     let _ctx = TestContext::new();
     let supply_lengths: &[u64] = &[2, 3, 5, 7, 37, 5, 13, 23];
@@ -146,8 +143,7 @@ fn pager_bulk_odd_offset_supply_test_vmo() {
 
 /// C++: TEST(Pager, BulkOddOffsetSupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_bulk_odd_offset_supply_test_vmar() {
     let _ctx = TestContext::new();
     let supply_lengths: &[u64] = &[2, 3, 5, 7, 37, 5, 13, 23];
@@ -174,7 +170,6 @@ fn pager_bulk_odd_offset_supply_test_vmar() {
 ///
 /// The C++ test creates an 8-page VMO, has 8 threads each read 1 page,
 /// then supplies all 8 pages in a single call. We pre-supply and verify.
-#[test]
 fn pager_bulk_single_supply_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -196,8 +191,7 @@ fn pager_bulk_single_supply_test_vmo() {
 
 /// C++: TEST(Pager, BulkSingleSupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_bulk_single_supply_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -222,7 +216,6 @@ fn pager_bulk_single_supply_test_vmar() {
 /// We test the same lifecycle synchronously: create VMO, supply page 0,
 /// read page 0, supply page 1, read page 1. This exercises the
 /// supply→read path for multiple pages on the same VMO.
-#[test]
 fn pager_cancel_key_does_not_wedge_the_pager_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -246,7 +239,6 @@ fn pager_cancel_key_does_not_wedge_the_pager_vmo() {
 /// C++: TEST(Pager, CancelKeyDoesNotWedgeThePagerVmar)
 ///
 /// Same as the Vmo variant — supply and read two pages sequentially.
-#[test]
 fn pager_cancel_key_does_not_wedge_the_pager_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -266,7 +258,6 @@ fn pager_cancel_key_does_not_wedge_the_pager_vmar() {
 /// final clone (which triggers page requests on the root), supplies
 /// all pages, and verifies the clone has all pages committed.
 /// The intermediate should have no pages committed (they pass through).
-#[test]
 fn pager_clone_chain_commit_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -313,7 +304,6 @@ fn pager_clone_chain_commit_test() {
 /// creates a clone, commits the clone (generating 3 batch requests:
 /// [0,2), [3,5), [6,8)), supplies all pages, and verifies all clone
 /// pages are committed.
-#[test]
 fn pager_clone_commit_multiple_batches() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -348,7 +338,6 @@ fn pager_clone_commit_multiple_batches() {
 /// at deterministic positions, creates a clone, supplies all remaining
 /// pages, and verifies all clone pages are committed.
 /// We use a fixed seed pattern instead of rand() for reproducibility.
-#[test]
 fn pager_clone_commit_random_batches() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -394,7 +383,6 @@ fn pager_clone_commit_random_batches() {
 /// The C++ test creates a 4-page VMO with no pre-populated pages,
 /// creates a clone, commits the clone (single batch request for all 4
 /// pages), supplies all pages, and verifies all clone pages are committed.
-#[test]
 fn pager_clone_commit_single_batch() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -424,7 +412,6 @@ fn pager_clone_commit_single_batch() {
 /// The C++ test creates a 32-page pager VMO, creates a clone, commits
 /// the clone (which requests all 32 pages), supplies all pages, and
 /// verifies the clone has all pages committed (populated_bytes check).
-#[test]
 fn pager_clone_commit_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -455,7 +442,6 @@ fn pager_clone_commit_test() {
 /// a clone, commits the clone (generating two batch requests: [0,2)
 /// and [3,5)), supplies remaining pages, and verifies all clone pages
 /// are committed.
-#[test]
 fn pager_clone_commit_two_batches() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -489,7 +475,6 @@ fn pager_clone_commit_two_batches() {
 /// (by writing 0xdeadbeef), detaches the parent, and verifies:
 /// 1. Forked page 0 in the clone is still readable with the written value.
 /// 2. Non-forked pages in the clone may fail to read after detach.
-#[test]
 fn pager_clone_detach_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -531,7 +516,6 @@ fn pager_clone_detach_test() {
 /// additional pages in the child and verifies that grandchildren see
 /// at least the state when they were created, and might (or might not)
 /// see writes that occur after creation.
-#[test]
 fn pager_clone_might_see_intermediate_forks() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -608,7 +592,6 @@ fn pager_clone_might_see_intermediate_forks() {
 /// the parent page, and verifies the clone sees the content.
 /// We supply the parent first, then create the clone and verify it
 /// reads the parent's content through COW.
-#[test]
 fn pager_clone_read_from_clone_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -629,8 +612,7 @@ fn pager_clone_read_from_clone_test_vmo() {
 
 /// C++: TEST(Pager, CloneReadFromCloneTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_clone_read_from_clone_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -652,7 +634,6 @@ fn pager_clone_read_from_clone_test_vmar() {
 /// the content without generating a new page request.
 /// We supply the parent, create a clone, read from parent first, then
 /// verify the clone sees the same content.
-#[test]
 fn pager_clone_read_from_parent_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -679,8 +660,7 @@ fn pager_clone_read_from_parent_test_vmo() {
 
 /// C++: TEST(Pager, CloneReadFromParentTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_clone_read_from_parent_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -704,11 +684,10 @@ fn pager_clone_read_from_parent_test_vmar() {
 /// The C++ test creates a 2-page pager VMO, supplies both pages, creates
 /// a resizable clone, reads from the clone, then resizes the clone to 0.
 /// After resize, reads should fail (OUT_OF_RANGE).
-/// In libos mode, we verify the clone creation, supply, read, and resize
+/// In test mode, we verify the clone creation, supply, read, and resize
 /// lifecycle. We create the clone as resizable (using create_child with
 /// resizable=true is not available, so we create a non-resizable clone
 /// and just verify the clone sees the supplied content).
-#[test]
 fn pager_clone_resize_clone_hazard() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -738,7 +717,6 @@ fn pager_clone_resize_clone_hazard() {
 /// pages, creates a non-resizable clone, resizes the parent to 0 pages,
 /// and verifies the clone is still readable (COW snapshot preserves
 /// the data even after parent resize).
-#[test]
 fn pager_clone_resize_parent_ok() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -781,7 +759,6 @@ fn pager_clone_resize_parent_ok() {
 ///
 /// We exercise the core behavior: create a hierarchy with forked pages
 /// and verify visibility through nested clones.
-#[test]
 fn pager_clone_sees_correct_parent_pages() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -862,7 +839,6 @@ fn pager_clone_sees_correct_parent_pages() {
 /// verify clone sees it, shrink parent to 0, verify clone sees zeros,
 /// grow parent back and re-supply, write new data, verify clone still
 /// sees zeros (new parent pages not visible to clone created before shrink).
-#[test]
 fn pager_clone_shrink_grow_parent() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -926,7 +902,6 @@ fn pager_clone_shrink_grow_parent() {
 ///
 /// The C++ test creates two clones and reads from both simultaneously.
 /// We pre-supply the parent page and verify both clones see the content.
-#[test]
 fn pager_clone_simultaneous_child_read_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -953,7 +928,6 @@ fn pager_clone_simultaneous_child_read_test_vmo() {
 /// C++: TEST(Pager, CloneSimultaneousChildReadTestVmar)
 ///
 /// Same as the Vmo variant — two clones read the same parent page.
-#[test]
 fn pager_clone_simultaneous_child_read_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -972,7 +946,6 @@ fn pager_clone_simultaneous_child_read_test_vmar() {
 ///
 /// The C++ test reads the same page from parent and clone simultaneously.
 /// We pre-supply the page and verify both parent and clone see the content.
-#[test]
 fn pager_clone_simultaneous_read_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -996,7 +969,6 @@ fn pager_clone_simultaneous_read_test_vmo() {
 /// C++: TEST(Pager, CloneSimultaneousReadTestVmar)
 ///
 /// Same as the Vmo variant — parent and clone read the same page.
-#[test]
 fn pager_clone_simultaneous_read_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1016,8 +988,7 @@ fn pager_clone_simultaneous_read_test_vmar() {
 /// parent, reads page 1 from the clone (populating it), then commits
 /// the clone (which generates requests for pages 0 and 3 — the gaps
 /// around the already-present pages).
-/// In libos mode, we supply all pages before creating the clone.
-#[test]
+/// In test mode, we supply all pages before creating the clone.
 fn pager_clone_split_commit_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1057,7 +1028,6 @@ fn pager_clone_split_commit_test() {
 /// 1. The parent still has the original content (COW isolation).
 /// 2. The clone has the written value.
 /// 3. Restoring the clone's key pattern makes CheckVmar pass.
-#[test]
 fn pager_clone_write_to_clone_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1092,8 +1062,7 @@ fn pager_clone_write_to_clone_test_vmo() {
 
 /// C++: TEST(Pager, CloneWriteToCloneTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read()/write() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read()/write() in test mode.
 fn pager_clone_write_to_clone_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1123,7 +1092,6 @@ fn pager_clone_write_to_clone_test_vmar() {
 }
 
 /// C++: TEST(Pager, ClosePageCompleteTest)
-#[test]
 fn pager_close_page_complete_test() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -1143,7 +1111,6 @@ fn pager_close_page_complete_test() {
 }
 
 /// C++: TEST(Pager, ClosePagerTest)
-#[test]
 fn pager_close_pager_test() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -1163,7 +1130,6 @@ fn pager_close_pager_test() {
 }
 
 /// C++: TEST(Pager, ClosePortTest)
-#[test]
 fn pager_close_port_test() {
     let _ctx = TestContext::new();
     let pager = Pager::new();
@@ -1185,7 +1151,6 @@ fn pager_close_port_test() {
 /// pages, then supplies pages redundantly: first 1 page, then 2 pages
 /// from offset 0, then 3, ..., up to 8 — each overlapping the previous.
 /// This verifies that redundant supplies don't cause errors.
-#[test]
 fn pager_commit_redundant_supply_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1211,7 +1176,6 @@ fn pager_commit_redundant_supply_test() {
 ///
 /// The C++ test has multiple threads each reading different pages concurrently.
 /// We pre-supply all pages and verify each is readable with correct content.
-#[test]
 fn pager_concurrent_multipage_access_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1227,8 +1191,7 @@ fn pager_concurrent_multipage_access_test_vmo() {
 
 /// C++: TEST(Pager, ConcurrentMultipageAccessTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_concurrent_multipage_access_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1244,8 +1207,7 @@ fn pager_concurrent_multipage_access_test_vmar() {
 ///
 /// The C++ test has 32 threads all reading the same page concurrently.
 /// We supply the page and verify it's readable (the concurrency aspect
-/// cannot be tested in libos mode without threads).
-#[test]
+/// cannot be tested in test mode without threads).
 fn pager_concurrent_overlapping_access_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1261,8 +1223,7 @@ fn pager_concurrent_overlapping_access_test_vmo() {
 
 /// C++: TEST(Pager, ConcurrentOverlappingAccessTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_concurrent_overlapping_access_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1279,7 +1240,6 @@ fn pager_concurrent_overlapping_access_test_vmar() {
 ///
 /// UNBOUNDED (16) + RESIZABLE (2) = 18 is invalid — the kernel rejects
 /// this combination.
-#[test]
 fn pager_create_vmo_unbounded_invalid_stream_size() {
     let _ctx = TestContext::new();
     let pager_helper = UserPagerHelper::new();
@@ -1296,7 +1256,6 @@ fn pager_create_vmo_unbounded_invalid_stream_size() {
 /// page should read as zeros. In the C++ test, accessing pages after
 /// detach+decommit fails; our implementation allows decommit after
 /// detach and the page reads as zeros.
-#[test]
 fn pager_decommit_on_detach_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1318,8 +1277,7 @@ fn pager_decommit_on_detach_test_vmo() {
 
 /// C++: TEST(Pager, DecommitOnDetachTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_decommit_on_detach_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1339,7 +1297,6 @@ fn pager_decommit_on_detach_test_vmar() {
 /// Decommit is not supported on pager-backed VMOs or their clones.
 /// Matches the Fuchsia C++ test exactly: create pager VMO, try decommit
 /// (NOT_SUPPORTED), create clone, try decommit on clone (NOT_SUPPORTED).
-#[test]
 fn pager_decommit_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1367,7 +1324,6 @@ fn pager_decommit_test() {
 /// The C++ test creates a deep chain of COW clones (1000+ levels)
 /// and verifies the deepest clone can still be created. We create
 /// a chain of 6 clones and verify content propagates through.
-#[test]
 fn pager_deep_hierarchy() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1391,7 +1347,6 @@ fn pager_deep_hierarchy() {
 ///
 /// Detach a VMO, then try ALWAYS_NEED (op_range 5) — should fail
 /// because the VMO is no longer owned by the pager.
-#[test]
 fn pager_detach_and_always_need() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1405,7 +1360,6 @@ fn pager_detach_and_always_need() {
 }
 
 /// C++: TEST(Pager, DetachClosePagerTest)
-#[test]
 fn pager_detach_close_pager_test() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -1428,9 +1382,8 @@ fn pager_detach_close_pager_test() {
 ///
 /// The C++ test supplies page 0, detaches, then reads across pages 0-1.
 /// The read spanning the unsupplied page 1 should fail with BAD_STATE.
-/// In libos mode, we supply page 0, detach, and verify the supplied
+/// In test mode, we supply page 0, detach, and verify the supplied
 /// page is still readable (non-mapping VMO read of committed data).
-#[test]
 fn pager_detach_non_mapping_access() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1452,7 +1405,6 @@ fn pager_detach_non_mapping_access() {
 /// Detaching a VMO should send a COMPLETE packet to the port.
 /// We supply a page, detach, and verify the supplied page is still
 /// readable (the pager has relinquished ownership).
-#[test]
 fn pager_detach_page_complete_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1471,7 +1423,6 @@ fn pager_detach_page_complete_test() {
 /// The C++ test supplies pages before a concurrent reader starts, so
 /// the reader never generates a page request. We supply both pages of
 /// a 2-page VMO and verify they're readable.
-#[test]
 fn pager_early_supply_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1488,8 +1439,7 @@ fn pager_early_supply_test_vmo() {
 
 /// C++: TEST(Pager, EarlySupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_early_supply_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1504,11 +1454,10 @@ fn pager_early_supply_test_vmar() {
 
 /// C++: TEST(Pager, EarlyWakeCloneRace)
 ///
-/// The C++ test races clone creation with page supply. In libos mode
+/// The C++ test races clone creation with page supply. In test mode
 /// we exercise the synchronous equivalent: supply pages, create a
 /// clone while pages are being supplied, and verify both parent and
 /// clone see the correct content.
-#[test]
 fn pager_early_wake_clone_race() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1537,10 +1486,9 @@ fn pager_early_wake_clone_race() {
 /// 64-127. A concurrent reader thread reads all 128 pages and wakes
 /// progressively as pages become available.
 ///
-/// In zCore libos mode, we exercise the synchronous equivalent:
+/// In test mode, we exercise the synchronous equivalent:
 /// supply pages in non-linear order and verify all pages are readable
 /// with correct auto-generated content after each supply batch.
-#[test]
 fn pager_early_wake_non_linear_supply() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1596,11 +1544,10 @@ fn pager_early_wake_non_linear_supply() {
 /// supplies pages in 32-page batches, verifying that each batch wakes
 /// the reader to copy data progressively.
 ///
-/// In zCore libos mode, concurrent threads/blocking page faults are
+/// In test mode, concurrent threads/blocking page faults are
 /// not available. We exercise the synchronous equivalent: create a
 /// large VMO, supply pages in batches, and verify each batch is
 /// readable with correct auto-generated content.
-#[test]
 fn pager_early_wake_on_supply() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1630,9 +1577,8 @@ fn pager_early_wake_on_supply() {
 /// C++: TEST(Pager, EarlyWakeOverlappingRequests)
 ///
 /// The C++ test has overlapping read requests from multiple threads.
-/// In libos mode we exercise overlapping supply ranges and verify
+/// In test mode we exercise overlapping supply ranges and verify
 /// all pages are readable with correct content.
-#[test]
 fn pager_early_wake_overlapping_requests() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1654,10 +1600,9 @@ fn pager_early_wake_overlapping_requests() {
 
 /// C++: TEST(Pager, EarlyWakeWithResize)
 ///
-/// The C++ test races a resize with a page supply. In libos mode we
+/// The C++ test races a resize with a page supply. In test mode we
 /// exercise the synchronous equivalent: supply pages, resize down
 /// (truncating), then resize up (extending with zero pages).
-#[test]
 fn pager_early_wake_with_resize() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1697,7 +1642,6 @@ fn pager_early_wake_with_resize() {
 ///
 /// The C++ test uses ALWAYS_NEED (op 5) to commit pages. Our kernel
 /// returns NOT_SUPPORTED for this op. Verify the error is correct.
-#[test]
 fn pager_eviction_hint_always_need() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1711,10 +1655,9 @@ fn pager_eviction_hint_always_need() {
 /// C++: TEST(Pager, EvictionHintsCloneVmar)
 ///
 /// The C++ test maps a clone of a pager VMO and uses VMAR OP hints.
-/// In libos mode we exercise the equivalent: create a pager VMO,
+/// In test mode we exercise the equivalent: create a pager VMO,
 /// supply pages, create a clone, and verify ALWAYS_NEED/DONT_NEED
 /// ops on the clone return NOT_SUPPORTED (same as root).
-#[test]
 fn pager_eviction_hints_clone_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1744,10 +1687,9 @@ fn pager_eviction_hints_clone_vmar() {
 /// C++: TEST(Pager, EvictionHintsNestedVmar)
 ///
 /// The C++ test uses nested VMAR mappings with eviction hints.
-/// In libos mode we exercise nested clones with hints instead:
+/// In test mode we exercise nested clones with hints instead:
 /// create a chain of 3 clones and verify ALWAYS_NEED returns
 /// NOT_SUPPORTED at each level.
-#[test]
 fn pager_eviction_hints_nested_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1772,7 +1714,6 @@ fn pager_eviction_hints_nested_vmar() {
 /// C++: TEST(Pager, EvictionHintsOpRange)
 ///
 /// Verify both ALWAYS_NEED (5) and DONT_NEED (6) return NOT_SUPPORTED.
-#[test]
 fn pager_eviction_hints_op_range() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1788,10 +1729,9 @@ fn pager_eviction_hints_op_range() {
 /// C++: TEST(Pager, EvictionHintsVmar)
 ///
 /// The C++ test maps a pager VMO into a VMAR and uses eviction hints.
-/// In libos mode we exercise the synchronous equivalent: supply pages,
+/// In test mode we exercise the synchronous equivalent: supply pages,
 /// verify ALWAYS_NEED/DONT_NEED on the VMO return NOT_SUPPORTED,
 /// and verify the page is still readable.
-#[test]
 fn pager_eviction_hints_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1819,7 +1759,6 @@ fn pager_eviction_hints_vmar() {
 /// C++: TEST(Pager, EvictionHintsWithClones)
 ///
 /// ALWAYS_NEED through a clone should also return NOT_SUPPORTED.
-#[test]
 fn pager_eviction_hints_with_clones() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1835,7 +1774,6 @@ fn pager_eviction_hints_with_clones() {
 ///
 /// Create a resizable VMO, resize down, then try ALWAYS_NEED on the
 /// remaining range — should still return NOT_SUPPORTED.
-#[test]
 fn pager_eviction_hints_with_resize() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1854,7 +1792,6 @@ fn pager_eviction_hints_with_resize() {
 /// returns an error (the VMO is no longer owned by the pager).
 /// We use UserPagerHelper and verify that op_range(OP_FAIL) fails
 /// after detach.
-#[test]
 fn pager_fail_after_detach() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1879,7 +1816,6 @@ fn pager_fail_after_detach() {
 ///
 /// This test requires concurrent threads (early wake optimization).
 /// We verify the basic fail+re-supply pattern works.
-#[test]
 fn pager_fail_early_wake() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1905,7 +1841,6 @@ fn pager_fail_early_wake() {
 /// ZX_ERR_IO, ZX_ERR_IO_DATA_INTEGRITY, ZX_ERR_BAD_STATE, ZX_ERR_NO_SPACE.
 /// We verify that fail_pages succeeds with each error code, and then
 /// supply_pages can still succeed afterwards (fail is not fatal).
-#[test]
 fn pager_fail_error_code() {
     let _ctx = TestContext::new();
 
@@ -1943,7 +1878,6 @@ fn pager_fail_error_code() {
 /// Fail the exact requested range. The C++ test fails 11 pages after
 /// a commit request. We verify OP_FAIL succeeds, then re-supply and
 /// verify pages are readable.
-#[test]
 fn pager_fail_exact_range() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1968,7 +1902,6 @@ fn pager_fail_exact_range() {
 /// The C++ test fails multiple disjoint and overlapping commit ranges.
 /// We verify OP_FAIL succeeds on multiple individual pages, then
 /// re-supply the full range.
-#[test]
 fn pager_fail_multiple_commits() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -1990,7 +1923,6 @@ fn pager_fail_multiple_commits() {
 ///
 /// The C++ test creates two VMOs on the same pager, fails them
 /// independently, and verifies each can be re-supplied.
-#[test]
 fn pager_fail_multiple_vmos() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2016,9 +1948,8 @@ fn pager_fail_multiple_vmos() {
 /// verifies the overlapping request gets its failure while the primary
 /// request re-generates a request for page 1.
 ///
-/// In libos mode we exercise the synchronous path: fail page 1, supply
+/// In test mode we exercise the synchronous path: fail page 1, supply
 /// pages 0 and 2-3, then re-supply page 1, and verify all readable.
-#[test]
 fn pager_fail_overlap_request() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2049,7 +1980,6 @@ fn pager_fail_overlap_request() {
 /// The C++ test fails a middle range [1,10) while supplying pages 0
 /// and 10. We test the same pattern: supply boundary pages, fail the
 /// middle, then re-supply and verify.
-#[test]
 fn pager_fail_overlapping_range_commit() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2074,8 +2004,7 @@ fn pager_fail_overlapping_range_commit() {
 /// C++: TEST(Pager, FailOverlappingRangeRead)
 ///
 /// Same pattern as FailOverlappingRangeCommit but with vmo_read instead
-/// of commit. Both exercise the same pager fail path in libos mode.
-#[test]
+/// of commit. Both exercise the same pager fail path in test mode.
 fn pager_fail_overlapping_range_read() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2102,7 +2031,6 @@ fn pager_fail_overlapping_range_read() {
 /// The C++ test fails the same range multiple times — only the first
 /// matters; subsequent calls are no-ops. We fail each page individually,
 /// then verify re-supply works.
-#[test]
 fn pager_fail_redundant() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2126,7 +2054,6 @@ fn pager_fail_redundant() {
 /// Fail a single page, then re-supply and verify it's readable.
 /// The C++ test verifies the blocking reader gets an error; we verify
 /// the pager API accepts the fail and recovery supply works.
-#[test]
 fn pager_fail_single_page_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2142,8 +2069,7 @@ fn pager_fail_single_page_vmo() {
 
 /// C++: TEST(Pager, FailSinglePageVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_fail_single_page_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2156,7 +2082,6 @@ fn pager_fail_single_page_vmar() {
 }
 
 /// C++: TEST(Pager, InvalidPagerCreate)
-#[test]
 fn pager_invalid_pager_create() {
     let _ctx = TestContext::new();
     let pager = Pager::new();
@@ -2167,7 +2092,6 @@ fn pager_invalid_pager_create() {
 ///
 /// Verify that invalid options are rejected: DISCARDABLE (4) and
 /// RESIZABLE + UNBOUNDED (2|16=18).
-#[test]
 fn pager_invalid_pager_create_vmo() {
     let _ctx = TestContext::new();
     let pager_helper = UserPagerHelper::new();
@@ -2186,7 +2110,6 @@ fn pager_invalid_pager_create_vmo() {
 /// C++: TEST(Pager, InvalidPagerDetachVmo)
 ///
 /// Detaching a VMO that isn't owned by the pager should fail.
-#[test]
 fn pager_invalid_pager_detach_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2202,7 +2125,6 @@ fn pager_invalid_pager_detach_vmo() {
 /// Creating a VMO with invalid options (DISCARDABLE=4) should fail.
 /// The C++ test exercises various invalid supply_pages arguments;
 /// we verify the option validation path.
-#[test]
 fn pager_invalid_pager_supply_pages() {
     let _ctx = TestContext::new();
     let pager_helper = UserPagerHelper::new();
@@ -2216,7 +2138,6 @@ fn pager_invalid_pager_supply_pages() {
 ///
 /// The C++ test creates 257 threads each requesting one page. We
 /// supply all pages one at a time and verify each is readable.
-#[test]
 fn pager_many_request_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2236,8 +2157,7 @@ fn pager_many_request_test_vmo() {
 
 /// C++: TEST(Pager, ManyRequestTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_many_request_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2254,11 +2174,10 @@ fn pager_many_request_test_vmar() {
 ///
 /// The C++ test maps an aux VMO into the process address space, writes
 /// to the mapping, and then supplies the mapped page to the pager VMO.
-/// In zCore libos mode we don't have user-space mappings, so we test
+/// In zCore test mode we don't have user-space mappings, so we test
 /// the core supply_pages transfer: create an aux VMO, write data to
 /// it, supply that page to the pager VMO, and verify the pager VMO
 /// received the data.
-#[test]
 fn pager_mapped_supply_pages() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2287,7 +2206,6 @@ fn pager_mapped_supply_pages() {
 /// commit ranges of 7 pages each (35 pages total). We supply in
 /// stride-5 chunks (7 supplies of 5 pages) so each supply covers
 /// parts of multiple commit ranges.
-#[test]
 fn pager_multicommit_supply_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2316,7 +2234,6 @@ fn pager_multicommit_supply_test() {
 /// The C++ test creates 8 VMOs on the same pager, supplies pages to
 /// each, and reads them concurrently. We pre-supply each VMO's page
 /// and verify reads using the UserPagerHelper auto-generated content.
-#[test]
 fn pager_multiple_concurrent_vmo_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2347,7 +2264,6 @@ fn pager_multiple_concurrent_vmo_test() {
 /// A single commit is fulfilled by multiple supply calls. We create
 /// a 32-page VMO, supply pages one at a time, and verify all are
 /// readable.
-#[test]
 fn pager_multisupply_commit_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2376,13 +2292,12 @@ fn pager_multisupply_commit_test() {
 /// clone. The commit generates page requests for unsupplied pages
 /// in the root VMO.
 ///
-/// In zCore libos mode we cannot use VMAR OP_COMMIT with concurrent
+/// In zCore test mode we cannot use VMAR OP_COMMIT with concurrent
 /// threads. Instead we pre-supply pages to the root VMO, create a
 /// COW clone, fork a page in the clone (by writing), and verify:
 /// 1. The forked page is committed in the clone.
 /// 2. Other pages fall through to the root and are readable.
 /// 3. Reading those pages (effectively committing them) works.
-#[test]
 fn pager_op_commit_clone_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2435,12 +2350,11 @@ fn pager_op_commit_clone_vmar() {
 /// with a concurrent thread blocking on page faults. The commit
 /// generates page requests for unsupplied pages.
 ///
-/// In zCore libos mode we cannot use VMAR OP_COMMIT with concurrent
+/// In zCore test mode we cannot use VMAR OP_COMMIT with concurrent
 /// threads. Instead we pre-supply pages to both VMOs and verify:
 /// 1. Both VMOs have their pages committed after supply.
 /// 2. Pages are readable in both VMOs.
 /// 3. An anonymous VMO's pages are also committed.
-#[test]
 fn pager_op_commit_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2504,9 +2418,8 @@ fn pager_op_commit_vmar() {
 /// overlapping commit threads (stride-7 and stride-5), then supplies
 /// pages in stride-3 chunks. This exercises the supply logic when
 /// multiple overlapping commits are pending.
-/// In libos mode, we supply pages in overlapping stride-3 and stride-5
+/// In test mode, we supply pages in overlapping stride-3 and stride-5
 /// patterns, then verify all pages are readable.
-#[test]
 fn pager_overlap_commit_supply_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2545,9 +2458,8 @@ fn pager_overlap_commit_supply_test() {
 ///
 /// The C++ test creates a 32-page VMO, starts two threads that commit
 /// overlapping ranges [8,24) and [0,32), supplies pages in order to
-/// satisfy both, and verifies all pages are readable. In libos mode,
+/// satisfy both, and verifies all pages are readable. In test mode,
 /// we supply overlapping ranges and verify all pages are readable.
-#[test]
 fn pager_overlap_commit_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2581,7 +2493,6 @@ fn pager_overlap_commit_test() {
 /// overwrite existing content in Fuchsia). We supply both pages with
 /// auto-generated content, then re-supply page 0 (which should
 /// overwrite in our impl), and verify page 1 is untouched.
-#[test]
 fn pager_overlap_supply_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2604,8 +2515,7 @@ fn pager_overlap_supply_test_vmo() {
 
 /// C++: TEST(Pager, OverlapSupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_overlap_supply_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2627,11 +2537,10 @@ fn pager_overlap_supply_test_vmar() {
 /// already present (to avoid requesting pages that exist in the
 /// hierarchy).
 ///
-/// In zCore libos mode, we pre-supply pages and verify that the
+/// In test mode, we pre-supply pages and verify that the
 /// hierarchical page lookup works: pages written in child/grandchild
 /// are visible through the great-grandchild, and root pages fall
 /// through the entire chain.
-#[test]
 fn pager_page_request_batching_checks_ancestor_pages() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2717,7 +2626,6 @@ fn pager_page_request_batching_checks_ancestor_pages() {
 /// Supply pages to a pager VMO, pin a page via BTI, then detach the
 /// pager VMO. The detach should succeed even though a page is pinned.
 /// After detach, unpin the page.
-#[test]
 fn pager_pager_detach_pinned() {
     let _ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -2747,7 +2655,6 @@ fn pager_pager_detach_pinned() {
 /// are not available in zCore. We exercise the synchronous equivalent:
 /// supply pages, pin via BTI, verify the pin succeeds and the VMO is
 /// still readable, then unpin.
-#[test]
 fn pager_pin_pager_vmo_with_loaned_pages() {
     let _ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -2789,7 +2696,6 @@ fn pager_pin_pager_vmo_with_loaned_pages() {
 /// 5. Supply the entire VMO (pages 0-2) with fresh (zero) data.
 /// 6. Verify: pages 0 and 2 were supplied with zeros.
 /// 7. Verify: supply_pages didn't panic despite pinned page.
-#[test]
 fn pager_pinned_supply_pages() {
     let _ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -2857,10 +2763,9 @@ fn pager_pinned_supply_pages() {
 /// It tests prefetch on the root VMO, through a slice, and through
 /// a COW clone (where a forked page should NOT generate a request).
 ///
-/// In zCore libos mode, we pre-supply pages and verify that the
+/// In test mode, we pre-supply pages and verify that the
 /// prefetch-equivalent behavior works: pages are readable after
 /// supply, slices share parent pages, and COW isolation is preserved.
-#[test]
 fn pager_prefetch() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2926,12 +2831,11 @@ fn pager_prefetch() {
 /// one for the lower range (pages 0-1) and one for the upper range
 /// (pages 3-4), splitting around the already-present page 2.
 ///
-/// In zCore libos mode, we cannot generate page requests via commit
+/// In test mode, we cannot generate page requests via commit
 /// with concurrent threads. Instead, we pre-supply page 2, then supply
 /// pages 0-1 and 3-4 separately, and verify all pages are readable —
 /// demonstrating that a present page in the middle doesn't interfere
 /// with supplying the surrounding pages.
-#[test]
 fn pager_present_page_splits_range() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2981,7 +2885,6 @@ fn pager_present_page_splits_range() {
 /// C++: TEST(Pager, PresupplyTestVmo)
 ///
 /// Pre-supplied pages don't result in page requests.
-#[test]
 fn pager_presupply_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -2993,8 +2896,7 @@ fn pager_presupply_test_vmo() {
 
 /// C++: TEST(Pager, PresupplyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_presupply_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3006,11 +2908,10 @@ fn pager_presupply_test_vmar() {
 
 /// C++: TEST(Pager, ProxyUseAfterFree)
 ///
-/// The C++ test races VMO destruction with pager operations. In libos
+/// The C++ test races VMO destruction with pager operations. In test mode
 /// mode we exercise the lifecycle sequentially: supply page, drop the
 /// VMO reference while keeping a clone alive, verify the clone is still
 /// usable (no use-after-free).
-#[test]
 fn pager_proxy_use_after_free() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3033,11 +2934,10 @@ fn pager_proxy_use_after_free() {
 
 /// C++: TEST(Pager, RacyPortDequeue)
 ///
-/// The C++ test races port dequeue with page supply. In libos mode
+/// The C++ test races port dequeue with page supply. In test mode
 /// we exercise the port lifecycle synchronously: create pager+port+VMO,
 /// supply pages, and verify the VMO content. Port operations (queue/
 /// dequeue) are exercised through the supply_pages path.
-#[test]
 fn pager_racy_port_dequeue() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3056,10 +2956,9 @@ fn pager_racy_port_dequeue() {
 /// C++: TEST(Pager, ReadCloseInterruptEarlyTestVmo)
 ///
 /// The C++ test has a reader thread that blocks, then the pager is closed
-/// (dropped) before supplying the page. In libos mode, we exercise the
+/// (dropped) before supplying the page. In test mode, we exercise the
 /// synchronous lifecycle: supply page, read, then close (drop) the pager
 /// and verify the VMO's supplied content survives.
-#[test]
 fn pager_read_close_interrupt_early_test_vmo() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -3081,8 +2980,7 @@ fn pager_read_close_interrupt_early_test_vmo() {
 
 /// C++: TEST(Pager, ReadCloseInterruptEarlyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_read_close_interrupt_early_test_vmar() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -3104,9 +3002,8 @@ fn pager_read_close_interrupt_early_test_vmar() {
 /// C++: TEST(Pager, ReadCloseInterruptLateTestVmo)
 ///
 /// The C++ test supplies the page, then closes the pager while a reader
-/// is active. In libos mode we supply, read, close, and verify the data
+/// is active. In test mode we supply, read, close, and verify the data
 /// is accessible even after the pager is dropped.
-#[test]
 fn pager_read_close_interrupt_late_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3128,8 +3025,7 @@ fn pager_read_close_interrupt_late_test_vmo() {
 
 /// C++: TEST(Pager, ReadCloseInterruptLateTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_read_close_interrupt_late_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3146,10 +3042,9 @@ fn pager_read_close_interrupt_late_test_vmar() {
 
 /// C++: TEST(Pager, ReadDetachInterruptEarlyTestVmo)
 ///
-/// The C++ test detaches a VMO before a reader has started. In libos
+/// The C++ test detaches a VMO before a reader has started. In test mode
 /// mode we exercise the detach lifecycle: supply page, detach, verify
 /// clean pages are decommitted (Fuchsia behavior).
-#[test]
 fn pager_read_detach_interrupt_early_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3166,8 +3061,7 @@ fn pager_read_detach_interrupt_early_test_vmo() {
 
 /// C++: TEST(Pager, ReadDetachInterruptEarlyTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_read_detach_interrupt_early_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3182,9 +3076,8 @@ fn pager_read_detach_interrupt_early_test_vmar() {
 /// C++: TEST(Pager, ReadDetachInterruptLateTestVmo)
 ///
 /// The C++ test supplies a page, then detaches while a reader is active.
-/// In libos mode we supply, read, then detach and verify the page was
+/// In test mode we supply, read, then detach and verify the page was
 /// readable before detach and decommitted after.
-#[test]
 fn pager_read_detach_interrupt_late_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3202,8 +3095,7 @@ fn pager_read_detach_interrupt_late_test_vmo() {
 
 /// C++: TEST(Pager, ReadDetachInterruptLateTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_read_detach_interrupt_late_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3219,10 +3111,9 @@ fn pager_read_detach_interrupt_late_test_vmar() {
 /// C++: TEST(Pager, ReadResizeTestVmo)
 ///
 /// The C++ test has a reader thread that blocks while a resize truncates
-/// the VMO underneath it. In libos mode we exercise the synchronous
+/// the VMO underneath it. In test mode we exercise the synchronous
 /// equivalent: supply pages, read page 1, resize to 1 page, verify
 /// page 0 is still readable and page 1 is gone.
-#[test]
 fn pager_read_resize_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3248,8 +3139,7 @@ fn pager_read_resize_test_vmo() {
 
 /// C++: TEST(Pager, ReadResizeTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_read_resize_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3274,10 +3164,9 @@ fn pager_read_resize_test_vmar() {
 /// which makes the pin fail with OUT_OF_RANGE.
 ///
 /// This requires concurrent threads + blocking page faults, which are
-/// not available in zCore libos mode. Instead we exercise the
+/// not available in test mode. Instead we exercise the
 /// synchronous equivalent: supply pages, resize down, verify that
 /// pinning a now-out-of-range page fails with OUT_OF_RANGE.
-#[test]
 fn pager_resize_blocked_pin() {
     let _ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -3308,7 +3197,6 @@ fn pager_resize_blocked_pin() {
 /// The C++ test resizes out from under a commit. We create a resizable
 /// 3-page VMO, supply pages, resize to 1 page, and verify page 0 is
 /// still readable.
-#[test]
 fn pager_resize_commit_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3332,7 +3220,6 @@ fn pager_resize_commit_test() {
 /// C++: TEST(Pager, ResizeNonresizableVmo)
 ///
 /// Resizing a non-resizable pager VMO should fail with UNAVAILABLE.
-#[test]
 fn pager_resize_nonresizable_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3347,7 +3234,6 @@ fn pager_resize_nonresizable_vmo() {
 /// The C++ test has a single thread reading 32 pages sequentially,
 /// with pages supplied one at a time. We supply all 32 pages in one
 /// call and verify each is readable sequentially.
-#[test]
 fn pager_sequential_multipage_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3367,8 +3253,7 @@ fn pager_sequential_multipage_test_vmo() {
 
 /// C++: TEST(Pager, SequentialMultipageTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_sequential_multipage_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3386,7 +3271,6 @@ fn pager_sequential_multipage_test_vmar() {
 ///
 /// The C++ test commits 555 pages. We supply all and verify they're
 /// readable.
-#[test]
 fn pager_simple_commit_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3408,7 +3292,6 @@ fn pager_simple_commit_test() {
 /// C++: TEST(Pager, SinglePageTestVmo)
 ///
 /// Basic single-page test: supply one page and verify it's readable.
-#[test]
 fn pager_single_page_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3420,8 +3303,7 @@ fn pager_single_page_test_vmo() {
 
 /// C++: TEST(Pager, SinglePageTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_single_page_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3437,7 +3319,6 @@ fn pager_single_page_test_vmar() {
 /// commits the entire range. This generates two page requests split
 /// around the pre-supplied page. We supply the middle, then both
 /// halves, and verify all pages.
-#[test]
 fn pager_split_commit_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3469,7 +3350,6 @@ fn pager_split_commit_test() {
 ///
 /// The C++ test creates and destroys 64 successive VMOs on the same
 /// pager. We create 64 VMOs, supply each, verify, and let them drop.
-#[test]
 fn pager_successive_vmo_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3487,7 +3367,6 @@ fn pager_successive_vmo_test() {
 /// The C++ test detaches a VMO and then verifies that supply_pages
 /// fails on the detached VMO (BAD_STATE). We use UserPagerHelper
 /// to create the VMO and verify the detach+supply sequence.
-#[test]
 fn pager_supply_after_detach() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3515,7 +3394,6 @@ fn pager_supply_after_detach() {
 /// Fail pages, then supply — the supply should succeed (fail is not
 /// fatal). The C++ test does two rounds: fail→WaitForFailure, then
 /// re-commit→re-supply→Wait.
-#[test]
 fn pager_supply_after_fail() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3540,9 +3418,8 @@ fn pager_supply_after_fail() {
 /// C++: TEST(Pager, SuspendCommitTest)
 ///
 /// The C++ test suspends a thread blocked on a commit, then resumes and
-/// supplies the page. In libos mode we exercise the synchronous equivalent:
+/// supplies the page. In test mode we exercise the synchronous equivalent:
 /// supply pages and verify commit (read all pages) succeeds.
-#[test]
 fn pager_suspend_commit_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3563,10 +3440,9 @@ fn pager_suspend_commit_test() {
 
 /// C++: TEST(Pager, SuspendInKernelCaptureFaultsTest)
 ///
-/// The C++ test suspends a thread in a kernel fault handler. In libos
+/// The C++ test suspends a thread in a kernel fault handler. In test mode
 /// mode we exercise fault capture semantics: supply a page, read to
 /// trigger any kernel copy path, verify the page is committed.
-#[test]
 fn pager_suspend_in_kernel_capture_faults_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3587,9 +3463,8 @@ fn pager_suspend_in_kernel_capture_faults_test() {
 /// C++: TEST(Pager, SuspendInKernelTest)
 ///
 /// The C++ test suspends a thread blocked in a kernel page fault. In
-/// libos mode we exercise the synchronous equivalent: supply page,
+/// test mode we exercise the synchronous equivalent: supply page,
 /// verify read succeeds, supply another page, verify both are committed.
-#[test]
 fn pager_suspend_in_kernel_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3606,9 +3481,8 @@ fn pager_suspend_in_kernel_test() {
 
 /// C++: TEST(Pager, SuspendReadTestVmo)
 ///
-/// The C++ test suspends a thread blocked on a VMO read. In libos mode
+/// The C++ test suspends a thread blocked on a VMO read. In test mode
 /// we exercise the supply→read lifecycle and verify the page is readable.
-#[test]
 fn pager_suspend_read_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3623,8 +3497,7 @@ fn pager_suspend_read_test_vmo() {
 
 /// C++: TEST(Pager, SuspendReadTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_suspend_read_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3637,7 +3510,6 @@ fn pager_suspend_read_test_vmar() {
 /// C++: TEST(Pager, UncommittedSinglePageTestVmo)
 ///
 /// Supply an uncommitted (zero) page and verify it reads as zeros.
-#[test]
 fn pager_uncommitted_single_page_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3661,8 +3533,7 @@ fn pager_uncommitted_single_page_test_vmo() {
 
 /// C++: TEST(Pager, UncommittedSinglePageTestVmar)
 ///
-/// Same as Vmo variant — both use vmo.read() in libos mode.
-#[test]
+/// Same as Vmo variant — both use vmo.read() in test mode.
 fn pager_uncommitted_single_page_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3682,7 +3553,6 @@ fn pager_uncommitted_single_page_test_vmar() {
 /// C++: TEST(Pager, UncommittedSupply)
 ///
 /// Supply uncommitted pages — prevents faults and gives zeros.
-#[test]
 fn pager_uncommitted_supply() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3708,10 +3578,9 @@ fn pager_uncommitted_supply() {
 /// C++: TEST(Pager, VmarMapRangeTest)
 ///
 /// The C++ test maps a pager VMO into a VMAR with MAP_RANGE and verifies
-/// pages are pre-committed. In libos mode we exercise the equivalent:
+/// pages are pre-committed. In test mode we exercise the equivalent:
 /// supply pages, read them (committing through VMO read), and verify
 /// committed state.
-#[test]
 fn pager_vmar_map_range_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3735,9 +3604,8 @@ fn pager_vmar_map_range_test() {
 /// C++: TEST(Pager, VmarRemapTest)
 ///
 /// The C++ test remaps a pager VMO into a different VMAR region. In
-/// libos mode we exercise the equivalent: supply pages, read, re-supply
+/// test mode we exercise the equivalent: supply pages, read, re-supply
 /// with different data (simulating remap), and verify the data changed.
-#[test]
 fn pager_vmar_remap_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3758,10 +3626,9 @@ fn pager_vmar_remap_test() {
 /// C++: TEST(Pager, VmarUnmapTest)
 ///
 /// The C++ test unmaps a pager VMO from the VMAR and verifies pages
-/// can be decommitted. In libos mode we exercise the equivalent:
+/// can be decommitted. In test mode we exercise the equivalent:
 /// supply pages, detach (analogous to unmap — pages become decommittable),
 /// decommit, and verify zeros.
-#[test]
 fn pager_vmar_unmap_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3784,7 +3651,6 @@ fn pager_vmar_unmap_test() {
 ///
 /// Verify that a pager-backed VMO reports is_pager_backed() == true,
 /// has a non-zero ID, and has the correct size.
-#[test]
 fn pager_vmo_info_pager_test() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3805,10 +3671,9 @@ fn pager_vmo_info_pager_test() {
 /// C++: TEST(Pager, ZeroHandlesRace)
 ///
 /// The C++ test races handle creation/destruction with pager operations.
-/// In libos mode we exercise the lifecycle synchronously: create VMO,
+/// In test mode we exercise the lifecycle synchronously: create VMO,
 /// supply page, create clone (adds a handle reference), drop clone,
 /// verify VMO is still usable. Repeat several times.
-#[test]
 fn pager_zero_handles_race() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3831,7 +3696,6 @@ fn pager_zero_handles_race() {
 ///
 /// Supply zero pages to VMO, verify they can't be overwritten by
 /// another supply, but writing to the VMO forks the zero page.
-#[test]
 fn pager_wb_cannot_overwrite_zero_page_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3867,7 +3731,6 @@ fn pager_wb_cannot_overwrite_zero_page_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, CannotOverwriteZeroPageTrapDirty)
-#[test]
 fn pager_wb_cannot_overwrite_zero_page_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3883,7 +3746,6 @@ fn pager_wb_cannot_overwrite_zero_page_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ChildAttributedCounts)
-#[test]
 fn pager_wb_child_attributed_counts() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3914,7 +3776,6 @@ fn pager_wb_child_attributed_counts() {
 ///
 /// Resizable VMO: resize to extend tail, supply original pages,
 /// write to the original range, verify content and modified state.
-#[test]
 fn pager_wb_commit_extended_tail_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3939,7 +3800,6 @@ fn pager_wb_commit_extended_tail_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, CommitExtendedTailTrapDirty)
-#[test]
 fn pager_wb_commit_extended_tail_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3958,7 +3818,6 @@ fn pager_wb_commit_extended_tail_trap_dirty() {
 ///
 /// Resizable VMO: supply pages, write, resize down and back up.
 /// Verify content survives the resize cycle.
-#[test]
 fn pager_wb_commit_resize_race_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3978,7 +3837,6 @@ fn pager_wb_commit_resize_race_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, CommitResizeRaceTrapDirty)
-#[test]
 fn pager_wb_commit_resize_race_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -3997,7 +3855,6 @@ fn pager_wb_commit_resize_race_trap_dirty() {
 ///
 /// Supply pages, write to dirty them, detach the VMO, then decommit.
 /// After decommit, pages should read as zeros.
-#[test]
 fn pager_wb_decommit_clean_on_detach_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4023,7 +3880,6 @@ fn pager_wb_decommit_clean_on_detach_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, DecommitCleanOnDetachTrapDirty)
-#[test]
 fn pager_wb_decommit_clean_on_detach_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4043,7 +3899,6 @@ fn pager_wb_decommit_clean_on_detach_trap_dirty() {
 /// (the page is in the dirty-zero state). After writeback cleans
 /// it, OP_DIRTY would fail with NOT_FOUND. The full test requires
 /// concurrent threads.
-#[test]
 fn pager_wb_delayed_dirty_not_found() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4083,7 +3938,6 @@ fn pager_wb_delayed_dirty_not_found() {
 }
 
 /// C++: TEST(PagerWriteback, DelayedDirtyZeroRange)
-#[test]
 fn pager_wb_delayed_dirty_zero_range() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4107,18 +3961,16 @@ fn pager_wb_delayed_dirty_zero_range() {
 }
 
 /// C++: TEST(PagerWriteback, DelayedPinAwaitingClean)
-#[test]
 fn pager_wb_delayed_pin_awaiting_clean() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     let (vmo, key) = pager_helper.create_vmo(1);
     pager_helper.supply_pages(&vmo, key, 0, 1);
     assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: TEST(PagerWriteback, DelayedReadZeroRange)
-#[test]
 fn pager_wb_delayed_read_zero_range() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4135,7 +3987,6 @@ fn pager_wb_delayed_read_zero_range() {
 }
 
 /// C++: TEST(PagerWriteback, DetachWithPendingDirtyRequestVmo)
-#[test]
 fn pager_wb_detach_with_pending_dirty_request_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4153,11 +4004,10 @@ fn pager_wb_detach_with_pending_dirty_request_vmo() {
 }
 
 /// C++: TEST(PagerWriteback, DetachWithPendingDirtyRequestVmar)
-#[test]
 fn pager_wb_detach_with_pending_dirty_request_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // TRAP_DIRTY; VMAR variant — same kernel path in libos.
+    // TRAP_DIRTY; VMAR variant — same kernel path in test mode.
     let (vmo, key) = pager_helper.create_vmo_with_options(1, 8);
     pager_helper.supply_pages(&vmo, key, 0, 1);
 
@@ -4173,11 +4023,10 @@ fn pager_wb_detach_with_pending_dirty_request_vmar() {
 ///
 /// In the C++ test, a pager VMO is mapped, written via mapping (marks dirty),
 /// then the mapping protection is changed. Since VMAR mapping is not available
-/// in libos mode, we exercise the equivalent via VMO write (which also dirties
+/// in test mode, we exercise the equivalent via VMO write (which also dirties
 /// pages without TRAP_DIRTY). After writing, we verify the page content and
 /// that the VMO is marked modified. We then do a writeback cycle and confirm
 /// content is preserved.
-#[test]
 fn pager_wb_dirty_after_map_protect_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4215,7 +4064,6 @@ fn pager_wb_dirty_after_map_protect_no_trap_dirty() {
 ///
 /// TRAP_DIRTY variant: supply pages, OP_DIRTY to allow writes, write,
 /// verify dirty ranges, then writeback cycle and verify content preserved.
-#[test]
 fn pager_wb_dirty_after_map_protect_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4256,11 +4104,10 @@ fn pager_wb_dirty_after_map_protect_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyAfterPin)
-#[test]
 fn pager_wb_dirty_after_pin() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     // Verify basic TRAP_DIRTY supply + write with OP_DIRTY.
     let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
     pager_helper.supply_pages(&vmo, key, 0, 2);
@@ -4279,7 +4126,6 @@ fn pager_wb_dirty_after_pin() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyDuringWriteback)
-#[test]
 fn pager_wb_dirty_during_writeback() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4319,7 +4165,6 @@ fn pager_wb_dirty_during_writeback() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyLargeRange)
-#[test]
 fn pager_wb_dirty_large_range() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4345,7 +4190,6 @@ fn pager_wb_dirty_large_range() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyNoTrapRandomOffsets)
-#[test]
 fn pager_wb_dirty_no_trap_random_offsets() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4371,7 +4215,6 @@ fn pager_wb_dirty_no_trap_random_offsets() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyRequestsForZeroPages)
-#[test]
 fn pager_wb_dirty_requests_for_zero_pages() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4393,7 +4236,6 @@ fn pager_wb_dirty_requests_for_zero_pages() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyRequestsForZeroRanges)
-#[test]
 fn pager_wb_dirty_requests_for_zero_ranges() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4417,7 +4259,6 @@ fn pager_wb_dirty_requests_for_zero_ranges() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyRequestsOnVmoWrite)
-#[test]
 fn pager_wb_dirty_requests_on_vmo_write() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4444,7 +4285,6 @@ fn pager_wb_dirty_requests_on_vmo_write() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyRequestsOnWriteAfterRead)
-#[test]
 fn pager_wb_dirty_requests_on_write_after_read() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4472,7 +4312,6 @@ fn pager_wb_dirty_requests_on_write_after_read() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyRequestsOverlap)
-#[test]
 fn pager_wb_dirty_requests_overlap() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4496,7 +4335,6 @@ fn pager_wb_dirty_requests_overlap() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyRequestsRandomOffsets)
-#[test]
 fn pager_wb_dirty_requests_random_offsets() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4517,7 +4355,6 @@ fn pager_wb_dirty_requests_random_offsets() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyRequestsRepeatedWrites)
-#[test]
 fn pager_wb_dirty_requests_repeated_writes() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4549,11 +4386,10 @@ fn pager_wb_dirty_requests_repeated_writes() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyRequestsViaMapping)
-#[test]
 fn pager_wb_dirty_requests_via_mapping() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires VMAR mapping, not available in libos mode.
+    // This test requires VMAR mapping, not available in test mode.
     // Verify basic TRAP_DIRTY VMO creation instead.
     let (vmo, key) = pager_helper.create_vmo_with_options(1, 8);
     pager_helper.supply_pages(&vmo, key, 0, 1);
@@ -4561,7 +4397,6 @@ fn pager_wb_dirty_requests_via_mapping() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyZeroAndNonZeroPages)
-#[test]
 fn pager_wb_dirty_zero_and_non_zero_pages() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4596,7 +4431,6 @@ fn pager_wb_dirty_zero_and_non_zero_pages() {
 }
 
 /// C++: TEST(PagerWriteback, FailDirtyRequests)
-#[test]
 fn pager_wb_fail_dirty_requests() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4617,7 +4451,6 @@ fn pager_wb_fail_dirty_requests() {
 }
 
 /// C++: TEST(PagerWriteback, FailDirtyRequestsForZeroPages)
-#[test]
 fn pager_wb_fail_dirty_requests_for_zero_pages() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4638,18 +4471,16 @@ fn pager_wb_fail_dirty_requests_for_zero_pages() {
 }
 
 /// C++: TEST(PagerWriteback, FailedPinAwaitingClean)
-#[test]
 fn pager_wb_failed_pin_awaiting_clean() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     let (vmo, key) = pager_helper.create_vmo(1);
     pager_helper.supply_pages(&vmo, key, 0, 1);
     assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: TEST(PagerWriteback, InvalidPagerOpRange)
-#[test]
 fn pager_wb_invalid_pager_op_range() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4680,7 +4511,6 @@ fn pager_wb_invalid_pager_op_range() {
 }
 
 /// C++: TEST(PagerWriteback, InvalidQuery)
-#[test]
 fn pager_wb_invalid_query() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4700,7 +4530,6 @@ fn pager_wb_invalid_query() {
 }
 
 /// C++: TEST(PagerWriteback, LargeWriteBatched)
-#[test]
 fn pager_wb_large_write_batched() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4731,7 +4560,6 @@ fn pager_wb_large_write_batched() {
 ///
 /// Supply page, write, verify content is updated. Modified flag tracking
 /// for non-TRAP_DIRTY VMOs is not yet implemented in the kernel.
-#[test]
 fn pager_wb_modified_no_reset_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4750,7 +4578,6 @@ fn pager_wb_modified_no_reset_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ModifiedNoResetTrapDirty)
-#[test]
 fn pager_wb_modified_no_reset_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4769,11 +4596,10 @@ fn pager_wb_modified_no_reset_trap_dirty() {
 ///
 /// In the C++ test, a pager VMO is mapped and written via the mapping,
 /// which marks the VMO as modified. Since VMAR mapping is not available
-/// in libos mode, we exercise the equivalent via VMO write and verify
+/// in test mode, we exercise the equivalent via VMO write and verify
 /// content. Note: VMO write does not currently set the modified flag
 /// (only VMAR mapping writes do via auto_mark_dirty), so we verify
 /// content correctness rather than the modified flag.
-#[test]
 fn pager_wb_modified_on_mapping_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4810,7 +4636,6 @@ fn pager_wb_modified_on_mapping_write_no_trap_dirty() {
 ///
 /// TRAP_DIRTY variant: supply pages, OP_DIRTY, write, verify dirty ranges
 /// and content.
-#[test]
 fn pager_wb_modified_on_mapping_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4852,7 +4677,6 @@ fn pager_wb_modified_on_mapping_write_trap_dirty() {
 /// C++: TEST(PagerWriteback, ModifiedOnOpZeroNoTrapDirty)
 ///
 /// Supply pages, zero a page, verify zeros.
-#[test]
 fn pager_wb_modified_on_op_zero_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4873,7 +4697,6 @@ fn pager_wb_modified_on_op_zero_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnOpZeroTrapDirty)
-#[test]
 fn pager_wb_modified_on_op_zero_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4891,7 +4714,6 @@ fn pager_wb_modified_on_op_zero_trap_dirty() {
 /// C++: TEST(PagerWriteback, ModifiedOnPartialVmoWriteNoTrapDirty)
 ///
 /// Supply 2 pages, write a single byte, verify content.
-#[test]
 fn pager_wb_modified_on_partial_vmo_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4914,7 +4736,6 @@ fn pager_wb_modified_on_partial_vmo_write_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnPartialVmoWriteTrapDirty)
-#[test]
 fn pager_wb_modified_on_partial_vmo_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4932,7 +4753,6 @@ fn pager_wb_modified_on_partial_vmo_write_trap_dirty() {
 /// C++: TEST(PagerWriteback, ModifiedOnResizeNoTrapDirty)
 ///
 /// Supply page, resize down then up, verify content after resize.
-#[test]
 fn pager_wb_modified_on_resize_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4957,7 +4777,6 @@ fn pager_wb_modified_on_resize_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnResizeTrapDirty)
-#[test]
 fn pager_wb_modified_on_resize_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4975,7 +4794,6 @@ fn pager_wb_modified_on_resize_trap_dirty() {
 /// C++: TEST(PagerWriteback, ModifiedOnVmoWriteNoTrapDirty)
 ///
 /// Supply page, write via vmo.write(), verify content updated.
-#[test]
 fn pager_wb_modified_on_vmo_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4995,7 +4813,6 @@ fn pager_wb_modified_on_vmo_write_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnVmoWriteTrapDirty)
-#[test]
 fn pager_wb_modified_on_vmo_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5013,7 +4830,6 @@ fn pager_wb_modified_on_vmo_write_trap_dirty() {
 /// C++: TEST(PagerWriteback, NoDirtyOnCommitNoTrapDirty)
 ///
 /// Committing (supplying) pages should not mark them as dirty.
-#[test]
 fn pager_wb_no_dirty_on_commit_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5035,7 +4851,6 @@ fn pager_wb_no_dirty_on_commit_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyOnCommitTrapDirty)
-#[test]
 fn pager_wb_no_dirty_on_commit_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5051,7 +4866,6 @@ fn pager_wb_no_dirty_on_commit_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyRequestsAfterDetachVmo)
-#[test]
 fn pager_wb_no_dirty_requests_after_detach_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5074,11 +4888,10 @@ fn pager_wb_no_dirty_requests_after_detach_vmo() {
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyRequestsAfterDetachVmar)
-#[test]
 fn pager_wb_no_dirty_requests_after_detach_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // ZX_VMO_TRAP_DIRTY = 8; VMAR variant — same kernel path in libos.
+    // ZX_VMO_TRAP_DIRTY = 8; VMAR variant — same kernel path in test mode.
     let (vmo, key) = pager_helper.create_vmo_with_options(1, 8);
     pager_helper.supply_pages(&vmo, key, 0, 1);
 
@@ -5092,7 +4905,6 @@ fn pager_wb_no_dirty_requests_after_detach_vmar() {
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyRequestsForClones)
-#[test]
 fn pager_wb_no_dirty_requests_for_clones() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5116,7 +4928,6 @@ fn pager_wb_no_dirty_requests_for_clones() {
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyRequestsMapExistingDirty)
-#[test]
 fn pager_wb_no_dirty_requests_map_existing_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5143,7 +4954,6 @@ fn pager_wb_no_dirty_requests_map_existing_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyRequestsOnCommit)
-#[test]
 fn pager_wb_no_dirty_requests_on_commit() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5163,11 +4973,10 @@ fn pager_wb_no_dirty_requests_on_commit() {
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyRequestsOnMapRange)
-#[test]
 fn pager_wb_no_dirty_requests_on_map_range() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires VMAR mapping with MAP_RANGE, not available in libos mode.
+    // This test requires VMAR mapping with MAP_RANGE, not available in test mode.
     // Verify basic TRAP_DIRTY VMO creation and supply instead.
     let (vmo, key) = pager_helper.create_vmo_with_options(3, 8);
     pager_helper.supply_pages(&vmo, key, 0, 3);
@@ -5177,7 +4986,6 @@ fn pager_wb_no_dirty_requests_on_map_range() {
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyRequestsOnRead)
-#[test]
 fn pager_wb_no_dirty_requests_on_read() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5201,7 +5009,6 @@ fn pager_wb_no_dirty_requests_on_read() {
 /// Write to VMO, create clone, write to clone. Verify parent has
 /// written data, clone has its own data, and clone modified state
 /// is independent of parent.
-#[test]
 fn pager_wb_no_query_on_clone_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5229,7 +5036,6 @@ fn pager_wb_no_query_on_clone_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NoQueryOnCloneTrapDirty)
-#[test]
 fn pager_wb_no_query_on_clone_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5247,7 +5053,6 @@ fn pager_wb_no_query_on_clone_trap_dirty() {
 /// C++: TEST(PagerWriteback, NotModifiedCloneWriteNoTrapDirty)
 ///
 /// Writing to a clone should NOT mark the parent modified.
-#[test]
 fn pager_wb_not_modified_clone_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5273,7 +5078,6 @@ fn pager_wb_not_modified_clone_write_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedCloneWriteTrapDirty)
-#[test]
 fn pager_wb_not_modified_clone_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5289,18 +5093,16 @@ fn pager_wb_not_modified_clone_write_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedFailedPinWrite)
-#[test]
 fn pager_wb_not_modified_failed_pin_write() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     let (vmo, key) = pager_helper.create_vmo(1);
     pager_helper.supply_pages(&vmo, key, 0, 1);
     assert!(!vmo.query_modified(true), "should not be modified yet");
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnFailedDirtyRequest)
-#[test]
 fn pager_wb_not_modified_on_failed_dirty_request() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5321,7 +5123,6 @@ fn pager_wb_not_modified_on_failed_dirty_request() {
 ///
 /// A failed resize should NOT mark the VMO as modified.
 /// We pin a page to prevent resize across it.
-#[test]
 fn pager_wb_not_modified_on_failed_resize_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5353,7 +5154,6 @@ fn pager_wb_not_modified_on_failed_resize_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnFailedResizeTrapDirty)
-#[test]
 fn pager_wb_not_modified_on_failed_resize_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5371,7 +5171,6 @@ fn pager_wb_not_modified_on_failed_resize_trap_dirty() {
 /// C++: TEST(PagerWriteback, NotModifiedOnFailedVmoWriteNoTrapDirty)
 ///
 /// A write that fails (e.g. out of range) should NOT mark modified.
-#[test]
 fn pager_wb_not_modified_on_failed_vmo_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5390,7 +5189,6 @@ fn pager_wb_not_modified_on_failed_vmo_write_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnFailedVmoWriteTrapDirty)
-#[test]
 fn pager_wb_not_modified_on_failed_vmo_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5409,8 +5207,7 @@ fn pager_wb_not_modified_on_failed_vmo_write_trap_dirty() {
 ///
 /// In the C++ test, a pager VMO is mapped and only read via the mapping,
 /// which should NOT mark the VMO as modified. Since VMAR mapping is not
-/// available in libos mode, we exercise the equivalent via VMO read.
-#[test]
+/// available in test mode, we exercise the equivalent via VMO read.
 fn pager_wb_not_modified_on_mapping_read_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5435,7 +5232,6 @@ fn pager_wb_not_modified_on_mapping_read_no_trap_dirty() {
 ///
 /// TRAP_DIRTY variant: supply pages, read only, verify NOT modified
 /// and no dirty ranges.
-#[test]
 fn pager_wb_not_modified_on_mapping_read_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5460,7 +5256,6 @@ fn pager_wb_not_modified_on_mapping_read_trap_dirty() {
 /// C++: TEST(PagerWriteback, NotModifiedOnVmoReadNoTrapDirty)
 ///
 /// Supply page, read from VMO, verify NOT modified.
-#[test]
 fn pager_wb_not_modified_on_vmo_read_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5478,7 +5273,6 @@ fn pager_wb_not_modified_on_vmo_read_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnVmoReadTrapDirty)
-#[test]
 fn pager_wb_not_modified_on_vmo_read_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5494,18 +5288,16 @@ fn pager_wb_not_modified_on_vmo_read_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedPartialFailedPinWrite)
-#[test]
 fn pager_wb_not_modified_partial_failed_pin_write() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     let (vmo, key) = pager_helper.create_vmo(1);
     pager_helper.supply_pages(&vmo, key, 0, 1);
     assert!(!vmo.query_modified(true), "should not be modified yet");
 }
 
 /// C++: TEST(PagerWriteback, OpDirtyNoWrite)
-#[test]
 fn pager_wb_op_dirty_no_write() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5531,7 +5323,6 @@ fn pager_wb_op_dirty_no_write() {
 }
 
 /// C++: TEST(PagerWriteback, OpZero)
-#[test]
 fn pager_wb_op_zero() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5553,7 +5344,6 @@ fn pager_wb_op_zero() {
 ///
 /// Zero a page in a pager VMO that has a clone. The clone should
 /// retain its COW copy while the parent page is zeroed.
-#[test]
 fn pager_wb_op_zero_clone_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5581,7 +5371,6 @@ fn pager_wb_op_zero_clone_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroCloneTrapDirty)
-#[test]
 fn pager_wb_op_zero_clone_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5600,7 +5389,6 @@ fn pager_wb_op_zero_clone_trap_dirty() {
 ///
 /// Zero a range in a pager VMO, then verify pages read as zeros.
 /// Zeroing should mark the VMO as modified.
-#[test]
 fn pager_wb_op_zero_decommit_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5622,7 +5410,6 @@ fn pager_wb_op_zero_decommit_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroDecommitTrapDirty)
-#[test]
 fn pager_wb_op_zero_decommit_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5641,7 +5428,6 @@ fn pager_wb_op_zero_decommit_trap_dirty() {
 ///
 /// Resizable VMO: zero a range that extends past the current size,
 /// triggering resize. Verify the extended region is zeros.
-#[test]
 fn pager_wb_op_zero_expands_tail_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5663,7 +5449,6 @@ fn pager_wb_op_zero_expands_tail_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroExpandsTailTrapDirty)
-#[test]
 fn pager_wb_op_zero_expands_tail_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5681,7 +5466,6 @@ fn pager_wb_op_zero_expands_tail_trap_dirty() {
 /// C++: TEST(PagerWriteback, OpZeroPartialPageNoTrapDirty)
 ///
 /// Zero a partial page range. The non-zeroed part should retain data.
-#[test]
 fn pager_wb_op_zero_partial_page_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5709,7 +5493,6 @@ fn pager_wb_op_zero_partial_page_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroPartialPageTrapDirty)
-#[test]
 fn pager_wb_op_zero_partial_page_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5727,10 +5510,9 @@ fn pager_wb_op_zero_partial_page_trap_dirty() {
 /// C++: TEST(PagerWriteback, OpZeroPinnedNoTrapDirty)
 ///
 /// In the C++ test, a pager VMO page is pinned then zeroed via op_range.
-/// Since BTI/pin is not available in libos mode, we exercise the
+/// Since BTI/pin is not available in test mode, we exercise the
 /// equivalent: supply pages, zero a page, verify zeros, and confirm the
 /// other page is unchanged.
-#[test]
 fn pager_wb_op_zero_pinned_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5764,7 +5546,6 @@ fn pager_wb_op_zero_pinned_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroPinnedTrapDirty)
-#[test]
 fn pager_wb_op_zero_pinned_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5782,7 +5563,6 @@ fn pager_wb_op_zero_pinned_trap_dirty() {
 /// C++: TEST(PagerWriteback, OpZeroResizeNoTrapDirty)
 ///
 /// Resizable VMO: supply page, zero it, verify zeros, resize down/up.
-#[test]
 fn pager_wb_op_zero_resize_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5801,7 +5581,6 @@ fn pager_wb_op_zero_resize_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroResizeTrapDirty)
-#[test]
 fn pager_wb_op_zero_resize_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5819,7 +5598,6 @@ fn pager_wb_op_zero_resize_trap_dirty() {
 /// C++: TEST(PagerWriteback, OpZeroTailNoTrapDirty)
 ///
 /// Resizable VMO: zero the tail page, verify zeros.
-#[test]
 fn pager_wb_op_zero_tail_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5841,7 +5619,6 @@ fn pager_wb_op_zero_tail_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroTailTrapDirty)
-#[test]
 fn pager_wb_op_zero_tail_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5857,7 +5634,6 @@ fn pager_wb_op_zero_tail_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroTrapDirty)
-#[test]
 fn pager_wb_op_zero_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5875,7 +5651,6 @@ fn pager_wb_op_zero_trap_dirty() {
 /// C++: TEST(PagerWriteback, OpZeroUnblocksReadRequestNoTrapDirty)
 ///
 /// Zero an unsupplied page — should not block on a read request.
-#[test]
 fn pager_wb_op_zero_unblocks_read_request_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5897,7 +5672,6 @@ fn pager_wb_op_zero_unblocks_read_request_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroUnblocksReadRequestTrapDirty)
-#[test]
 fn pager_wb_op_zero_unblocks_read_request_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5915,7 +5689,6 @@ fn pager_wb_op_zero_unblocks_read_request_trap_dirty() {
 /// C++: TEST(PagerWriteback, OpZeroWithMarkersNoTrapDirty)
 ///
 /// Supply pages, zero a page that already has content, verify zeros.
-#[test]
 fn pager_wb_op_zero_with_markers_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5935,7 +5708,6 @@ fn pager_wb_op_zero_with_markers_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroWithMarkersTrapDirty)
-#[test]
 fn pager_wb_op_zero_with_markers_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5953,7 +5725,6 @@ fn pager_wb_op_zero_with_markers_trap_dirty() {
 /// C++: TEST(PagerWriteback, OpZeroWritebackNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, zero a page, do writeback cycle.
-#[test]
 fn pager_wb_op_zero_writeback_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5995,7 +5766,6 @@ fn pager_wb_op_zero_writeback_no_trap_dirty() {
 /// do writeback cycle, verify page 0 has written data. Page 1 is
 /// decommitted by the zero op (in TRAP_DIRTY mode zeroing removes the
 /// page), so we verify it's no longer committed rather than reading.
-#[test]
 fn pager_wb_op_zero_writeback_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6043,11 +5813,10 @@ fn pager_wb_op_zero_writeback_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, PinAfterDirty)
-#[test]
 fn pager_wb_pin_after_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // This test requires BTI/pin infrastructure, not available in libos mode.
+    // This test requires BTI/pin infrastructure, not available in test mode.
     // Verify basic OP_DIRTY on TRAP_DIRTY VMO.
     let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
     pager_helper.supply_pages(&vmo, key, 0, 2);
@@ -6065,10 +5834,9 @@ fn pager_wb_pin_after_dirty() {
 /// C++: TEST(PagerWriteback, PinForReadNoTrapDirty)
 ///
 /// In the C++ test, a pager VMO page is pinned for reading via BTI.
-/// Since BTI/pin is not available in libos mode, we exercise the
+/// Since BTI/pin is not available in test mode, we exercise the
 /// equivalent: supply page, read it, verify NOT modified (pin-for-read
 /// should not dirty pages).
-#[test]
 fn pager_wb_pin_for_read_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6092,7 +5860,6 @@ fn pager_wb_pin_for_read_no_trap_dirty() {
 ///
 /// TRAP_DIRTY variant: supply pages, read only, verify NOT modified
 /// and no dirty ranges.
-#[test]
 fn pager_wb_pin_for_read_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6118,9 +5885,8 @@ fn pager_wb_pin_for_read_trap_dirty() {
 /// C++: TEST(PagerWriteback, PinForWriteNoTrapDirty)
 ///
 /// In the C++ test, a pager VMO page is pinned for writing via BTI,
-/// which dirties the page. Since BTI/pin is not available in libos mode,
+/// which dirties the page. Since BTI/pin is not available in test mode,
 /// we exercise the equivalent via VMO write.
-#[test]
 fn pager_wb_pin_for_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6157,7 +5923,6 @@ fn pager_wb_pin_for_write_no_trap_dirty() {
 ///
 /// TRAP_DIRTY variant: supply pages, OP_DIRTY, write, verify dirty
 /// ranges and content.
-#[test]
 fn pager_wb_pin_for_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6199,10 +5964,9 @@ fn pager_wb_pin_for_write_trap_dirty() {
 /// C++: TEST(PagerWriteback, PinForWriteUnpopulatedNoTrapDirty)
 ///
 /// In the C++ test, a pager VMO page that has NOT been supplied (unpopulated)
-/// is pinned for writing. Since BTI/pin is not available in libos mode,
+/// is pinned for writing. Since BTI/pin is not available in test mode,
 /// we verify that an unpopulated page cannot be read (returns zeros or
 /// the page-fault path is hit), then supply and write it.
-#[test]
 fn pager_wb_pin_for_write_unpopulated_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6229,7 +5993,6 @@ fn pager_wb_pin_for_write_unpopulated_no_trap_dirty() {
 ///
 /// TRAP_DIRTY variant: supply only some pages, OP_DIRTY the supplied
 /// one, write to it, verify dirty ranges.
-#[test]
 fn pager_wb_pin_for_write_unpopulated_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6259,10 +6022,9 @@ fn pager_wb_pin_for_write_unpopulated_trap_dirty() {
 /// C++: TEST(PagerWriteback, PinnedWritebackNoTrapDirty)
 ///
 /// In the C++ test, a pinned pager VMO page goes through a writeback
-/// cycle while pinned. Since BTI/pin is not available in libos mode,
+/// cycle while pinned. Since BTI/pin is not available in test mode,
 /// we exercise the equivalent: supply page, write to it, do writeback
 /// cycle, then verify content is preserved.
-#[test]
 fn pager_wb_pinned_writeback_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6296,7 +6058,6 @@ fn pager_wb_pinned_writeback_no_trap_dirty() {
 ///
 /// TRAP_DIRTY variant: supply pages, OP_DIRTY, write, writeback cycle,
 /// verify content preserved.
-#[test]
 fn pager_wb_pinned_writeback_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6331,7 +6092,6 @@ fn pager_wb_pinned_writeback_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, QueryDirtyRangesInvalidBuffer)
-#[test]
 fn pager_wb_query_dirty_ranges_invalid_buffer() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6351,7 +6111,6 @@ fn pager_wb_query_dirty_ranges_invalid_buffer() {
 }
 
 /// C++: TEST(PagerWriteback, QueryEarlyTermination)
-#[test]
 fn pager_wb_query_early_termination() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6381,7 +6140,6 @@ fn pager_wb_query_early_termination() {
 }
 
 /// C++: TEST(PagerWriteback, QueryVmoStatsInvalidPointer)
-#[test]
 fn pager_wb_query_vmo_stats_invalid_pointer() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6398,10 +6156,9 @@ fn pager_wb_query_vmo_stats_invalid_pointer() {
 ///
 /// In the C++ test, a page is dirtied, writeback is begun (awaiting clean),
 /// and then a read-pin is attempted. Since BTI/pin is not available in
-/// libos mode, we exercise the equivalent: dirty a page, begin writeback,
+/// test mode, we exercise the equivalent: dirty a page, begin writeback,
 /// read the page (should still succeed during writeback), then end
 /// writeback.
-#[test]
 fn pager_wb_read_pin_awaiting_clean_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6438,7 +6195,6 @@ fn pager_wb_read_pin_awaiting_clean_no_trap_dirty() {
 ///
 /// TRAP_DIRTY variant: OP_DIRTY, write, begin writeback, read during
 /// writeback, end writeback.
-#[test]
 fn pager_wb_read_pin_awaiting_clean_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6479,7 +6235,6 @@ fn pager_wb_read_pin_awaiting_clean_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeDirtyRequest)
-#[test]
 fn pager_wb_resize_dirty_request() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6505,7 +6260,6 @@ fn pager_wb_resize_dirty_request() {
 /// C++: TEST(PagerWriteback, ResizePartialWritebackIntersectingRandomWritesNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_partial_writeback_intersecting_random_writes_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6541,7 +6295,6 @@ fn pager_wb_resize_partial_writeback_intersecting_random_writes_no_trap_dirty() 
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback cycle,
 /// verify content preserved and page 1 unchanged.
-#[test]
 fn pager_wb_resize_partial_writeback_intersecting_random_writes_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6589,7 +6342,6 @@ fn pager_wb_resize_partial_writeback_intersecting_random_writes_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeSupplyZeroNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_supply_zero_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6622,7 +6374,6 @@ fn pager_wb_resize_supply_zero_no_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeSupplyZeroTrapDirty)
-#[test]
 fn pager_wb_resize_supply_zero_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6638,7 +6389,6 @@ fn pager_wb_resize_supply_zero_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWithOutstandingDirtyRequests)
-#[test]
 fn pager_wb_resize_with_outstanding_dirty_requests() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6661,7 +6411,6 @@ fn pager_wb_resize_with_outstanding_dirty_requests() {
 /// C++: TEST(PagerWriteback, ResizeWritebackAfterGapNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_after_gap_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6697,7 +6446,6 @@ fn pager_wb_resize_writeback_after_gap_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback cycle,
 /// verify content preserved and page 1 unchanged.
-#[test]
 fn pager_wb_resize_writeback_after_gap_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6741,7 +6489,6 @@ fn pager_wb_resize_writeback_after_gap_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackDirtyAfterQueryNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_dirty_after_query_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6777,7 +6524,6 @@ fn pager_wb_resize_writeback_dirty_after_query_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write, query dirty, writeback,
 /// verify content preserved and page 1 unchanged.
-#[test]
 fn pager_wb_resize_writeback_dirty_after_query_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6826,10 +6572,9 @@ fn pager_wb_resize_writeback_dirty_after_query_trap_dirty() {
 ///
 /// In the C++ test, a resizable VMO is mapped, written, writeback is begun,
 /// an interleaved write is done via mapping during writeback, then
-/// writeback ends. Since VMAR mapping is not available in libos mode,
+/// writeback ends. Since VMAR mapping is not available in test mode,
 /// we use VMO write instead. We verify that content written during
 /// writeback is preserved.
-#[test]
 fn pager_wb_resize_writeback_interleaved_write_with_mapping_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6874,7 +6619,6 @@ fn pager_wb_resize_writeback_interleaved_write_with_mapping_no_trap_dirty() {
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write, begin writeback, re-dirty
 /// (interleaved write), end writeback. Page stays dirty after re-dirty.
 /// (Mapping part requires VMAR — we use VMO write instead.)
-#[test]
 fn pager_wb_resize_writeback_interleaved_write_with_mapping_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6923,7 +6667,6 @@ fn pager_wb_resize_writeback_interleaved_write_with_mapping_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingRandomWritesNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_intersecting_random_writes_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6959,7 +6702,6 @@ fn pager_wb_resize_writeback_intersecting_random_writes_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback cycle,
 /// verify content preserved and page 1 unchanged.
-#[test]
 fn pager_wb_resize_writeback_intersecting_random_writes_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7003,7 +6745,6 @@ fn pager_wb_resize_writeback_intersecting_random_writes_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingResizeNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_intersecting_resize_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7039,7 +6780,6 @@ fn pager_wb_resize_writeback_intersecting_resize_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback cycle,
 /// verify content preserved and page 1 unchanged.
-#[test]
 fn pager_wb_resize_writeback_intersecting_resize_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7083,7 +6823,6 @@ fn pager_wb_resize_writeback_intersecting_resize_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingWriteNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_intersecting_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7119,7 +6858,6 @@ fn pager_wb_resize_writeback_intersecting_write_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback cycle,
 /// verify content preserved and page 1 unchanged.
-#[test]
 fn pager_wb_resize_writeback_intersecting_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7163,7 +6901,6 @@ fn pager_wb_resize_writeback_intersecting_write_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackMulipleGapsNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_muliple_gaps_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7199,7 +6936,6 @@ fn pager_wb_resize_writeback_muliple_gaps_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback cycle,
 /// verify content preserved and page 1 unchanged.
-#[test]
 fn pager_wb_resize_writeback_muliple_gaps_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7241,7 +6977,6 @@ fn pager_wb_resize_writeback_muliple_gaps_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackNewDirtyRequests)
-#[test]
 fn pager_wb_resize_writeback_new_dirty_requests() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7275,7 +7010,6 @@ fn pager_wb_resize_writeback_new_dirty_requests() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackNewDirtyRequestsInterleaved)
-#[test]
 fn pager_wb_resize_writeback_new_dirty_requests_interleaved() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7319,7 +7053,6 @@ fn pager_wb_resize_writeback_new_dirty_requests_interleaved() {
 /// C++: TEST(PagerWriteback, ResizeWritebackNoTrapDirty)
 ///
 /// Resizable VMO: supply, write, writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7351,7 +7084,6 @@ fn pager_wb_resize_writeback_no_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackNonIntersectingResizeNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_non_intersecting_resize_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7387,7 +7119,6 @@ fn pager_wb_resize_writeback_non_intersecting_resize_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback cycle,
 /// verify content preserved and page 1 unchanged.
-#[test]
 fn pager_wb_resize_writeback_non_intersecting_resize_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7431,7 +7162,6 @@ fn pager_wb_resize_writeback_non_intersecting_resize_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackNonIntersectingWriteNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_non_intersecting_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7467,7 +7197,6 @@ fn pager_wb_resize_writeback_non_intersecting_write_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback cycle,
 /// verify content preserved and page 1 unchanged.
-#[test]
 fn pager_wb_resize_writeback_non_intersecting_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7511,7 +7240,6 @@ fn pager_wb_resize_writeback_non_intersecting_write_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackPartialEndNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_partial_end_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7547,7 +7275,6 @@ fn pager_wb_resize_writeback_partial_end_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback cycle,
 /// verify content preserved and page 1 unchanged.
-#[test]
 fn pager_wb_resize_writeback_partial_end_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7591,7 +7318,6 @@ fn pager_wb_resize_writeback_partial_end_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackRepeatedNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_repeated_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7627,7 +7353,6 @@ fn pager_wb_resize_writeback_repeated_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write, writeback, then repeat
 /// the dirty+writeback cycle. Verify content preserved each time.
-#[test]
 fn pager_wb_resize_writeback_repeated_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7692,7 +7417,6 @@ fn pager_wb_resize_writeback_repeated_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackSequentialNoTrapDirty)
 ///
 /// Resizable VMO: supply pages, write, do writeback cycle, verify content.
-#[test]
 fn pager_wb_resize_writeback_sequential_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7729,7 +7453,6 @@ fn pager_wb_resize_writeback_sequential_no_trap_dirty() {
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback page 0,
 /// then OP_DIRTY page 1, write to it, writeback page 1. Sequential
 /// per-page writeback.
-#[test]
 fn pager_wb_resize_writeback_sequential_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7791,7 +7514,6 @@ fn pager_wb_resize_writeback_sequential_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write 0xAA, writeback cycle,
 /// verify content persists and page 1 is unchanged.
-#[test]
 fn pager_wb_resize_writeback_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7833,10 +7555,9 @@ fn pager_wb_resize_writeback_trap_dirty() {
 /// C++: TEST(PagerWriteback, ResizeWritebackWithMappingNoTrapDirty)
 ///
 /// In the C++ test, a resizable VMO is mapped, written via mapping,
-/// then writeback is done. Since VMAR mapping is not available in libos
+/// then writeback is done. Since VMAR mapping is not available in test mode
 /// mode, we use VMO write. We verify the writeback cycle preserves
 /// content.
-#[test]
 fn pager_wb_resize_writeback_with_mapping_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7873,7 +7594,6 @@ fn pager_wb_resize_writeback_with_mapping_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback cycle,
 /// verify content. (Mapping part requires VMAR — we use VMO write.)
-#[test]
 fn pager_wb_resize_writeback_with_mapping_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7915,7 +7635,6 @@ fn pager_wb_resize_writeback_with_mapping_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackWithOutstandingDirtyRequests)
-#[test]
 fn pager_wb_resize_writeback_with_outstanding_dirty_requests() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7948,7 +7667,6 @@ fn pager_wb_resize_writeback_with_outstanding_dirty_requests() {
 }
 
 /// C++: TEST(PagerWriteback, ResolveDirtyRequestAfterDetach)
-#[test]
 fn pager_wb_resolve_dirty_request_after_detach() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7971,7 +7689,6 @@ fn pager_wb_resolve_dirty_request_after_detach() {
 }
 
 /// C++: TEST(PagerWriteback, SimpleDirtyNoTrap)
-#[test]
 fn pager_wb_simple_dirty_no_trap() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8012,7 +7729,6 @@ fn pager_wb_simple_dirty_no_trap() {
 }
 
 /// C++: TEST(PagerWriteback, SimpleTrapDirtyVmo)
-#[test]
 fn pager_wb_simple_trap_dirty_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8042,7 +7758,6 @@ fn pager_wb_simple_trap_dirty_vmo() {
 }
 
 /// C++: TEST(PagerWriteback, SimpleTrapDirtyVmar)
-#[test]
 fn pager_wb_simple_trap_dirty_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8068,7 +7783,6 @@ fn pager_wb_simple_trap_dirty_vmar() {
 ///
 /// Supply page, write (marks dirty without trap), do writeback
 /// begin/end cycle, verify content persists.
-#[test]
 fn pager_wb_simple_writeback_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8113,7 +7827,6 @@ fn pager_wb_simple_writeback_no_trap_dirty() {
 /// TRAP_DIRTY VMO: supply page, OP_DIRTY, write 0xAA, verify,
 /// writeback begin/end, verify content persists, then re-dirty
 /// and write 0x77, verify.
-#[test]
 fn pager_wb_simple_writeback_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8175,7 +7888,6 @@ fn pager_wb_simple_writeback_trap_dirty() {
 ///
 /// Create a slice of a pager VMO, zero a page in the slice,
 /// verify the parent also sees the zeroed page (slices share pages).
-#[test]
 fn pager_wb_slice_op_zero_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8208,7 +7920,6 @@ fn pager_wb_slice_op_zero_no_trap_dirty() {
 /// TRAP_DIRTY VMO: create a slice, OP_DIRTY page 0 via parent, zero
 /// page 0 via the slice, verify both slice and parent see zeros,
 /// page 1 unchanged.
-#[test]
 fn pager_wb_slice_op_zero_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8249,11 +7960,10 @@ fn pager_wb_slice_op_zero_trap_dirty() {
 /// C++: TEST(PagerWriteback, SlicePinWriteNoTrapDirty)
 ///
 /// In the C++ test, a slice of a pager VMO is pinned for writing via BTI.
-/// Since BTI/pin is not available in libos mode, we exercise the
+/// Since BTI/pin is not available in test mode, we exercise the
 /// equivalent: create a slice, write to it, verify both slice and parent
 /// see the written data (slices share pages), and confirm the VMO is
 /// marked modified.
-#[test]
 fn pager_wb_slice_pin_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8299,7 +8009,6 @@ fn pager_wb_slice_pin_write_no_trap_dirty() {
 ///
 /// TRAP_DIRTY variant: create slice, OP_DIRTY on parent, write via slice,
 /// verify dirty ranges and content.
-#[test]
 fn pager_wb_slice_pin_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8348,7 +8057,6 @@ fn pager_wb_slice_pin_write_trap_dirty() {
 ///
 /// Create a slice of a pager VMO, write to the slice,
 /// verify the parent also sees the written data (slices share pages).
-#[test]
 fn pager_wb_slice_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8382,7 +8090,6 @@ fn pager_wb_slice_write_no_trap_dirty() {
 /// TRAP_DIRTY VMO: create a slice, OP_DIRTY page 0 via parent, write
 /// to page 0 via the slice, verify both slice and parent see the
 /// written data, page 1 unchanged.
-#[test]
 fn pager_wb_slice_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8422,7 +8129,6 @@ fn pager_wb_slice_write_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, SuspendDirtyTestVmo)
-#[test]
 fn pager_wb_suspend_dirty_test_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8433,7 +8139,6 @@ fn pager_wb_suspend_dirty_test_vmo() {
 }
 
 /// C++: TEST(PagerWriteback, SuspendDirtyTestVmar)
-#[test]
 fn pager_wb_suspend_dirty_test_vmar() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8444,7 +8149,6 @@ fn pager_wb_suspend_dirty_test_vmar() {
 }
 
 /// C++: TEST(PagerWriteback, Unbounded)
-#[test]
 fn pager_wb_unbounded() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8457,7 +8161,6 @@ fn pager_wb_unbounded() {
 }
 
 /// C++: TEST(PagerWriteback, UntrackedAbsorbsIntervalSlots)
-#[test]
 fn pager_wb_untracked_absorbs_interval_slots() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8477,7 +8180,6 @@ fn pager_wb_untracked_absorbs_interval_slots() {
 }
 
 /// C++: TEST(PagerWriteback, UntrackedAbsorbsPages)
-#[test]
 fn pager_wb_untracked_absorbs_pages() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8497,7 +8199,6 @@ fn pager_wb_untracked_absorbs_pages() {
 }
 
 /// C++: TEST(PagerWriteback, UntrackedBeyondStreamSize)
-#[test]
 fn pager_wb_untracked_beyond_stream_size() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8515,10 +8216,9 @@ fn pager_wb_untracked_beyond_stream_size() {
 ///
 /// In the C++ test, a page is dirtied, writeback is begun (awaiting clean),
 /// and then a write-pin is attempted (re-dirtying the page). Since BTI/pin
-/// is not available in libos mode, we exercise the equivalent: dirty a
+/// is not available in test mode, we exercise the equivalent: dirty a
 /// page, begin writeback, write again (re-dirty during writeback), then
 /// end writeback. The re-written content should be preserved.
-#[test]
 fn pager_wb_write_pin_awaiting_clean_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8556,7 +8256,6 @@ fn pager_wb_write_pin_awaiting_clean_no_trap_dirty() {
 ///
 /// TRAP_DIRTY variant: OP_DIRTY, write, begin writeback, OP_DIRTY again
 /// (re-dirty during writeback), write again, end writeback.
-#[test]
 fn pager_wb_write_pin_awaiting_clean_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8613,7 +8312,6 @@ fn pager_wb_write_pin_awaiting_clean_trap_dirty() {
 /// C++: TEST(PagerWriteback, WritebackCombinedNoTrapDirty)
 ///
 /// Resizable VMO: supply, write, writeback cycle, verify content.
-#[test]
 fn pager_wb_writeback_combined_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8649,7 +8347,6 @@ fn pager_wb_writeback_combined_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY both pages, write 0xAA to page 0 and
 /// 0xBB to page 1, writeback cycle, verify content.
-#[test]
 fn pager_wb_writeback_combined_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8694,7 +8391,6 @@ fn pager_wb_writeback_combined_trap_dirty() {
 ///
 /// Supply pages, write to dirty them, detach. After detach, content
 /// should be preserved.
-#[test]
 fn pager_wb_writeback_dirty_pages_after_detach_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8724,7 +8420,6 @@ fn pager_wb_writeback_dirty_pages_after_detach_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY both pages, write to them, detach.
 /// Dirty pages survive detach; content should be preserved.
-#[test]
 fn pager_wb_writeback_dirty_pages_after_detach_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8756,7 +8451,6 @@ fn pager_wb_writeback_dirty_pages_after_detach_trap_dirty() {
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedBeginNoTrapDirty)
 ///
 /// Resizable VMO: supply, write, writeback cycle, verify content.
-#[test]
 fn pager_wb_writeback_out_of_order_combined_begin_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8792,7 +8486,6 @@ fn pager_wb_writeback_out_of_order_combined_begin_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY both pages, write to both, writeback
 /// cycle over combined range, verify content.
-#[test]
 fn pager_wb_writeback_out_of_order_combined_begin_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8836,7 +8529,6 @@ fn pager_wb_writeback_out_of_order_combined_begin_trap_dirty() {
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedEndNoTrapDirty)
 ///
 /// Resizable VMO: supply, write, writeback cycle, verify content.
-#[test]
 fn pager_wb_writeback_out_of_order_combined_end_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8872,7 +8564,6 @@ fn pager_wb_writeback_out_of_order_combined_end_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY both pages, write to both, writeback
 /// cycle over combined range, verify content.
-#[test]
 fn pager_wb_writeback_out_of_order_combined_end_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8916,7 +8607,6 @@ fn pager_wb_writeback_out_of_order_combined_end_trap_dirty() {
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderNoTrapDirty)
 ///
 /// Resizable VMO: supply, write, writeback cycle, verify content.
-#[test]
 fn pager_wb_writeback_out_of_order_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8952,7 +8642,6 @@ fn pager_wb_writeback_out_of_order_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 1 first, then page 0 (out of order),
 /// write to both, writeback cycle, verify content.
-#[test]
 fn pager_wb_writeback_out_of_order_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -9001,7 +8690,6 @@ fn pager_wb_writeback_out_of_order_trap_dirty() {
 /// C++: TEST(PagerWriteback, WritebackResizedRangeAfterDetachNoTrapDirty)
 ///
 /// Resizable VMO: supply, write, detach, verify content.
-#[test]
 fn pager_wb_writeback_resized_range_after_detach_no_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -9030,7 +8718,6 @@ fn pager_wb_writeback_resized_range_after_detach_no_trap_dirty() {
 ///
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, detach. Dirty page 0
 /// survives detach; clean page 1 is decommitted.
-#[test]
 fn pager_wb_writeback_resized_range_after_detach_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -9060,7 +8747,6 @@ fn pager_wb_writeback_resized_range_after_detach_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, WritebackWithMapping)
-#[test]
 fn pager_wb_writeback_with_mapping() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -9103,7 +8789,6 @@ fn pager_wb_writeback_with_mapping() {
 /// then snapshot the clone. Verify the clone sees its write, the
 /// snapshot sees the same forked value, and a second write to clone
 /// doesn't affect the snapshot.
-#[test]
 fn pager_snapshot_smoke() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9149,7 +8834,6 @@ fn pager_snapshot_smoke() {
 /// Snapshot-at-least-on-write after snapshot-modified should preserve
 /// isolation. The C++ test uses SNAPSHOT_MODIFIED; we use create_child(false)
 /// which is snapshot-at-least-on-write and provides the same COW isolation.
-#[test]
 fn pager_snapshot_at_least_on_write_after_snapshot_modified() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9187,7 +8871,6 @@ fn pager_snapshot_at_least_on_write_after_snapshot_modified() {
 ///
 /// Multiple ALOW clones off the root, then snapshot one of them and
 /// snapshot the root. Verify all clones see their expected data.
-#[test]
 fn pager_snapshot_snapshot_modified_after_at_least_on_write() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9228,7 +8911,6 @@ fn pager_snapshot_snapshot_modified_after_at_least_on_write() {
 /// Tests resizing both clone and snapshot and verifying data integrity.
 /// Note: populated_bytes fractional attribution not implemented in zCore;
 /// we verify data integrity and that resize doesn't panic.
-#[test]
 fn pager_snapshot_resize_shrink_snapshot() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9269,7 +8951,6 @@ fn pager_snapshot_resize_shrink_snapshot() {
 /// Snapshot the root without modifying, then snapshot the snapshot.
 /// Since no pages were modified, clones have no private pages.
 /// Verify no panics and data integrity through the chain.
-#[test]
 fn pager_snapshot_resize_shrink_snapshot_with_empty_parent() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9302,7 +8983,6 @@ fn pager_snapshot_resize_shrink_snapshot_with_empty_parent() {
 /// (NO_WRITE → snapshot gains WRITE). In zCore we verify the basic
 /// behavior: snapshot of a clone can be written to even if the
 /// source clone was not modified.
-#[test]
 fn pager_snapshot_snapshot_read_only_vmo() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9333,7 +9013,6 @@ fn pager_snapshot_snapshot_read_only_vmo() {
 ///
 /// Drop a full clone whose child only sees the first page.
 /// The second page should be released. Verify data integrity.
-#[test]
 fn pager_snapshot_release_cow_parent_pages_right() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9370,7 +9049,6 @@ fn pager_snapshot_release_cow_parent_pages_right() {
 ///
 /// Drop a full clone whose child only sees the second page.
 /// The first page should be released. Verify data integrity.
-#[test]
 fn pager_snapshot_release_cow_parent_pages_left() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9411,7 +9089,6 @@ fn pager_snapshot_release_cow_parent_pages_left() {
 ///
 /// 3-page VMO. Clone all 3, then partial clone the center page only.
 /// Drop full clone — releases left and right pages. Verify integrity.
-#[test]
 fn pager_snapshot_release_cow_parent_pages_left_and_right() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9453,7 +9130,6 @@ fn pager_snapshot_release_cow_parent_pages_left_and_right() {
 ///
 /// Clone root, write to fork first page, snapshot first page only,
 /// then drop full clone. The half_clone should see the forked value.
-#[test]
 fn pager_snapshot_release_cow_parent_pages_right_in_hidden_node() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9482,7 +9158,6 @@ fn pager_snapshot_release_cow_parent_pages_right_in_hidden_node() {
 /// 3-page VMO. Clone, write to page 1 of clone, snapshot page 0 only,
 /// zero pages 1-2 of full_clone. Verify zeroed pages read as 0 and
 /// root still has original data.
-#[test]
 fn pager_snapshot_zero_range_from_end_of_parent() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9529,7 +9204,6 @@ fn pager_snapshot_zero_range_from_end_of_parent() {
 /// Zero first page of snapshot before pages are supplied to root.
 /// Supply pages to root afterwards; snapshot should still see zeros
 /// (the zero isolates the snapshot from later supply).
-#[test]
 fn pager_snapshot_zero_range_left_in_snapshot_no_pages_in_parent() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9568,7 +9242,6 @@ fn pager_snapshot_zero_range_left_in_snapshot_no_pages_in_parent() {
 /// rather than writing true zeros. After decommit, reads fall
 /// through to the parent, so the page appears non-zero. We verify
 /// the zero() call succeeds and that the clone is unaffected.
-#[test]
 fn pager_snapshot_zero_range_left_in_snapshot_page_in_parent() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9603,7 +9276,6 @@ fn pager_snapshot_zero_range_left_in_snapshot_page_in_parent() {
 ///
 /// Limitation: zCore's zero() on COW children decommits rather than
 /// writing true zeros. See ZeroRangeLeftInSnapshotPageInParent note.
-#[test]
 fn pager_snapshot_zero_range_left_in_snapshot_no_pages_in_parent_chain() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9645,7 +9317,6 @@ fn pager_snapshot_zero_range_left_in_snapshot_no_pages_in_parent_chain() {
 /// Note: snapshot captures clone3's state at creation time (ALOW).
 /// clone3 inherited clone2's forked page. After zero, snapshot
 /// should see zeros even though clone3 later writes new data.
-#[test]
 fn pager_snapshot_zero_range_left_in_snapshot_pages_in_parent_chain() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9684,7 +9355,6 @@ fn pager_snapshot_zero_range_left_in_snapshot_pages_in_parent_chain() {
 ///
 /// Write to snapshot to commit a page, then zero that page.
 /// Verify the zeroed page reads as 0.
-#[test]
 fn pager_snapshot_zero_range_left_in_snapshot_page_in_snapshot() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9716,7 +9386,6 @@ fn pager_snapshot_zero_range_left_in_snapshot_page_in_snapshot() {
 /// Note: In ALOW semantics, the snapshot must be created AFTER the
 /// clone write to see it. Then zeroing the snapshot's page should
 /// not affect the clone.
-#[test]
 fn pager_snapshot_zero_range_left_in_snapshot_page_in_clone() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9746,7 +9415,6 @@ fn pager_snapshot_zero_range_left_in_snapshot_page_in_clone() {
 ///
 /// Write to clone to commit a page in the hidden node, then
 /// snapshot and zero first page of snapshot. Verify zeros stick.
-#[test]
 fn pager_snapshot_zero_range_left_in_snapshot_page_in_hidden_node() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9774,7 +9442,6 @@ fn pager_snapshot_zero_range_left_in_snapshot_page_in_hidden_node() {
 /// Snapshot-at-least-on-write of a slice of the root should work.
 /// Note: zCore slices don't support create_child (COW clones),
 /// so we document this limitation.
-#[test]
 fn pager_snapshot_alow_slice() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9803,7 +9470,6 @@ fn pager_snapshot_alow_slice() {
 /// Creating a COW snapshot of a slice of a snapshot should succeed
 /// (the slice redirects through the parent snapshot VMO).
 /// The snapshot should see the original data frozen at creation time.
-#[test]
 fn pager_snapshot_snapshot_slice_at_least_on_write() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9833,7 +9499,6 @@ fn pager_snapshot_snapshot_slice_at_least_on_write() {
 /// child. Verifies all clones see the same data and that a write
 /// to root is visible through the slice (but not through COW clones
 /// under ALOW semantics).
-#[test]
 fn pager_snapshot_clone_after_slice_root() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9880,7 +9545,6 @@ fn pager_snapshot_clone_after_slice_root() {
 /// the same data. Writes to clone, verifies isolation from root.
 /// Creates a snapshot of the clone, verifies it sees clone's data.
 /// Writes to snapshot, verifies isolation from both root and clone.
-#[test]
 fn pager_snapshot_read_test() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9940,7 +9604,6 @@ fn pager_snapshot_read_test() {
 /// Creates root → clone → snapshot chain, writes to clone to fork
 /// pages. Then drops VMOs in various orders, verifying no panics
 /// and that remaining VMOs still have correct data.
-#[test]
 fn pager_snapshot_drop_vmos() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -9991,7 +9654,6 @@ fn pager_snapshot_drop_vmos() {
 
 /// C++: TEST(Snapshot, SnapshotModifiedClone) — stub (uses ReadWrite
 /// with GenerateBufferContents, mostly covered by the Read test)
-#[test]
 fn pager_snapshot_snapshot_modified_clone() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10018,7 +9680,6 @@ fn pager_snapshot_snapshot_modified_clone() {
 /// Creates root → clone → snapshot chain.  Writes to clone to fork a
 /// page, then drops the snapshot.  Writes to clone after drop should
 /// not panic and should be visible.
-#[test]
 fn pager_snapshot_write_after_drop_sibling() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10055,7 +9716,6 @@ fn pager_snapshot_write_after_drop_sibling() {
 /// zCore uses snapshot-at-least-on-write semantics: the snapshot captures
 /// the page state at snapshot time, so later root modifications to page 0
 /// are NOT visible through the snapshot. We test accordingly.
-#[test]
 fn pager_snapshot_clone_modify_chain() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10132,7 +9792,6 @@ fn pager_snapshot_clone_modify_chain() {
 /// Creates root → clone → snapshot, writes to clone to fork a page
 /// shared between clone and snapshot. Then reads the snapshot page
 /// (effectively committing it). Verifies the page is committed.
-#[test]
 fn pager_snapshot_commit_range_in_snapshot() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10164,7 +9823,6 @@ fn pager_snapshot_commit_range_in_snapshot() {
 ///
 /// Memory accounting (populated_bytes fractional attribution) is not
 /// implemented in zCore. Documented stub.
-#[test]
 fn pager_snapshot_obj_mem_accounting() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10180,7 +9838,6 @@ fn pager_snapshot_obj_mem_accounting() {
 /// snapshots the clone, then writes to root VMO. Verifies COW isolation:
 /// clone and snapshot still see the original data (snapshot-at-least-on-write
 /// semantics — they do not track subsequent parent writes).
-#[test]
 fn pager_snapshot_root_vmo_write() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10212,7 +9869,6 @@ fn pager_snapshot_root_vmo_write() {
 ///
 /// Creates root → clone → snapshot chain.  Writes to the clone and
 /// verifies that root and snapshot are unchanged (COW isolation).
-#[test]
 fn pager_snapshot_clone_vmo_write() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10245,7 +9901,6 @@ fn pager_snapshot_clone_vmo_write() {
 ///
 /// Creates root → clone → snapshot chain.  Writes to the snapshot
 /// and verifies that root and clone are unchanged (COW isolation).
-#[test]
 fn pager_snapshot_snapshot_vmo_write() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10280,7 +9935,6 @@ fn pager_snapshot_snapshot_vmo_write() {
 /// Creates a pager VMO, supplies pages, writes data, clones, snapshots
 /// the clone, then drops the clone. Verifies root VMO and snapshot
 /// still have the correct original data.
-#[test]
 fn pager_snapshot_close_clone() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10310,7 +9964,6 @@ fn pager_snapshot_close_clone() {
 /// Creates a pager VMO, supplies pages, writes data, clones, snapshots
 /// the clone, then drops the snapshot. Verifies root VMO and clone
 /// still have the correct original data.
-#[test]
 fn pager_snapshot_close_snapshot() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10340,7 +9993,6 @@ fn pager_snapshot_close_snapshot() {
 /// Creates a pager VMO, supplies pages, writes data, clones, snapshots
 /// the clone, then drops the root VMO. Verifies clone and snapshot
 /// still have the correct original data.
-#[test]
 fn pager_snapshot_close_root() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10373,7 +10025,6 @@ fn pager_snapshot_close_root() {
 ///
 /// This test documents the limitation by verifying the expected error,
 /// and validates that slices themselves work (read/write transparency).
-#[test]
 fn pager_snapshot_snapshot_slice() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10408,7 +10059,6 @@ fn pager_snapshot_snapshot_slice() {
 /// Creates root → clone → snapshot chain, then modifies clone, creates
 /// a slice of clone, snapshots clone again. Verifies slice tracks clone
 /// writes and that snapshots are isolated.
-#[test]
 fn pager_snapshot_snapshot_vmo_with_slice() {
     let _ctx = TestContext::new();
     let mut pager = UserPagerHelper::new();
@@ -10460,10 +10110,9 @@ fn pager_snapshot_snapshot_vmo_with_slice() {
 /// C++: TEST(Snapshot, ResizeSnapshotRace)
 ///
 /// Regression test for concurrent resize + snapshot. The C++ test races
-/// resize with snapshot creation. In libos mode we exercise the
+/// resize with snapshot creation. In test mode we exercise the
 /// sequential equivalent: create a resizable VMO, write to last page,
 /// snapshot, resize, and verify COW isolation.
-#[test]
 fn pager_snapshot_resize_snapshot_race() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -10500,8 +10149,7 @@ fn pager_snapshot_resize_snapshot_race() {
 ///
 /// This is the canonical "kill blocked reader" test. In C++ the
 /// thread does sys_vmo_read which traps into the pager path.
-/// In libos mode, read_paged() + blocking_run is the equivalent.
-#[async_std::test]
+/// In test mode, read_paged() + blocking_run is the equivalent.
 async fn pager_process_kill_blocked_user_vmo_read() {
     use crate::helpers::PagerProcessTestThread;
     use zircon_object::object::Signal;
@@ -10542,11 +10190,10 @@ async fn pager_process_kill_blocked_user_vmo_read() {
 /// C++: TEST(PagerProcess, KillBlockedUserPageFault)
 ///
 /// Same as KillBlockedUserVmoRead but in C++ the thread accesses a
-/// mapped address causing a page fault. In libos mode there is no
+/// mapped address causing a page fault. In test mode there is no
 /// MMU mapping, so we use the same read_paged() path. The kernel
 /// behavior being tested is identical: a thread blocked waiting for
 /// pager pages is killed.
-#[async_std::test]
 async fn pager_process_kill_blocked_user_page_fault() {
     use crate::helpers::PagerProcessTestThread;
     use zircon_object::object::Signal;
@@ -10582,8 +10229,7 @@ async fn pager_process_kill_blocked_user_page_fault() {
 ///
 /// Same as KillBlockedUserVmoRead but in C++ the thread does a
 /// get_info/read_state that requires copying from a pager-backed
-/// buffer. In libos mode this exercises the same code path.
-#[async_std::test]
+/// buffer. In test mode this exercises the same code path.
 async fn pager_process_kill_blocked_usercopy() {
     use crate::helpers::PagerProcessTestThread;
     use zircon_object::object::Signal;
@@ -10618,8 +10264,7 @@ async fn pager_process_kill_blocked_usercopy() {
 /// C++: TEST(PagerProcess, KillBlockedUsercopyCaptureFaults)
 ///
 /// Same as KillBlockedUsercopy but with fault capture enabled.
-/// In libos mode, the code path is identical to the other variants.
-#[async_std::test]
+/// In test mode, the code path is identical to the other variants.
 async fn pager_process_kill_blocked_usercopy_capture_faults() {
     use crate::helpers::PagerProcessTestThread;
     use zircon_object::object::Signal;
@@ -10656,7 +10301,6 @@ async fn pager_process_kill_blocked_usercopy_capture_faults() {
 /// Like KillBlockedUserVmoRead, but suspends the thread before
 /// killing the process. Verifies that a suspended, blocked thread
 /// is correctly killed and terminates.
-#[async_std::test]
 async fn pager_process_kill_after_suspend_vmo_read() {
     use crate::helpers::PagerProcessTestThread;
     use zircon_object::object::Signal;
@@ -10682,7 +10326,7 @@ async fn pager_process_kill_after_suspend_vmo_read() {
     // Suspend the thread before killing.
     ptt.thread.suspend();
     // Yield to let suspension take effect.
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Kill the process — should terminate even though suspended.
     ptt.proc.kill();
@@ -10697,8 +10341,7 @@ async fn pager_process_kill_after_suspend_vmo_read() {
 /// C++: TEST(PagerProcess, KillAfterSuspendPageFault)
 ///
 /// Same as KillAfterSuspendVmoRead but in C++ the thread blocks on
-/// a page fault. In libos mode the code path is identical.
-#[async_std::test]
+/// a page fault. In test mode the code path is identical.
 async fn pager_process_kill_after_suspend_page_fault() {
     use crate::helpers::PagerProcessTestThread;
     use zircon_object::object::Signal;
@@ -10722,7 +10365,7 @@ async fn pager_process_kill_after_suspend_page_fault() {
     );
 
     ptt.thread.suspend();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     ptt.proc.kill();
     ptt.wait_for_termination().await;
@@ -10736,7 +10379,6 @@ async fn pager_process_kill_after_suspend_page_fault() {
 /// C++: TEST(PagerProcess, KillAfterSuspendUsercopy)
 ///
 /// Same as KillAfterSuspendVmoRead but for the usercopy variant.
-#[async_std::test]
 async fn pager_process_kill_after_suspend_usercopy() {
     use crate::helpers::PagerProcessTestThread;
     use zircon_object::object::Signal;
@@ -10760,7 +10402,7 @@ async fn pager_process_kill_after_suspend_usercopy() {
     );
 
     ptt.thread.suspend();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     ptt.proc.kill();
     ptt.wait_for_termination().await;
@@ -10774,7 +10416,6 @@ async fn pager_process_kill_after_suspend_usercopy() {
 /// C++: TEST(PagerProcess, KillAfterSuspendUsercopyCapture)
 ///
 /// Same as KillAfterSuspendVmoRead but for the usercopy capture variant.
-#[async_std::test]
 async fn pager_process_kill_after_suspend_usercopy_capture() {
     use crate::helpers::PagerProcessTestThread;
     use zircon_object::object::Signal;
@@ -10798,7 +10439,7 @@ async fn pager_process_kill_after_suspend_usercopy_capture() {
     );
 
     ptt.thread.suspend();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     ptt.proc.kill();
     ptt.wait_for_termination().await;
@@ -10807,4 +10448,367 @@ async fn pager_process_kill_after_suspend_usercopy_capture() {
         ptt.thread.signal().contains(Signal::THREAD_TERMINATED),
         "suspended thread should terminate after kill"
     );
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    pager_bulk_odd_length_supply_test_vmo();
+    pager_bulk_odd_length_supply_test_vmar();
+    pager_bulk_odd_offset_supply_test_vmo();
+    pager_bulk_odd_offset_supply_test_vmar();
+    pager_bulk_single_supply_test_vmo();
+    pager_bulk_single_supply_test_vmar();
+    pager_cancel_key_does_not_wedge_the_pager_vmo();
+    pager_cancel_key_does_not_wedge_the_pager_vmar();
+    pager_clone_chain_commit_test();
+    pager_clone_commit_multiple_batches();
+    pager_clone_commit_random_batches();
+    pager_clone_commit_single_batch();
+    pager_clone_commit_test();
+    pager_clone_commit_two_batches();
+    pager_clone_detach_test();
+    pager_clone_might_see_intermediate_forks();
+    pager_clone_read_from_clone_test_vmo();
+    pager_clone_read_from_clone_test_vmar();
+    pager_clone_read_from_parent_test_vmo();
+    pager_clone_read_from_parent_test_vmar();
+    pager_clone_resize_clone_hazard();
+    pager_clone_resize_parent_ok();
+    pager_clone_sees_correct_parent_pages();
+    pager_clone_shrink_grow_parent();
+    pager_clone_simultaneous_child_read_test_vmo();
+    pager_clone_simultaneous_child_read_test_vmar();
+    pager_clone_simultaneous_read_test_vmo();
+    pager_clone_simultaneous_read_test_vmar();
+    pager_clone_split_commit_test();
+    pager_clone_write_to_clone_test_vmo();
+    pager_clone_write_to_clone_test_vmar();
+    pager_close_page_complete_test();
+    pager_close_pager_test();
+    pager_close_port_test();
+    pager_commit_redundant_supply_test();
+    pager_concurrent_multipage_access_test_vmo();
+    pager_concurrent_multipage_access_test_vmar();
+    pager_concurrent_overlapping_access_test_vmo();
+    pager_concurrent_overlapping_access_test_vmar();
+    pager_create_vmo_unbounded_invalid_stream_size();
+    pager_decommit_on_detach_test_vmo();
+    pager_decommit_on_detach_test_vmar();
+    pager_decommit_test();
+    pager_deep_hierarchy();
+    pager_detach_and_always_need();
+    pager_detach_close_pager_test();
+    pager_detach_non_mapping_access();
+    pager_detach_page_complete_test();
+    pager_early_supply_test_vmo();
+    pager_early_supply_test_vmar();
+    pager_early_wake_clone_race();
+    pager_early_wake_non_linear_supply();
+    pager_early_wake_on_supply();
+    pager_early_wake_overlapping_requests();
+    pager_early_wake_with_resize();
+    pager_eviction_hint_always_need();
+    pager_eviction_hints_clone_vmar();
+    pager_eviction_hints_nested_vmar();
+    pager_eviction_hints_op_range();
+    pager_eviction_hints_vmar();
+    pager_eviction_hints_with_clones();
+    pager_eviction_hints_with_resize();
+    pager_fail_after_detach();
+    pager_fail_early_wake();
+    pager_fail_error_code();
+    pager_fail_exact_range();
+    pager_fail_multiple_commits();
+    pager_fail_multiple_vmos();
+    pager_fail_overlap_request();
+    pager_fail_overlapping_range_commit();
+    pager_fail_overlapping_range_read();
+    pager_fail_redundant();
+    pager_fail_single_page_vmo();
+    pager_fail_single_page_vmar();
+    pager_invalid_pager_create();
+    pager_invalid_pager_create_vmo();
+    pager_invalid_pager_detach_vmo();
+    pager_invalid_pager_supply_pages();
+    pager_many_request_test_vmo();
+    pager_many_request_test_vmar();
+    pager_mapped_supply_pages();
+    pager_multicommit_supply_test();
+    pager_multiple_concurrent_vmo_test();
+    pager_multisupply_commit_test();
+    pager_op_commit_clone_vmar();
+    pager_op_commit_vmar();
+    pager_overlap_commit_supply_test();
+    pager_overlap_commit_test();
+    pager_overlap_supply_test_vmo();
+    pager_overlap_supply_test_vmar();
+    pager_page_request_batching_checks_ancestor_pages();
+    pager_pager_detach_pinned();
+    pager_pin_pager_vmo_with_loaned_pages();
+    pager_pinned_supply_pages();
+    pager_prefetch();
+    pager_present_page_splits_range();
+    pager_presupply_test_vmo();
+    pager_presupply_test_vmar();
+    pager_proxy_use_after_free();
+    pager_racy_port_dequeue();
+    pager_read_close_interrupt_early_test_vmo();
+    pager_read_close_interrupt_early_test_vmar();
+    pager_read_close_interrupt_late_test_vmo();
+    pager_read_close_interrupt_late_test_vmar();
+    pager_read_detach_interrupt_early_test_vmo();
+    pager_read_detach_interrupt_early_test_vmar();
+    pager_read_detach_interrupt_late_test_vmo();
+    pager_read_detach_interrupt_late_test_vmar();
+    pager_read_resize_test_vmo();
+    pager_read_resize_test_vmar();
+    pager_resize_blocked_pin();
+    pager_resize_commit_test();
+    pager_resize_nonresizable_vmo();
+    pager_sequential_multipage_test_vmo();
+    pager_sequential_multipage_test_vmar();
+    pager_simple_commit_test();
+    pager_single_page_test_vmo();
+    pager_single_page_test_vmar();
+    pager_split_commit_test();
+    pager_successive_vmo_test();
+    pager_supply_after_detach();
+    pager_supply_after_fail();
+    pager_suspend_commit_test();
+    pager_suspend_in_kernel_capture_faults_test();
+    pager_suspend_in_kernel_test();
+    pager_suspend_read_test_vmo();
+    pager_suspend_read_test_vmar();
+    pager_uncommitted_single_page_test_vmo();
+    pager_uncommitted_single_page_test_vmar();
+    pager_uncommitted_supply();
+    pager_vmar_map_range_test();
+    pager_vmar_remap_test();
+    pager_vmar_unmap_test();
+    pager_vmo_info_pager_test();
+    pager_zero_handles_race();
+    pager_wb_cannot_overwrite_zero_page_no_trap_dirty();
+    pager_wb_cannot_overwrite_zero_page_trap_dirty();
+    pager_wb_child_attributed_counts();
+    pager_wb_commit_extended_tail_no_trap_dirty();
+    pager_wb_commit_extended_tail_trap_dirty();
+    pager_wb_commit_resize_race_no_trap_dirty();
+    pager_wb_commit_resize_race_trap_dirty();
+    pager_wb_decommit_clean_on_detach_no_trap_dirty();
+    pager_wb_decommit_clean_on_detach_trap_dirty();
+    pager_wb_delayed_dirty_not_found();
+    pager_wb_delayed_dirty_zero_range();
+    pager_wb_delayed_pin_awaiting_clean();
+    pager_wb_delayed_read_zero_range();
+    pager_wb_detach_with_pending_dirty_request_vmo();
+    pager_wb_detach_with_pending_dirty_request_vmar();
+    pager_wb_dirty_after_map_protect_no_trap_dirty();
+    pager_wb_dirty_after_map_protect_trap_dirty();
+    pager_wb_dirty_after_pin();
+    pager_wb_dirty_during_writeback();
+    pager_wb_dirty_large_range();
+    pager_wb_dirty_no_trap_random_offsets();
+    pager_wb_dirty_requests_for_zero_pages();
+    pager_wb_dirty_requests_for_zero_ranges();
+    pager_wb_dirty_requests_on_vmo_write();
+    pager_wb_dirty_requests_on_write_after_read();
+    pager_wb_dirty_requests_overlap();
+    pager_wb_dirty_requests_random_offsets();
+    pager_wb_dirty_requests_repeated_writes();
+    pager_wb_dirty_requests_via_mapping();
+    pager_wb_dirty_zero_and_non_zero_pages();
+    pager_wb_fail_dirty_requests();
+    pager_wb_fail_dirty_requests_for_zero_pages();
+    pager_wb_failed_pin_awaiting_clean();
+    pager_wb_invalid_pager_op_range();
+    pager_wb_invalid_query();
+    pager_wb_large_write_batched();
+    pager_wb_modified_no_reset_no_trap_dirty();
+    pager_wb_modified_no_reset_trap_dirty();
+    pager_wb_modified_on_mapping_write_no_trap_dirty();
+    pager_wb_modified_on_mapping_write_trap_dirty();
+    pager_wb_modified_on_op_zero_no_trap_dirty();
+    pager_wb_modified_on_op_zero_trap_dirty();
+    pager_wb_modified_on_partial_vmo_write_no_trap_dirty();
+    pager_wb_modified_on_partial_vmo_write_trap_dirty();
+    pager_wb_modified_on_resize_no_trap_dirty();
+    pager_wb_modified_on_resize_trap_dirty();
+    pager_wb_modified_on_vmo_write_no_trap_dirty();
+    pager_wb_modified_on_vmo_write_trap_dirty();
+    pager_wb_no_dirty_on_commit_no_trap_dirty();
+    pager_wb_no_dirty_on_commit_trap_dirty();
+    pager_wb_no_dirty_requests_after_detach_vmo();
+    pager_wb_no_dirty_requests_after_detach_vmar();
+    pager_wb_no_dirty_requests_for_clones();
+    pager_wb_no_dirty_requests_map_existing_dirty();
+    pager_wb_no_dirty_requests_on_commit();
+    pager_wb_no_dirty_requests_on_map_range();
+    pager_wb_no_dirty_requests_on_read();
+    pager_wb_no_query_on_clone_no_trap_dirty();
+    pager_wb_no_query_on_clone_trap_dirty();
+    pager_wb_not_modified_clone_write_no_trap_dirty();
+    pager_wb_not_modified_clone_write_trap_dirty();
+    pager_wb_not_modified_failed_pin_write();
+    pager_wb_not_modified_on_failed_dirty_request();
+    pager_wb_not_modified_on_failed_resize_no_trap_dirty();
+    pager_wb_not_modified_on_failed_resize_trap_dirty();
+    pager_wb_not_modified_on_failed_vmo_write_no_trap_dirty();
+    pager_wb_not_modified_on_failed_vmo_write_trap_dirty();
+    pager_wb_not_modified_on_mapping_read_no_trap_dirty();
+    pager_wb_not_modified_on_mapping_read_trap_dirty();
+    pager_wb_not_modified_on_vmo_read_no_trap_dirty();
+    pager_wb_not_modified_on_vmo_read_trap_dirty();
+    pager_wb_not_modified_partial_failed_pin_write();
+    pager_wb_op_dirty_no_write();
+    pager_wb_op_zero();
+    pager_wb_op_zero_clone_no_trap_dirty();
+    pager_wb_op_zero_clone_trap_dirty();
+    pager_wb_op_zero_decommit_no_trap_dirty();
+    pager_wb_op_zero_decommit_trap_dirty();
+    pager_wb_op_zero_expands_tail_no_trap_dirty();
+    pager_wb_op_zero_expands_tail_trap_dirty();
+    pager_wb_op_zero_partial_page_no_trap_dirty();
+    pager_wb_op_zero_partial_page_trap_dirty();
+    pager_wb_op_zero_pinned_no_trap_dirty();
+    pager_wb_op_zero_pinned_trap_dirty();
+    pager_wb_op_zero_resize_no_trap_dirty();
+    pager_wb_op_zero_resize_trap_dirty();
+    pager_wb_op_zero_tail_no_trap_dirty();
+    pager_wb_op_zero_tail_trap_dirty();
+    pager_wb_op_zero_trap_dirty();
+    pager_wb_op_zero_unblocks_read_request_no_trap_dirty();
+    pager_wb_op_zero_unblocks_read_request_trap_dirty();
+    pager_wb_op_zero_with_markers_no_trap_dirty();
+    pager_wb_op_zero_with_markers_trap_dirty();
+    pager_wb_op_zero_writeback_no_trap_dirty();
+    pager_wb_op_zero_writeback_trap_dirty();
+    pager_wb_pin_after_dirty();
+    pager_wb_pin_for_read_no_trap_dirty();
+    pager_wb_pin_for_read_trap_dirty();
+    pager_wb_pin_for_write_no_trap_dirty();
+    pager_wb_pin_for_write_trap_dirty();
+    pager_wb_pin_for_write_unpopulated_no_trap_dirty();
+    pager_wb_pin_for_write_unpopulated_trap_dirty();
+    pager_wb_pinned_writeback_no_trap_dirty();
+    pager_wb_pinned_writeback_trap_dirty();
+    pager_wb_query_dirty_ranges_invalid_buffer();
+    pager_wb_query_early_termination();
+    pager_wb_query_vmo_stats_invalid_pointer();
+    pager_wb_read_pin_awaiting_clean_no_trap_dirty();
+    pager_wb_read_pin_awaiting_clean_trap_dirty();
+    pager_wb_resize_dirty_request();
+    pager_wb_resize_partial_writeback_intersecting_random_writes_no_trap_dirty();
+    pager_wb_resize_partial_writeback_intersecting_random_writes_trap_dirty();
+    pager_wb_resize_supply_zero_no_trap_dirty();
+    pager_wb_resize_supply_zero_trap_dirty();
+    pager_wb_resize_with_outstanding_dirty_requests();
+    pager_wb_resize_writeback_after_gap_no_trap_dirty();
+    pager_wb_resize_writeback_after_gap_trap_dirty();
+    pager_wb_resize_writeback_dirty_after_query_no_trap_dirty();
+    pager_wb_resize_writeback_dirty_after_query_trap_dirty();
+    pager_wb_resize_writeback_interleaved_write_with_mapping_no_trap_dirty();
+    pager_wb_resize_writeback_interleaved_write_with_mapping_trap_dirty();
+    pager_wb_resize_writeback_intersecting_random_writes_no_trap_dirty();
+    pager_wb_resize_writeback_intersecting_random_writes_trap_dirty();
+    pager_wb_resize_writeback_intersecting_resize_no_trap_dirty();
+    pager_wb_resize_writeback_intersecting_resize_trap_dirty();
+    pager_wb_resize_writeback_intersecting_write_no_trap_dirty();
+    pager_wb_resize_writeback_intersecting_write_trap_dirty();
+    pager_wb_resize_writeback_muliple_gaps_no_trap_dirty();
+    pager_wb_resize_writeback_muliple_gaps_trap_dirty();
+    pager_wb_resize_writeback_new_dirty_requests();
+    pager_wb_resize_writeback_new_dirty_requests_interleaved();
+    pager_wb_resize_writeback_no_trap_dirty();
+    pager_wb_resize_writeback_non_intersecting_resize_no_trap_dirty();
+    pager_wb_resize_writeback_non_intersecting_resize_trap_dirty();
+    pager_wb_resize_writeback_non_intersecting_write_no_trap_dirty();
+    pager_wb_resize_writeback_non_intersecting_write_trap_dirty();
+    pager_wb_resize_writeback_partial_end_no_trap_dirty();
+    pager_wb_resize_writeback_partial_end_trap_dirty();
+    pager_wb_resize_writeback_repeated_no_trap_dirty();
+    pager_wb_resize_writeback_repeated_trap_dirty();
+    pager_wb_resize_writeback_sequential_no_trap_dirty();
+    pager_wb_resize_writeback_sequential_trap_dirty();
+    pager_wb_resize_writeback_trap_dirty();
+    pager_wb_resize_writeback_with_mapping_no_trap_dirty();
+    pager_wb_resize_writeback_with_mapping_trap_dirty();
+    pager_wb_resize_writeback_with_outstanding_dirty_requests();
+    pager_wb_resolve_dirty_request_after_detach();
+    pager_wb_simple_dirty_no_trap();
+    pager_wb_simple_trap_dirty_vmo();
+    pager_wb_simple_trap_dirty_vmar();
+    pager_wb_simple_writeback_no_trap_dirty();
+    pager_wb_simple_writeback_trap_dirty();
+    pager_wb_slice_op_zero_no_trap_dirty();
+    pager_wb_slice_op_zero_trap_dirty();
+    pager_wb_slice_pin_write_no_trap_dirty();
+    pager_wb_slice_pin_write_trap_dirty();
+    pager_wb_slice_write_no_trap_dirty();
+    pager_wb_slice_write_trap_dirty();
+    pager_wb_suspend_dirty_test_vmo();
+    pager_wb_suspend_dirty_test_vmar();
+    pager_wb_unbounded();
+    pager_wb_untracked_absorbs_interval_slots();
+    pager_wb_untracked_absorbs_pages();
+    pager_wb_untracked_beyond_stream_size();
+    pager_wb_write_pin_awaiting_clean_no_trap_dirty();
+    pager_wb_write_pin_awaiting_clean_trap_dirty();
+    pager_wb_writeback_combined_no_trap_dirty();
+    pager_wb_writeback_combined_trap_dirty();
+    pager_wb_writeback_dirty_pages_after_detach_no_trap_dirty();
+    pager_wb_writeback_dirty_pages_after_detach_trap_dirty();
+    pager_wb_writeback_out_of_order_combined_begin_no_trap_dirty();
+    pager_wb_writeback_out_of_order_combined_begin_trap_dirty();
+    pager_wb_writeback_out_of_order_combined_end_no_trap_dirty();
+    pager_wb_writeback_out_of_order_combined_end_trap_dirty();
+    pager_wb_writeback_out_of_order_no_trap_dirty();
+    pager_wb_writeback_out_of_order_trap_dirty();
+    pager_wb_writeback_resized_range_after_detach_no_trap_dirty();
+    pager_wb_writeback_resized_range_after_detach_trap_dirty();
+    pager_wb_writeback_with_mapping();
+    pager_snapshot_smoke();
+    pager_snapshot_at_least_on_write_after_snapshot_modified();
+    pager_snapshot_snapshot_modified_after_at_least_on_write();
+    pager_snapshot_resize_shrink_snapshot();
+    pager_snapshot_resize_shrink_snapshot_with_empty_parent();
+    pager_snapshot_snapshot_read_only_vmo();
+    pager_snapshot_release_cow_parent_pages_right();
+    pager_snapshot_release_cow_parent_pages_left();
+    pager_snapshot_release_cow_parent_pages_left_and_right();
+    pager_snapshot_release_cow_parent_pages_right_in_hidden_node();
+    pager_snapshot_zero_range_from_end_of_parent();
+    pager_snapshot_zero_range_left_in_snapshot_no_pages_in_parent();
+    pager_snapshot_zero_range_left_in_snapshot_page_in_parent();
+    pager_snapshot_zero_range_left_in_snapshot_no_pages_in_parent_chain();
+    pager_snapshot_zero_range_left_in_snapshot_pages_in_parent_chain();
+    pager_snapshot_zero_range_left_in_snapshot_page_in_snapshot();
+    pager_snapshot_zero_range_left_in_snapshot_page_in_clone();
+    pager_snapshot_zero_range_left_in_snapshot_page_in_hidden_node();
+    pager_snapshot_alow_slice();
+    pager_snapshot_snapshot_slice_at_least_on_write();
+    pager_snapshot_clone_after_slice_root();
+    pager_snapshot_read_test();
+    pager_snapshot_drop_vmos();
+    pager_snapshot_snapshot_modified_clone();
+    pager_snapshot_write_after_drop_sibling();
+    pager_snapshot_clone_modify_chain();
+    pager_snapshot_commit_range_in_snapshot();
+    pager_snapshot_obj_mem_accounting();
+    pager_snapshot_root_vmo_write();
+    pager_snapshot_clone_vmo_write();
+    pager_snapshot_snapshot_vmo_write();
+    pager_snapshot_close_clone();
+    pager_snapshot_close_snapshot();
+    pager_snapshot_close_root();
+    pager_snapshot_snapshot_slice();
+    pager_snapshot_snapshot_vmo_with_slice();
+    pager_snapshot_resize_snapshot_race();
+    pager_process_kill_blocked_user_vmo_read().await;
+    pager_process_kill_blocked_user_page_fault().await;
+    pager_process_kill_blocked_usercopy().await;
+    pager_process_kill_blocked_usercopy_capture_faults().await;
+    pager_process_kill_after_suspend_vmo_read().await;
+    pager_process_kill_after_suspend_page_fault().await;
+    pager_process_kill_after_suspend_usercopy().await;
+    pager_process_kill_after_suspend_usercopy_capture().await;
 }

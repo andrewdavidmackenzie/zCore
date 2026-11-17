@@ -3,6 +3,9 @@
 //! 1:1 ports of Fuchsia's zircon/system/utest/core/channel-iovec/iovec.cc.
 //! Tests verify iovec-based channel write and call with various edge cases.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::ipc::MessagePacket;
@@ -39,7 +42,6 @@ fn syscall_channel_create(ctx: &TestContext) -> (HandleValue, HandleValue) {
 // ────────────────────────── Write tests ──────────────────────────
 
 /// C++: TEST(IOVecTest, WriteZeroIovecs)
-#[test]
 fn write_zero_iovecs() {
     let ctx = TestContext::new();
     let (write_h, read_h) = syscall_channel_create(&ctx);
@@ -141,7 +143,6 @@ fn write_read_iovecs<const N: usize, const M: usize>(ctx: &TestContext) {
 
 /// C++: TEST(IOVecTest, WriteFewLargeIovecs)
 /// Test writing a small number of iovecs, which fit within the kernel stack buffer.
-#[test]
 fn write_few_large_iovecs() {
     let ctx = TestContext::new();
     write_read_iovecs::<3, 8000>(&ctx);
@@ -149,14 +150,12 @@ fn write_few_large_iovecs() {
 
 /// C++: TEST(IOVecTest, WriteManySmallIovecs)
 /// Test writing a large number of iovecs, that don't fit within the stack buffer.
-#[test]
 fn write_many_small_iovecs() {
     let ctx = TestContext::new();
     write_read_iovecs::<1000, 10>(&ctx);
 }
 
 /// C++: TEST(IOVecTest, WriteWithHandle)
-#[test]
 fn write_with_handle() {
     let ctx = TestContext::new();
     let (write_h, read_h) = syscall_channel_create(&ctx);
@@ -211,7 +210,6 @@ fn write_with_handle() {
 }
 
 /// C++: TEST(IOVecTest, WriteEtcWithHandle)
-#[test]
 fn write_etc_with_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -310,21 +308,18 @@ fn check_for_out_of_range_write<const N: usize, const M: usize>(ctx: &TestContex
 }
 
 /// C++: TEST(IOVecTest, WriteTooManyIovecs)
-#[test]
 fn write_too_many_iovecs() {
     let ctx = TestContext::new();
     check_for_out_of_range_write::<9000, 1>(&ctx);
 }
 
 /// C++: TEST(IOVecTest, WriteTooManyBytes)
-#[test]
 fn write_too_many_bytes() {
     let ctx = TestContext::new();
     check_for_out_of_range_write::<1000, 100>(&ctx);
 }
 
 /// C++: TEST(IOVecTest, WriteNonZeroReservedIovec)
-#[test]
 fn write_non_zero_reserved_iovec() {
     let ctx = TestContext::new();
     let (write_h, _read_h) = syscall_channel_create(&ctx);
@@ -349,7 +344,6 @@ fn write_non_zero_reserved_iovec() {
 }
 
 /// C++: TEST(IOVecTest, WriteNullBufferNonnullSize)
-#[test]
 fn write_null_buffer_nonnull_size() {
     let ctx = TestContext::new();
     let (write_h, _read_h) = syscall_channel_create(&ctx);
@@ -392,8 +386,7 @@ struct TestChannelCallArgs {
 
 /// C++: TEST(IOVecTest, CallIovecBytesLessThanTxidSize)
 /// Call with iovec total bytes < sizeof(zx_txid_t) (4) should return INVALID_ARGS.
-#[test]
-fn call_iovec_bytes_less_than_txid_size() {
+async fn call_iovec_bytes_less_than_txid_size() {
     let ctx = TestContext::new();
     let (client_h, _server_h) = syscall_channel_create(&ctx);
     let sc = ctx.syscall();
@@ -419,14 +412,16 @@ fn call_iovec_bytes_less_than_txid_size() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
-        client_h,
-        USE_IOVEC,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            client_h,
+            USE_IOVEC,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
@@ -441,14 +436,16 @@ fn call_iovec_bytes_less_than_txid_size() {
 /// handled in the syscall dispatcher (sys_channel_call with USE_IOVEC
 /// flag). At the kernel-object level, Channel::call() takes a single
 /// MessagePacket. We test the echo pattern with a direct channel_call.
-#[async_std::test]
 async fn call_few_large_iovecs() {
     use crate::helpers::{EchoServer, TestContext};
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     // C++: 3 iovecs of 8000 bytes = 24000 bytes total
     // At kernel-object level, simulate as a single 24000-byte message
@@ -477,14 +474,16 @@ async fn call_few_large_iovecs() {
 /// C++: TEST(IOVecTest, CallManySmallIovecs)
 ///
 /// Same as CallFewLargeIovecs but with 1000 * 10 = 10000 bytes.
-#[async_std::test]
 async fn call_many_small_iovecs() {
     use crate::helpers::{EchoServer, TestContext};
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     let total = 1000 * 10;
     let mut data = vec![0u8; total];
@@ -511,7 +510,6 @@ async fn call_many_small_iovecs() {
 /// C++: TEST(IOVecTest, CallWithHandle)
 ///
 /// Echo server echoes bytes + handle.
-#[async_std::test]
 async fn call_with_handle() {
     use crate::helpers::{EchoServer, TestContext};
     use zircon_object::object::Handle;
@@ -519,8 +517,11 @@ async fn call_with_handle() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     let event = Event::new();
     let handle = Handle::new(event, zircon_object::object::Rights::DEFAULT_EVENT);
@@ -545,7 +546,6 @@ async fn call_with_handle() {
 ///
 /// Same as CallWithHandle — handle disposition is syscall-layer.
 /// At kernel-object level we verify handle transfer via echo.
-#[async_std::test]
 async fn call_etc_with_handle() {
     use crate::helpers::{EchoServer, TestContext};
     use zircon_object::object::Handle;
@@ -553,8 +553,11 @@ async fn call_etc_with_handle() {
 
     let ctx = TestContext::new();
     let echo = EchoServer::start(&ctx.proc);
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(50),
+    )
+    .await;
 
     let event = Event::new();
     let handle = Handle::new(event, zircon_object::object::Rights::DEFAULT_EVENT);
@@ -576,7 +579,7 @@ async fn call_etc_with_handle() {
 }
 
 /// Helper: check that call with too many iovecs or too many bytes returns OUT_OF_RANGE.
-fn check_for_out_of_range_call<const N: usize, const M: usize>(ctx: &TestContext) {
+async fn check_for_out_of_range_call<const N: usize, const M: usize>(ctx: &TestContext) {
     let sc = ctx.syscall();
     let (ch0, ch1) = zircon_object::ipc::Channel::create();
     let client_h = ctx.proc.add_handle(zircon_object::object::Handle::new(
@@ -611,34 +614,33 @@ fn check_for_out_of_range_call<const N: usize, const M: usize>(ctx: &TestContext
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_etc_noretry(
-        client_h,
-        USE_IOVEC,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_etc_noretry(
+            client_h,
+            USE_IOVEC,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 
 /// C++: TEST(IOVecTest, CallTooManyIovecs)
-#[test]
-fn call_too_many_iovecs() {
+async fn call_too_many_iovecs() {
     let ctx = TestContext::new();
-    check_for_out_of_range_call::<9000, 1>(&ctx);
+    check_for_out_of_range_call::<9000, 1>(&ctx).await;
 }
 
 /// C++: TEST(IOVecTest, CallTooManyBytes)
-#[test]
-fn call_too_many_bytes() {
+async fn call_too_many_bytes() {
     let ctx = TestContext::new();
-    check_for_out_of_range_call::<1000, 100>(&ctx);
+    check_for_out_of_range_call::<1000, 100>(&ctx).await;
 }
 
 /// C++: TEST(IOVecTest, CallNonZeroReservedIovec)
-#[test]
-fn call_non_zero_reserved_iovec() {
+async fn call_non_zero_reserved_iovec() {
     let ctx = TestContext::new();
     let (client_h, _server_h) = syscall_channel_create(&ctx);
     let sc = ctx.syscall();
@@ -663,20 +665,21 @@ fn call_non_zero_reserved_iovec() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
-        client_h,
-        USE_IOVEC,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            client_h,
+            USE_IOVEC,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(IOVecTest, CallNullBufferNonnullSize)
-#[test]
-fn call_null_buffer_nonnull_size() {
+async fn call_null_buffer_nonnull_size() {
     let ctx = TestContext::new();
     let (client_h, _server_h) = syscall_channel_create(&ctx);
     let sc = ctx.syscall();
@@ -700,13 +703,37 @@ fn call_null_buffer_nonnull_size() {
 
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
-    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
-        client_h,
-        USE_IOVEC,
-        zircon_syscall::Deadline::from(0usize),
-        UserInPtr::from(&args as *const _ as usize),
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-    ));
+    let result = sc
+        .sys_channel_call_noretry(
+            client_h,
+            USE_IOVEC,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    write_zero_iovecs();
+    write_few_large_iovecs();
+    write_many_small_iovecs();
+    write_with_handle();
+    write_etc_with_handle();
+    write_too_many_iovecs();
+    write_too_many_bytes();
+    write_non_zero_reserved_iovec();
+    write_null_buffer_nonnull_size();
+    call_iovec_bytes_less_than_txid_size().await;
+    call_few_large_iovecs().await;
+    call_many_small_iovecs().await;
+    call_with_handle().await;
+    call_etc_with_handle().await;
+    call_too_many_iovecs().await;
+    call_too_many_bytes().await;
+    call_non_zero_reserved_iovec().await;
+    call_null_buffer_nonnull_size().await;
 }

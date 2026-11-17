@@ -167,6 +167,11 @@ mod bitmap {
                 );
             }
         }
+        // Reserve frame 0 — physical address 0x0 is used as a null
+        // sentinel (e.g. ThreadSwitchFuture checks table_phys == 0 to
+        // detect torn-down address spaces). Allocating frame 0 would
+        // create page tables that look "null" and get skipped.
+        ba.remove(0..1);
         // Reserve the SMP trampoline page.
         ba.remove(SMP_TRAMPOLINE_PAGE..SMP_TRAMPOLINE_PAGE + 1);
         log::info!("Frame allocator init end.");

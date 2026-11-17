@@ -1241,6 +1241,7 @@ dependencies = [
  "zcore-sfs",
  "zircon-loader",
  "zircon-object",
+ "zircon-tests",
 ]
 
 [[package]]
@@ -2667,7 +2668,11 @@ name = "zircon-tests"
 version = "0.1.0"
 dependencies = [
  "async-std",
+ "executor",
  "hal-impl",
+ "lock",
+ "log",
+ "spin 0.9.4",
  "xmas-elf",
  "zircon-object",
  "zircon-syscall",

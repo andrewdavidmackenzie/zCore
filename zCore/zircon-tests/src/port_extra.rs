@@ -8,14 +8,12 @@ use zircon_object::object::KernelObject;
 use zircon_object::signal::{PayloadRepr, Port, PortPacket, PortPacketRepr};
 use zircon_object::ZxError;
 
-#[test]
 fn port_create() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
     assert_ne!(port.id(), 0);
 }
 
-#[test]
 fn port_queue_user_packet() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -29,7 +27,6 @@ fn port_queue_user_packet() {
 }
 
 /// Port queue and wait round-trip.
-#[async_std::test]
 async fn port_queue_and_wait() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -53,7 +50,6 @@ async fn port_queue_and_wait() {
 }
 
 /// Multiple packets are returned in FIFO order.
-#[async_std::test]
 async fn port_fifo_order() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -74,7 +70,6 @@ async fn port_fifo_order() {
     }
 }
 
-#[test]
 fn port_create_invalid_options() {
     let _ctx = TestContext::new();
     // Only 0 and 1 (BIND_TO_INTERRUPT) are valid
@@ -82,7 +77,6 @@ fn port_create_invalid_options() {
 }
 
 /// Port should enforce per-port packet limit.
-#[test]
 fn port_queue_user_packet_limit() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -110,7 +104,6 @@ fn port_queue_user_packet_limit() {
 }
 
 /// Port should have READABLE signal when packets are queued.
-#[test]
 fn port_signal_readable() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -128,7 +121,6 @@ fn port_signal_readable() {
 }
 
 /// Port with BIND_TO_INTERRUPT option should be creatable.
-#[test]
 fn port_create_with_bind_to_interrupt() {
     let _ctx = TestContext::new();
     let port = Port::new(1).unwrap(); // BIND_TO_INTERRUPT
@@ -136,7 +128,6 @@ fn port_create_with_bind_to_interrupt() {
 }
 
 /// Port without BIND_TO_INTERRUPT should not be bindable.
-#[test]
 fn port_cannot_bind_to_interrupt_by_default() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -144,7 +135,6 @@ fn port_cannot_bind_to_interrupt_by_default() {
 }
 
 /// The status field in a user packet is preserved through queue/dequeue.
-#[async_std::test]
 async fn port_user_packet_status_preserved() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -167,11 +157,25 @@ async fn port_user_packet_status_preserved() {
     }
 }
 
-#[test]
 fn port_cancel_by_key_not_found() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
     // No subscriptions exist — should return NOT_FOUND
     assert_eq!(port.cancel_by_key(999).unwrap_err(), ZxError::NOT_FOUND);
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    port_create();
+    port_queue_user_packet();
+    port_queue_and_wait().await;
+    port_fifo_order().await;
+    port_create_invalid_options();
+    port_queue_user_packet_limit();
+    port_signal_readable();
+    port_create_with_bind_to_interrupt();
+    port_cannot_bind_to_interrupt_by_default();
+    port_user_packet_status_preserved().await;
+    port_cancel_by_key_not_found();
 }

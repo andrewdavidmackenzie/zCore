@@ -15,6 +15,9 @@
 //!   prebuilt/zircon-test/x86_64/standalone-elf-load-test-module.so
 //!   prebuilt/zircon-test/aarch64/standalone-elf-load-test-module.so
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use xmas_elf::symbol_table::Entry;
 use zircon_object::task::{Job, Process};
@@ -47,7 +50,6 @@ const TEST_MODULE_BYTES: &[u8] = &[];
 ///   Steps: parse ELF → ehdr.Loadable() → load segments via
 ///   LocalVmarLoader → decode PT_DYNAMIC → look up "kTestRoData"
 ///   → assert *ptr == kTestRoDataValue (42)
-#[test]
 fn load() {
     let _ctx = TestContext::new();
 
@@ -115,7 +117,7 @@ fn load() {
     assert!(found_symbol, "test module has no kTestRoData symbol");
 
     // C++ step j: if native machine, call TestStart(17, 23) and assert == 40.
-    // We cannot call code from a mapped VMO in libos mode — the
+    // We cannot call code from a mapped VMO in test mode — the
     // mapping is backed by anonymous memory, not executable pages
     // with proper instruction fetch support. This step is only
     // testable on bare-metal/QEMU where VMAR mappings are real
@@ -124,4 +126,9 @@ fn load() {
     // The kTestRoData lookup above exercises the full ELF loading
     // pipeline (parse → map → symbol lookup → read), which is the
     // core functionality being tested.
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    load();
 }

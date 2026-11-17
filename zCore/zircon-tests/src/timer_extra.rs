@@ -8,14 +8,12 @@ use core::time::Duration;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::{Slack, Timer};
 
-#[test]
 fn timer_create() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
     assert_ne!(timer.id(), 0);
 }
 
-#[test]
 fn timer_set_past_deadline_fires_immediately() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -27,7 +25,6 @@ fn timer_set_past_deadline_fires_immediately() {
     assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
-#[test]
 fn timer_cancel() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -39,7 +36,6 @@ fn timer_cancel() {
     assert!(!timer.signal().contains(Signal::SIGNALED));
 }
 
-#[test]
 fn timer_cancel_clears_signal() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -53,7 +49,6 @@ fn timer_cancel_clears_signal() {
     assert!(!timer.signal().contains(Signal::SIGNALED));
 }
 
-#[test]
 fn timer_create_with_slack() {
     let _ctx = TestContext::new();
 
@@ -67,7 +62,6 @@ fn timer_create_with_slack() {
     assert_ne!(timer_late.id(), 0);
 }
 
-#[test]
 fn timer_one_shot() {
     let _ctx = TestContext::new();
     // Duration::from_nanos(0) is in the past — should fire immediately
@@ -75,7 +69,6 @@ fn timer_one_shot() {
     assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
-#[test]
 fn timer_set_replaces_deadline() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -89,7 +82,6 @@ fn timer_set_replaces_deadline() {
     assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
-#[test]
 fn timer_get_info() {
     let _ctx = TestContext::new();
     let timer = Timer::with_slack(Slack::Late);
@@ -100,7 +92,6 @@ fn timer_get_info() {
     assert_eq!(slack, 0);
 }
 
-#[test]
 fn timer_get_info_after_set() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -112,7 +103,6 @@ fn timer_get_info_after_set() {
     assert_eq!(slack, 500);
 }
 
-#[test]
 fn timer_cancel_twice_is_ok() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -123,7 +113,6 @@ fn timer_cancel_twice_is_ok() {
     assert!(!timer.signal().contains(Signal::SIGNALED));
 }
 
-#[test]
 fn timer_name() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -136,7 +125,6 @@ fn timer_name() {
 /// Set a timer with a deadline computed via `zx_deadline_after()`,
 /// then verify the SIGNALED bit fires. Since we can't easily wait
 /// in a unit test, we use deadline=0 (past) which fires immediately.
-#[test]
 fn timer_deadline_after() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -152,7 +140,6 @@ fn timer_deadline_after() {
 /// Set a far-future timer, cancel it, then set a new one that fires
 /// immediately. Verifies that cancel truly resets state and a
 /// subsequent set works correctly.
-#[test]
 fn timer_coalesce_and_cancel() {
     let _ctx = TestContext::new();
     let timer = Timer::new();
@@ -175,7 +162,6 @@ fn timer_coalesce_and_cancel() {
 /// At the object level, `Slack` is a Rust enum so invalid values
 /// can't be constructed. This test verifies the syscall rejects
 /// invalid options (slack mode >= 3).
-#[test]
 fn timer_invalid_args() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -192,4 +178,22 @@ fn timer_invalid_args() {
     // options=0xFF is also invalid
     let result = sc.sys_timer_create(0xFF, 0, UserOutPtr::from(&mut h as *mut _ as usize));
     assert_eq!(result.unwrap_err(), zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    timer_create();
+    timer_set_past_deadline_fires_immediately();
+    timer_cancel();
+    timer_cancel_clears_signal();
+    timer_create_with_slack();
+    timer_one_shot();
+    timer_set_replaces_deadline();
+    timer_get_info();
+    timer_get_info_after_set();
+    timer_cancel_twice_is_ok();
+    timer_name();
+    timer_deadline_after();
+    timer_coalesce_and_cancel();
+    timer_invalid_args();
 }

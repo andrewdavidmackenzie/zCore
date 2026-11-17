@@ -16,11 +16,10 @@ use zircon_object::object::KernelObject;
 ///
 /// The C++ test uses Clang safe-stack/shadow-call-stack sanitizers,
 /// __builtin_frame_address, __builtin_thread_pointer, and environ.
-/// None of these are available in Rust or libos mode.
+/// None of these are available in Rust or test mode.
 ///
 /// We verify the page-distinctness concept: stack, heap, and
 /// thread-local storage occupy different memory regions.
-#[test]
 fn main_thread_stack() {
     let _ctx = crate::helpers::TestContext::new();
 
@@ -32,7 +31,7 @@ fn main_thread_stack() {
     let heap_addr = &*heap_var as *const i32 as usize;
 
     thread_local! {
-        static TLS_VAR: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
+        static TLS_VAR: core::cell::Cell<i32> = const { core::cell::Cell::new(0) };
     }
     let tls_addr = TLS_VAR.with(|v| v as *const _ as usize);
 
@@ -64,7 +63,6 @@ fn main_thread_stack() {
 /// Clang sanitizer builtins. We verify the Zircon thread creation
 /// infrastructure works and that the VMO used for thread stacks has
 /// the expected page alignment.
-#[test]
 fn thread_stack() {
     let _ctx = crate::helpers::TestContext::new();
 
@@ -90,4 +88,10 @@ fn thread_stack() {
     let proc = zircon_object::task::Process::create(&job, "stack-test").unwrap();
     let thread = zircon_object::task::Thread::create(&proc, "stack-thread").unwrap();
     assert_ne!(thread.id(), 0);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    main_thread_stack();
+    thread_stack();
 }

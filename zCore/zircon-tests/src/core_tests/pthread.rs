@@ -37,14 +37,13 @@ use zircon_object::task::{Job, Process, Task, Thread};
 /// 1. Uncontested mutex lock/unlock (CAS fast path)
 /// 2. 3 threads doing condvar wait, main broadcasts, all wake
 /// 3. 3 mutex contender threads
-#[async_std::test]
 async fn basic() {
     use crate::helpers::{
         condvar_waiter_thread_fn, mutex_contender_thread_fn, CondvarWaiterState,
         MutexContenderState, SyncCondition, SyncMutex,
     };
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicBool;
-    use std::sync::Arc;
 
     let ctx = TestContext::new();
     let proc = ctx.proc.clone();
@@ -52,7 +51,7 @@ async fn basic() {
     // Part 1: Uncontested mutex lock/unlock (C++: fast CAS path)
     let mutex = Arc::new(SyncMutex::new());
     // Lock and unlock without contention — should succeed immediately
-    async_std::task::block_on(mutex.lock());
+    mutex.lock().await;
     mutex.unlock();
 
     // Part 2: 3 condvar threads + broadcast (C++: cond_threads)
@@ -60,7 +59,7 @@ async fn basic() {
     let predicate = Arc::new(AtomicBool::new(false));
     let woken_counter = Arc::new(core::sync::atomic::AtomicI32::new(0));
 
-    let mut cond_threads = std::vec::Vec::new();
+    let mut cond_threads = alloc::vec::Vec::new();
     for _ in 0..3 {
         let state = CondvarWaiterState::new(
             mutex.clone(),
@@ -73,28 +72,31 @@ async fn basic() {
         cond_threads.push((thread, state));
     }
 
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::sleep_until(
+        hal_impl::timer::timer_now() + core::time::Duration::from_millis(100),
+    )
+    .await;
 
     predicate.store(true, Ordering::Release);
     cond.broadcast();
 
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     while woken_counter.load(Ordering::SeqCst) < 3 {
-        assert!(std::time::Instant::now() < deadline, "condvar timed out");
-        async_std::task::yield_now().await;
+        assert!(hal_impl::timer::timer_now() < deadline, "condvar timed out");
+        hal_impl::thread::yield_now().await;
     }
 
     for (thread, _) in &cond_threads {
-        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let dl = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= dl {
+            if hal_impl::timer::timer_now() >= dl {
                 break;
             }
-            async_std::task::yield_now().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 
@@ -102,7 +104,7 @@ async fn basic() {
     let mutex2 = Arc::new(SyncMutex::new());
     let counter = Arc::new(core::sync::atomic::AtomicI32::new(0));
 
-    let mut mutex_threads = std::vec::Vec::new();
+    let mut mutex_threads = alloc::vec::Vec::new();
     for &iters in &[10usize, 5, 3] {
         let state = MutexContenderState::new(mutex2.clone(), counter.clone(), iters);
         let thread = Thread::create_with_ext(&proc, "pthread-mutex", state.clone()).unwrap();
@@ -110,26 +112,26 @@ async fn basic() {
         mutex_threads.push((thread, state));
     }
 
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    let deadline = hal_impl::timer::timer_now() + core::time::Duration::from_secs(10);
     for (_, state) in &mutex_threads {
         while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
-            assert!(std::time::Instant::now() < deadline, "mutex timed out");
-            async_std::task::yield_now().await;
+            assert!(hal_impl::timer::timer_now() < deadline, "mutex timed out");
+            hal_impl::thread::yield_now().await;
         }
     }
 
     assert_eq!(counter.load(Ordering::SeqCst), 18); // 10+5+3
 
     for (thread, _) in &mutex_threads {
-        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        let dl = hal_impl::timer::timer_now() + core::time::Duration::from_secs(5);
         loop {
             if thread.state() == zircon_object::task::ThreadState::Dead {
                 break;
             }
-            if std::time::Instant::now() >= dl {
+            if hal_impl::timer::timer_now() >= dl {
                 break;
             }
-            async_std::task::yield_now().await;
+            hal_impl::thread::yield_now().await;
         }
     }
 }
@@ -142,7 +144,6 @@ async fn basic() {
 ///
 /// We verify: Thread::create returns a valid object, and the thread
 /// knows its own KOID (equivalent of the non-null pthread_self check).
-#[test]
 fn self_main_thread() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -171,7 +172,6 @@ fn self_main_thread() {
 /// We verify: thread creation succeeds (the kernel primitive),
 /// and the thread can be started with test_loop_thread_fn and
 /// terminated (simulating the join).
-#[async_std::test]
 async fn big_stack_size() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -187,11 +187,11 @@ async fn big_stack_size() {
         .expect("pthread_create should succeed (thread start)");
 
     // Yield to let thread run
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Kill and wait for termination (simulates pthread_join)
     thread.kill();
-    let thread_obj: std::sync::Arc<dyn KernelObject> = thread.clone();
+    let thread_obj: alloc::sync::Arc<dyn KernelObject> = thread.clone();
     thread_obj.wait_signal(Signal::THREAD_TERMINATED).await;
 
     assert!(
@@ -209,7 +209,6 @@ async fn big_stack_size() {
 /// At the kernel level, the stack is a VMAR region. We verify that
 /// the process VMAR exists and has a valid KOID (the kernel object
 /// that backs stack allocation).
-#[test]
 fn getstack_main_thread() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -231,7 +230,6 @@ fn getstack_main_thread() {
 /// At the kernel level: create a thread, start it, verify it has
 /// a valid handle (C++ does zx_handle_duplicate to prove validity),
 /// then join (wait for termination).
-#[async_std::test]
 async fn getstack_other_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -243,11 +241,11 @@ async fn getstack_other_thread() {
 
     // Start the thread (pthread_create)
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Kill and join (pthread_join)
     thread.kill();
-    let thread_obj: std::sync::Arc<dyn KernelObject> = thread.clone();
+    let thread_obj: alloc::sync::Arc<dyn KernelObject> = thread.clone();
     thread_obj.wait_signal(Signal::THREAD_TERMINATED).await;
 }
 
@@ -256,7 +254,6 @@ async fn getstack_other_thread() {
 /// Same as GetstackOtherThread but with explicit stack size (1 MB).
 /// At kernel level, the stack size attribute is consumed during
 /// thread_start (VMAR allocation), not thread_create.
-#[async_std::test]
 async fn getstack_other_thread_explicit_size() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -268,10 +265,20 @@ async fn getstack_other_thread_explicit_size() {
 
     // Start the thread (pthread_create with explicit attr)
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Kill and join (pthread_join)
     thread.kill();
-    let thread_obj: std::sync::Arc<dyn KernelObject> = thread.clone();
+    let thread_obj: alloc::sync::Arc<dyn KernelObject> = thread.clone();
     thread_obj.wait_signal(Signal::THREAD_TERMINATED).await;
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    basic().await;
+    self_main_thread();
+    big_stack_size().await;
+    getstack_main_thread();
+    getstack_other_thread().await;
+    getstack_other_thread_explicit_size().await;
 }

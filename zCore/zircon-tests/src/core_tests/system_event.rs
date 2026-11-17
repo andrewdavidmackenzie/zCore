@@ -14,6 +14,9 @@
 
 extern crate alloc;
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::Event;
@@ -27,7 +30,6 @@ use zircon_object::ZxError;
 /// - child job → ZX_ERR_ACCESS_DENIED (not root job)
 /// - root job with bad kind → ZX_ERR_INVALID_ARGS
 /// - root job with valid kind → ZX_OK
-#[test]
 fn retrieve_oom() {
     let ctx = TestContext::new();
 
@@ -64,7 +66,6 @@ fn retrieve_oom() {
 ///
 /// We verify that attempting to use an event handle without SIGNAL
 /// rights is rejected.
-#[test]
 fn cannot_signal_oom_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -90,7 +91,6 @@ fn cannot_signal_oom_from_userspace() {
 }
 
 /// C++: TEST(SystemEvent, RetrieveImminentOom)
-#[test]
 fn retrieve_imminent_oom() {
     let ctx = TestContext::new();
 
@@ -112,7 +112,6 @@ fn retrieve_imminent_oom() {
 }
 
 /// C++: TEST(SystemEvent, CannotSignalImminentOomFromUserspace)
-#[test]
 fn cannot_signal_imminent_oom_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -127,7 +126,6 @@ fn cannot_signal_imminent_oom_from_userspace() {
 }
 
 /// C++: TEST(SystemEvent, RetrieveMempressureCritical)
-#[test]
 fn retrieve_mempressure_critical() {
     let ctx = TestContext::new();
     assert_eq!(
@@ -146,7 +144,6 @@ fn retrieve_mempressure_critical() {
 }
 
 /// C++: TEST(SystemEvent, CannotSignalMempressureCriticalFromUserspace)
-#[test]
 fn cannot_signal_mempressure_critical_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -162,7 +159,6 @@ fn cannot_signal_mempressure_critical_from_userspace() {
 
 /// C++: TEST(SystemEvent, RetreiveMempressureWarning)
 /// Note: the C++ test has a typo "Retreive" — we preserve it.
-#[test]
 fn retreive_mempressure_warning() {
     let ctx = TestContext::new();
     assert_eq!(
@@ -181,7 +177,6 @@ fn retreive_mempressure_warning() {
 }
 
 /// C++: TEST(SystemEvent, CannotSignalMempressureWarningFromUserspace)
-#[test]
 fn cannot_signal_mempressure_warning_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -196,7 +191,6 @@ fn cannot_signal_mempressure_warning_from_userspace() {
 }
 
 /// C++: TEST(SystemEvent, RetrieveMempressureNormal)
-#[test]
 fn retrieve_mempressure_normal() {
     let ctx = TestContext::new();
     assert_eq!(
@@ -215,7 +209,6 @@ fn retrieve_mempressure_normal() {
 }
 
 /// C++: TEST(SystemEvent, CannotSignalMempressureNormalFromUserspace)
-#[test]
 fn cannot_signal_mempressure_normal_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -232,7 +225,6 @@ fn cannot_signal_mempressure_normal_from_userspace() {
 /// C++: TEST(SystemEvent, ExactlyOneMemoryEventSignaled)
 /// Retrieve all 5 memory pressure events, wait on all with wait_many,
 /// verify exactly one is signaled.
-#[test]
 fn exactly_one_memory_event_signaled() {
     let _ctx = TestContext::new();
 
@@ -252,7 +244,6 @@ fn exactly_one_memory_event_signaled() {
     assert_eq!(events_signaled, 1, "exactly one memory event signaled");
 }
 /// C++: TEST(SystemEvent, CannotSignalMemoryStallEventFromUserspace)
-#[test]
 fn cannot_signal_memory_stall_event_from_userspace() {
     let ctx = TestContext::new();
     let event = Event::new();
@@ -273,7 +264,6 @@ fn cannot_signal_memory_stall_event_from_userspace() {
 /// C++: TEST(SystemEvent, MemoryStallThresholds)
 /// Tests zx_system_watch_memory_stall with various valid/invalid
 /// parameters. zCore does not implement this syscall.
-#[test]
 fn memory_stall_thresholds() {
     let _ctx = TestContext::new();
 
@@ -304,4 +294,21 @@ fn memory_stall_thresholds() {
     assert!(window_ns > 0 && window_ns <= max_window_ns);
     let too_large_window: i64 = max_window_ns + 1;
     assert!(too_large_window > max_window_ns, "window > 10s is invalid");
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    retrieve_oom();
+    cannot_signal_oom_from_userspace();
+    retrieve_imminent_oom();
+    cannot_signal_imminent_oom_from_userspace();
+    retrieve_mempressure_critical();
+    cannot_signal_mempressure_critical_from_userspace();
+    retreive_mempressure_warning();
+    cannot_signal_mempressure_warning_from_userspace();
+    retrieve_mempressure_normal();
+    cannot_signal_mempressure_normal_from_userspace();
+    exactly_one_memory_event_signaled();
+    cannot_signal_memory_stall_event_from_userspace();
+    memory_stall_thresholds();
 }

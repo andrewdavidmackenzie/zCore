@@ -12,7 +12,6 @@ extern crate alloc;
 
 /// C++: TEST(VmoReference, Write)
 /// Reference sees parent writes and vice versa.
-#[test]
 fn write() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -37,7 +36,6 @@ fn write() {
 
 /// C++: TEST(VmoReference, ZeroChildren)
 /// VMO_ZERO_CHILDREN signal tracks reference lifecycle.
-#[test]
 fn zero_children() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -60,7 +58,6 @@ fn zero_children() {
 
 /// C++: TEST(VmoReference, ChildSnapshot)
 /// Snapshot child of reference parent — write isolation.
-#[test]
 fn child_snapshot() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -88,7 +85,6 @@ fn child_snapshot() {
 
 /// C++: TEST(VmoReference, ChildSlice)
 /// Slice of reference — write-through semantics.
-#[test]
 fn child_slice() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -112,7 +108,6 @@ fn child_slice() {
 
 /// C++: TEST(VmoReference, NestedChild)
 /// Nested references propagate writes.
-#[test]
 fn nested_child() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -139,7 +134,6 @@ fn nested_child() {
 /// C++: TEST(VmoReference, AttributedCounts)
 /// Reference populated_bytes is zero even after parent commits pages.
 /// Dropping parent still keeps reference's populated_bytes at zero.
-#[test]
 fn attributed_counts() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -175,7 +169,6 @@ fn attributed_counts() {
 /// C++: TEST(VmoReference, Resize)
 /// Resizing parent is visible through reference; resizing reference is
 /// visible through parent.
-#[test]
 fn resize() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged_with_resizable(true, 4);
@@ -199,7 +192,6 @@ fn resize() {
 
 /// C++: TEST(VmoReference, UnsupportedResize)
 /// Non-resizable reference rejects set_size.
-#[test]
 fn unsupported_resize() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged_with_resizable(true, 4);
@@ -214,7 +206,6 @@ fn unsupported_resize() {
 
 /// C++: TEST(VmoReference, GetInfo)
 /// Reference does not have IS_COW_CLONE flag.
-#[test]
 fn get_info() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -230,7 +221,6 @@ fn get_info() {
 
 /// C++: TEST(VmoReference, MappingUpdate)
 /// Write to parent, decommit, reference reads zeros.
-#[test]
 fn mapping_update() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -256,7 +246,6 @@ fn mapping_update() {
 
 /// C++: TEST(VmoReference, MappingUpdateAfterDroppingRef)
 /// Write to parent, create reference, drop reference, decommit parent.
-#[test]
 fn mapping_update_after_dropping_ref() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -280,7 +269,6 @@ fn mapping_update_after_dropping_ref() {
 
 /// C++: TEST(VmoReference, MappingUpdateAfterDroppingParent)
 /// Write to parent, create reference, drop parent, read reference.
-#[test]
 fn mapping_update_after_dropping_parent() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -299,7 +287,6 @@ fn mapping_update_after_dropping_parent() {
 
 /// C++: TEST(VmoReference, MappingUpdateNestedChildDestroy)
 /// Nested references: destroy inner ref, verify outer still works.
-#[test]
 fn mapping_update_nested_child_destroy() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
@@ -344,13 +331,12 @@ fn mapping_update_nested_child_destroy() {
 /// Lines 791/793 of vmo-reference.cc: `EXPECT_EQ(0u, *buf)` fails
 /// with `*buf == 0xBB`.
 ///
-/// In libos mode, `read_memory` resolves through `VmObject::read`
+/// In test mode, `read_memory` resolves through `VmObject::read`
 /// (not through hardware PTEs), so this test passes correctly.
 /// On QEMU/bare-metal, after dropping root and decommitting through
 /// the nested reference, sibling VMAR mappings should read zeros
 /// but stale PTE entries cause them to still return old data.
 /// C++ test fails at vmo-reference.cc:791 EXPECT_EQ(0u, *buf).
-#[test]
 fn mapping_update_nested_root_destroy() {
     let _ctx = TestContext::new();
 
@@ -409,7 +395,7 @@ fn mapping_update_nested_root_destroy() {
     );
 
     // C++ DIVERGENCE: On QEMU/bare-metal, ref1/ref2 mappings still
-    // read 0xBB here (stale PTEs not invalidated). In libos mode,
+    // read 0xBB here (stale PTEs not invalidated). In test mode,
     // read_memory goes through VmObject::read which sees the
     // decommitted frame and returns zeros correctly.
     //
@@ -440,7 +426,6 @@ fn mapping_update_nested_root_destroy() {
 
 /// C++: TEST(VmoReference, Streams)
 /// Stream can be created on a reference VMO.
-#[test]
 fn streams() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged_with_resizable(true, 2);
@@ -462,7 +447,6 @@ fn streams() {
 
 /// C++: TEST(VmoReference, UnsupportedChild)
 /// Pager-backed reference: verify that creating snapshot children fails.
-#[test]
 fn unsupported_child() {
     let _ctx = TestContext::new();
     let pager = Pager::new();
@@ -499,7 +483,6 @@ fn unsupported_child() {
 ///
 /// The C++ test exercises pager VMO → reference → SNAPSHOT_AT_LEAST_ON_WRITE
 /// child creation. The Rust test faithfully reproduces this chain.
-#[test]
 fn child_snapshot_at_least_on_write() {
     let _ctx = TestContext::new();
 
@@ -569,4 +552,25 @@ fn child_snapshot_at_least_on_write() {
 
     child.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0xCC, "child should have forked data");
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    write();
+    zero_children();
+    child_snapshot();
+    child_slice();
+    nested_child();
+    attributed_counts();
+    resize();
+    unsupported_resize();
+    get_info();
+    mapping_update();
+    mapping_update_after_dropping_ref();
+    mapping_update_after_dropping_parent();
+    mapping_update_nested_child_destroy();
+    mapping_update_nested_root_destroy();
+    streams();
+    unsupported_child();
+    child_snapshot_at_least_on_write();
 }

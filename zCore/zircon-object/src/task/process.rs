@@ -220,7 +220,9 @@ impl Process {
         ext: impl Any + Send + Sync,
         vmar: Arc<VmAddressRegion>,
     ) -> ZxResult<Arc<Self>> {
-        // Register VMAR for libos COW fault handling.
+        // On host, register VMAR for COW fault handling via signal handler.
+        // On bare-metal, page faults go through the hardware trap handler.
+        #[cfg(not(target_os = "none"))]
         crate::vm::vmar::register_cow_vmar(&vmar);
         let proc = Arc::new(Process {
             base: KObjectBase::with_name(name),

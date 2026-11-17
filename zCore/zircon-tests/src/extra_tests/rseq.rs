@@ -6,7 +6,7 @@
 //! validation patterns. We call the same syscall through the zCore
 //! dispatch layer. Tests that require multi-threaded preemption or
 //! assembly stubs (SpinUntilMigratedOrAborted, RseqIncrement) are
-//! documented but cannot execute in libos mode.
+//! documented but cannot execute in test mode.
 
 use crate::helpers::TestContext;
 use zircon_object::object::{Handle, Rights};
@@ -26,7 +26,6 @@ const RSEQ_STRUCT_SIZE: u64 = 32;
 /// ASSERT_OK(zx_thread_set_rseq(vmo.get(), 0, sizeof(zx_rseq_t)));
 /// ASSERT_OK(zx_thread_set_rseq(ZX_HANDLE_INVALID, 0, 0));
 /// ```
-#[test]
 fn register_unregister() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -57,7 +56,6 @@ fn register_unregister() {
 /// when unregistering (handle=INVALID). These assertions may not match
 /// the C++ expectations. We call the syscalls faithfully and assert what
 /// the C++ expects.
-#[test]
 fn invalid_unregister_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -98,7 +96,6 @@ fn invalid_unregister_args() {
 /// ```
 ///
 /// Unregistering when not registered should be fine.
-#[test]
 fn unregister_not_registered() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -116,7 +113,6 @@ fn unregister_not_registered() {
 /// ASSERT_EQ(zx_thread_set_rseq(vmo.get(), 0, sizeof(zx_rseq_t) + 1), ZX_ERR_INVALID_ARGS);
 /// ASSERT_EQ(zx_thread_set_rseq(vmo.get(), 0, 0), ZX_ERR_INVALID_ARGS);
 /// ```
-#[test]
 fn invalid_size() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -146,7 +142,6 @@ fn invalid_size() {
 /// ASSERT_EQ(zx_thread_set_rseq(vmo.get(), page_size - 1, sizeof(zx_rseq_t)),
 ///           ZX_ERR_INVALID_ARGS);
 /// ```
-#[test]
 fn invalid_offset() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -171,7 +166,6 @@ fn invalid_offset() {
 ///     UINT64_MAX - sizeof(zx_rseq_t) + 1, sizeof(zx_rseq_t)),
 ///     ZX_ERR_OUT_OF_RANGE);
 /// ```
-#[test]
 fn arithmetic_overflow() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -190,7 +184,6 @@ fn arithmetic_overflow() {
 /// ```cpp
 /// ASSERT_EQ(zx_thread_set_rseq(0xbadc0ffe, 0, sizeof(zx_rseq_t)), ZX_ERR_BAD_HANDLE);
 /// ```
-#[test]
 fn bad_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -215,7 +208,6 @@ fn bad_handle() {
 /// ASSERT_OK(vmo.duplicate(rights & ~ZX_RIGHT_DUPLICATE, &no_dup));
 /// ASSERT_EQ(zx_thread_set_rseq(no_dup.get(), 0, sizeof(zx_rseq_t)), ZX_ERR_ACCESS_DENIED);
 /// ```
-#[test]
 fn insufficient_rights() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -253,7 +245,6 @@ fn insufficient_rights() {
 /// ASSERT_OK(zx::event::create(0, &event));
 /// ASSERT_EQ(zx_thread_set_rseq(event.get(), 0, sizeof(zx_rseq_t)), ZX_ERR_WRONG_TYPE);
 /// ```
-#[test]
 fn wrong_handle_type() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -279,7 +270,6 @@ fn wrong_handle_type() {
 /// Note: zCore's Thread::set_rseq returns ALREADY_EXISTS on second
 /// registration. The C++ test expects the second call to succeed
 /// (replacing the first). This is a known behavioral difference.
-#[test]
 fn double_register() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -314,7 +304,6 @@ fn double_register() {
 /// After registration, the kernel should update cpu_id to a valid value.
 /// In zCore's implementation, set_rseq doesn't write cpu_id (no
 /// preemptive scheduling), so this may not match the C++ expectation.
-#[test]
 fn update_cpu_id() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -341,9 +330,8 @@ fn update_cpu_id() {
 /// - Assembly stubs (SpinUntilMigratedOrAborted)
 /// - Preemptive scheduling
 ///
-/// Cannot execute in libos mode. We verify the syscall path works
+/// Cannot execute in test mode. We verify the syscall path works
 /// by registering and unregistering.
-#[test]
 fn abort() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -365,8 +353,7 @@ fn abort() {
 /// Verifies that various invalid rseq field values don't crash the kernel.
 /// Tests with start_ip=0xFFFF..., post_commit_offset=0/1/2, abort_ip=0.
 /// Requires mapped VMO and active rseq registration with kernel checking.
-/// In libos mode, we verify registration succeeds.
-#[test]
+/// In test mode, we verify registration succeeds.
 fn invalid_rseq() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -388,11 +375,10 @@ fn invalid_rseq() {
 /// Multi-threaded stress test using RseqIncrement assembly stub to
 /// atomically increment per-CPU counters. Verifies no lost updates.
 /// Requires multiple threads, preemptive scheduling, and asm stubs.
-/// Cannot execute in libos mode.
-#[test]
+/// Cannot execute in test mode.
 fn no_lost_updates() {
     // C++ spawns num_cpus * 8 threads, each doing 10000 iterations
-    // of RseqIncrement. Cannot test in libos mode.
+    // of RseqIncrement. Cannot test in test mode.
     // Verify at least that VMO creation for rseq works.
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -404,14 +390,13 @@ fn no_lost_updates() {
 /// Floods pin count by performing many concurrent zx_thread_set_rseq.
 /// Creates page_size * 16 / sizeof(zx_rseq_t) threads, each registering
 /// at a different offset. Requires multi-threading.
-/// Cannot fully execute in libos mode.
-#[test]
+/// Cannot fully execute in test mode.
 fn many_concurrent() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
     // C++ creates a VMO with 16 pages and spawns many threads.
-    // In libos mode, we verify a single registration works.
+    // In test mode, we verify a single registration works.
     let vmo = VmObject::new_paged(16);
     let vmo_handle = ctx.proc.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO));
 
@@ -433,7 +418,6 @@ fn many_concurrent() {
 ///
 /// Regression test: attempt to unmap kernel-pinned pages through
 /// set_stream_size after registering rseq at page 2.
-#[test]
 fn set_stream_size() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -460,4 +444,24 @@ fn set_stream_size() {
 
     // Cleanup
     let _ = sc.sys_thread_set_rseq(0, 0, 0);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    register_unregister();
+    invalid_unregister_args();
+    unregister_not_registered();
+    invalid_size();
+    invalid_offset();
+    arithmetic_overflow();
+    bad_handle();
+    insufficient_rights();
+    wrong_handle_type();
+    double_register();
+    update_cpu_id();
+    abort();
+    invalid_rseq();
+    no_lost_updates();
+    many_concurrent();
+    set_stream_size();
 }

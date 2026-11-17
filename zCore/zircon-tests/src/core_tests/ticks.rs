@@ -7,7 +7,6 @@ use crate::helpers::TestContext;
 
 /// C++: TEST(TicksTest, ElapsedTimeUsingTicks)
 /// Read the monotonic clock twice and verify elapsed time is non-negative.
-#[test]
 fn elapsed_time_using_ticks() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -27,7 +26,6 @@ fn elapsed_time_using_ticks() {
 /// C++: TEST(TicksTest, TimeValuesPaddingLeak)
 /// Verify that time values are properly aligned and don't leak
 /// padding bytes. Read monotonic time and verify it's a valid i64.
-#[test]
 fn time_values_padding_leak() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -41,4 +39,10 @@ fn time_values_padding_leak() {
         time < hundred_years_ns,
         "time should be reasonable (< 100 years)"
     );
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    elapsed_time_using_ticks();
+    time_values_padding_leak();
 }

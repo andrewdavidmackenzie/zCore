@@ -9,7 +9,6 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 
 /// C++: TEST(ProcessDebugTest, ReadMemoryAtOffsetIsOk)
 /// Read memory from a mapped VMO via VMAR read_memory.
-#[test]
 fn read_memory() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -32,7 +31,6 @@ fn read_memory() {
 
 /// C++: TEST(ProcessDebugTest, WriteMemoryAtOffsetIsOk)
 /// Write memory to a mapped VMO via VMAR write_memory.
-#[test]
 fn write_memory() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -55,7 +53,6 @@ fn write_memory() {
 
 /// C++: TEST(ProcessDebugTest, ReadMemoryAtInvalidOffsetReturnsErrorNotFound)
 /// Read from unmapped address should fail.
-#[test]
 fn read_unmapped() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -77,7 +74,6 @@ fn read_unmapped() {
 
 /// C++: TEST(ProcessDebugUtilsTest, XorShiftIsOk)
 /// Verify process VMAR info for debug purposes.
-#[test]
 fn debug_utilities() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -91,7 +87,6 @@ fn debug_utilities() {
 
 /// C++: TEST(ProcessDebugVDSO, WriteToVdsoAddressReturnsAccessDenied)
 /// Verify VDSO base is 0 in test mode (no vDSO mapped).
-#[test]
 fn vdso_protection() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(zircon_object::object::Handle::new(
@@ -108,7 +103,6 @@ fn vdso_protection() {
 
 /// C++: TEST(ProcessDebugTest, WriteAtInvalidOffsetReturnsErrorNotFound)
 /// Write to unmapped address should fail.
-#[test]
 fn write_at_invalid_offset() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -125,4 +119,14 @@ fn write_at_invalid_offset() {
         result.is_err(),
         "write_memory on unmapped address should fail"
     );
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    read_memory();
+    write_memory();
+    read_unmapped();
+    debug_utilities();
+    vdso_protection();
+    write_at_invalid_offset();
 }

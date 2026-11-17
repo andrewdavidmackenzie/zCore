@@ -19,6 +19,9 @@
 
 extern crate alloc;
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::{Event, PayloadRepr, Port, PortPacketRepr};
@@ -36,7 +39,6 @@ const DEADLINE_WAKE_SOURCE_KOID: u64 = 1; // ZX_KOID_KERNEL
 /// for {entry_buffer, num_entries, actual_entries_ptr} and verifies
 /// they return INVALID_ARGS. Also tests invalid option flags and
 /// REPORT_ONLY without a header buffer.
-#[test]
 fn port_bound_bad_report_requests() {
     let _ctx = TestContext::new();
 
@@ -68,8 +70,7 @@ fn port_bound_bad_report_requests() {
 /// First attempt: entry reported, unreported=0.
 /// Second attempt: entry reported again with PREVIOUSLY_REPORTED flag.
 /// After ack: nothing to report.
-#[test]
-fn port_bound_single_wake_source() {
+async fn port_bound_single_wake_source() {
     let _ctx = TestContext::new();
     let event = Event::new();
     let port = Port::new(0).unwrap();
@@ -83,7 +84,7 @@ fn port_bound_single_wake_source() {
     event.signal_set(Signal::USER_SIGNAL_0);
 
     // First report: source is signaled, not previously reported.
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = port.wait().await;
     let repr = PortPacketRepr::from(&pkt);
     assert_eq!(repr.key, 1);
 
@@ -92,15 +93,14 @@ fn port_bound_single_wake_source() {
     event_obj
         .send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 2, false)
         .unwrap();
-    let pkt2 = async_std::task::block_on(port.wait());
+    let pkt2 = port.wait().await;
     assert_eq!(PortPacketRepr::from(&pkt2).key, 2);
 }
 
 /// C++: TEST_F(WakeReportTestsPortBound, MultiWakeSource)
 /// Signal all 4 interrupt wake sources. Each suspend attempt should
 /// report all still-pending sources. Ack one source per attempt.
-#[test]
-fn port_bound_multi_wake_source() {
+async fn port_bound_multi_wake_source() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -122,7 +122,7 @@ fn port_bound_multi_wake_source() {
     // Read all packets — one per source.
     let mut keys = alloc::vec::Vec::new();
     for _ in 0..INTERRUPT_WAKE_SOURCE_COUNT {
-        let pkt = async_std::task::block_on(port.wait());
+        let pkt = port.wait().await;
         keys.push(PortPacketRepr::from(&pkt).key);
     }
     keys.sort();
@@ -136,8 +136,7 @@ fn port_bound_multi_wake_source() {
 /// Signal and ack a source multiple times, then request a report.
 /// The entry should show signal_count=4 and be in the acked state.
 /// After that report, nothing left to report.
-#[test]
-fn port_bound_acked() {
+async fn port_bound_acked() {
     let _ctx = TestContext::new();
     let event = Event::new();
     let port = Port::new(0).unwrap();
@@ -148,7 +147,7 @@ fn port_bound_acked() {
         obj.send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, i, false)
             .unwrap();
         event.signal_set(Signal::USER_SIGNAL_0);
-        let pkt = async_std::task::block_on(port.wait());
+        let pkt = port.wait().await;
         assert_eq!(PortPacketRepr::from(&pkt).key, i);
 
         // Clear signal to simulate ack.
@@ -162,8 +161,7 @@ fn port_bound_acked() {
 /// C++: TEST_F(WakeReportTestsPortBound, AckedStillPending)
 /// Signal and ack multiple times, then signal once more without acking.
 /// The entry should remain in the pending (not acked) state.
-#[test]
-fn port_bound_acked_still_pending() {
+async fn port_bound_acked_still_pending() {
     let _ctx = TestContext::new();
     let event = Event::new();
     let port = Port::new(0).unwrap();
@@ -174,7 +172,7 @@ fn port_bound_acked_still_pending() {
         obj.send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, i, false)
             .unwrap();
         event.signal_set(Signal::USER_SIGNAL_0);
-        let _pkt = async_std::task::block_on(port.wait());
+        let _pkt = port.wait().await;
         event.signal_clear(Signal::USER_SIGNAL_0);
     }
 
@@ -183,7 +181,7 @@ fn port_bound_acked_still_pending() {
     obj.send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 100, false)
         .unwrap();
     event.signal_set(Signal::USER_SIGNAL_0);
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = port.wait().await;
     assert_eq!(PortPacketRepr::from(&pkt).key, 100);
 
     // Event is still signaled (not acked).
@@ -194,8 +192,7 @@ fn port_bound_acked_still_pending() {
 /// Signal all sources, ack even-indexed ones. Request report with
 /// DISCARD option. Acked entries should be discarded; odd-indexed
 /// entries should be reported.
-#[test]
-fn port_bound_discard() {
+async fn port_bound_discard() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -212,7 +209,7 @@ fn port_bound_discard() {
 
     // Read all packets.
     for _ in 0..INTERRUPT_WAKE_SOURCE_COUNT {
-        let _pkt = async_std::task::block_on(port.wait());
+        let _pkt = port.wait().await;
     }
 
     // "Ack" even-indexed sources (clear their signals).
@@ -247,8 +244,7 @@ fn port_bound_discard() {
 /// C++: TriggerWakeSource(0); DestroyWakeSource(0); VerifyNothingToReport();
 /// VerifyNothingToReport calls DoSuspend (which zCore doesn't implement),
 /// so we verify the port-level equivalent: no more packets are queued.
-#[test]
-fn port_bound_destruction_no_ack() {
+async fn port_bound_destruction_no_ack() {
     let _ctx = TestContext::new();
     let event = Event::new();
     let port = Port::new(0).unwrap();
@@ -258,7 +254,7 @@ fn port_bound_destruction_no_ack() {
         .unwrap();
     event.signal_set(Signal::USER_SIGNAL_0);
 
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = port.wait().await;
     // The packet should have been delivered with the observed signals.
     let repr = PortPacketRepr::from(&pkt);
     if let PayloadRepr::Signal(sig) = repr.data {
@@ -286,8 +282,7 @@ fn port_bound_destruction_no_ack() {
 ///
 /// C++: TriggerWakeSource(0); AckWakeSource(0); DestroyWakeSource(0);
 ///      VerifyNothingToReport();
-#[test]
-fn port_bound_destruction_yes_ack() {
+async fn port_bound_destruction_yes_ack() {
     let _ctx = TestContext::new();
     let event = Event::new();
     let port = Port::new(0).unwrap();
@@ -297,7 +292,7 @@ fn port_bound_destruction_yes_ack() {
         .unwrap();
     event.signal_set(Signal::USER_SIGNAL_0);
 
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = port.wait().await;
     // The packet should have been delivered with the observed signals.
     let repr = PortPacketRepr::from(&pkt);
     if let PayloadRepr::Signal(sig) = repr.data {
@@ -323,7 +318,6 @@ fn port_bound_destruction_yes_ack() {
 /// C++: TEST_F(WakeReportTestsPortBound, AlreadyTimedOut)
 /// Suspend with no asserted wake sources and deadline in past.
 /// Report should contain only the deadline wake source.
-#[test]
 fn port_bound_already_timed_out() {
     let _ctx = TestContext::new();
     // With no pending wake sources, the system would "suspend" and
@@ -335,8 +329,7 @@ fn port_bound_already_timed_out() {
 /// C++: TEST_F(WakeReportTestsPortBound, ReportOnly)
 /// Call suspend with REPORT_ONLY flag. No actual suspend attempt.
 /// With no pending entries: returns 0 entries.
-#[test]
-fn port_bound_report_only() {
+async fn port_bound_report_only() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -347,15 +340,17 @@ fn port_bound_report_only() {
     // BadReportRequests test). Passing out_header=0 with REPORT_ONLY
     // should return INVALID_ARGS.
     let mut actual_entries: u32 = 0xFFFF;
-    let result = async_std::task::block_on(sc.sys_system_suspend_enter(
-        root_resource,
-        0,   // deadline (irrelevant for REPORT_ONLY)
-        0x2, // ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY
-        0,   // out_header = nullptr → INVALID_ARGS
-        0,
-        0,
-        hal_impl::user::UserOutPtr::from(&mut actual_entries as *mut u32 as usize),
-    ));
+    let result = sc
+        .sys_system_suspend_enter(
+            root_resource,
+            0,   // deadline (irrelevant for REPORT_ONLY)
+            0x2, // ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY
+            0,   // out_header = nullptr → INVALID_ARGS
+            0,
+            0,
+            hal_impl::user::UserOutPtr::from(&mut actual_entries as *mut u32 as usize),
+        )
+        .await;
     assert_eq!(
         result,
         Err(zircon_object::ZxError::INVALID_ARGS),
@@ -364,22 +359,23 @@ fn port_bound_report_only() {
 
     // With a header buffer, REPORT_ONLY should succeed.
     let mut header = [0u8; 24];
-    let result = async_std::task::block_on(sc.sys_system_suspend_enter(
-        root_resource,
-        0,                            // deadline
-        0x2,                          // ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY
-        header.as_mut_ptr() as usize, // out_header
-        0,                            // out_entries (header-only)
-        0,
-        hal_impl::user::UserOutPtr::from(0usize), // actual_entries null
-    ));
+    let result = sc
+        .sys_system_suspend_enter(
+            root_resource,
+            0,                            // deadline
+            0x2,                          // ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY
+            header.as_mut_ptr() as usize, // out_header
+            0,                            // out_entries (header-only)
+            0,
+            hal_impl::user::UserOutPtr::from(0usize), // actual_entries null
+        )
+        .await;
     assert!(result.is_ok(), "REPORT_ONLY with header should succeed");
 }
 
 /// C++: TEST_F(WakeReportTestsPortBound, SmallReportBuffer)
 /// Use a buffer too small to hold all entries. Verify we can
 /// retrieve all entries across multiple REPORT_ONLY calls.
-#[test]
 fn port_bound_small_report_buffer() {
     let _ctx = TestContext::new();
 
@@ -403,8 +399,7 @@ fn port_bound_small_report_buffer() {
 /// Trigger one source 3 times in a row (edge-triggered). Should
 /// produce at most 2 pending acks. After acking twice, source is
 /// fully acked and disappears from report.
-#[test]
-fn port_bound_multiple_signals() {
+async fn port_bound_multiple_signals() {
     let _ctx = TestContext::new();
     let event = Event::new();
     let port = Port::new(0).unwrap();
@@ -414,7 +409,7 @@ fn port_bound_multiple_signals() {
     obj.send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 1, false)
         .unwrap();
     event.signal_set(Signal::USER_SIGNAL_0);
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = port.wait().await;
     assert_eq!(PortPacketRepr::from(&pkt).key, 1);
 
     // Second and third triggers while first is unacked.
@@ -426,7 +421,7 @@ fn port_bound_multiple_signals() {
     let obj2 = event.clone() as alloc::sync::Arc<dyn KernelObject>;
     obj2.send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 2, false)
         .unwrap();
-    let pkt2 = async_std::task::block_on(port.wait());
+    let pkt2 = port.wait().await;
     assert_eq!(PortPacketRepr::from(&pkt2).key, 2);
 
     // Ack second.
@@ -443,7 +438,6 @@ fn port_bound_multiple_signals() {
 // coordinator. We use Event signal observation as the equivalent.
 
 /// C++: TEST_F(WakeReportTestsThreadBound, BadReportRequests)
-#[test]
 fn thread_bound_bad_report_requests() {
     let _ctx = TestContext::new();
     // Same validation as port-bound: invalid flag combinations rejected.
@@ -458,7 +452,6 @@ fn thread_bound_bad_report_requests() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, SingleWakeSource)
-#[test]
 fn thread_bound_single_wake_source() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -473,7 +466,6 @@ fn thread_bound_single_wake_source() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, MultiWakeSource)
-#[test]
 fn thread_bound_multi_wake_source() {
     let _ctx = TestContext::new();
     let events: alloc::vec::Vec<_> = (0..4).map(|_| Event::new()).collect();
@@ -486,7 +478,6 @@ fn thread_bound_multi_wake_source() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, Acked)
-#[test]
 fn thread_bound_acked() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -501,7 +492,6 @@ fn thread_bound_acked() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, AckedStillPending)
-#[test]
 fn thread_bound_acked_still_pending() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -520,7 +510,6 @@ fn thread_bound_acked_still_pending() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, Discard)
-#[test]
 fn thread_bound_discard() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -530,7 +519,6 @@ fn thread_bound_discard() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, DestructionNoAck)
-#[test]
 fn thread_bound_destruction_no_ack() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -547,7 +535,6 @@ fn thread_bound_destruction_no_ack() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, DestructionYesAck)
-#[test]
 fn thread_bound_destruction_yes_ack() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -569,7 +556,6 @@ fn thread_bound_destruction_yes_ack() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, AlreadyTimedOut)
-#[test]
 fn thread_bound_already_timed_out() {
     let _ctx = TestContext::new();
     // No pending wake sources → deadline immediately fires.
@@ -577,7 +563,6 @@ fn thread_bound_already_timed_out() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, ReportOnly)
-#[test]
 fn thread_bound_report_only() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -586,7 +571,6 @@ fn thread_bound_report_only() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, SmallReportBuffer)
-#[test]
 fn thread_bound_small_report_buffer() {
     let _ctx = TestContext::new();
     // Same pattern as port-bound: multiple REPORT_ONLY calls with
@@ -599,7 +583,6 @@ fn thread_bound_small_report_buffer() {
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, MultipleSignals)
-#[test]
 fn thread_bound_multiple_signals() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -616,4 +599,32 @@ fn thread_bound_multiple_signals() {
     // Final ack.
     event.signal_clear(Signal::USER_SIGNAL_0);
     assert!(!event.signal().contains(Signal::USER_SIGNAL_0));
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    port_bound_bad_report_requests();
+    port_bound_single_wake_source().await;
+    port_bound_multi_wake_source().await;
+    port_bound_acked().await;
+    port_bound_acked_still_pending().await;
+    port_bound_discard().await;
+    port_bound_destruction_no_ack().await;
+    port_bound_destruction_yes_ack().await;
+    port_bound_already_timed_out();
+    port_bound_report_only().await;
+    port_bound_small_report_buffer();
+    port_bound_multiple_signals().await;
+    thread_bound_bad_report_requests();
+    thread_bound_single_wake_source();
+    thread_bound_multi_wake_source();
+    thread_bound_acked();
+    thread_bound_acked_still_pending();
+    thread_bound_discard();
+    thread_bound_destruction_no_ack();
+    thread_bound_destruction_yes_ack();
+    thread_bound_already_timed_out();
+    thread_bound_report_only();
+    thread_bound_small_report_buffer();
+    thread_bound_multiple_signals();
 }

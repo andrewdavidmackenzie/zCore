@@ -276,6 +276,9 @@ impl VMObjectPaged {
 
     /// Create a new VMO backing on contiguous pages.
     pub fn new_contiguous(pages: usize, align_log2: usize) -> ZxResult<Arc<Self>> {
+        if pages == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let vmo = Self::new(pages);
         let mut frames =
             PhysFrame::new_contiguous(pages, align_log2.saturating_sub(PAGE_SIZE_LOG2));

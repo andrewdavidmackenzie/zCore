@@ -9,7 +9,6 @@ use zircon_object::vm::{SeekOrigin, Stream, VmObject};
 
 ///
 /// Create a stream on a VMO and verify it has a valid KOID.
-#[test]
 fn create_stream() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -19,7 +18,6 @@ fn create_stream() {
 
 ///
 /// Write data through a stream and read it back.
-#[test]
 fn write_and_read() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -37,7 +35,6 @@ fn write_and_read() {
 
 ///
 /// Seek to absolute offset from start.
-#[test]
 fn seek_from_start() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -54,7 +51,6 @@ fn seek_from_start() {
 ///
 /// Read beyond the content_size. Should return fewer bytes than
 /// requested.
-#[test]
 fn read_past_end() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -71,7 +67,6 @@ fn read_past_end() {
 ///
 /// Seek to a specific offset and write. Data before the offset
 /// should be unmodified.
-#[test]
 fn write_at_offset() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -91,7 +86,6 @@ fn write_at_offset() {
 
 ///
 /// Set and get the name of a stream.
-#[test]
 fn stream_name() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -102,7 +96,6 @@ fn stream_name() {
 
 ///
 /// Create a read-only stream (mode=1). Writing should fail.
-#[test]
 fn read_only() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -126,7 +119,6 @@ fn read_only() {
 /// Create a write-only stream (mode=2). Reading should fail.
 /// Note: zCore Stream currently doesn't enforce read/write mode
 /// restrictions at the object level — this is a syscall-layer check.
-#[test]
 fn write_only() {
     let _ctx = TestContext::new();
     // Create a stream and verify that stream mode options are stored
@@ -151,7 +143,6 @@ fn write_only() {
 
 ///
 /// Seek to the end of the stream (SEEK_END).
-#[test]
 fn seek_to_end() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -165,7 +156,6 @@ fn seek_to_end() {
 ///
 /// Create multiple streams on the same VMO. Each should have its
 /// own seek position.
-#[test]
 fn multiple_streams_on_same_vmo() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -189,10 +179,24 @@ fn multiple_streams_on_same_vmo() {
 ///
 /// Create a stream with an invalid mode (0 = no READ or WRITE).
 /// Should fail or be useless.
-#[test]
 fn invalid_mode() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
     let _stream = Stream::create(vmo, 0, 0);
     // Mode 0 (no READ or WRITE) creates a stream but it can't do anything.
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    create_stream();
+    write_and_read();
+    seek_from_start();
+    read_past_end();
+    write_at_offset();
+    stream_name();
+    read_only();
+    write_only();
+    seek_to_end();
+    multiple_streams_on_same_vmo();
+    invalid_mode();
 }

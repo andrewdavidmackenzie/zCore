@@ -9,7 +9,6 @@ use zircon_object::object::KernelObject;
 
 ///
 /// Create a debuglog with flags=0 and verify it has a valid KOID.
-#[test]
 fn debuglog_create() {
     let _ctx = TestContext::new();
     let log = DebugLog::create(0);
@@ -19,7 +18,6 @@ fn debuglog_create() {
 ///
 /// Write a message to the debuglog and verify it doesn't panic.
 /// The write API takes severity, flags, tid, pid, and data.
-#[test]
 fn debuglog_write() {
     let _ctx = TestContext::new();
     let log = DebugLog::create(0);
@@ -36,7 +34,6 @@ fn debuglog_write() {
 /// In zCore, DebugLog::write takes an Arc<DebugLog>, so there's no
 /// "invalid handle" at the kernel object level — that's a syscall
 /// concern. This test verifies that writing with various flags works.
-#[test]
 fn debuglog_write_invalid_handle() {
     let _ctx = TestContext::new();
     // At the kernel object level, we can't pass an invalid handle.
@@ -52,7 +49,6 @@ fn debuglog_write_invalid_handle() {
 ///
 /// Read back a previously written log record. The read API returns
 /// the record size (DLOG_MAX_LEN on success, 0 when empty).
-#[test]
 fn debuglog_read() {
     let _ctx = TestContext::new();
     let log = DebugLog::create(0);
@@ -77,10 +73,18 @@ fn debuglog_read() {
 /// INVALID_ARGS. In zCore, DebugLog::create takes a u32 flags
 /// value and doesn't validate — the syscall layer would reject
 /// invalid options. This test documents that create() is infallible.
-#[test]
 fn debuglog_create_invalid_options() {
     let _ctx = TestContext::new();
     // All u32 values are accepted at the kernel object level.
     let log = DebugLog::create(0xDEAD_BEEF);
     assert_ne!(log.id(), 0);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    debuglog_create();
+    debuglog_write();
+    debuglog_write_invalid_handle();
+    debuglog_read();
+    debuglog_create_invalid_options();
 }

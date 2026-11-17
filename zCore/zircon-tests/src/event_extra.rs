@@ -8,14 +8,12 @@ use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::{Event, EventPair};
 use zircon_object::ZxError;
 
-#[test]
 fn event_create() {
     let _ctx = TestContext::new();
     let event = Event::new();
     assert_ne!(event.id(), 0);
 }
 
-#[test]
 fn event_signal() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -32,7 +30,6 @@ fn event_signal() {
     assert!(!event.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-#[test]
 fn event_signal_change() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -48,7 +45,6 @@ fn event_signal_change() {
     assert!(event.signal().contains(Signal::USER_SIGNAL_2));
 }
 
-#[test]
 fn eventpair_create() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -57,7 +53,6 @@ fn eventpair_create() {
     assert_eq!(ep1.related_koid(), ep0.id());
 }
 
-#[test]
 fn eventpair_peer_closed() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -67,7 +62,6 @@ fn eventpair_peer_closed() {
     assert_eq!(ep0.peer().unwrap_err(), ZxError::PEER_CLOSED);
 }
 
-#[test]
 fn eventpair_signal_peer() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -78,7 +72,6 @@ fn eventpair_signal_peer() {
     assert!(!ep0.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-#[test]
 fn event_multiple_signals() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -91,7 +84,6 @@ fn event_multiple_signals() {
     assert!(!sig.contains(Signal::USER_SIGNAL_3));
 }
 
-#[test]
 fn event_signaled_bit() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -104,7 +96,6 @@ fn event_signaled_bit() {
     assert!(!event.signal().contains(Signal::SIGNALED));
 }
 
-#[test]
 fn event_name() {
     let _ctx = TestContext::new();
     let event = Event::new();
@@ -116,7 +107,6 @@ fn event_name() {
 ///
 /// All eight USER_SIGNAL bits (0..7) can be independently set and
 /// cleared on an eventpair endpoint.
-#[test]
 fn eventpair_user_signals() {
     let _ctx = TestContext::new();
     let (ep0, _ep1) = EventPair::create();
@@ -147,4 +137,18 @@ fn eventpair_user_signals() {
     let sig = ep0.signal();
     assert!(!sig.contains(Signal::USER_SIGNAL_0));
     assert!(!sig.contains(Signal::USER_SIGNAL_7));
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    event_create();
+    event_signal();
+    event_signal_change();
+    eventpair_create();
+    eventpair_peer_closed();
+    eventpair_signal_peer();
+    event_multiple_signals();
+    event_signaled_bit();
+    event_name();
+    eventpair_user_signals();
 }

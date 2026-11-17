@@ -20,7 +20,6 @@ pub(crate) fn syscall_vmo_create(ctx: &TestContext, size: u64, options: u32) -> 
 }
 /// C++: TEST(VmoTestCase, StreamSize) — syscall level
 /// Get/set stream size via syscall.
-#[test]
 fn stream_size_via_syscall() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, (PAGE_SIZE * 4) as u64, 0);
@@ -34,4 +33,9 @@ fn stream_size_via_syscall() {
     sc.sys_vmo_get_stream_size(h, UserOutPtr::from(&mut size as *mut _ as usize))
         .unwrap();
     assert_eq!(size, PAGE_SIZE * 2);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    stream_size_via_syscall();
 }

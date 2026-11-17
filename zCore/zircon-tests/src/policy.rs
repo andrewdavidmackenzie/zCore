@@ -17,7 +17,6 @@ extern crate alloc;
 
 ///
 /// A newly created job should have a default permissive policy.
-#[test]
 fn default_policy() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -28,7 +27,6 @@ fn default_policy() {
 
 ///
 /// Set a basic policy on a job. Children should inherit the policy.
-#[test]
 fn set_basic_policy() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -53,7 +51,6 @@ fn set_basic_policy() {
 
 ///
 /// Policies set on a parent job are inherited by child jobs.
-#[test]
 fn policy_inheritance() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -80,7 +77,6 @@ fn policy_inheritance() {
 ///
 /// Set policy to deny VMO creation. Creating a VMO in a process
 /// under this job should fail.
-#[test]
 fn policy_deny_new_vmo() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -103,7 +99,6 @@ fn policy_deny_new_vmo() {
 ///
 /// Set policy to deny channel creation. Creating a channel should
 /// fail with ACCESS_DENIED.
-#[test]
 fn policy_deny_new_channel() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -126,7 +121,6 @@ fn policy_deny_new_channel() {
 ///
 /// Set policy to deny event creation. Creating an event should
 /// fail with ACCESS_DENIED.
-#[test]
 fn policy_deny_new_event() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -149,7 +143,6 @@ fn policy_deny_new_event() {
 ///
 /// Set policy to deny socket creation. Creating a socket should
 /// fail with ACCESS_DENIED.
-#[test]
 fn policy_deny_new_socket() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -172,7 +165,6 @@ fn policy_deny_new_socket() {
 ///
 /// Set policy to deny FIFO creation. Creating a FIFO should fail
 /// with ACCESS_DENIED.
-#[test]
 fn policy_deny_new_fifo() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -195,7 +187,6 @@ fn policy_deny_new_fifo() {
 ///
 /// Set policy to deny timer creation. Creating a timer should fail
 /// with ACCESS_DENIED.
-#[test]
 fn policy_deny_new_timer() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -218,7 +209,6 @@ fn policy_deny_new_timer() {
 ///
 /// Set policy to deny port creation. Creating a port should fail
 /// with ACCESS_DENIED.
-#[test]
 fn policy_deny_new_port() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -241,7 +231,6 @@ fn policy_deny_new_port() {
 ///
 /// Set override policy to DENY on a parent, then try to set ALLOW
 /// on a child. The child should not be able to relax the policy.
-#[test]
 fn policy_override_deny() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -281,7 +270,6 @@ fn policy_override_deny() {
 ///
 /// Set override policy to ALLOW on a parent. Child jobs should be
 /// able to set their own policies freely.
-#[test]
 fn policy_override_allow() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -325,7 +313,6 @@ fn policy_override_allow() {
 ///
 /// Set policy to allow ambient VMO exec marking. VMOs created under
 /// this job should get EXECUTE right. Tests ZX_POL_AMBIENT_MARK_VMO_EXEC.
-#[test]
 fn policy_ambient_mark_vmo_exec() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -356,7 +343,6 @@ fn policy_ambient_mark_vmo_exec() {
 ///
 /// Policies can only be set on jobs with no children. Setting a
 /// policy on a non-empty job should return BAD_STATE.
-#[test]
 fn policy_on_empty_job_only() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -383,7 +369,6 @@ fn policy_on_empty_job_only() {
 ///
 /// Set multiple policy conditions atomically in a single batch.
 /// All conditions should be applied together.
-#[test]
 fn policy_batch_application() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -423,4 +408,23 @@ fn policy_batch_application() {
     // Conditions not in the batch remain unset.
     assert_eq!(effective.get_action(PolicyCondition::NewSocket), None);
     assert_eq!(effective.get_action(PolicyCondition::NewTimer), None);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    default_policy();
+    set_basic_policy();
+    policy_inheritance();
+    policy_deny_new_vmo();
+    policy_deny_new_channel();
+    policy_deny_new_event();
+    policy_deny_new_socket();
+    policy_deny_new_fifo();
+    policy_deny_new_timer();
+    policy_deny_new_port();
+    policy_override_deny();
+    policy_override_allow();
+    policy_ambient_mark_vmo_exec();
+    policy_on_empty_job_only();
+    policy_batch_application();
 }

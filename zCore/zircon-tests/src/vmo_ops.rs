@@ -12,7 +12,6 @@ extern crate alloc;
 ///
 /// Commit pages in a VMO. The committed pages should be backed by
 /// physical memory.
-#[test]
 fn commit_pages() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -25,7 +24,6 @@ fn commit_pages() {
 ///
 /// Decommit pages from a VMO. The pages are returned to the kernel
 /// and read as zeroes on next access.
-#[test]
 fn decommit_pages() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -38,7 +36,6 @@ fn decommit_pages() {
 
 ///
 /// Zero a range of a VMO. The zeroed range should read as all zeroes.
-#[test]
 fn zero_range() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -51,7 +48,6 @@ fn zero_range() {
 
 ///
 /// Zero only part of a page. The rest should be untouched.
-#[test]
 fn zero_partial() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -67,7 +63,6 @@ fn zero_partial() {
 
 ///
 /// Commit pages that are already committed. Should be a no-op.
-#[test]
 fn commit_already_committed() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -81,7 +76,6 @@ fn commit_already_committed() {
 ///
 /// Decommit pages then write new data. The new data should be
 /// readable.
-#[test]
 fn decommit_and_rewrite() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -95,7 +89,6 @@ fn decommit_and_rewrite() {
 
 ///
 /// Commit a large range of pages at once.
-#[test]
 fn commit_large_range() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(32);
@@ -110,7 +103,6 @@ fn commit_large_range() {
 ///
 /// Decommit only some pages of a multi-page VMO. Non-decommitted
 /// pages should retain their data.
-#[test]
 fn decommit_partial() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(3);
@@ -131,7 +123,6 @@ fn decommit_partial() {
 ///
 /// Get and set content_size on a VMO. Content size tracks the
 /// logical data size within the VMO.
-#[test]
 fn vmo_content_size() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -146,7 +137,6 @@ fn vmo_content_size() {
 ///
 /// Query the committed bytes of a VMO. Should reflect how many
 /// pages are actually backed by physical memory.
-#[test]
 fn vmo_committed_bytes() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -161,7 +151,6 @@ fn vmo_committed_bytes() {
 
 ///
 /// Every VMO should have a unique non-zero KOID.
-#[test]
 fn vmo_koid() {
     let _ctx = TestContext::new();
     let v1 = VmObject::new_paged(1);
@@ -173,7 +162,6 @@ fn vmo_koid() {
 
 ///
 /// VMO length should be page-aligned and match the requested size.
-#[test]
 fn vmo_len() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(5);
@@ -182,7 +170,6 @@ fn vmo_len() {
 
 ///
 /// Create a resizable VMO, resize it, and verify the new length.
-#[test]
 fn resizable_vmo() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged_with_resizable(true, 2);
@@ -193,7 +180,6 @@ fn resizable_vmo() {
 
 ///
 /// Shrink a resizable VMO. Data beyond the new end is lost.
-#[test]
 fn resize_shrink() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged_with_resizable(true, 4);
@@ -204,7 +190,6 @@ fn resize_shrink() {
 
 ///
 /// A non-resizable VMO should reject resize with UNAVAILABLE.
-#[test]
 fn non_resizable_reject_resize() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(2);
@@ -214,4 +199,23 @@ fn non_resizable_reject_resize() {
         Some(zircon_object::ZxError::UNAVAILABLE),
         "non-resizable VMO should reject resize"
     );
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    commit_pages();
+    decommit_pages();
+    zero_range();
+    zero_partial();
+    commit_already_committed();
+    decommit_and_rewrite();
+    commit_large_range();
+    decommit_partial();
+    vmo_content_size();
+    vmo_committed_bytes();
+    vmo_koid();
+    vmo_len();
+    resizable_vmo();
+    resize_shrink();
+    non_resizable_reject_resize();
 }

@@ -11,7 +11,6 @@ use zircon_object::object::KernelObject;
 use zircon_object::vm::{VmObject, PAGE_SIZE, PAGE_SIZE_LOG2};
 
 /// Pin a VMO and verify PMT is tracked.
-#[test]
 fn pin_and_info() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -31,7 +30,6 @@ fn pin_and_info() {
 }
 
 /// Unpin a PMT — removes it from the BTI list.
-#[test]
 fn pin_and_unpin() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -51,7 +49,6 @@ fn pin_and_unpin() {
 }
 
 /// Quarantine: drop PMT handle without unpin, then release_quarantine.
-#[test]
 fn quarantine_lifecycle() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -79,7 +76,6 @@ fn quarantine_lifecycle() {
 }
 
 /// Pin with zero size should fail.
-#[test]
 fn pin_zero_size_fails() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -90,7 +86,6 @@ fn pin_zero_size_fails() {
 }
 
 /// Pin multiple VMOs.
-#[test]
 fn pin_multiple() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -113,12 +108,11 @@ fn pin_multiple() {
     assert_eq!(bti.get_info().pmo_count, 2);
 }
 
-/// Create a contiguous VMO (works in libos mode via bitmap allocator).
-#[test]
+/// Create a contiguous VMO (works in test mode via bitmap allocator).
 fn contiguous_vmo_creation() {
     let _ctx = TestContext::new();
 
-    // new_contiguous uses the bitmap allocator in libos mode.
+    // new_contiguous uses the bitmap allocator in test mode.
     let vmo = VmObject::new_contiguous(4, PAGE_SIZE_LOG2).unwrap();
     assert_eq!(vmo.len(), 4 * PAGE_SIZE);
 
@@ -131,7 +125,6 @@ fn contiguous_vmo_creation() {
 }
 
 /// Pin a contiguous VMO.
-#[test]
 fn pin_contiguous_vmo() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -151,7 +144,6 @@ fn pin_contiguous_vmo() {
 
 ///
 /// Pin a VMO with both READ and WRITE permissions.
-#[test]
 fn pin_read_write() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -172,7 +164,6 @@ fn pin_read_write() {
 
 ///
 /// Pin multiple VMOs on the same BTI. All should coexist.
-#[test]
 fn pin_multiple_vmos() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -192,7 +183,6 @@ fn pin_multiple_vmos() {
 
 ///
 /// Each BTI should have a unique KOID.
-#[test]
 fn bti_koid_unique() {
     let _ctx = TestContext::new();
     let (_iommu1, bti1) = create_iommu_bti();
@@ -202,7 +192,6 @@ fn bti_koid_unique() {
 
 ///
 /// Each PMT (Pinned Memory Token) should have a unique KOID.
-#[test]
 fn pmt_koid() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -219,7 +208,6 @@ fn pmt_koid() {
 
 ///
 /// Each IOMMU object should have a valid non-zero KOID.
-#[test]
 fn iommu_koid() {
     let _ctx = TestContext::new();
     let (_iommu, _bti) = create_iommu_bti();
@@ -228,7 +216,6 @@ fn iommu_koid() {
 
 ///
 /// Pinning with zero length should fail with INVALID_ARGS.
-#[test]
 fn pin_zero_length_fails() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -240,7 +227,6 @@ fn pin_zero_length_fails() {
 
 ///
 /// Pin a large (multi-page) VMO. All pages should be pinned.
-#[test]
 fn pin_large_vmo() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
@@ -251,4 +237,22 @@ fn pin_large_vmo() {
         .unwrap();
     assert_ne!(pmt.id(), 0);
     pmt.unpin();
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    pin_and_info();
+    pin_and_unpin();
+    quarantine_lifecycle();
+    pin_zero_size_fails();
+    pin_multiple();
+    contiguous_vmo_creation();
+    pin_contiguous_vmo();
+    pin_read_write();
+    pin_multiple_vmos();
+    bti_koid_unique();
+    pmt_koid();
+    iommu_koid();
+    pin_zero_length_fails();
+    pin_large_vmo();
 }

@@ -5,13 +5,13 @@
 //! operations and rights enforcement.
 
 use crate::helpers::TestContext;
+use crate::prelude::*;
 use hal_impl::user::UserOutPtr;
 use zircon_object::object::{Handle, HandleValue, Rights};
 use zircon_object::ZxError;
 
 /// C++: TEST(HandleCloseTest, Many) — syscall level
 /// Close many handles at once.
-#[test]
 fn close_many_handles() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -46,7 +46,6 @@ fn close_many_handles() {
 }
 
 /// C++: TEST(HandleDup, ReplaceSuccessOrigInvalid) — syscall level
-#[test]
 fn replace_success_orig_invalid() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -74,7 +73,6 @@ fn replace_success_orig_invalid() {
 }
 
 /// C++: TEST(HandleDup, ReplaceFailureBothInvalid) — syscall level
-#[test]
 fn replace_failure_both_invalid() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -96,4 +94,11 @@ fn replace_failure_both_invalid() {
     // (differs from Fuchsia where replace always consumes).
     // The source handle remains valid.
     sc.sys_handle_check_valid(h).unwrap();
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    close_many_handles();
+    replace_success_orig_invalid();
+    replace_failure_both_invalid();
 }

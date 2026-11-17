@@ -62,7 +62,6 @@ pub(crate) fn as_kobject(thread: &alloc::sync::Arc<Thread>) -> alloc::sync::Arc<
 /// Trigger a BAD_SYSCALL policy exception with synth_data=1 (valid
 /// syscall number, but not called from vDSO). Verify the exception
 /// report has ZX_EXCP_POLICY_CODE_BAD_SYSCALL and synth_data==1.
-#[async_std::test]
 async fn bad_syscall_caller() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -116,7 +115,6 @@ async fn bad_syscall_caller() {
 ///
 /// Same as BadSyscallCaller but with synth_data=10000 (invalid syscall
 /// number). Verify synth_data==10000 in the exception report.
-#[async_std::test]
 async fn bad_syscall_number() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -168,7 +166,6 @@ async fn bad_syscall_number() {
 
 /// C++: TEST(Threads, Basics)
 /// Basic thread creation, start, and termination.
-#[async_std::test]
 async fn basics() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -181,7 +178,7 @@ async fn basics() {
     assert_eq!(thread.related_koid(), proc.id());
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     assert_eq!(thread.state(), ThreadState::Running);
     assert!(thread.signal().contains(Signal::THREAD_RUNNING));
@@ -201,7 +198,6 @@ async fn basics() {
 /// Requires x86 DR6 debug register. Tests that DR6 retains breakpoint
 /// status bits after breakpoints are removed via write_state(Debug).
 #[cfg(target_arch = "x86_64")]
-#[test]
 fn debug_registers_dr6_correct_after_breakpoint_removal() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -259,7 +255,6 @@ fn debug_registers_dr6_correct_after_breakpoint_removal() {
 /// The full C++ test verifies DR6 reset after a hardware debug exception,
 /// which requires bare-metal. This test verifies the write/read round-trip.
 #[cfg(target_arch = "x86_64")]
-#[test]
 fn debug_registers_dr6_reset_on_debug_exception() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -295,7 +290,6 @@ fn debug_registers_dr6_reset_on_debug_exception() {
 /// Validate debug register state kind. Should return an error
 /// Verify debug register read succeeds on a suspended thread and
 /// returns the expected size (48 bytes on x86_64).
-#[test]
 fn debug_registers_validation() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -327,7 +321,6 @@ fn debug_registers_validation() {
 /// via write_state is accepted. The full C++ test triggers the
 /// watchpoint during a syscall — that requires bare-metal.
 #[cfg(target_arch = "x86_64")]
-#[test]
 fn debug_registers_watchpoint_syscall_panic_repro() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -360,7 +353,6 @@ fn debug_registers_watchpoint_syscall_panic_repro() {
 
 /// C++: TEST(Threads, EmptyNameSucceeds)
 /// Creating a thread with an empty name should succeed.
-#[test]
 fn empty_name_succeeds() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -395,7 +387,6 @@ fn empty_name_succeeds() {
 /// Create a thread that triggers a policy exception (BAD_SYSCALL),
 /// catch it on the process exception channel, set the exception state
 /// to THREAD_EXIT (state=2), and verify the thread terminates.
-#[async_std::test]
 async fn exit_via_exception() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -451,7 +442,6 @@ async fn exit_via_exception() {
 /// C++: TEST(Threads, GetAffinity)
 /// Get thread CPU affinity info. Verify the cpu_affinity_mask has
 /// at least one CPU set and represents a contiguous range 0..N-1.
-#[test]
 fn get_affinity() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -466,14 +456,13 @@ fn get_affinity() {
     assert_eq!(thread.state(), ThreadState::New);
 
     // The info struct should be valid (not zeroed / panicked).
-    // In libos mode we're running on the host, so there's at least 1 CPU.
+    // In test mode we're running on the host, so there's at least 1 CPU.
     let _ = info;
 }
 
 /// C++: TEST(Threads, GetInfoRuntime)
 /// Runtime info: before start cpu_time should be 0, after running
 /// it should increase. Also verify the syscall returns actual=1, avail=1.
-#[async_std::test]
 async fn get_info_runtime() {
     helpers::ensure_hal_init();
     let ctx = TestContext::new();
@@ -487,8 +476,8 @@ async fn get_info_runtime() {
 
     // Start the thread, let it accumulate some runtime
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Accumulate synthetic runtime (the cooperative executor doesn't
     // track real CPU time, so we add it explicitly)
@@ -529,7 +518,6 @@ async fn get_info_runtime() {
 /// C++: TEST(Threads, GetInfoRuntimeV1)
 /// Same as GetInfoRuntime but verifying the V1 topic (also topic 30
 /// with a 16-byte buffer). Verify cumulative runtime tracking.
-#[async_std::test]
 async fn get_info_runtime_v1() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -538,7 +526,7 @@ async fn get_info_runtime_v1() {
 
     // Start and accumulate runtime
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.time_add(10000);
     assert_eq!(thread.get_time(), 10000);
@@ -562,7 +550,6 @@ async fn get_info_runtime_v1() {
 /// C++: TEST(Threads, GetLastScheduledCpu)
 /// Before starting, last_scheduled_cpu should be ZX_INFO_INVALID_CPU.
 /// After running, it should be a valid CPU number.
-#[async_std::test]
 async fn get_last_scheduled_cpu() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -579,8 +566,8 @@ async fn get_last_scheduled_cpu() {
 
     // Start the thread, let it run briefly, then check again
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // After running, the thread should have a valid state
     assert_eq!(thread.state(), ThreadState::Running);
@@ -595,7 +582,6 @@ async fn get_last_scheduled_cpu() {
 /// C++: TEST(Threads, InfoTaskStatsFails)
 /// ZX_INFO_TASK_STATS (topic 1) on a thread handle should fail because
 /// TASK_STATS only applies to processes and jobs, not threads.
-#[test]
 fn info_task_stats_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -631,7 +617,6 @@ fn info_task_stats_fails() {
 /// C++: TEST(Threads, InfoThreadStatsFails)
 /// ZX_INFO_THREAD_STATS (topic 15) on a dead thread should return
 /// BAD_STATE because the thread has no valid runtime stats.
-#[test]
 fn info_thread_stats_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -677,7 +662,6 @@ fn info_thread_stats_fails() {
 /// C++: TEST(Threads, InvalidRights)
 /// Handle duplication with reduced rights — verify ACCESS_DENIED
 /// when the reduced handle lacks a required right.
-#[test]
 fn invalid_rights() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -708,7 +692,6 @@ fn invalid_rights() {
 /// C++ verifies the name is truncated at ZX_MAX_NAME_LEN-1 (31 chars)
 /// and the first 31 chars match. zCore's KObjectBase stores the full
 /// string, so we verify the name starts with the expected prefix.
-#[test]
 fn long_name_succeeds() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -736,7 +719,6 @@ fn long_name_succeeds() {
 /// kernel-space addresses. The C++ test suspends a thread via interrupt
 /// (IRETQ path) but the validation is the same regardless of context.
 #[cfg(target_arch = "x86_64")]
-#[test]
 fn noncanonical_rip_address_iretq() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -777,7 +759,6 @@ fn noncanonical_rip_address_iretq() {
 /// Same RIP validation as IRETQ test — the C++ test suspends a thread
 /// in a syscall (SYSRET path) but zCore's validation is context-independent.
 #[cfg(target_arch = "x86_64")]
-#[test]
 fn noncanonical_rip_address_syscall() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -801,7 +782,6 @@ fn noncanonical_rip_address_syscall() {
 /// C++: TEST(Threads, NonstartedThread)
 /// A thread that is created but never started should be killable
 /// and transition to Dead.
-#[test]
 fn nonstarted_thread() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -830,7 +810,6 @@ fn nonstarted_thread() {
 /// already-started process returns BAD_STATE, but zx_thread_start
 /// on a second thread succeeds. We exercise the kernel-level
 /// Thread::start which corresponds to zx_thread_start.
-#[async_std::test]
 async fn process_start_on_second_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -840,13 +819,13 @@ async fn process_start_on_second_thread() {
 
     // Start first thread
     t1.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Start second thread — zx_thread_start on additional threads succeeds
     let result = t2.start(helpers::test_loop_thread_fn);
     assert!(result.is_ok(), "second thread start should succeed");
 
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Both should be running
     assert!(t1.signal().contains(Signal::THREAD_RUNNING));
@@ -860,7 +839,6 @@ async fn process_start_on_second_thread() {
 
 /// C++: TEST(Threads, ReadingFpRegisterState)
 /// Read FP register state on a suspended thread.
-#[async_std::test]
 async fn reading_fp_register_state() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -868,8 +846,8 @@ async fn reading_fp_register_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -885,7 +863,7 @@ async fn reading_fp_register_state() {
     // On x86_64: FP state read should succeed and return 152 bytes.
     // On aarch64: NOT_SUPPORTED (FP uses vector regs on ARM).
     // If the thread isn't properly suspended (timing issue), the read
-    // may return BAD_STATE — that's acceptable in libos mode.
+    // may return BAD_STATE — that's acceptable in test mode.
     match result {
         Ok(size) => {
             #[cfg(target_arch = "x86_64")]
@@ -905,7 +883,7 @@ async fn reading_fp_register_state() {
             // isn't tracked in the cooperative executor.
         }
         Err(ZxError::BAD_STATE) => {
-            // Thread not fully suspended — timing issue in libos mode.
+            // Thread not fully suspended — timing issue in test mode.
         }
         Err(e) => panic!("unexpected error from FP state read: {:?}", e),
     }
@@ -926,7 +904,6 @@ async fn reading_fp_register_state() {
 /// then suspends and reads back. We set known values via setup_uspace
 /// (IP, SP, args) and verify those specific fields appear in the
 /// read_state output.
-#[async_std::test]
 async fn reading_general_register_state() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -941,8 +918,8 @@ async fn reading_general_register_state() {
         .unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -971,7 +948,7 @@ async fn reading_general_register_state() {
     assert!(ip != 0 || sp != 0, "at least IP or SP should be non-zero");
 
     // Verify the buffer contains some data, not entirely zeros.
-    // In libos mode with the cooperative executor, most registers
+    // In test mode with the cooperative executor, most registers
     // are zero because no real instructions execute. The rflags
     // register (set by setup_uspace to 0x3202) should be non-zero.
     // On bare-metal with real execution, all regs would be populated.
@@ -995,7 +972,6 @@ async fn reading_general_register_state() {
 /// C++ fills vector regs via inline asm, reads back, and asserts
 /// each register matches. We verify the API returns the right size
 /// and the mxcsr field is a valid value.
-#[async_std::test]
 async fn reading_vector_register_state() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1003,8 +979,8 @@ async fn reading_vector_register_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -1049,7 +1025,6 @@ async fn reading_vector_register_state() {
 /// Suspend and resume a running thread. C++ does two cycles:
 /// first quick suspend+immediate resume, then a full cycle with
 /// signal-while-suspended verification.
-#[async_std::test]
 async fn resume_suspended() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1057,8 +1032,8 @@ async fn resume_suspended() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Cycle 1: Suspend
     thread.suspend();
@@ -1109,7 +1084,6 @@ async fn resume_suspended() {
 /// C++: TEST(Threads, StartRegs)
 /// Start a thread with specific initial register values and verify
 /// they are set via context. C++ verifies PC, SP, arg0, arg1.
-#[test]
 fn start_regs() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1147,7 +1121,6 @@ fn start_regs() {
 /// Verifies that starting a thread with a non-canonical TP (thread
 /// pointer) register value is rejected with INVALID_ARGS.
 #[cfg(target_arch = "x86_64")]
-#[test]
 fn start_regs_noncanonical_tp() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -1179,7 +1152,6 @@ fn start_regs_noncanonical_tp() {
 /// Start a thread with initial regs while pre-suspended. Verify
 /// register state is readable while suspended and IP/SP match
 /// the values set via setup_uspace.
-#[async_std::test]
 async fn start_regs_suspended() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1196,8 +1168,8 @@ async fn start_regs_suspended() {
 
     // Start
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     as_kobject(&thread)
         .wait_signal(Signal::THREAD_SUSPENDED)
@@ -1232,7 +1204,6 @@ async fn start_regs_suspended() {
 
 /// C++: TEST(Threads, StartSuspendedAndResumedThread)
 /// Pre-suspend, start, then resume — thread should run.
-#[async_std::test]
 async fn start_suspended_and_resumed_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1241,8 +1212,8 @@ async fn start_suspended_and_resumed_thread() {
 
     thread.suspend();
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     as_kobject(&thread)
         .wait_signal(Signal::THREAD_SUSPENDED)
@@ -1262,7 +1233,6 @@ async fn start_suspended_and_resumed_thread() {
 
 /// C++: TEST(Threads, StartSuspendedThread)
 /// Start a pre-suspended thread — should be suspended not running.
-#[async_std::test]
 async fn start_suspended_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1271,8 +1241,8 @@ async fn start_suspended_thread() {
 
     thread.suspend();
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     as_kobject(&thread)
         .wait_signal(Signal::THREAD_SUSPENDED)
@@ -1293,7 +1263,6 @@ async fn start_suspended_thread() {
 /// and the token handle is invalid. At the kernel level, suspend()
 /// on a dead thread should be a no-op (not panic) and the thread
 /// should remain Dead.
-#[async_std::test]
 async fn suspend_after_death() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1301,7 +1270,7 @@ async fn suspend_after_death() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.kill();
     as_kobject(&thread)
@@ -1331,7 +1300,6 @@ async fn suspend_after_death() {
 /// Thread is blocked on channel_call (waiting for reply). Suspend,
 /// verify SUSPENDED state, write a reply, resume, verify the thread
 /// receives the reply and terminates.
-#[async_std::test]
 async fn suspend_channel_call() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1350,7 +1318,7 @@ async fn suspend_channel_call() {
         if cct.thread.state() == ThreadState::BlockedChannel {
             break;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
     assert_eq!(
         cct.thread.state(),
@@ -1388,7 +1356,7 @@ async fn suspend_channel_call() {
         if cct.thread.state() == ThreadState::Dead {
             break;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
     assert_eq!(
         cct.thread.state(),
@@ -1412,7 +1380,6 @@ async fn suspend_channel_call() {
 /// - WRONG_TYPE on a channel
 /// - WRONG_TYPE on a VMO
 /// - NOT_SUPPORTED on self-thread (would deadlock)
-#[test]
 fn suspend_invalid_targets() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1449,7 +1416,6 @@ fn suspend_invalid_targets() {
 
 /// C++: TEST(Threads, SuspendMultiple)
 /// Multiple suspend tokens — requires matching resumes.
-#[async_std::test]
 async fn suspend_multiple() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1457,8 +1423,8 @@ async fn suspend_multiple() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.suspend();
     thread.suspend();
@@ -1485,7 +1451,6 @@ async fn suspend_multiple() {
 /// Thread is blocked on port_wait. Suspend, verify SUSPENDED, queue
 /// packets, resume, verify the thread processes the first packet and
 /// forwards result to the result port.
-#[async_std::test]
 async fn suspend_port_call() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1499,7 +1464,7 @@ async fn suspend_port_call() {
         if pwt.thread.state() == ThreadState::BlockedPort {
             break;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
     assert_eq!(
         pwt.thread.state(),
@@ -1538,7 +1503,7 @@ async fn suspend_port_call() {
         if pwt.thread.state() == ThreadState::Dead {
             break;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
     assert_eq!(
         pwt.thread.state(),
@@ -1564,7 +1529,6 @@ async fn suspend_port_call() {
 /// Thread waiting on an event via wait_one. Suspend, verify SUSPENDED,
 /// resume, signal the event, verify the thread receives the signal
 /// and terminates.
-#[async_std::test]
 async fn suspend_single_wait_async_signal_delivery() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1578,7 +1542,7 @@ async fn suspend_single_wait_async_signal_delivery() {
         if ewt.thread.state() == ThreadState::BlockedWaitOne {
             break;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
     assert_eq!(
         ewt.thread.state(),
@@ -1608,7 +1572,7 @@ async fn suspend_single_wait_async_signal_delivery() {
         if ewt.thread.state() == ThreadState::BlockedWaitOne {
             break;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
     assert_eq!(
         ewt.thread.state(),
@@ -1633,7 +1597,7 @@ async fn suspend_single_wait_async_signal_delivery() {
         if ewt.thread.state() == ThreadState::BlockedWaitOne {
             break;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
     assert_eq!(
         ewt.thread.state(),
@@ -1653,7 +1617,7 @@ async fn suspend_single_wait_async_signal_delivery() {
         if ewt.thread.state() == ThreadState::Dead {
             break;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
     assert_eq!(
         ewt.thread.state(),
@@ -1668,7 +1632,6 @@ async fn suspend_single_wait_async_signal_delivery() {
 ///
 /// Thread calls nanosleep (blocking wait). Suspend, verify SUSPENDED,
 /// resume, verify thread continues and eventually terminates.
-#[async_std::test]
 async fn suspend_sleeping() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1691,7 +1654,7 @@ async fn suspend_sleeping() {
             proc.exit(0);
             return;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
     assert!(reached_blocked, "timed out waiting for BlockedSleeping");
 
@@ -1728,7 +1691,6 @@ async fn suspend_sleeping() {
 
 /// C++: TEST(Threads, SuspendStopsThread)
 /// Verify that suspending a thread stops its execution.
-#[async_std::test]
 async fn suspend_stops_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1736,8 +1698,8 @@ async fn suspend_stops_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     assert!(thread.signal().contains(Signal::THREAD_RUNNING));
 
@@ -1773,7 +1735,6 @@ async fn suspend_stops_thread() {
 /// Our test verifies the write_state/read_state round-trip for the
 /// return register on a suspended thread. We also verify that
 /// multiple register modifications are independently tracked.
-#[test]
 fn syscall_debugger_modify_result() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -1834,7 +1795,6 @@ fn syscall_debugger_modify_result() {
 /// We verify the general regs are readable and contain meaningful
 /// values (the cooperative executor doesn't populate real syscall
 /// argument registers, but the register struct should still be valid).
-#[async_std::test]
 async fn syscall_suspended_register_state() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1846,8 +1806,8 @@ async fn syscall_suspended_register_state() {
         .unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -1881,7 +1841,6 @@ async fn syscall_suspended_register_state() {
 ///
 /// Verifies that the TLS register (fsbase on x86_64, tpidr on aarch64)
 /// can be written and read back via write_state/read_state.
-#[test]
 fn thread_local_register_state() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -1903,7 +1862,7 @@ fn thread_local_register_state() {
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     let tls_offset = usize::MAX; // skip on unsupported arch
 
-    if tls_offset + 8 > n {
+    if tls_offset == usize::MAX || tls_offset + 8 > n {
         return; // GeneralRegs too small for TLS field
     }
 
@@ -1926,7 +1885,6 @@ fn thread_local_register_state() {
 /// Start a thread with invalid entry point via syscall.
 /// C++ tests three cases: non-canonical (bit 55), kernel-space, and
 /// x86 non-canonical — all must return INVALID_ARGS.
-#[test]
 fn thread_start_invalid_entry() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -1986,7 +1944,6 @@ fn thread_start_invalid_entry() {
 
 /// C++: TEST(Threads, ThreadStartOnInitialThread)
 /// Start a process thread (initial thread).
-#[async_std::test]
 async fn thread_start_on_initial_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -1997,7 +1954,7 @@ async fn thread_start_on_initial_thread() {
     thread
         .start_with_entry(0x1000, 0x8000, 0, 0, helpers::test_loop_thread_fn)
         .unwrap();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     assert!(thread.signal().contains(Signal::THREAD_RUNNING));
 
@@ -2009,14 +1966,13 @@ async fn thread_start_on_initial_thread() {
 
 /// C++: TEST(Threads, ThreadStartWithZeroInstructionPointer)
 /// Start a thread with IP=0. On real hardware this triggers a fatal
-/// page fault exception with fault_address=0. In libos mode, we
+/// page fault exception with fault_address=0. In test mode, we
 /// verify the context is set correctly and attempt to start —
 /// the cooperative executor won't actually fault but the kernel
 /// should accept the configuration.
 ///
 /// C++ test: starts thread with PC=0, waits for
 /// ZX_EXCP_FATAL_PAGE_FAULT exception with fault_address==0.
-#[async_std::test]
 async fn thread_start_with_zero_instruction_pointer() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -2044,11 +2000,11 @@ async fn thread_start_with_zero_instruction_pointer() {
 
     // Start the thread — it should be accepted by the kernel even
     // with IP=0 (the fault happens during execution, not at start).
-    // In libos mode with the cooperative executor, this won't
+    // In test mode with the cooperative executor, this won't
     // actually cause a page fault but the thread lifecycle should
     // work correctly.
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Thread should be running (or may have already died from the
     // "fault" depending on the executor implementation)
@@ -2072,7 +2028,6 @@ async fn thread_start_with_zero_instruction_pointer() {
 /// be set via write_state. The full C++ test triggers the watchpoint
 /// during a syscall (requires bare-metal). This tests the API.
 #[cfg(target_arch = "x86_64")]
-#[test]
 fn watchpoint_syscall_panic() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -2102,7 +2057,6 @@ fn watchpoint_syscall_panic() {
 
 /// C++: TEST(Threads, WriteReadDebugRegisterState)
 /// Write/read debug register state — should fail (not implemented).
-#[test]
 fn write_read_debug_register_state() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -2141,7 +2095,6 @@ fn write_read_debug_register_state() {
 /// Verifies that writing thread state with an invalid MXCSR value
 /// returns ZX_ERR_INVALID_ARGS and does not modify the thread's state.
 #[cfg(target_arch = "x86_64")]
-#[test]
 fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -2184,7 +2137,6 @@ fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
 /// Write FP register state and verify round-trip.
 /// On x86_64: write st[0..6] with test values, read back, verify.
 /// On aarch64: NOT_SUPPORTED (FP uses vector regs).
-#[async_std::test]
 async fn writing_fp_register_state() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -2192,8 +2144,8 @@ async fn writing_fp_register_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -2251,7 +2203,6 @@ async fn writing_fp_register_state() {
 
 /// C++: TEST(Threads, WritingGeneralRegisterState)
 /// Write general register state on a suspended thread.
-#[async_std::test]
 async fn writing_general_register_state() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -2259,8 +2210,8 @@ async fn writing_general_register_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -2305,7 +2256,6 @@ async fn writing_general_register_state() {
 /// - value UINT32_MAX → INVALID_ARGS
 /// - larger buffer → OK (only first 4 bytes used)
 /// - smaller buffer → BUFFER_TOO_SMALL
-#[test]
 fn writing_single_step_state() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -2366,7 +2316,6 @@ fn writing_single_step_state() {
 
 /// C++: TEST(Threads, WritingVectorRegisterState)
 /// Write vector register state — should fail (not implemented).
-#[async_std::test]
 async fn writing_vector_register_state() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -2374,8 +2323,8 @@ async fn writing_vector_register_state() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -2423,7 +2372,6 @@ async fn writing_vector_register_state() {
 /// On x86_64: write should succeed (supported), unsupported high
 /// ZMM bits should be zeroed on readback.
 /// On other archs: write returns NOT_SUPPORTED.
-#[test]
 fn writing_vector_register_state_unsupported_fields_ignored() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -2474,7 +2422,6 @@ fn writing_vector_register_state_unsupported_fields_ignored() {
 /// via write_state. The full C++ test triggers the AC flag during a
 /// usercopy fault — that requires bare-metal. This tests the API.
 #[cfg(target_arch = "x86_64")]
-#[test]
 fn x86_ac_flag_user_copy() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -2520,7 +2467,6 @@ fn x86_ac_flag_user_copy() {
 
 /// C++: TEST(Threads, YieldWithNonZeroOptionIsInvalidArgs)
 /// thread_legacy_yield with non-zero options returns INVALID_ARGS.
-#[async_std::test]
 async fn yield_with_non_zero_option_is_invalid_args() {
     let ctx = TestContext::new();
     let mut sc = ctx.syscall();
@@ -2534,7 +2480,6 @@ async fn yield_with_non_zero_option_is_invalid_args() {
 
 /// C++: TEST(Threads, YieldWithZeroOptionIsOk)
 /// thread_legacy_yield with zero options should succeed.
-#[async_std::test]
 async fn yield_with_zero_option_is_ok() {
     let ctx = TestContext::new();
     let mut sc = ctx.syscall();
@@ -2542,4 +2487,90 @@ async fn yield_with_zero_option_is_ok() {
     // SYS_THREAD_LEGACY_YIELD = 166, arg0 = options = 0
     let result = sc.syscall(166, [0, 0, 0, 0, 0, 0, 0, 0]).await;
     assert_eq!(result, 0, "zero options should succeed");
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    bad_syscall_caller().await;
+    bad_syscall_number().await;
+    basics().await;
+    #[cfg(target_arch = "x86_64")]
+    {
+        debug_registers_dr6_correct_after_breakpoint_removal();
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        debug_registers_dr6_reset_on_debug_exception();
+    }
+    debug_registers_validation();
+    #[cfg(target_arch = "x86_64")]
+    {
+        debug_registers_watchpoint_syscall_panic_repro();
+    }
+    empty_name_succeeds();
+    exit_via_exception().await;
+    get_affinity();
+    get_info_runtime().await;
+    get_info_runtime_v1().await;
+    get_last_scheduled_cpu().await;
+    info_task_stats_fails();
+    info_thread_stats_fails();
+    invalid_rights();
+    long_name_succeeds();
+    #[cfg(target_arch = "x86_64")]
+    {
+        noncanonical_rip_address_iretq();
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        noncanonical_rip_address_syscall();
+    }
+    nonstarted_thread();
+    process_start_on_second_thread().await;
+    reading_fp_register_state().await;
+    reading_general_register_state().await;
+    reading_vector_register_state().await;
+    resume_suspended().await;
+    start_regs();
+    #[cfg(target_arch = "x86_64")]
+    {
+        start_regs_noncanonical_tp();
+    }
+    start_regs_suspended().await;
+    start_suspended_and_resumed_thread().await;
+    start_suspended_thread().await;
+    suspend_after_death().await;
+    suspend_channel_call().await;
+    suspend_invalid_targets();
+    suspend_multiple().await;
+    suspend_port_call().await;
+    suspend_single_wait_async_signal_delivery().await;
+    suspend_sleeping().await;
+    suspend_stops_thread().await;
+    syscall_debugger_modify_result();
+    syscall_suspended_register_state().await;
+    thread_local_register_state();
+    thread_start_invalid_entry();
+    thread_start_on_initial_thread().await;
+    thread_start_with_zero_instruction_pointer().await;
+    #[cfg(target_arch = "x86_64")]
+    {
+        watchpoint_syscall_panic();
+    }
+    write_read_debug_register_state();
+    #[cfg(target_arch = "x86_64")]
+    {
+        write_thread_state_with_invalid_mxcsr_is_invalid_args();
+    }
+    writing_fp_register_state().await;
+    writing_general_register_state().await;
+    writing_single_step_state();
+    writing_vector_register_state().await;
+    writing_vector_register_state_unsupported_fields_ignored();
+    #[cfg(target_arch = "x86_64")]
+    {
+        x86_ac_flag_user_copy();
+    }
+    yield_with_non_zero_option_is_invalid_args().await;
+    yield_with_zero_option_is_ok().await;
 }

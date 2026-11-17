@@ -12,7 +12,6 @@ extern crate alloc;
 ///
 /// Create a child job and destroy it. The parent should signal
 /// JOB_NO_CHILDREN when all children are gone.
-#[test]
 fn job_create_and_destroy() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -26,7 +25,6 @@ fn job_create_and_destroy() {
 ///
 /// Create a deep job hierarchy (job → child → grandchild). Each
 /// level should have the correct parent KOID.
-#[test]
 fn nested_job_hierarchy() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -41,7 +39,6 @@ fn nested_job_hierarchy() {
 ///
 /// Kill a job and verify all child jobs and processes are also
 /// killed.
-#[test]
 fn kill_job_kills_children() {
     use zircon_object::task::{Process, Task};
     let _ctx = TestContext::new();
@@ -67,7 +64,6 @@ fn kill_job_kills_children() {
 ///
 /// Create a process within a job. The process should be a child
 /// of the job.
-#[test]
 fn process_create_in_job() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -79,7 +75,6 @@ fn process_create_in_job() {
 ///
 /// Create a thread within a process. The thread should belong to
 /// the process.
-#[test]
 fn thread_create_in_process() {
     use zircon_object::task::{Process, Thread};
     let _ctx = TestContext::new();
@@ -93,7 +88,6 @@ fn thread_create_in_process() {
 ///
 /// Kill a process with no running threads. Should succeed
 /// and signal TERMINATED.
-#[test]
 fn kill_empty_process() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -106,7 +100,6 @@ fn kill_empty_process() {
 ///
 /// Kill a job that contains a process. The process should also
 /// be killed.
-#[test]
 fn kill_job_with_process() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -118,7 +111,6 @@ fn kill_job_with_process() {
 
 ///
 /// Create multiple processes in the same job. All should coexist.
-#[test]
 fn multiple_processes_in_job() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -132,7 +124,6 @@ fn multiple_processes_in_job() {
 
 ///
 /// Try to create a process in a killed job. Should return BAD_STATE.
-#[test]
 fn create_process_in_dead_job() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -144,7 +135,6 @@ fn create_process_in_dead_job() {
 
 ///
 /// Try to create a child job in a killed job. Should return BAD_STATE.
-#[test]
 fn create_child_job_in_dead_job() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -157,7 +147,6 @@ fn create_child_job_in_dead_job() {
 ///
 /// Fuchsia limits job hierarchy depth to 32. Verify we can create
 /// at least a moderately deep hierarchy.
-#[test]
 fn job_max_height() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -171,7 +160,6 @@ fn job_max_height() {
 
 ///
 /// Verify process return code is tracked on exit.
-#[test]
 fn process_return_code_tracking() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -193,7 +181,6 @@ fn process_return_code_tracking() {
 ///
 /// The JOB_NO_PROCESSES signal should be asserted when a job has
 /// no processes.
-#[test]
 fn job_no_processes_signal() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -216,7 +203,6 @@ fn job_no_processes_signal() {
 ///
 /// The JOB_NO_JOBS signal should be asserted when a job has no
 /// child jobs.
-#[test]
 fn job_no_jobs_signal() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -234,4 +220,22 @@ fn job_no_jobs_signal() {
     drop(child);
     // JOB_NO_JOBS should be set again
     assert!(job.signal().contains(Signal::JOB_NO_JOBS));
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    job_create_and_destroy();
+    nested_job_hierarchy();
+    kill_job_kills_children();
+    process_create_in_job();
+    thread_create_in_process();
+    kill_empty_process();
+    kill_job_with_process();
+    multiple_processes_in_job();
+    create_process_in_dead_job();
+    create_child_job_in_dead_job();
+    job_max_height();
+    process_return_code_tracking();
+    job_no_processes_signal();
+    job_no_jobs_signal();
 }

@@ -10,7 +10,6 @@ use zircon_object::object::KernelObject;
 use zircon_object::ZxError;
 
 /// Write data through syscall, read it back through syscall.
-#[test]
 fn write_and_read_via_syscall() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_channel_create(&ctx);
@@ -51,7 +50,6 @@ fn write_and_read_via_syscall() {
 }
 
 /// Write a handle through a channel, read it back on the other end.
-#[test]
 fn write_handle_transfer_via_syscall() {
     let ctx = TestContext::new();
     let (ch0, ch1) = syscall_channel_create(&ctx);
@@ -102,7 +100,6 @@ fn write_handle_transfer_via_syscall() {
     assert_eq!(received_event.id(), event.id());
 }
 
-#[test]
 fn write_without_write_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -127,7 +124,6 @@ fn write_without_write_right() {
 }
 
 /// Data exceeding ZX_CHANNEL_MAX_MSG_BYTES (65536) is rejected.
-#[test]
 fn write_data_too_large_via_syscall() {
     let ctx = TestContext::new();
     let (h0, _h1) = syscall_channel_create(&ctx);
@@ -144,4 +140,12 @@ fn write_data_too_large_via_syscall() {
         0,
     );
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    write_and_read_via_syscall();
+    write_handle_transfer_via_syscall();
+    write_without_write_right();
+    write_data_too_large_via_syscall();
 }

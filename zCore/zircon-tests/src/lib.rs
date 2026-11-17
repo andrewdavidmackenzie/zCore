@@ -22,157 +22,266 @@
 //! cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
 //! ```
 
-#[cfg(test)]
+#![no_std]
+#[macro_use]
+extern crate alloc;
 mod helpers;
 
+mod prelude;
+
 // ── 1:1 C++ core-test ports ────────────────────────────────────────
-#[cfg(test)]
+
 mod core_tests;
 
 // ── Tests from other Fuchsia binaries (not core-tests-standalone) ──
-#[cfg(test)]
+
 mod extra_tests;
 
 // ── zCore-original tests ───────────────────────────────────────────
-#[cfg(test)]
+
 mod bad_syscall;
-#[cfg(test)]
+
 mod bti_extra;
-#[cfg(test)]
+
 mod cache;
-#[cfg(test)]
+
 mod channel_extra;
-#[cfg(test)]
+
 mod clock_extra;
-#[cfg(test)]
+
 mod clock_ops;
-#[cfg(test)]
+
 mod cprng;
-#[cfg(test)]
+
 mod debug;
-#[cfg(test)]
+
 mod debuglog_extra;
-#[cfg(test)]
+
 mod event_extra;
-#[cfg(test)]
+
 mod event_pair_extra;
-#[cfg(test)]
+
 mod exception_extra;
-#[cfg(test)]
+
 mod exception_ops;
-#[cfg(test)]
+
 mod fifo_extra;
-#[cfg(test)]
+
 mod fifo_ops;
-#[cfg(test)]
+
 mod futex_extra;
-#[cfg(test)]
+
 mod handle_dup;
-#[cfg(test)]
+
 mod handle_extra;
-#[cfg(test)]
+
 mod interrupt_extra;
-#[cfg(test)]
+
 mod ipc_limits;
-#[cfg(test)]
+
 mod job_extra;
-#[cfg(test)]
+
 mod kcounter;
-#[cfg(test)]
+
 mod memory_mapping_extra;
-#[cfg(test)]
+
 mod mini_process;
-#[cfg(test)]
+
 mod namespace;
-#[cfg(test)]
+
 mod object_info_extra;
-#[cfg(test)]
+
 mod object_lifecycle;
-#[cfg(test)]
+
 mod object_properties;
-#[cfg(test)]
+
 mod object_signal;
-#[cfg(test)]
+
 mod object_wait_extra;
-#[cfg(test)]
+
 mod object_wait_ops;
-#[cfg(test)]
+
 mod page_size_extra;
-#[cfg(test)]
+
 mod pager_extra;
-#[cfg(test)]
+
 mod policy;
-#[cfg(test)]
+
 mod port_extra;
-#[cfg(test)]
+
 mod port_stress_extra;
-#[cfg(test)]
+
 mod process_debug_extra;
-#[cfg(test)]
+
 mod process_extra;
-#[cfg(test)]
+
 mod profile_extra;
-#[cfg(test)]
+
 mod property_extra;
-#[cfg(test)]
+
 mod pthread_tls;
-#[cfg(test)]
+
 mod resource_extra;
-#[cfg(test)]
+
 mod rights;
-#[cfg(test)]
+
 mod socket_disposition;
-#[cfg(test)]
+
 mod socket_extra;
-#[cfg(test)]
+
 mod stream_extra;
-#[cfg(test)]
+
 mod stream_ops;
-#[cfg(test)]
+
 mod suspend_resume;
-#[cfg(test)]
+
 mod syscall_channel_extra;
-#[cfg(test)]
+
 mod syscall_fifo_extra;
-#[cfg(test)]
+
 mod syscall_handle_extra;
-#[cfg(test)]
+
 mod syscall_object;
-#[cfg(test)]
+
 mod syscall_port_extra;
-#[cfg(test)]
+
 mod syscall_signal_extra;
-#[cfg(test)]
+
 mod syscall_socket_extra;
-#[cfg(test)]
+
 mod syscall_transfer_data_extra;
-#[cfg(test)]
+
 mod syscall_vmo_extra;
-#[cfg(test)]
+
 mod task_lifecycle;
-#[cfg(test)]
+
 mod thread_extra;
-#[cfg(test)]
+
 mod timer_extra;
-#[cfg(test)]
+
 mod timer_ops;
-#[cfg(test)]
+
 mod vmar_extra;
-#[cfg(test)]
+
 mod vmar_ops;
-#[cfg(test)]
+
 mod vmo_clone_extra;
-#[cfg(test)]
+
 mod vmo_contiguous;
-#[cfg(test)]
+
 mod vmo_discardable;
-#[cfg(test)]
+
 mod vmo_extra;
-#[cfg(test)]
+
 mod vmo_ops;
-#[cfg(test)]
+
 mod vmo_slice_extra;
-#[cfg(test)]
+
 mod vmo_zero_extra;
-#[cfg(test)]
+
 mod zx_assert_extra;
+
+/// Log and run a test module.
+macro_rules! run_module {
+    ($name:ident) => {{
+        log::warn!("TEST MODULE: {}", stringify!($name));
+        $name::run_all();
+    }};
+    (async $name:ident) => {{
+        log::warn!("TEST MODULE: {}", stringify!($name));
+        $name::run_all().await;
+    }};
+}
+
+/// Run all tests (for bare-metal kernel test runner).
+///
+/// Tests are split into kernel API tests (run everywhere) and syscall
+/// tests (need user-mode buffers, only run in libos/host mode).
+/// Syscall tests will migrate to the petal user-mode binary.
+pub async fn run_all() {
+    // core_tests and extra_tests handle the kernel/syscall split internally
+    run_module!(async core_tests);
+    run_module!(async extra_tests);
+
+    // ── Kernel API modules (no UserInPtr/UserOutPtr) ────────────────
+    run_module!(bti_extra);
+    run_module!(cache);
+    run_module!(channel_extra);
+    run_module!(debuglog_extra);
+    run_module!(event_extra);
+    run_module!(event_pair_extra);
+    run_module!(exception_ops);
+    run_module!(fifo_extra);
+    run_module!(fifo_ops);
+    run_module!(futex_extra);
+    run_module!(handle_dup);
+    run_module!(handle_extra);
+    run_module!(interrupt_extra);
+    run_module!(ipc_limits);
+    run_module!(job_extra);
+    run_module!(kcounter);
+    run_module!(memory_mapping_extra);
+    run_module!(namespace);
+    run_module!(object_lifecycle);
+    run_module!(object_properties);
+    run_module!(object_signal);
+    run_module!(async object_wait_ops);
+    run_module!(page_size_extra);
+    run_module!(async pager_extra);
+    run_module!(policy);
+    run_module!(async port_extra);
+    run_module!(async port_stress_extra);
+    run_module!(process_debug_extra);
+    run_module!(process_extra);
+    run_module!(profile_extra);
+    run_module!(property_extra);
+    run_module!(pthread_tls);
+    run_module!(resource_extra);
+    run_module!(rights);
+    run_module!(socket_disposition);
+    run_module!(socket_extra);
+    run_module!(stream_extra);
+    run_module!(stream_ops);
+    run_module!(async suspend_resume);
+    run_module!(task_lifecycle);
+    run_module!(timer_ops);
+    run_module!(vmar_extra);
+    run_module!(vmar_ops);
+    run_module!(vmo_clone_extra);
+    run_module!(vmo_contiguous);
+    run_module!(vmo_ops);
+    run_module!(vmo_slice_extra);
+    run_module!(vmo_zero_extra);
+    run_module!(zx_assert_extra);
+
+    // ── Syscall modules (use UserInPtr/UserOutPtr) ──────────────────
+    // These pass kernel addresses through syscall user-pointer validation.
+    // On bare-metal, kernel addresses are correctly rejected by VMAR
+    // validation. These tests only run in libos mode (host `cargo test`).
+    // They need to migrate to the petal user-mode binary.
+    #[cfg(not(target_os = "none"))]
+    {
+        run_module!(bad_syscall);
+        run_module!(clock_extra);
+        run_module!(clock_ops);
+        run_module!(cprng);
+        run_module!(debug);
+        run_module!(exception_extra);
+        run_module!(mini_process);
+        run_module!(object_info_extra);
+        run_module!(async object_wait_extra);
+        run_module!(syscall_channel_extra);
+        run_module!(syscall_fifo_extra);
+        run_module!(syscall_handle_extra);
+        run_module!(syscall_object);
+        run_module!(async syscall_port_extra);
+        run_module!(syscall_signal_extra);
+        run_module!(syscall_socket_extra);
+        run_module!(async syscall_transfer_data_extra);
+        run_module!(async syscall_vmo_extra);
+        run_module!(async thread_extra);
+        run_module!(timer_extra);
+        run_module!(async vmo_discardable);
+        run_module!(vmo_extra);
+    }
+}

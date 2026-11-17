@@ -3,6 +3,9 @@
 //! Tests for the DebugLog kernel object: creation, write, read,
 //! and invalid options handling.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 
 use zircon_object::debuglog::{DebugLog, Severity, DLOG_MAX_LEN};
@@ -10,7 +13,6 @@ use zircon_object::debuglog::{DebugLog, Severity, DLOG_MAX_LEN};
 /// C++: TEST(DebugLogTest, DrainAndSignal)
 /// Write multiple messages, then read until drained.
 /// After draining, read returns 0 (no more records).
-#[test]
 fn drain_and_signal() {
     let _ctx = TestContext::new();
     let log = DebugLog::create(0);
@@ -42,7 +44,6 @@ fn drain_and_signal() {
 /// C++: TEST(DebugLogTest, InvalidHandleAllowedOnlyForWrite)
 /// At the syscall level, write with ZX_HANDLE_INVALID (0) is allowed,
 /// but read requires a valid handle. Test both paths.
-#[test]
 fn invalid_handle_allowed_only_for_write() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
 
@@ -72,7 +73,6 @@ fn invalid_handle_allowed_only_for_write() {
 
 /// C++: TEST(DebugLogTest, InvalidOptions)
 /// syscall-level debuglog_create with invalid options returns INVALID_ARGS.
-#[test]
 fn invalid_options() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -97,7 +97,6 @@ fn invalid_options() {
 
 /// C++: TEST(DebugLogTest, InvalidResourceHandleReturnsWrongType)
 /// Using a non-resource handle for debuglog_create returns WRONG_TYPE.
-#[test]
 fn invalid_resource_handle_returns_wrong_type() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::{Handle, HandleValue, Rights};
@@ -125,7 +124,6 @@ fn invalid_resource_handle_returns_wrong_type() {
 
 /// C++: TEST(DebugLogTest, MaxMessageSize)
 /// Write a message at the maximum data size and verify no panic.
-#[test]
 fn max_message_size() {
     use zircon_object::debuglog::DLOG_MAX_DATA;
 
@@ -185,7 +183,6 @@ fn max_message_size() {
 
 /// C++: TEST(DebugLogTest, ReadDataCopyFault)
 /// Reading with a null buffer at the syscall level should fail.
-#[test]
 fn read_data_copy_fault() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -219,7 +216,6 @@ fn read_data_copy_fault() {
 
 /// C++: TEST(DebugLogTest, ReadErrors)
 /// Read with invalid options, bad handle, etc.
-#[test]
 fn read_errors() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -260,7 +256,6 @@ fn read_errors() {
 
 /// C++: TEST(DebugLogTest, WriteErrors)
 /// Write with invalid options returns INVALID_ARGS.
-#[test]
 fn write_errors() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::object::HandleValue;
@@ -305,7 +300,6 @@ fn write_errors() {
 ///
 /// Write a message via syscall, read it back, verify the read returns
 /// the requested size and doesn't corrupt memory beyond the read length.
-#[test]
 fn write_read() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
     use zircon_object::object::HandleValue;
@@ -367,4 +361,17 @@ fn write_read() {
         found,
         "should find the written message in debuglog read-back"
     );
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    drain_and_signal();
+    invalid_handle_allowed_only_for_write();
+    invalid_options();
+    invalid_resource_handle_returns_wrong_type();
+    max_message_size();
+    read_data_copy_fault();
+    read_errors();
+    write_errors();
+    write_read();
 }

@@ -10,7 +10,6 @@ use zircon_object::object::{Handle, Rights};
 /// C++: TEST(NextVdsoTest, BasicTest)
 /// Verify that the VDSO base address property is queryable.
 /// In zCore test mode, no vDSO is mapped so base should be 0.
-#[test]
 fn basic_test() {
     let ctx = TestContext::new();
     let proc_h = ctx.proc.add_handle(Handle::new(
@@ -24,4 +23,9 @@ fn basic_test() {
         .unwrap();
     let vdso_base = usize::from_ne_bytes(buf);
     assert_eq!(vdso_base, 0, "no vDSO mapped in test mode");
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    basic_test();
 }

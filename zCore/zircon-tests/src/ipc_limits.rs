@@ -3,6 +3,9 @@
 //! Tests for IPC object limits: maximum message sizes, handle counts,
 //! and queue depths.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::TestContext;
 use zircon_object::ipc::{Channel, Fifo, MessagePacket, Socket};
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};
@@ -14,7 +17,6 @@ extern crate alloc;
 ///
 /// Transfer the maximum number of handles in a single channel message.
 /// Fuchsia allows up to 64 handles per message.
-#[test]
 fn channel_max_handles() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -38,7 +40,6 @@ fn channel_max_handles() {
 
 ///
 /// Queue many messages on a channel. All should be readable in FIFO.
-#[test]
 fn channel_queue_depth() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -61,7 +62,6 @@ fn channel_queue_depth() {
 ///
 /// Write data until the socket buffer is full. Writing more should
 /// return SHOULD_WAIT.
-#[test]
 fn socket_stream_capacity() {
     let _ctx = TestContext::new();
     let (s0, s1) = Socket::create(0).unwrap();
@@ -98,7 +98,6 @@ fn socket_stream_capacity() {
 ///
 /// Send a message with both data and handles. Verify both are
 /// received correctly.
-#[test]
 fn channel_message_data_and_handles() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -123,7 +122,6 @@ fn channel_message_data_and_handles() {
 ///
 /// Verify FIFO element count tracking as elements are written and
 /// read.
-#[test]
 fn fifo_element_count() {
     let _ctx = TestContext::new();
     let (local, remote) = Fifo::create(8, 4);
@@ -139,7 +137,6 @@ fn fifo_element_count() {
 ///
 /// Write a completely empty message (zero bytes, zero handles).
 /// Should succeed.
-#[test]
 fn channel_zero_bytes_zero_handles() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -157,7 +154,6 @@ fn channel_zero_bytes_zero_handles() {
 ///
 /// Write a specific pattern through a socket and verify it is
 /// received identically.
-#[test]
 fn socket_data_integrity() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
@@ -174,7 +170,6 @@ fn socket_data_integrity() {
 ///
 /// Transfer different object types through a channel. Each should
 /// retain its type and KOID.
-#[test]
 fn channel_handle_transfer_preserves_type() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -208,7 +203,6 @@ fn channel_handle_transfer_preserves_type() {
 ///
 /// Multiple reads from a channel. After draining all messages,
 /// READABLE should be cleared.
-#[test]
 fn channel_multiple_reads_clears() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
@@ -227,4 +221,17 @@ fn channel_multiple_reads_clears() {
     }
     // Channel should no longer be readable
     assert!(!remote.signal().contains(Signal::READABLE));
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    channel_max_handles();
+    channel_queue_depth();
+    socket_stream_capacity();
+    channel_message_data_and_handles();
+    fifo_element_count();
+    channel_zero_bytes_zero_handles();
+    socket_data_integrity();
+    channel_handle_transfer_preserves_type();
+    channel_multiple_reads_clears();
 }

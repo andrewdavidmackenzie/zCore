@@ -8,7 +8,6 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 
 /// C++: TEST(MemoryMappingTest, AddressSpaceLimitsTest)
 /// Map multiple VMOs and verify they all get distinct addresses.
-#[test]
 fn address_space_limits_test() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -33,7 +32,6 @@ extern crate alloc;
 
 /// C++: TEST(MemoryMappingTest, MmapFlagsTest)
 /// Map with various flag combinations and verify they succeed.
-#[test]
 fn mmap_flags_test() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -53,7 +51,6 @@ fn mmap_flags_test() {
 
 /// C++: TEST(MemoryMappingTest, MmapLenTest)
 /// Map with various lengths (1 page, 4 pages, 16 pages).
-#[test]
 fn mmap_len_test() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -68,7 +65,6 @@ fn mmap_len_test() {
 
 /// C++: TEST(MemoryMappingTest, MmapOffsetTest)
 /// Map at a VMO offset. The mapped region starts at the given offset.
-#[test]
 fn mmap_offset_test() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -95,7 +91,6 @@ fn mmap_offset_test() {
 
 /// C++: TEST(MemoryMappingTest, MmapProtExecTest)
 /// Map with EXECUTE flag. May succeed or fail depending on policy.
-#[test]
 fn mmap_prot_exec_test() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -122,7 +117,6 @@ fn mmap_prot_exec_test() {
 
 /// C++: TEST(MemoryMappingTest, MmapProtTest)
 /// Map with different protection flags and verify.
-#[test]
 fn mmap_prot_test() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -151,7 +145,6 @@ fn mmap_prot_test() {
 
 /// C++: TEST(MemoryMappingTest, MmapZerofilledTest)
 /// A freshly created VMO's pages are zero-filled.
-#[test]
 fn mmap_zerofilled_test() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -171,7 +164,6 @@ fn mmap_zerofilled_test() {
 
 /// C++: TEST(MemoryMappingTest, MprotectTest)
 /// Change protection on a mapped range. Verify protect succeeds.
-#[test]
 fn mprotect_test() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
@@ -192,4 +184,16 @@ fn mprotect_test() {
     let result = vmar.protect(addr, PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE);
     assert!(result.is_ok());
     vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    address_space_limits_test();
+    mmap_flags_test();
+    mmap_len_test();
+    mmap_offset_test();
+    mmap_prot_exec_test();
+    mmap_prot_test();
+    mmap_zerofilled_test();
+    mprotect_test();
 }

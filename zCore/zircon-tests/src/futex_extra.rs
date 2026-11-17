@@ -8,7 +8,6 @@ use zircon_object::object::KernelObject;
 use zircon_object::signal::Futex;
 
 /// Futex wake with no waiters returns 0.
-#[test]
 fn futex_wake_no_waiters() {
     let _ctx = TestContext::new();
     let futex = Futex::new(0);
@@ -17,7 +16,6 @@ fn futex_wake_no_waiters() {
 }
 
 /// Futex wake with count 0 wakes nobody.
-#[test]
 fn futex_wake_zero_count() {
     let _ctx = TestContext::new();
     let futex = Futex::new(0);
@@ -26,9 +24,15 @@ fn futex_wake_zero_count() {
 }
 
 /// Futex has a valid koid.
-#[test]
 fn futex_koid() {
     let _ctx = TestContext::new();
     let futex = Futex::new(0);
     assert_ne!(futex.id(), 0);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    futex_wake_no_waiters();
+    futex_wake_zero_count();
+    futex_koid();
 }

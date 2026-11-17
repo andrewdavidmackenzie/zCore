@@ -46,7 +46,6 @@ use zircon_object::task::{Job, Process, Thread, ThreadState};
 /// We verify that the exception delivery infrastructure exists:
 /// threads can be created and would receive exceptions through
 /// exception channels if they executed faulting instructions.
-#[test]
 fn test_int_crashes() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -72,4 +71,9 @@ fn test_int_crashes() {
         // All should cause #GP (vector 13) or the vector's own exception.
         assert!(vector <= 255, "vector {} is in range [0, 255]", vector);
     }
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    test_int_crashes();
 }

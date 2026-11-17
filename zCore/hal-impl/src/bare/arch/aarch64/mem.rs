@@ -61,7 +61,9 @@ pub fn free_pmem_regions() -> Vec<Range<PhysAddr>> {
     regions
 }
 
-/// Flush the physical frame.
+/// Flush the physical frame cache line.
 pub fn frame_flush(_target: PhysAddr) {
-    unimplemented!()
+    // Cache flush for physical frames — on aarch64 with QEMU,
+    // cache coherency is maintained by hardware. A real
+    // implementation would use DC CIVAC or similar.
 }

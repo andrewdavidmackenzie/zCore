@@ -16,7 +16,6 @@ use zircon_object::ZxError;
 // ── Testable debug syscalls ────────────────────────────────────────
 
 /// `sys_debug_write` with valid data succeeds (writes to console).
-#[test]
 fn debug_write_basic() {
     let ctx = TestContext::new();
     let syscall = ctx.syscall();
@@ -28,7 +27,6 @@ fn debug_write_basic() {
 }
 
 /// `sys_debug_write` with zero length succeeds (no-op).
-#[test]
 fn debug_write_empty() {
     let ctx = TestContext::new();
     let syscall = ctx.syscall();
@@ -42,7 +40,6 @@ fn debug_write_empty() {
 }
 
 /// `sys_debug_write` rejects oversized writes (> 4096 bytes).
-#[test]
 fn debug_write_too_large() {
     let ctx = TestContext::new();
     let syscall = ctx.syscall();
@@ -56,7 +53,6 @@ fn debug_write_too_large() {
 }
 
 /// `sys_debug_send_command` with "help" command succeeds.
-#[test]
 fn debug_send_command_help() {
     let ctx = TestContext::new();
     let resource_handle = ctx.add_root_resource();
@@ -68,7 +64,6 @@ fn debug_send_command_help() {
 }
 
 /// `sys_debug_send_command` with "ps" command succeeds.
-#[test]
 fn debug_send_command_ps() {
     let ctx = TestContext::new();
     let resource_handle = ctx.add_root_resource();
@@ -80,7 +75,6 @@ fn debug_send_command_ps() {
 }
 
 /// `sys_debug_send_command` with "threads" command succeeds.
-#[test]
 fn debug_send_command_threads() {
     let ctx = TestContext::new();
     let resource_handle = ctx.add_root_resource();
@@ -95,7 +89,6 @@ fn debug_send_command_threads() {
 }
 
 /// `sys_debug_send_command` with unknown command returns INVALID_ARGS.
-#[test]
 fn debug_send_command_unknown() {
     let ctx = TestContext::new();
     let resource_handle = ctx.add_root_resource();
@@ -111,7 +104,6 @@ fn debug_send_command_unknown() {
 }
 
 /// `sys_debug_send_command` with invalid resource handle returns BAD_HANDLE.
-#[test]
 fn debug_send_command_bad_handle() {
     let ctx = TestContext::new();
     let syscall = ctx.syscall();
@@ -127,7 +119,6 @@ fn debug_send_command_bad_handle() {
 }
 
 /// `sys_debug_send_command` with zero-length buffer returns INVALID_ARGS.
-#[test]
 fn debug_send_command_empty_buffer() {
     let ctx = TestContext::new();
     let resource_handle = ctx.add_root_resource();
@@ -142,7 +133,6 @@ fn debug_send_command_empty_buffer() {
 }
 
 /// `sys_debug_send_command` with oversized buffer (> 1024) returns INVALID_ARGS.
-#[test]
 fn debug_send_command_oversized_buffer() {
     let ctx = TestContext::new();
     let resource_handle = ctx.add_root_resource();
@@ -154,4 +144,18 @@ fn debug_send_command_oversized_buffer() {
         ZxError::INVALID_ARGS,
         "debug_send_command with oversized buffer should return INVALID_ARGS"
     );
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    debug_write_basic();
+    debug_write_empty();
+    debug_write_too_large();
+    debug_send_command_help();
+    debug_send_command_ps();
+    debug_send_command_threads();
+    debug_send_command_unknown();
+    debug_send_command_bad_handle();
+    debug_send_command_empty_buffer();
+    debug_send_command_oversized_buffer();
 }

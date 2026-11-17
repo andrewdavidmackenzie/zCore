@@ -459,6 +459,7 @@ fn check_style() {
 
     println!("==> Clippy: libos (linux)...");
     BuildConfig::from_args(BuildArgs {
+        extra_features: None,
         machine: "libos".into(),
         flavour: Some("linux".into()),
         debug: false,
@@ -467,6 +468,7 @@ fn check_style() {
 
     println!("==> Clippy: libos (zircon)...");
     BuildConfig::from_args(BuildArgs {
+        extra_features: None,
         machine: "libos".into(),
         flavour: None,
         debug: false,
@@ -477,6 +479,7 @@ fn check_style() {
     for arch in [Arch::Aarch64, Arch::X86_64, Arch::Riscv64] {
         println!("    {}", arch.name());
         BuildConfig::from_args(BuildArgs {
+            extra_features: None,
             machine: format!("qemu-{}", arch.name()),
             flavour: Some("linux".into()),
             debug: false,
@@ -490,6 +493,7 @@ fn check_style() {
     for arch in [Arch::Aarch64, Arch::X86_64] {
         println!("    {}", arch.name());
         BuildConfig::from_args(BuildArgs {
+            extra_features: None,
             machine: format!("qemu-{}", arch.name()),
             flavour: None,
             debug: false,
@@ -517,9 +521,13 @@ fn check_style() {
 
     println!("==> Clippy: test crates...");
     Cargo::clippy()
+        .args(["-p", "zircon-tests", "--tests", "--features", "host"])
+        .arg("--no-deps")
+        .args(["--", "--deny", "warnings"])
+        .invoke();
+
+    Cargo::clippy()
         .args([
-            "-p",
-            "zircon-tests",
             "-p",
             "zircon-object",
             "--tests",
@@ -606,6 +614,7 @@ mod libos {
         rootfs(false);
         // Build via BuildConfig so features come from targets/libos.toml.
         let build_config = BuildConfig::from_args(BuildArgs {
+            extra_features: None,
             machine: "libos".into(),
             flavour: Some("linux".into()),
             debug: false,
@@ -634,6 +643,7 @@ mod libos {
         // BuildConfig::from_args handles everything: features from
         // targets/libos.toml, flavour, and zircon prerequisites.
         let build_config = BuildConfig::from_args(BuildArgs {
+            extra_features: None,
             machine: "libos".into(),
             flavour: None,
             debug: false,

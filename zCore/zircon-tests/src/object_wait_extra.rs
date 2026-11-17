@@ -10,7 +10,6 @@ use zircon_object::signal::{PortPacket, PortPacketRepr};
 use zircon_object::ZxError;
 
 /// wait_one returns immediately when the signal is already set.
-#[async_std::test]
 async fn wait_one_already_signaled() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -36,7 +35,6 @@ async fn wait_one_already_signaled() {
 }
 
 /// wait_one with an unsatisfied signal and deadline=0 returns TIMED_OUT.
-#[async_std::test]
 async fn wait_one_timeout() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -59,7 +57,6 @@ async fn wait_one_timeout() {
 }
 
 /// wait_one on an invalid handle returns BAD_HANDLE.
-#[async_std::test]
 async fn wait_one_invalid_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -77,7 +74,6 @@ async fn wait_one_invalid_handle() {
 }
 
 /// wait_one without WAIT right returns ACCESS_DENIED.
-#[async_std::test]
 async fn wait_one_access_denied() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -102,7 +98,6 @@ async fn wait_one_access_denied() {
 }
 
 /// wait_one with null observed pointer still works when signal is set.
-#[async_std::test]
 async fn wait_one_null_observed() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -125,7 +120,6 @@ async fn wait_one_null_observed() {
 }
 
 /// wait_async registers a subscription that fires when signaled.
-#[async_std::test]
 async fn wait_async_basic() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -167,7 +161,6 @@ async fn wait_async_basic() {
 }
 
 /// Cancelling wait_async removes the subscription.
-#[test]
 fn wait_async_cancel() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -193,7 +186,6 @@ fn wait_async_cancel() {
 }
 
 /// wait_async with invalid options returns INVALID_ARGS.
-#[test]
 fn wait_async_invalid_options() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -218,7 +210,6 @@ fn wait_async_invalid_options() {
 }
 
 /// wait_async with invalid port handle returns BAD_HANDLE.
-#[test]
 fn wait_async_bad_port_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -238,7 +229,6 @@ fn wait_async_bad_port_handle() {
 }
 
 /// wait_async with invalid source handle returns BAD_HANDLE.
-#[test]
 fn wait_async_bad_source_handle() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -258,7 +248,6 @@ fn wait_async_bad_source_handle() {
 }
 
 /// wait_async with TIMESTAMP option.
-#[async_std::test]
 async fn wait_async_timestamp() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -298,7 +287,6 @@ async fn wait_async_timestamp() {
 }
 
 /// wait_async with EDGE option.
-#[async_std::test]
 async fn wait_async_edge() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -338,7 +326,6 @@ async fn wait_async_edge() {
 }
 
 /// TIMESTAMP and BOOT_TIMESTAMP options cannot both be set.
-#[test]
 fn wait_async_timestamp_and_boot_timestamp_exclusive() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -357,7 +344,6 @@ fn wait_async_timestamp_and_boot_timestamp_exclusive() {
 }
 
 /// wait_one on a channel whose peer is closed returns with PEER_CLOSED.
-#[async_std::test]
 async fn wait_one_channel_peer_closed() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -395,4 +381,22 @@ async fn wait_one_channel_peer_closed() {
         }
         Err(e) => panic!("unexpected error: {:?}", e),
     }
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    wait_one_already_signaled().await;
+    wait_one_timeout().await;
+    wait_one_invalid_handle().await;
+    wait_one_access_denied().await;
+    wait_one_null_observed().await;
+    wait_async_basic().await;
+    wait_async_cancel();
+    wait_async_invalid_options();
+    wait_async_bad_port_handle();
+    wait_async_bad_source_handle();
+    wait_async_timestamp().await;
+    wait_async_edge().await;
+    wait_async_timestamp_and_boot_timestamp_exclusive();
+    wait_one_channel_peer_closed().await;
 }

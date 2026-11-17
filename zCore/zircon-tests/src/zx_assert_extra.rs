@@ -7,7 +7,6 @@ use crate::helpers::TestContext;
 use zircon_object::ZxError;
 
 /// Verify ZX_OK equivalent (Ok(())).
-#[test]
 fn assert_ok() {
     let _ctx = TestContext::new();
     let result: Result<(), ZxError> = Ok(());
@@ -15,7 +14,6 @@ fn assert_ok() {
 }
 
 /// Verify error values are distinct from Ok.
-#[test]
 fn assert_not_ok() {
     let _ctx = TestContext::new();
     let result: Result<(), ZxError> = Err(ZxError::BAD_HANDLE);
@@ -24,7 +22,6 @@ fn assert_not_ok() {
 }
 
 /// Various error values have correct identity.
-#[test]
 fn assert_error_values() {
     let _ctx = TestContext::new();
     assert_ne!(ZxError::BAD_HANDLE, ZxError::INVALID_ARGS);
@@ -33,7 +30,6 @@ fn assert_error_values() {
 }
 
 /// Error codes should be matchable.
-#[test]
 fn assert_in_range() {
     let _ctx = TestContext::new();
     let err = ZxError::OUT_OF_RANGE;
@@ -44,7 +40,6 @@ fn assert_in_range() {
 }
 
 /// Error values have debug representations.
-#[test]
 fn assert_debug_string() {
     let _ctx = TestContext::new();
     let err = ZxError::BAD_HANDLE;
@@ -53,7 +48,6 @@ fn assert_debug_string() {
 }
 
 /// Error equality comparison works.
-#[test]
 fn assert_eq() {
     let _ctx = TestContext::new();
     let e1 = ZxError::BAD_HANDLE;
@@ -62,7 +56,6 @@ fn assert_eq() {
 }
 
 /// Error inequality comparison works.
-#[test]
 fn assert_neq() {
     let _ctx = TestContext::new();
     let e1 = ZxError::BAD_HANDLE;
@@ -71,10 +64,21 @@ fn assert_neq() {
 }
 
 /// Error values can be copied and compared.
-#[test]
 fn assert_copy() {
     let _ctx = TestContext::new();
     let err = ZxError::PEER_CLOSED;
     let copy = err;
     assert_eq!(err, copy, "copied error should be equal to original");
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    assert_ok();
+    assert_not_ok();
+    assert_error_values();
+    assert_in_range();
+    assert_debug_string();
+    assert_eq();
+    assert_neq();
+    assert_copy();
 }

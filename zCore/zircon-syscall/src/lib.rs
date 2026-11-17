@@ -90,12 +90,8 @@ impl Syscall<'_> {
         match vmar.check_user_access(addr, len, MMUFlags::READ) {
             Ok(()) => Ok(()),
             Err(ZxError::ACCESS_DENIED) => Err(ZxError::INVALID_ARGS),
-            #[cfg(feature = "libos")]
-            Err(ZxError::NOT_FOUND) => {
-                // In libos mode, addresses not in any VMAR mapping may be
-                // valid host memory (stack, heap). Allow them.
-                Ok(())
-            }
+            #[cfg(not(target_os = "none"))]
+            Err(ZxError::NOT_FOUND) => Ok(()),
             Err(_) => Err(ZxError::INVALID_ARGS),
         }
     }
@@ -111,12 +107,8 @@ impl Syscall<'_> {
         match vmar.check_user_access(addr, len, MMUFlags::WRITE) {
             Ok(()) => Ok(()),
             Err(ZxError::ACCESS_DENIED) => Err(ZxError::INVALID_ARGS),
-            #[cfg(feature = "libos")]
-            Err(ZxError::NOT_FOUND) => {
-                // In libos mode, addresses not in any VMAR mapping may be
-                // valid host memory (stack, heap). Allow them.
-                Ok(())
-            }
+            #[cfg(not(target_os = "none"))]
+            Err(ZxError::NOT_FOUND) => Ok(()),
             Err(_) => Err(ZxError::INVALID_ARGS),
         }
     }

@@ -10,7 +10,6 @@ use zircon_object::ZxError;
 
 ///
 /// Create FIFOs with various depths and element sizes.
-#[test]
 fn create_various_sizes() {
     let _ctx = TestContext::new();
     let (f1, _r1) = Fifo::create(4, 4);
@@ -24,7 +23,6 @@ fn create_various_sizes() {
 ///
 /// Write elements to a FIFO and read them back. Elements should
 /// be in FIFO order.
-#[test]
 fn write_and_read_back() {
     let _ctx = TestContext::new();
     let (local, remote) = Fifo::create(8, 4); // 8 entries, 4 bytes each
@@ -40,7 +38,6 @@ fn write_and_read_back() {
 
 ///
 /// Write multiple elements and read them back in FIFO order.
-#[test]
 fn multiple_elements() {
     let _ctx = TestContext::new();
     let (local, remote) = Fifo::create(8, 4);
@@ -58,7 +55,6 @@ fn multiple_elements() {
 
 ///
 /// Read from an empty FIFO should return SHOULD_WAIT.
-#[test]
 fn read_from_empty() {
     let _ctx = TestContext::new();
     let (_local, remote) = Fifo::create(8, 4);
@@ -69,7 +65,6 @@ fn read_from_empty() {
 
 ///
 /// Dropping one end should set PEER_CLOSED on the other.
-#[test]
 fn peer_closed_on_drop() {
     let _ctx = TestContext::new();
     let (local, remote) = Fifo::create(8, 4);
@@ -80,7 +75,6 @@ fn peer_closed_on_drop() {
 ///
 /// Writing to a FIFO whose peer has been closed should return
 /// PEER_CLOSED.
-#[test]
 fn write_to_peer_closed() {
     let _ctx = TestContext::new();
     let (local, remote) = Fifo::create(8, 4);
@@ -93,7 +87,6 @@ fn write_to_peer_closed() {
 ///
 /// Write data, close the writer, then read remaining data from
 /// the reader side.
-#[test]
 fn read_remaining_after_close() {
     let _ctx = TestContext::new();
     let (local, remote) = Fifo::create(8, 4);
@@ -110,7 +103,6 @@ fn read_remaining_after_close() {
 
 ///
 /// Set and get the name of a FIFO.
-#[test]
 fn fifo_name() {
     let _ctx = TestContext::new();
     let (local, _remote) = Fifo::create(8, 4);
@@ -120,7 +112,6 @@ fn fifo_name() {
 
 ///
 /// Each FIFO endpoint's related_koid should be the other's koid.
-#[test]
 fn fifo_related_koid() {
     let _ctx = TestContext::new();
     let (local, remote) = Fifo::create(8, 4);
@@ -130,7 +121,6 @@ fn fifo_related_koid() {
 
 ///
 /// Verify WRITABLE is set initially, READABLE after write.
-#[test]
 fn fifo_signals() {
     let _ctx = TestContext::new();
     let (local, remote) = Fifo::create(8, 4);
@@ -145,11 +135,25 @@ fn fifo_signals() {
 
 ///
 /// Each FIFO endpoint should have a unique non-zero KOID.
-#[test]
 fn fifo_koid() {
     let _ctx = TestContext::new();
     let (local, remote) = Fifo::create(8, 4);
     assert_ne!(local.id(), 0);
     assert_ne!(remote.id(), 0);
     assert_ne!(local.id(), remote.id());
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    create_various_sizes();
+    write_and_read_back();
+    multiple_elements();
+    read_from_empty();
+    peer_closed_on_drop();
+    write_to_peer_closed();
+    read_remaining_after_close();
+    fifo_name();
+    fifo_related_koid();
+    fifo_signals();
+    fifo_koid();
 }

@@ -8,7 +8,6 @@ use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::ZxError;
 
-#[test]
 fn shutdown_write() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_socket_create(&ctx, 0);
@@ -39,4 +38,9 @@ fn shutdown_write() {
     )
     .unwrap();
     assert_eq!(actual, 2);
+}
+
+/// Run all tests in this module.
+pub fn run_all() {
+    shutdown_write();
 }

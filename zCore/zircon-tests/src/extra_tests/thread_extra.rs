@@ -5,6 +5,9 @@
 //! lifecycle edge cases (kill, suspend, TLS) that complement the
 //! 1:1 tests in core_tests/thread.rs.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use crate::helpers::{self, TestContext};
 use hal_impl::user::UserOutPtr;
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};
@@ -22,7 +25,6 @@ fn as_kobject(thread: &alloc::sync::Arc<Thread>) -> alloc::sync::Arc<dyn KernelO
 /// Fuchsia equivalent: TEST(Threads, KillSuspendedImmediately)
 /// Suspend a thread and immediately kill it before the suspend fully
 /// completes. The kill should preempt the suspend — thread goes Dead.
-#[async_std::test]
 async fn kill_suspended_immediately() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -30,7 +32,7 @@ async fn kill_suspended_immediately() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Suspend and immediately kill — don't wait for SUSPENDED
     thread.suspend();
@@ -45,7 +47,6 @@ async fn kill_suspended_immediately() {
 /// Fuchsia equivalent: TEST(Threads, KillSuspendedThread)
 /// Suspend a running thread, wait for SUSPENDED, then kill it.
 /// Thread should transition cleanly to Dead.
-#[async_std::test]
 async fn kill_suspended_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -53,8 +54,8 @@ async fn kill_suspended_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.suspend();
     as_kobject(&thread)
@@ -72,7 +73,6 @@ async fn kill_suspended_thread() {
 /// Fuchsia equivalent: TEST(Threads, KillWaitingThread)
 /// Kill a thread that is blocked on a syscall (sleeping).
 /// The blocking wait should be interrupted and the thread exits.
-#[async_std::test]
 async fn kill_waiting_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -85,7 +85,7 @@ async fn kill_waiting_thread() {
         if sleeper.thread.state() == ThreadState::BlockedSleeping {
             break;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
 
     // Kill while blocked
@@ -99,7 +99,6 @@ async fn kill_waiting_thread() {
 /// Fuchsia equivalent: TEST(Threads, ExitBusy)
 /// A thread that exits voluntarily (returns from its entry function)
 /// should transition to Dead and signal THREAD_TERMINATED.
-#[async_std::test]
 async fn exit_busy() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -113,7 +112,7 @@ async fn exit_busy() {
         Box::pin(async move {
             let ctx = thread.wait_for_run().await;
             // Brief "work"
-            async_std::task::yield_now().await;
+            hal_impl::thread::yield_now().await;
             thread.put_context(ctx);
             // Return → thread exits
         })
@@ -131,7 +130,6 @@ async fn exit_busy() {
 /// A thread blocked in channel_call is killed before receiving a reply.
 /// The in-flight message should not leak — the channel peer should
 /// not have stale messages after the thread dies.
-#[async_std::test]
 async fn channel_call_doesnt_leak_message() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -161,7 +159,6 @@ async fn channel_call_doesnt_leak_message() {
 /// Fuchsia equivalent: TEST(Threads, SuspendRunningThread)
 /// Suspend a currently-running thread. Verify THREAD_SUSPENDED fires,
 /// THREAD_RUNNING is cleared, and state is Suspended.
-#[async_std::test]
 async fn suspend_running_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -169,8 +166,8 @@ async fn suspend_running_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     assert!(thread.signal().contains(Signal::THREAD_RUNNING));
 
@@ -200,7 +197,6 @@ async fn suspend_running_thread() {
 /// deadlock. At the kernel object level, we verify that suspending
 /// the test context's own thread doesn't panic and produces the
 /// expected error or state.
-#[test]
 fn suspend_self() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -229,7 +225,6 @@ fn suspend_self() {
 /// Take two suspend tokens, register wait_async for THREAD_RUNNING
 /// on a port. Release one token (still suspended), release second
 /// (resumes), verify port receives the RUNNING signal.
-#[async_std::test]
 async fn suspend_multiple_wait_async() {
     use zircon_object::signal::{Port, PortPacketRepr};
 
@@ -239,8 +234,8 @@ async fn suspend_multiple_wait_async() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Double suspend
     thread.suspend();
@@ -267,7 +262,7 @@ async fn suspend_multiple_wait_async() {
         .await;
 
     // Port should have received the RUNNING signal
-    let pkt = async_std::task::block_on(port.wait());
+    let pkt = port.wait().await;
     let repr = PortPacketRepr::from(&pkt);
     assert_eq!(repr.key, 99);
 
@@ -281,7 +276,6 @@ async fn suspend_multiple_wait_async() {
 /// Multiple Zircon threads independently suspend and resume a target.
 /// Verify the suspend count is tracked correctly — the target only
 /// resumes when all outstanding suspends are released.
-#[async_std::test]
 async fn suspend_resume_from_multiple_threads() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -289,11 +283,11 @@ async fn suspend_resume_from_multiple_threads() {
     let thread = Thread::create(&proc, "target").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     // Simulate two independent suspenders by calling suspend twice
-    // (in libos, all calls come from the same async context, but the
+    // (in test mode, all calls come from the same async context, but the
     // kernel's suspend count is what we're testing)
     thread.suspend(); // suspender A
     thread.suspend(); // suspender B
@@ -319,10 +313,9 @@ async fn suspend_resume_from_multiple_threads() {
 }
 
 /// Fuchsia equivalent: TEST(Threads, SuspendStoppedThread)
-/// Suspend a thread that has been stopped (via exception). In libos
+/// Suspend a thread that has been stopped (via exception). In test mode
 /// mode we approximate this by suspending a thread that has been
 /// killed (Dead state) — the kernel should handle it gracefully.
-#[async_std::test]
 async fn suspend_stopped_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -330,7 +323,7 @@ async fn suspend_stopped_thread() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
+    hal_impl::thread::yield_now().await;
 
     thread.kill();
     as_kobject(&thread)
@@ -344,10 +337,9 @@ async fn suspend_stopped_thread() {
 
 /// Fuchsia equivalent: TEST(Threads, SuspendStoppedAndBlockedThread)
 /// Suspend a thread that is both stopped (exception) and blocked
-/// (syscall). In libos mode we test by suspending a sleeping thread,
+/// (syscall). In test mode we test by suspending a sleeping thread,
 /// then killing it while suspended, verifying the composite state
 /// transitions work correctly.
-#[async_std::test]
 async fn suspend_stopped_and_blocked_thread() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -360,7 +352,7 @@ async fn suspend_stopped_and_blocked_thread() {
         if sleeper.thread.state() == ThreadState::BlockedSleeping {
             break;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
 
     // Suspend while blocked
@@ -380,7 +372,6 @@ async fn suspend_stopped_and_blocked_thread() {
 /// Fuchsia equivalent: TEST(Threads, SuspendStoppedAndBlockedThread2)
 /// Variant: kill the blocked thread first, then try to suspend.
 /// The thread should be Dead and the suspend should be a no-op.
-#[async_std::test]
 async fn suspend_stopped_and_blocked_thread2() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -392,7 +383,7 @@ async fn suspend_stopped_and_blocked_thread2() {
         if sleeper.thread.state() == ThreadState::BlockedSleeping {
             break;
         }
-        async_std::task::yield_now().await;
+        hal_impl::thread::yield_now().await;
     }
 
     // Kill while blocked (reverse order of variant 1)
@@ -410,7 +401,6 @@ async fn suspend_stopped_and_blocked_thread2() {
 /// Verify that TLS registers are independent per thread. Set
 /// different TLS values on two suspended threads and verify they
 /// don't interfere with each other.
-#[test]
 fn thread_local() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -436,7 +426,7 @@ fn thread_local() {
     let mut buf2 = vec![0u8; 512];
     let n2 = t2.read_state(ThreadStateKind::General, &mut buf2).unwrap();
 
-    if tls_offset + 8 > n1 || tls_offset + 8 > n2 {
+    if tls_offset == usize::MAX || tls_offset + 8 > n1 || tls_offset + 8 > n2 {
         return; // arch doesn't support TLS offset check
     }
 
@@ -467,7 +457,6 @@ fn thread_local() {
 /// Read thread state during the startup transition. After setup_uspace
 /// but before the thread fully enters Running, the register state
 /// should contain the initial values (entry, stack, args).
-#[test]
 fn thread_read_state_when_starting() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -506,7 +495,6 @@ fn thread_read_state_when_starting() {
 /// aarch64-only: write the CPSR/SPSR flags register and verify
 /// the value round-trips via write_state/read_state.
 #[cfg(target_arch = "aarch64")]
-#[test]
 fn writing_arm_flags_register() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -546,4 +534,24 @@ fn writing_arm_flags_register() {
             "NZCV flags should round-trip"
         );
     }
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    kill_suspended_immediately().await;
+    kill_suspended_thread().await;
+    kill_waiting_thread().await;
+    exit_busy().await;
+    channel_call_doesnt_leak_message().await;
+    suspend_running_thread().await;
+    suspend_self();
+    suspend_multiple_wait_async().await;
+    suspend_resume_from_multiple_threads().await;
+    suspend_stopped_thread().await;
+    suspend_stopped_and_blocked_thread().await;
+    suspend_stopped_and_blocked_thread2().await;
+    thread_local();
+    thread_read_state_when_starting();
+    #[cfg(target_arch = "aarch64")]
+    writing_arm_flags_register();
 }

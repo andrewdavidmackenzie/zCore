@@ -9,7 +9,6 @@ use zircon_object::signal::EventPair;
 use super::object_info::{get_info, HANDLE_BASIC_SIZE, TOPIC_HANDLE_BASIC};
 
 /// C++: TEST(EventPairTest, HandlesNotInvalid)
-#[test]
 fn handles_not_invalid() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -20,7 +19,6 @@ fn handles_not_invalid() {
 /// C++: TEST(EventPairTest, HandleRightsAreCorrect)
 ///
 /// Verify handle type is EVENTPAIR (16) and rights are BASIC | SIGNAL | SIGNAL_PEER.
-#[test]
 fn handle_rights_are_correct() {
     let ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -66,7 +64,6 @@ fn handle_rights_are_correct() {
 /// C++: TEST(EventPairTest, KoidsAreCorrect)
 ///
 /// Verify koid and related_koid via ZX_INFO_HANDLE_BASIC for both endpoints.
-#[test]
 fn koids_are_correct() {
     let ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -112,7 +109,6 @@ fn koids_are_correct() {
 /// In C++, `create(1, ...)` returns ZX_ERR_NOT_SUPPORTED.
 /// In zCore, EventPair::create() takes no flags, so this tests
 /// the syscall layer rejection via sys_eventpair_create.
-#[test]
 fn check_no_flags_supported() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -136,7 +132,6 @@ fn check_no_flags_supported() {
 /// C++: TEST(EventPairTest, SignalEventPairAndClearVerifySignals)
 ///
 /// Set a user signal on self, verify, then clear it and verify again.
-#[test]
 fn signal_event_pair_and_clear_verify_signals() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -160,7 +155,6 @@ fn signal_event_pair_and_clear_verify_signals() {
 ///
 /// Signal the peer endpoint with various user signals and verify
 /// they appear on the correct side.
-#[test]
 fn signal_peer_and_verify_received() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -189,7 +183,6 @@ fn signal_peer_and_verify_received() {
 /// C++: TEST(EventPairTest, SignalPeerThenCloseAndVerifySignalReceived)
 ///
 /// Signal peer, close original, verify signals + PEER_CLOSED on survivor.
-#[test]
 fn signal_peer_then_close_and_verify_signal_received() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -211,7 +204,6 @@ fn signal_peer_then_close_and_verify_signal_received() {
 /// C++: TEST(EventPairTest, SignalingClosedPeerReturnsPeerClosed)
 ///
 /// After peer is closed, signal_peer should return ZX_ERR_PEER_CLOSED.
-#[test]
 fn signaling_closed_peer_returns_peer_closed() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -234,7 +226,6 @@ fn signaling_closed_peer_returns_peer_closed() {
 /// Duplicate handle without SIGNAL right, verify signal returns ACCESS_DENIED.
 /// At the object level, rights are not enforced — this tests the concept
 /// by verifying signal_change works with appropriate rights at syscall level.
-#[test]
 fn signal_access_denied_missing_signal_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -252,7 +243,6 @@ fn signal_access_denied_missing_signal_right() {
 /// C++: TEST(EventPairTest, SignalPeerAccessDeniedMissingSignalPeerRight)
 ///
 /// Duplicate handle without SIGNAL_PEER right, verify signal_peer returns ACCESS_DENIED.
-#[test]
 fn signal_peer_access_denied_missing_signal_peer_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -270,8 +260,7 @@ fn signal_peer_access_denied_missing_signal_peer_right() {
 /// C++: TEST(EventPairTest, WaitAccessDeniedMissingWaitRight)
 ///
 /// Duplicate handle without WAIT right, verify wait returns ACCESS_DENIED.
-#[test]
-fn wait_access_denied_missing_wait_right() {
+async fn wait_access_denied_missing_wait_right() {
     use hal_impl::user::UserOutPtr;
 
     let ctx = TestContext::new();
@@ -285,12 +274,14 @@ fn wait_access_denied_missing_wait_right() {
     // sys_object_wait_one should fail with ACCESS_DENIED.
     let mut observed = Signal::empty();
     let out = UserOutPtr::from(&mut observed as *mut _ as usize);
-    let result = async_std::task::block_on(sc.sys_object_wait_one(
-        h,
-        Signal::USER_SIGNAL_0.bits(),
-        zircon_syscall::Deadline::from(0usize),
-        out,
-    ));
+    let result = sc
+        .sys_object_wait_one(
+            h,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out,
+        )
+        .await;
     assert_eq!(result, Err(zircon_object::ZxError::ACCESS_DENIED));
 }
 
@@ -298,7 +289,6 @@ fn wait_access_denied_missing_wait_right() {
 ///
 /// Multiple handles to same endpoint via handle table: PEER_CLOSED fires
 /// only when all handles are closed.
-#[test]
 fn duplicate_handles_and_peer_closed() {
     use hal_impl::user::UserOutPtr;
     use zircon_object::object::HandleValue;
@@ -355,7 +345,6 @@ fn duplicate_handles_and_peer_closed() {
 /// C++: TEST(EventPairTest, SignalSelfAfterPeerClosed)
 ///
 /// After peer closed, surviving endpoint can still modify its own user signals.
-#[test]
 fn signal_self_after_peer_closed() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
@@ -377,7 +366,6 @@ fn signal_self_after_peer_closed() {
 /// PEER_CLOSED cannot be asserted/cleared by userspace.
 /// Non-allowed signal bits return INVALID_ARGS.
 /// SIGNALED is allowed via both signal and signal_peer.
-#[test]
 fn invalid_signal_bits() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -453,7 +441,6 @@ fn invalid_signal_bits() {
 ///
 /// signal_peer on invalid handle returns BAD_HANDLE.
 /// signal_peer on non-peered object (event) returns ACCESS_DENIED.
-#[test]
 fn invalid_handle_and_wrong_type() {
     use zircon_object::signal::Event;
 
@@ -475,4 +462,23 @@ fn invalid_handle_and_wrong_type() {
         sc.sys_object_signal_peer(h, 0, Signal::USER_SIGNAL_0.bits()),
         Err(zircon_object::ZxError::ACCESS_DENIED)
     );
+}
+
+/// Run all tests in this module.
+pub async fn run_all() {
+    handles_not_invalid();
+    handle_rights_are_correct();
+    koids_are_correct();
+    check_no_flags_supported();
+    signal_event_pair_and_clear_verify_signals();
+    signal_peer_and_verify_received();
+    signal_peer_then_close_and_verify_signal_received();
+    signaling_closed_peer_returns_peer_closed();
+    signal_access_denied_missing_signal_right();
+    signal_peer_access_denied_missing_signal_peer_right();
+    wait_access_denied_missing_wait_right().await;
+    duplicate_handles_and_peer_closed();
+    signal_self_after_peer_closed();
+    invalid_signal_bits();
+    invalid_handle_and_wrong_type();
 }
