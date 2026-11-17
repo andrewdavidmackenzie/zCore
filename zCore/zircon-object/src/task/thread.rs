@@ -1554,18 +1554,8 @@ impl Future for ThreadSwitchFuture {
         // torn down — stop polling. In libos mode (hosted OS) there are
         // no real page tables, so table_phys is always 0; skip the check.
         #[cfg(target_os = "none")]
-        {
-            use crate::object::KernelObject;
-            if table_phys == 0 {
-                let inner_destroyed = proc.vmar().is_dead();
-                log::warn!(
-                    "ThreadSwitchFuture: table_phys=0 for thread {:?} ({}), vmar_dead={}, skipping poll",
-                    self.thread.name(),
-                    self.thread.id(),
-                    inner_destroyed,
-                );
-                return Poll::Ready(());
-            }
+        if table_phys == 0 {
+            return Poll::Ready(());
         }
         cfg_if! {
             if #[cfg(all(target_os = "none", target_arch = "aarch64"))] {
