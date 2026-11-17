@@ -142,3 +142,11 @@ path = "src/bin/syscall_transfer_data_extra_test.rs"
 [[bin]]
 name = "syscall-object-test"
 path = "src/bin/syscall_object_test.rs"
+
+[[bin]]
+name = "syscall-vmo-extra-test"
+path = "src/bin/syscall_vmo_extra_test.rs"
+
+[[bin]]
+name = "syscall-channel-extra-test"
+path = "src/bin/syscall_channel_extra_test.rs"
