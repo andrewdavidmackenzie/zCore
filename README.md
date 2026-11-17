@@ -28,8 +28,12 @@ examples of unimplemented syscalls.
 
 Type `poweroff -f` at the `/ #` prompt (or press `Ctrl-A X`) to exit.
 
-Prerequisites: Rust nightly, QEMU, and `aarch64-linux-musl-gcc`
-(on macOS: `make config` installs the cross-compiler via Homebrew).
+Prerequisites: run `make setup` once after cloning — it installs QEMU
+(x86_64/aarch64/riscv64), UEFI firmware (OVMF), mtools, and e2fsprogs,
+and configures rustup cross-targets. Rust itself comes from
+[rustup](https://rustup.rs); the pinned nightly toolchain installs
+automatically on the first `cargo` invocation. (On macOS, `make setup`
+also installs the musl cross-toolchains via Homebrew.)
 
 ## Building
 

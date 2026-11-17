@@ -14,8 +14,6 @@
 /rootfs
 /zCore/disk
 
-# Generated target spec JSON files (built by xtask from configs/boards/*.toml)
-configs/boards/*.json
 # Persistent user build selection (cargo zcore set)
 configs/config.toml
 

@@ -38,7 +38,7 @@ STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
 
-.PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc docs clean \
+.PHONY: help build run test boot-test busybox-test config config-macos setup update rootfs libc-test other-test image clippy-all check doc docs clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
 	list-products list-boards flash \
 	debug-qemu debug-lldb debug-x86-qemu debug-x86-gdb \
@@ -664,18 +664,19 @@ libos-run-zircon:
 	cargo zcore-build -m petal.libos
 	./target/petal.libos/release/kernel
 
-# configure build environment (platform toolchain)
-config:
-ifeq ($(shell uname -s),Darwin)
-	$(MAKE) config-macos
-endif
+# ── Environment setup ──────────────────────────────────────────────────
+# Install all host dependencies needed to build and test zCore:
+# QEMU emulators, UEFI firmware (OVMF + aarch64), mtools, e2fsprogs,
+# rustup cross-targets, and (on macOS) the musl cross-toolchains.
+# Run once after cloning. See tools/scripts/setup.sh for details.
+setup:
+	@tools/scripts/setup.sh
 
-config-linux:
-	sudo apt update
-	sudo apt install qemu-system qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils virt-manager
-	sudo systemctl enable --now libvirtd
+# Backwards-compatible alias (CI and old docs use `make config`).
+config: setup
 
 # install cross-compilation toolchain on macOS via Homebrew
+# (invoked automatically by `make setup` on Darwin)
 config-macos:
 	@echo "==> Installing musl cross-compiler toolchains (macOS)..."
 	@brew tap FiloSottile/musl-cross 2>/dev/null || true

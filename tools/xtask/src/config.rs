@@ -421,19 +421,26 @@ impl Selection {
 
     /// Writes the target-spec JSON for this selection and returns its path.
     ///
-    /// The file is named `<product>.<board>.json` in `configs/boards/`:
-    /// its *content* is board data, but the name keys cargo's output
-    /// directory (`target/<product>.<board>/`) so that switching products
-    /// on one board yields independent build artifacts — flavour,
-    /// features, and `ZCORE_CMDLINE` are compile-time inputs.
+    /// The file lives under `target/specs/` — it is a generated build
+    /// artifact (wiped by `cargo clean`), not source. It is named
+    /// `<product>.<board>.json`: its *content* is board data, but the
+    /// name keys cargo's output directory (`target/<product>.<board>/`)
+    /// so that switching products on one board yields independent build
+    /// artifacts — flavour, features, and `ZCORE_CMDLINE` are
+    /// compile-time inputs.
     /// Only writes if content changed to avoid unnecessary rebuilds.
     pub fn write_target_json(&self) -> PathBuf {
         let path = workspace_root()
-            .join(BOARDS_DIR)
+            .join("target")
+            .join("specs")
             .join(format!("{}.json", self.name()));
         let json = self.generate_target_json();
         let existing = fs::read_to_string(&path).unwrap_or_default();
         if existing != json {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)
+                    .unwrap_or_else(|e| panic!("Failed to create {}: {}", parent.display(), e));
+            }
             fs::write(&path, &json)
                 .unwrap_or_else(|e| panic!("Failed to write {}: {}", path.display(), e));
         }

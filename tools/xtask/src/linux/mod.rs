@@ -36,8 +36,12 @@ impl LinuxRootfs {
                     .output()
                     .expect("failed to run `file`");
                 let desc = String::from_utf8_lossy(&output.stdout);
-                // Regular rootfs always uses non-PIE static busybox.
-                if desc.contains("statically linked") {
+                // Regular rootfs uses non-PIE static busybox. Note: the
+                // aarch64 musl cross toolchain links PIE by default, so a
+                // plain `CONFIG_STATIC=y` build shows up as "static-pie
+                // linked" — accept it too (it boots fine; only the libos
+                // loader on aarch64 macOS requires the explicit PIE build).
+                if desc.contains("statically linked") || desc.contains("static-pie linked") {
                     return;
                 }
                 println!("cached rootfs busybox is not statically linked, rebuilding...");

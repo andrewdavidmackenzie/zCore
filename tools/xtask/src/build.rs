@@ -631,6 +631,8 @@ impl QemuArgs {
                     "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
                     "/usr/share/qemu/edk2-aarch64-code.fd",
                     "/usr/share/AAVMF/AAVMF_CODE.fd",
+                    // Ubuntu's qemu-efi-aarm64 package (installed by make setup)
+                    "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
                 ];
                 let edk2 = edk2_paths
                     .iter()
