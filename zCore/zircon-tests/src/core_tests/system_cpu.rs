@@ -300,7 +300,9 @@ fn get_performance_info_argument_validation() {
 
     // C++: invalid output_count (nullptr) → ZX_ERR_INVALID_ARGS
     {
-        let mut perf_info = [0u8; 12];
+        // Buffer must hold online_cpus entries — the syscall may write
+        // all entries before checking the null output_count pointer.
+        let mut perf_info = alloc::vec![0u8; 12 * online_cpus];
         let result = sc.sys_system_get_performance_info(
             cpu_resource,
             ZX_CPU_PERF_SCALE,
