@@ -176,7 +176,7 @@ impl Executor {
                 let task_num = runtime.task_num();
                 let weak_executor = runtime.weak_executor_num();
                 drop(runtime);
-                if cfg!(feature = "baremetal-test") && task_num == 0 {
+                if task_num == 0 {
                     crate::runtime::sched_yield();
                 } else if weak_executor != 0 {
                     crate::runtime::sched_yield();

@@ -19,7 +19,7 @@ doc = false
 # Print colorless logs
 colorless-log = []
 thead-maee = ["hal-impl/thead-maee"]
-baremetal-test = ["executor/baremetal-test", "dep:zircon-tests"]
+baremetal-test = ["dep:zircon-tests"]
 lockdep = ["zircon-object/lockdep"]
 
 # --- Flavour ---
