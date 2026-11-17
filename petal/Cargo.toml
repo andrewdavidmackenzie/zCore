@@ -54,3 +54,7 @@ path = "src/bin/debuglog_test.rs"
 [[bin]]
 name = "counter-test"
 path = "src/bin/counter_test.rs"
+
+[[bin]]
+name = "hotplug-test"
+path = "src/bin/hotplug_test.rs"
