@@ -2,7 +2,9 @@
 #
 # Build a UEFI-bootable disk image for x86_64 real hardware.
 #
-# Usage: tools/scripts/x86-uefi-image.sh <output-image>
+# Usage: tools/scripts/x86-uefi-image.sh <output-image> [rootfs-mode]
+#   rootfs-mode: "auto" (default, include the rootfs if it exists) or
+#                "none" (Zircon-only image without a rootfs ramdisk)
 #
 # The output image can be written to a USB drive with dd.
 

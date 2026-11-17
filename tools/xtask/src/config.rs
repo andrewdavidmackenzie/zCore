@@ -242,10 +242,10 @@ impl Selection {
             Some(spec) => Self::parse(spec),
             None => {
                 if let Some(saved) = Self::saved() {
-                    println!("Using saved selection: {saved} (`cargo zcore set` to change)");
+                    eprintln!("Using saved selection: {saved} (`cargo zcore set` to change)");
                     return Self::parse(&saved);
                 }
-                println!(
+                eprintln!(
                     "No saved selection (`cargo zcore set <product>.<board>` to set one); \
                      using default {DEFAULT_SELECTION}"
                 );
