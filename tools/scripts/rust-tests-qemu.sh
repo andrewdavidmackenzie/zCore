@@ -85,6 +85,8 @@ if grep -q "All tests passed" "$LOG"; then
   exit 0
 else
   echo "FAIL: Rust zircon-tests did not complete on $ARCH"
-  tail -20 "$LOG"
+  echo "--- Full QEMU serial output ($ARCH) ---"
+  cat "$LOG"
+  echo "--- End serial output ---"
   exit 1
 fi
