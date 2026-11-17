@@ -46,3 +46,7 @@ zircon-abi = { path = "../zCore/zircon-abi", default-features = false }
 embedded-io = "0.6"
 
 # Profile settings are in the workspace root Cargo.toml
+
+[[bin]]
+name = "debuglog-test"
+path = "src/bin/debuglog_test.rs"
