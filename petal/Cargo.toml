@@ -82,3 +82,11 @@ path = "src/bin/bad_access_test.rs"
 [[bin]]
 name = "syscall-handle-test"
 path = "src/bin/syscall_handle_test.rs"
+
+[[bin]]
+name = "syscall-fifo-test"
+path = "src/bin/syscall_fifo_test.rs"
+
+[[bin]]
+name = "syscall-port-test"
+path = "src/bin/syscall_port_test.rs"
