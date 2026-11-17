@@ -9,6 +9,7 @@ description = "Zircon syscalls implementation"
 
 [features]
 # hypervisor = ["zircon-object/hypervisor"]
+baremetal-test = []
 deny-page-fault = []
 elf = ["zircon-object/elf"]
 libos = []
