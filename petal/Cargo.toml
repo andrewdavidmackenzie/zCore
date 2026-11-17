@@ -222,3 +222,15 @@ path = "src/bin/process_shared_test.rs"
 [[bin]]
 name = "object-info-test"
 path = "src/bin/object_info_test.rs"
+
+[[bin]]
+name = "mini-process-test"
+path = "src/bin/mini_process_test.rs"
+
+[[bin]]
+name = "timer-extra-test"
+path = "src/bin/timer_extra_test.rs"
+
+[[bin]]
+name = "vmo-extra-test"
+path = "src/bin/vmo_extra_test.rs"
