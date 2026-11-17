@@ -126,3 +126,11 @@ path = "src/bin/debug_test.rs"
 [[bin]]
 name = "clock-ops-test"
 path = "src/bin/clock_ops_test.rs"
+
+[[bin]]
+name = "syscall-handle-extra-test"
+path = "src/bin/syscall_handle_extra_test.rs"
+
+[[bin]]
+name = "syscall-signal-extra-test"
+path = "src/bin/syscall_signal_extra_test.rs"
