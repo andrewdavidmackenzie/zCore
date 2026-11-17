@@ -174,3 +174,7 @@ path = "src/bin/channel_internal_test.rs"
 [[bin]]
 name = "exceptions-arch-test"
 path = "src/bin/exceptions_arch_test.rs"
+
+[[bin]]
+name = "vmo-discardable-test"
+path = "src/bin/vmo_discardable_test.rs"
