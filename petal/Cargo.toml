@@ -90,3 +90,7 @@ path = "src/bin/syscall_fifo_test.rs"
 [[bin]]
 name = "syscall-port-test"
 path = "src/bin/syscall_port_test.rs"
+
+[[bin]]
+name = "syscall-generation-test"
+path = "src/bin/syscall_generation_test.rs"
