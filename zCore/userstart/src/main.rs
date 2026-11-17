@@ -230,9 +230,16 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         zx_channel_create(0, &mut init_channel_local, &mut init_channel_remote)
     });
 
+    // Duplicate the process handle so the child can reference itself.
+    let mut init_proc_self: HandleValue = ZX_HANDLE_INVALID;
+    check("handle_duplicate(proc_self)", unsafe {
+        zx_handle_duplicate(init_proc, ZX_RIGHT_SAME_RIGHTS, &mut init_proc_self)
+    });
+
     // Forward bootstrap handles to init using processargs format.
-    let forward_handles = [root_job, root_resource, zbi_vmo, init_vmar];
-    let forward_info: [u32; 4] = [
+    let forward_handles = [init_proc_self, root_job, root_resource, zbi_vmo, init_vmar];
+    let forward_info: [u32; 5] = [
+        pa_hnd(PA_PROC_SELF, 0),
         pa_hnd(PA_JOB_DEFAULT, 0),
         pa_hnd(PA_RESOURCE, 0),
         pa_hnd(PA_VMO_BOOTDATA, 0),

@@ -29,11 +29,11 @@ pub fn take_startup_handle() -> u32 {
 /// Parsed bootstrap handles from a processargs channel message.
 pub struct Bootstrap {
     /// Message data (contains processargs header + handle_info).
-    pub data: [u8; 256],
+    pub data: [u8; 1024],
     /// Number of valid bytes in `data`.
     pub data_len: usize,
     /// Handle values received from the channel.
-    pub handles: [u32; 8],
+    pub handles: [u32; 32],
     /// Number of valid handles.
     pub num_handles: usize,
 }
@@ -51,8 +51,8 @@ impl Bootstrap {
         }
 
         let mut b = Bootstrap {
-            data: [0u8; 256],
-            handles: [0u32; 8],
+            data: [0u8; 1024],
+            handles: [0u32; 32],
             data_len: 0,
             num_handles: 0,
         };

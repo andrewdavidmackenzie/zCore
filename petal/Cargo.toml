@@ -62,3 +62,11 @@ path = "src/bin/hotplug_test.rs"
 [[bin]]
 name = "syscall-transfer-data-test"
 path = "src/bin/syscall_transfer_data_test.rs"
+
+[[bin]]
+name = "syscall-vmo-test"
+path = "src/bin/syscall_vmo_test.rs"
+
+[[bin]]
+name = "user-exceptions-test"
+path = "src/bin/user_exceptions_test.rs"
