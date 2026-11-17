@@ -198,3 +198,7 @@ path = "src/bin/thread_sampler_test.rs"
 [[bin]]
 name = "profile-test"
 path = "src/bin/profile_test.rs"
+
+[[bin]]
+name = "job-test"
+path = "src/bin/job_test.rs"
