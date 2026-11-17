@@ -162,3 +162,7 @@ path = "src/bin/syscall_port_extra_test.rs"
 [[bin]]
 name = "syscall-socket-extra-test"
 path = "src/bin/syscall_socket_extra_test.rs"
+
+[[bin]]
+name = "socket-test"
+path = "src/bin/socket_test.rs"
