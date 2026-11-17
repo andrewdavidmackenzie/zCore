@@ -102,3 +102,7 @@ path = "src/bin/event_pair_test.rs"
 [[bin]]
 name = "syscall-socket-test"
 path = "src/bin/syscall_socket_test.rs"
+
+[[bin]]
+name = "fifo-test"
+path = "src/bin/fifo_test.rs"
