@@ -476,27 +476,57 @@ async fn run_syscall(
 
 async fn handler_user_trap(
     thread: &CurrentThread,
-    ctx: Box<UserContext>,
+    mut ctx: Box<UserContext>,
 ) -> Result<(), ExceptionInfo> {
     let reason = ctx.trap_reason();
 
     if let TrapReason::Syscall = reason {
         let num = syscall_num(&ctx);
         let args = syscall_args(&ctx);
-        // Note: there is deliberately NO vDSO-range enforcement here.
-        // Petal binaries issue raw `syscall`/`svc` instructions instead
-        // of going through a vDSO, so "syscall from outside the vDSO"
-        // is the normal case for them. Enforcing it deadlocked any
-        // single-threaded petal program that created an exception
-        // channel: the BAD_SYSCALL policy exception was delivered to
-        // that channel while the only thread that could read it was
-        // blocked here awaiting a handler response.
+        // BAD_SYSCALL policy check: if this process has a vDSO code
+        // range recorded, verify the syscall came from within it. Raw
+        // `syscall`/`svc` instructions from user code bypass the vDSO
+        // security wrappers — Threads.BadSyscallCaller relies on this
+        // (a valid syscall number must still fail when called outside
+        // the vDSO).
         //
-        // Genuinely invalid syscall numbers are still rejected (with a
-        // BAD_SYSCALL policy exception) by the dispatch layer in
-        // `zircon_syscall::Syscall::syscall`, matching Fuchsia's
-        // `sys_invalid_syscall`.
-        //
+        // The code range is only recorded for dynamically-linked
+        // processes (spawn_process sets it when the binary has a
+        // PT_INTERP): static binaries (petal, busybox) legitimately
+        // issue raw syscalls, and rejecting those deadlocked any
+        // single-threaded petal program with an exception channel.
+        // On x86_64, RCX holds the return address after `syscall`.
+        // On aarch64, the return address is in ELR_EL1 (saved as RIP).
+        let ret_addr = {
+            cfg_if! {
+                if #[cfg(target_arch = "x86_64")] {
+                    ctx.general().rcx
+                } else {
+                    ctx.get_field(UserContextField::InstrPointer)
+                }
+            }
+        };
+        if thread.proc().has_exception_channel()
+            && thread.proc().is_syscall_from_outside_vdso(ret_addr)
+        {
+            ctx.advance_pc(reason);
+            thread.put_context(ctx);
+            // Signal BAD_SYSCALL policy exception with the syscall
+            // number as synth_data, matching Fuchsia.
+            thread
+                .signal_policy_exception(zircon_object::task::policy_code::BAD_SYSCALL, num as u32);
+            thread.deliver_pending_policy_exception().await;
+            thread
+                .with_context(|ctx| {
+                    ctx.set_field(UserContextField::ReturnValue, ZxError::BAD_SYSCALL as usize)
+                })
+                .map_err(|_| ExceptionInfo {
+                    type_: ExceptionType::ThreadExiting,
+                    synth_code: 0,
+                })?;
+            hal_impl::thread::yield_now().await;
+            return Ok(());
+        }
         // Mark this as a user-mode syscall so user-buffer copies
         // enforce the user/kernel address split. In-kernel test code
         // (baremetal-test) calls the Syscall interface directly,

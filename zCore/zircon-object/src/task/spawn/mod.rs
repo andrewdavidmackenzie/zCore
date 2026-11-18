@@ -299,7 +299,9 @@ pub fn spawn_process(
             config.vdso_code_size,
             vdso_flags,
         )?;
-        proc.set_vdso_code_range(vdso_code_addr, config.vdso_code_size);
+        // No vdso_code_range here: fixed_base implies a static binary
+        // (petal) whose raw syscalls are legitimate — see the comment
+        // in the PIE branch below.
         (image_vmar, entry, vdso_code_addr)
     } else {
         // vDSO: map FIRST so it's at a low address that ld.so.1's unmap
@@ -315,8 +317,15 @@ pub fn spawn_process(
             vdso_flags,
         )?;
         // Record the vDSO code range so the kernel can verify syscalls
-        // come from the vDSO (BAD_SYSCALL policy check).
-        proc.set_vdso_code_range(vdso_code_addr, config.vdso_code_size);
+        // come from the vDSO (BAD_SYSCALL policy check —
+        // Threads.BadSyscallCaller). Only for dynamically-linked
+        // processes: they use the vDSO as their syscall gateway.
+        // Static binaries (petal, busybox) issue raw syscalls
+        // legitimately — recording the range would reject everyone
+        // of their syscalls once an exception channel exists.
+        if has_interp {
+            proc.set_vdso_code_range(vdso_code_addr, config.vdso_code_size);
+        }
 
         // Avoid allocating at vaddr 0: PIE binaries like ld.so.1 have PT_LOAD
         // starting at vaddr 0, and loading at base 0 causes fsbase=0 to alias
