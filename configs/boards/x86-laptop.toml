@@ -17,8 +17,8 @@ flash-method = "usb"
 default-product = "petal"
 
 # No [qemu] section -- this is real hardware.
-# Use `make image CONFIG=<product>.x86-laptop` to build a UEFI boot
-# image and write it to a USB drive.
+# Use `make image-uefi CONFIG=<product>.x86-laptop` to build a UEFI
+# boot image and `make flash USB=` to write it to a USB drive.
 
 [rustc-target]
 llvm-target = "x86_64-unknown-none-elf"

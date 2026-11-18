@@ -136,9 +136,14 @@ debug-x86-qemu:
 	@echo "    Kernel symbols: target/$(DEBUG_X86_CONFIG)/release/kernel"
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	ROOTFS_IMG=$$(cargo xtask rootfs-image -m $(DEBUG_X86_CONFIG) --print-path); \
+	RAMDISK_ARGS=""; \
+	case "$$ROOTFS_IMG" in \
+		*/petal-*) ;; \
+		*) RAMDISK_ARGS="--ramdisk $$ROOTFS_IMG" ;; \
+	esac; \
 	tools/x86-bootimage/target/release/x86-bootimage \
 		target/$(DEBUG_X86_CONFIG)/release/kernel \
-		target/$(DEBUG_X86_CONFIG)/release/kernel-zircon.img; \
+		target/$(DEBUG_X86_CONFIG)/release/kernel-zircon.img $$RAMDISK_ARGS; \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
 		-machine q35 -smp $(X86_CORES) -cpu qemu64,+rdrand \
 		-serial mon:stdio \
@@ -242,7 +247,7 @@ book: docs
 #
 # Usage:
 #   make build CONFIG=petal.raspi400
-#   make image CONFIG=busybox.x86-laptop OUTPUT=/tmp/zcore.img
+#   make image-uefi CONFIG=busybox.x86-laptop OUTPUT=/tmp/zcore.img
 #   make flash CONFIG=petal.raspi400 SD=/Volumes/boot
 #   make flash CONFIG=busybox.x86-laptop USB=/dev/disk5
 #
@@ -279,7 +284,7 @@ jollac2-sd: jollac2-build
 ifndef DISK
 	$(error DISK is required. Usage: make jollac2-sd DISK=/dev/diskN)
 endif
-	@tools/jolla-c2/make-sdcard-image.sh "$(DISK)"
+	@tools/jolla-c2/make-sdcard-image.sh "$(DISK)" "petal.jolla-c2"
 
 # ── UEFI boot logo and firmware ─────────────────────────────────────────
 
@@ -317,8 +322,8 @@ x86-zircon-run:
 # full/core-tests images are embedded as the ramdisk; petal-manifest
 # products boot their userspace from the embedded ZBI (no ramdisk),
 # like the old MODE=zircon image.
-# Usage: make image CONFIG=busybox.x86-laptop OUTPUT=/tmp/zcore-uefi.img
-#        make image CONFIG=petal.x86-laptop OUTPUT=/tmp/zcore-uefi.img
+# Usage: make image-uefi CONFIG=busybox.x86-laptop OUTPUT=/tmp/zcore-uefi.img
+#        make image-uefi CONFIG=petal.x86-laptop OUTPUT=/tmp/zcore-uefi.img
 OUTPUT ?= target/$(CONFIG)/release/kernel-uefi.img
 image-uefi:
 ifeq ($(BOARD),x86-laptop)

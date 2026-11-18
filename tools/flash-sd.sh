@@ -29,7 +29,7 @@ case "$BOARD" in
       echo "Usage: make flash CONFIG=petal.jolla-c2 DISK=/dev/diskN" >&2
       exit 1
     fi
-    exec "$(dirname "$0")/jolla-c2/make-sdcard-image.sh" "$DISK"
+    exec "$(dirname "$0")/jolla-c2/make-sdcard-image.sh" "$DISK" "$CONFIG"
     ;;
   *)
     echo "ERROR: board '$BOARD' has no SD flash procedure" >&2
