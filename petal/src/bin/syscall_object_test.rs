@@ -110,18 +110,22 @@ fn get_info_bad_handle() {
 /// ZX_PROP_NAME get/set
 fn set_get_property_name() {
     let name = b"set_get_property_name";
-    let mut h0: HandleValue = 0;
-    let mut h1: HandleValue = 0;
-    assert_ok(
-        unsafe { zx_channel_create(0, &mut h0, &mut h1) },
-        name,
-        b"create",
-    );
+    // ZX_PROP_NAME applies to jobs/processes/threads — channels do not
+    // have the SET_PROPERTY right. Use the bootstrap process handle.
+    let bootstrap = petal::Bootstrap::read().unwrap_or_else(|| {
+        zx::debug_write(b"FAIL: no bootstrap\n");
+        zx::Process::exit(1);
+    });
+    let proc_h = bootstrap.find(zircon_abi::processargs::PA_PROC_SELF);
+    if proc_h == 0 {
+        zx::debug_write(b"  SKIP: no PA_PROC_SELF\n");
+        return;
+    }
 
     // Set name
-    let obj_name = b"test-channel\0";
+    let obj_name = b"test-proc\0";
     assert_ok(
-        unsafe { zx_object_set_property(h0, ZX_PROP_NAME, obj_name.as_ptr(), obj_name.len()) },
+        unsafe { zx_object_set_property(proc_h, ZX_PROP_NAME, obj_name.as_ptr(), obj_name.len()) },
         name,
         b"set name",
     );
@@ -129,16 +133,14 @@ fn set_get_property_name() {
     // Get name
     let mut buf = [0u8; 32];
     assert_ok(
-        unsafe { zx_object_get_property(h0, ZX_PROP_NAME, buf.as_mut_ptr(), buf.len()) },
+        unsafe { zx_object_get_property(proc_h, ZX_PROP_NAME, buf.as_mut_ptr(), buf.len()) },
         name,
         b"get name",
     );
-    if &buf[..12] != b"test-channel" {
+    if &buf[..9] != b"test-proc" {
         fail(name, b"name mismatch");
     }
 
-    unsafe { zx_handle_close(h0) };
-    unsafe { zx_handle_close(h1) };
     pass(name);
 }
 

@@ -2017,7 +2017,7 @@ pub unsafe fn zx_vmar_map_clock(
     mapped_addr: *mut usize,
 ) -> ZxStatus {
     syscall6(
-        crate::consts::SYS_VMAR_MAP,
+        crate::consts::SYS_VMAR_MAP_CLOCK,
         vmar as u64,
         options as u64,
         offset,

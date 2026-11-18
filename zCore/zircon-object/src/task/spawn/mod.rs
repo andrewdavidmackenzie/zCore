@@ -277,7 +277,7 @@ pub fn spawn_process(
         // Place the image VMAR at the ELF's link base (before the vDSO,
         // so the low addresses the code references belong to the image),
         // and map segments at (vaddr - elf_base) within it.
-        let Some(offset) = elf_base.checked_sub(vmar.addr() as usize) else {
+        let Some(offset) = elf_base.checked_sub(vmar.addr()) else {
             return Err(crate::ZxError::INVALID_ARGS);
         };
         let span = size.saturating_sub(elf_base);

@@ -158,22 +158,26 @@ pub unsafe fn copy_to_user(dst: *mut u8, src: *const u8, len: usize) -> Result<(
     guarded_user_copy(dst, src, len)
 }
 
-/// Check that `[addr, addr+len)` lies within the canonical 48-bit user
-/// address form on x86_64 (bits 63:48 must replicate bit 47). Accessing
-/// a non-canonical address raises #GP rather than #PF, which the
-/// guarded user-copy fault recovery cannot intercept — so bad user
-/// pointers must be rejected before the copy starts.
+/// The x86_64 architectural user-space limit: user addresses are the
+/// lower canonical half, `[0, 2^47)`. Addresses at or above it are
+/// either non-canonical (accessing them raises #GP, which the guarded
+/// user-copy fault recovery cannot intercept) or in the kernel half
+/// (supervisor-mapped, so a copy would wrongly succeed). Mirrors the
+/// libos validation's `LIBOS_KERNEL_ASPACE_BASE` boundary.
+#[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
+const X86_64_USER_ADDR_LIMIT: usize = 1usize << 47;
+
+/// Check that `[addr, addr+len)` lies within the **user** address space
+/// on x86_64 (below the architectural user limit). Bad user pointers
+/// must be rejected before the copy starts — see
+/// [`X86_64_USER_ADDR_LIMIT`].
 #[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
 fn validate_canonical_user_range(addr: usize, len: usize) -> Result<()> {
-    fn canonical(a: usize) -> bool {
-        let upper = a >> 47;
-        upper == 0 || upper == (1usize << 17) - 1
-    }
-    if !canonical(addr) {
+    if addr >= X86_64_USER_ADDR_LIMIT {
         return Err(Error::InvalidPointer);
     }
     match addr.checked_add(len) {
-        Some(end) if len == 0 || canonical(end - 1) => Ok(()),
+        Some(end) if len == 0 || end <= X86_64_USER_ADDR_LIMIT => Ok(()),
         _ => Err(Error::InvalidPointer),
     }
 }

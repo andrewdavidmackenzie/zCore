@@ -85,7 +85,9 @@ impl VmarExt for VmAddressRegion {
         segs.sort_by_key(|s| s.0);
 
         // Merge overlapping/adjacent page ranges into groups.
-        let mut groups: Vec<(usize, usize, MMUFlags, Vec<(usize, &[u8])>)> = Vec::new();
+        // A group: (page_start, page_end, union_flags, [(vaddr, data)]).
+        type SegmentGroup<'a> = (usize, usize, MMUFlags, Vec<(usize, &'a [u8])>);
+        let mut groups: Vec<SegmentGroup> = Vec::new();
         for (start, end, vaddr, data, flags) in segs {
             match groups.last_mut() {
                 Some(g) if start < g.1 => {

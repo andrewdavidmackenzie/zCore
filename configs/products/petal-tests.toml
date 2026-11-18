@@ -10,5 +10,10 @@ root-proc = "/bin/test-runner"
 log = "warn"
 rootfs-contents = "petal"
 
+# The petal suite includes tests of the debugging syscalls
+# (debug-test, hotplug-test), which Fuchsia gates behind this cmdline
+# — same as the core-tests product.
+extra-cmdline = ["kernel.enable-debugging-syscalls=true"]
+
 # The petal rootfs and runner work on the QEMU boards.
 supported-boards = ["qemu-aarch64", "qemu-x86_64"]

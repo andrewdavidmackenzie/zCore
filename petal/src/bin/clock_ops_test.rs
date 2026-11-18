@@ -11,9 +11,9 @@ extern crate petal;
 use zx::sys::*;
 
 const PA_RESOURCE: u32 = 0x3F;
-const ZX_CLOCK_OPT_AUTO_START: u64 = 1 << 0;
-const ZX_CLOCK_OPT_MONOTONIC: u64 = 1 << 1;
-const ZX_CLOCK_OPT_CONTINUOUS: u64 = 1 << 2;
+const ZX_CLOCK_OPT_AUTO_START: u64 = 1 << 2;
+const ZX_CLOCK_OPT_MONOTONIC: u64 = 1 << 0;
+const ZX_CLOCK_OPT_CONTINUOUS: u64 = 1 << 1;
 
 fn pass(name: &[u8]) {
     zx::debug_write(b"  clock_ops_test: ");

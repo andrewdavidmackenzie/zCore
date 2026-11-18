@@ -286,18 +286,20 @@ fn read_into_null_buffer() {
 /// C++: TEST(SocketTest, GetPropertyRxThresholdWrongType)
 fn get_property_rx_threshold_wrong_type() {
     let name = b"get_property_rx_threshold_wrong_type";
-    let mut event_h: HandleValue = 0;
+    // Use a VMO like the C++ original: VMOs carry GET_PROPERTY rights,
+    // so the failure comes from the type check (WRONG_TYPE), not rights.
+    let mut vmo_h: HandleValue = 0;
     assert_ok(
-        unsafe { zx_event_create(0, &mut event_h) },
+        unsafe { zx_vmo_create(4096, 0, &mut vmo_h) },
         name,
-        b"event create",
+        b"vmo create",
     );
 
     let mut val: usize = 0;
     assert_status(
         unsafe {
             zx_object_get_property(
-                event_h,
+                vmo_h,
                 ZX_PROP_SOCKET_RX_THRESHOLD,
                 &mut val as *mut _ as *mut u8,
                 core::mem::size_of::<usize>(),
@@ -308,25 +310,27 @@ fn get_property_rx_threshold_wrong_type() {
         b"",
     );
 
-    unsafe { zx_handle_close(event_h) };
+    unsafe { zx_handle_close(vmo_h) };
     pass(name);
 }
 
 /// C++: TEST(SocketTest, SetPropertyRxThresholdWrongType)
 fn set_property_rx_threshold_wrong_type() {
     let name = b"set_property_rx_threshold_wrong_type";
-    let mut event_h: HandleValue = 0;
+    // Use a VMO like the C++ original: VMOs carry SET_PROPERTY rights,
+    // so the failure comes from the type check (WRONG_TYPE), not rights.
+    let mut vmo_h: HandleValue = 0;
     assert_ok(
-        unsafe { zx_event_create(0, &mut event_h) },
+        unsafe { zx_vmo_create(4096, 0, &mut vmo_h) },
         name,
-        b"event create",
+        b"vmo create",
     );
 
     let val: usize = 0;
     assert_status(
         unsafe {
             zx_object_set_property(
-                event_h,
+                vmo_h,
                 ZX_PROP_SOCKET_RX_THRESHOLD,
                 &val as *const _ as *const u8,
                 core::mem::size_of::<usize>(),
@@ -337,7 +341,7 @@ fn set_property_rx_threshold_wrong_type() {
         b"",
     );
 
-    unsafe { zx_handle_close(event_h) };
+    unsafe { zx_handle_close(vmo_h) };
     pass(name);
 }
 
@@ -346,10 +350,11 @@ fn disable_write_local() {
     let name = b"disable_write_local";
     let (h0, h1) = socket_create(ZX_SOCKET_STREAM);
 
-    // Disable write on local side
+    // Disable write on the local endpoint: the `disposition` argument
+    // controls THIS socket's writes (disposition_peer controls the peer's).
     assert_ok(
         unsafe {
-            zx_socket_set_disposition(h0, 0, 1 /* ZX_SOCKET_DISPOSITION_WRITE_DISABLED */)
+            zx_socket_set_disposition(h0, 1 /* ZX_SOCKET_DISPOSITION_WRITE_DISABLED */, 0)
         },
         name,
         b"disable write",
