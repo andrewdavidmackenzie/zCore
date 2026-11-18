@@ -170,7 +170,10 @@ pub async fn run_all() {
     run_test!(vmo_transfer_data);
     run_test!(vmo_zero);
 
-    // ── Syscall tests (use UserInPtr/UserOutPtr) ────────────────────
+    // ── Kernel-API tests from modules that also have syscall tests ──
+    // These functions don't use UserInPtr/UserOutPtr and run in kernel mode.
+    log::warn!("  core_test: thread (kernel-API subset)");
+    thread::run_kernel_tests();
+
     // Syscall-layer tests have been ported to petal user-mode binaries.
-    // They run on bare-metal QEMU via the petal test infrastructure.
 }
