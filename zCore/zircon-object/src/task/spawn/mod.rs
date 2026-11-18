@@ -202,8 +202,8 @@ pub fn spawn_process(
     config: &SpawnConfig,
 ) -> crate::ZxResult<Arc<Process>> {
     use crate::util::elf_loader::*;
-    use xmas_elf::ElfFile;
     use xmas_elf::program::Type;
+    use xmas_elf::ElfFile;
 
     // Check for PT_INTERP (dynamic linking).
     let elf_check = ElfFile::new(elf_data).map_err(|_| crate::ZxError::INVALID_ARGS)?;
@@ -289,8 +289,7 @@ pub fn spawn_process(
         )?;
         image_vmar.load_from_elf_rebased(&elf, elf_base)?;
         // No relocations to apply: a fixed-base executable has none.
-        let entry =
-            image_vmar.addr() as usize + (elf.header.pt2.entry_point() as usize - elf_base);
+        let entry = image_vmar.addr() as usize + (elf.header.pt2.entry_point() as usize - elf_base);
         // Map the vDSO after the image (first fit lands above it).
         let vdso_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
         let vdso_code_addr = vmar.map(

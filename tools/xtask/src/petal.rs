@@ -79,9 +79,7 @@ pub fn build_petal_batch(arch: Arch, names: &[String]) {
     cmd.args(["-Z", "build-std=core,alloc"])
         .args(["-Z", "build-std-features=compiler-builtins-mem"])
         .env("RUSTFLAGS", "-C relocation-model=static");
-    let status = cmd
-        .status()
-        .expect("failed to run cargo build for petal");
+    let status = cmd.status().expect("failed to run cargo build for petal");
     if !status.success() {
         panic!("petal batch build failed");
     }
