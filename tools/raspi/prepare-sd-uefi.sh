@@ -4,12 +4,12 @@
 #
 # This script:
 # 1. Downloads pftf/RPi4 UEFI firmware (if not cached)
-# 2. Builds the UEFI stub and kernel for raspi400-uefi
+# 2. Builds the UEFI stub and kernel for the raspi400 board
 # 3. Creates an ESP-compatible layout on the SD card
 #
 # Usage:
-#   tools/raspi/prepare-sd-uefi.sh /Volumes/boot
-#   tools/raspi/prepare-sd-uefi.sh /mnt/boot
+#   tools/raspi/prepare-sd-uefi.sh <mount-point> [product.board]
+#     selection defaults to busybox.raspi400
 #
 # Prerequisites:
 #   - A microSD card with a FAT32 partition (acts as ESP), mounted
@@ -91,7 +91,7 @@ fi
 # --- Step 2: Build the UEFI stub ---
 echo "==> Building UEFI stub for Pi 400..."
 cd "$PROJECT_DIR/tools/aarch64-uefi-stub"
-# Stub features are configured in targets/raspi400-uefi.toml (stub-features).
+# Stub features are configured in configs/boards/raspi400.toml (stub-features).
 # The xtask build handles this automatically via 'cargo xtask zcore-build'.
 # For the SD card script we build the stub directly with the same features.
 cargo build --release --target aarch64-unknown-uefi --features board-raspi400,uefi-console
@@ -103,11 +103,20 @@ if [ ! -f "$STUB_EFI" ]; then
 fi
 
 # --- Step 3: Build the kernel ---
-echo "==> Building zCore kernel for Pi 400 UEFI..."
+# The selection (product.board) is passed through by make flash /
+# tools/flash-sd.sh. The busybox selection keeps the historical
+# LOG=info cmdline override; other selections use their product config.
+CONFIG="${2:-busybox.raspi400}"
+echo "==> Building zCore kernel for Pi 400 UEFI ($CONFIG)..."
 cd "$PROJECT_DIR"
-ZCORE_CMDLINE="LOG=info ROOTPROC=/bin/busybox?sh" cargo xtask zcore-build -m raspi400-uefi
+if [ "$CONFIG" = "busybox.raspi400" ]; then
+    ZCORE_CMDLINE="LOG=info ROOTPROC=/bin/busybox?sh" \
+        cargo xtask zcore-build -m "$CONFIG"
+else
+    cargo xtask zcore-build -m "$CONFIG"
+fi
 
-KERNEL_ELF="$PROJECT_DIR/target/raspi400-uefi/release/kernel"
+KERNEL_ELF="$PROJECT_DIR/target/${CONFIG}/release/kernel"
 if [ ! -f "$KERNEL_ELF" ]; then
     echo "ERROR: Kernel ELF not found at $KERNEL_ELF"
     exit 1
@@ -164,7 +173,7 @@ echo "==> Copying kernel..."
 cp "$KERNEL_ELF" "$BOOT_DIR/kernel"
 
 # Rootfs (initrd)
-ROOTFS_IMG="$PROJECT_DIR/target/qemu-aarch64/release/aarch64-linux.img"
+ROOTFS_IMG="$PROJECT_DIR/target/rootfs/images/full-aarch64.img"
 if [ ! -f "$ROOTFS_IMG" ]; then
     echo "==> Building rootfs image..."
     cd "$PROJECT_DIR"

@@ -3,17 +3,15 @@ use os_xtask_utils::{CommandExt, Qemu};
 use std::{fs, path::Path};
 
 impl super::LinuxRootfs {
-    /// Returns the path for the Linux rootfs image file.
+    /// Returns the path for the `full` rootfs image file.
     ///
-    /// Layout: `target/qemu-{arch}/release/{arch}-linux.img`
+    /// Layout: `target/rootfs/images/full-{arch}.img`
+    /// (manifest + arch keyed; shared across boards and selections).
     pub fn image_path(&self) -> std::path::PathBuf {
-        let dir = PROJECT_DIR
-            .join("target")
-            .join(format!("qemu-{}", self.0.name()))
-            .join("release");
+        let dir = PROJECT_DIR.join("target").join("rootfs").join("images");
         os_xtask_utils::dir::create_parent(dir.join("_")).unwrap_or(());
         fs::create_dir_all(&dir).ok();
-        dir.join(format!("{arch}-linux.img", arch = self.0.name()))
+        dir.join(format!("full-{}.img", self.0.name()))
     }
 
     /// Generates the rootfs image.

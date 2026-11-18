@@ -28,91 +28,132 @@ examples of unimplemented syscalls.
 
 Type `poweroff -f` at the `/ #` prompt (or press `Ctrl-A X`) to exit.
 
-Prerequisites: Rust nightly, QEMU, and `aarch64-linux-musl-gcc`
-(on macOS: `make config` installs the cross-compiler via Homebrew).
+Prerequisites: run `make setup` once after cloning — it installs QEMU
+(x86_64/aarch64/riscv64), UEFI firmware (OVMF), mtools, and e2fsprogs,
+and configures rustup cross-targets. Rust itself comes from
+[rustup](https://rustup.rs); the pinned nightly toolchain installs
+automatically on the first `cargo` invocation. (On macOS, `make setup`
+also installs the musl cross-toolchains via Homebrew.)
 
 ## Building
 
-All build commands are target-driven. Each target is defined in a TOML
-file under `targets/` that specifies the architecture, drivers, features,
-and whether to include Linux emulation. You never need to specify
-feature flags manually.
+Builds are configured by a **product** and a **board**, selected as
+`<product>.<board>` — mirroring Fuchsia's `fx set PRODUCT.BOARD`:
 
-### Available targets
+- A **board** (`configs/boards/<name>.toml`) defines the hardware:
+  architecture, CPU cores, drivers, linker script, QEMU launch config,
+  and the rustc target spec.
+- A **product** (`configs/products/<name>.toml`) defines the software:
+  OS personality (Zircon only or Zircon+Linux), init program, rootfs
+  contents, and kernel command line. Products can `extends` another
+  product (child keys override, lists append).
 
-| Target | Arch | Flavour | Hardware |
-|--------|------|-------------|----------|
-| `qemu-aarch64` | aarch64 | linux | QEMU virt |
-| `qemu-x86_64` | x86_64 | linux | QEMU q35 |
-| `qemu-riscv64` | riscv64 | linux | QEMU virt |
-| `raspi400` | aarch64 | Zircon only | Raspberry Pi 400 |
-| `x86-laptop` | x86_64 | Zircon only | x86_64 real hardware (UEFI) |
-| `libos` | host | linux | runs as a host process |
+You never need to specify feature flags manually.
+
+### Available boards
+
+| Board | Arch | Hardware |
+|-------|------|----------|
+| `qemu-aarch64` | aarch64 | QEMU virt |
+| `qemu-x86_64` | x86_64 | QEMU q35 |
+| `qemu-riscv64` | riscv64 | QEMU virt |
+| `raspi400` | aarch64 | Raspberry Pi 400 (UEFI via pftf firmware) |
+| `x86-laptop` | x86_64 | x86_64 real hardware (UEFI) |
+| `jolla-c2` | aarch64 | Jolla C2 phone |
+| `libos` | host | runs as a host process |
+
+### Available products
+
+| Product | Flavour | Init | Rootfs |
+|---------|---------|------|--------|
+| `busybox` | Zircon + Linux | `/bin/busybox?sh` | busybox + petal + demos |
+| `petal` | Zircon only | `/bin/shell` | petal programs |
+| `petal-linux` | Zircon + Linux | `/bin/shell` | busybox + petal + demos |
+| `zircon-hello` | Zircon only | `/bin/hello` | petal programs |
+| `core-tests` | Zircon only | core-tests-standalone | Fuchsia test binaries |
+| `rust-tests` | Zircon only | in-kernel test runner | — |
+
+Discover definitions with `make list-products` / `make list-boards`
+(or `cargo zcore list-products` / `cargo zcore list-boards`).
 
 ### Build commands
 
 ```bash
-# Build a kernel (features come from targets/<name>.toml)
-cargo zcore-build -m qemu-aarch64
-cargo zcore-build -m raspi400
-cargo zcore-build -m libos
+# Build a kernel (features come from configs/)
+cargo zcore-build -m petal.qemu-aarch64
+cargo zcore-build -m busybox.qemu-x86_64
+cargo zcore-build -m petal.raspi400
 
-# Override the default flavour
-cargo zcore-build -m qemu-aarch64
+# Persist a default selection (used when -m is omitted)
+cargo zcore set busybox.qemu-aarch64
 
 # Build and strip to raw binary
-cargo bin -m qemu-aarch64
+cargo bin -m busybox.qemu-aarch64
 
 # Build and run in QEMU
-cargo qemu -m qemu-aarch64
-cargo qemu -m qemu-x86_64 --log info
+cargo qemu -m petal.qemu-aarch64
+cargo qemu -m busybox.qemu-x86_64 --log info
 
 # Build and run as a host process (no QEMU needed)
-cargo zcore-build -m libos                         # linux (default flavour)
-cargo zcore-build -m libos     # Zircon only
-cargo linux-libos --args "/bin/busybox ls"          # build + run linux libos
+cargo zcore-build -m busybox.libos       # Zircon + Linux
+cargo zcore-build -m petal.libos         # Zircon only
+cargo linux-libos --args "/bin/busybox ls"  # build + run linux libos
 ```
 
 ### Makefile shortcuts
 
-| Scope           | Linux                      | Zircon                         |
-|-----------------|----------------------------|--------------------------------|
-| QEMU (any arch) | `make linux-run`           | `make zircon-run`              |
-| x86_64 specific | `make x86-linux-build/run` | `make x86-zircon-build/run`    |
-| LibOS build     | `make libos-build-linux`   | `make libos-build-zircon`      |
-| LibOS run       | `make libos-run-linux`     | `make libos-run-zircon` (#281) |
-| Pi 400          | n/a (Zircon only)          | `make raspi400-build/run/sd`   |
-
 ```bash
-make raspi400-sd SD=/Volumes/boot   # flash SD card for Pi 400
+make run CONFIG=busybox.qemu-aarch64   # build + boot in QEMU
+make build CONFIG=petal.qemu-x86_64    # build only
+make image                             # rootfs image for the selection
+make flash CONFIG=petal.raspi400 SD=/Volumes/boot   # write to SD
+make flash CONFIG=busybox.x86-laptop USB=/dev/disk5 # write to USB
 make clippy-all              # clippy on all code (all archs, libos, userspace, tests)
 make test                    # boot smoke test + libc conformance tests
 ```
 
-### Target configuration
+Backwards-compatible aliases exist for the old per-flavour targets
+(`make linux-run`, `make zircon-run`, `make petal-shell`,
+`make x86-linux-build`, `make raspi400-sd`, ...).
 
-Each `targets/<name>.toml` file is the single source of truth:
+### Board and product configuration
+
+Boards and products are the single source of truth:
 
 ```toml
-# targets/qemu-aarch64.toml
-default-flavour = "linux"
+# configs/boards/qemu-aarch64.toml
 arch = "aarch64"
-linker-script = "zCore/kernel/src/platform/aarch64/linker.ld"
-drivers = ["pl011-uart", "gic-400", "virtio-blk"]
+cores = 4
+linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker.ld"
+drivers = ["pl011-uart", "gic-400"]
+boot-method = "raw"
+default-product = "busybox"
 
 [qemu]
 machine = "virt"
 cpu = "cortex-a72"
 memory = "2G"
-
-[rustc-target]
-llvm-target = "aarch64-unknown-linux-gnu"
-# ...
 ```
 
-The `drivers` list maps to cargo feature flags in `kernel-drivers`.
-The `default-flavour` sets whether the kernel boots with Linux
-syscall emulation or the Zircon microkernel flavour.
+```toml
+# configs/products/busybox.toml
+flavour = "linux"                # "" = Zircon only
+root-proc = "/bin/busybox?sh"    # init program
+log = "warn"
+rootfs-contents = "full"         # busybox + petal + demos
+```
+
+The board's `drivers` list maps to cargo feature flags in `kernel-drivers`.
+Field ownership is strict: a board file declaring a product field (or vice
+versa) is a configuration error. A product may `extends` another product,
+and may list `supported-boards` to encode known-good pairings (e.g.
+Zircon-only products exclude riscv64 where zircon-abi cannot compile).
+
+Build artifacts are keyed by the full selection:
+`target/<product>.<board>/release/kernel` — switching products on one
+board yields independent binaries (flavour, features, and the kernel
+command line are compile-time inputs). Rootfs images are keyed by
+manifest + arch under `target/rootfs/images/`.
 
 ## Attribution and History
 
@@ -242,7 +283,7 @@ cargo asm -m virt-riscv64 -o z.asm
 生成内核 raw 镜像到指定位置。默认输出到 `target/{arch}/release/zcore.bin`。
 
 ```bash
-cargo bin -m virt-riscv64 -o z.bin
+cargo bin -m busybox.qemu-riscv64 -o z.bin
 ```
 
 #### **qemu**
@@ -250,13 +291,13 @@ cargo bin -m virt-riscv64 -o z.bin
 在 Qemu 中启动 zCore。这需要 Qemu 已经安装好了。
 
 ```bash
-cargo qemu --arch riscv64 --smp 4
+cargo qemu -m busybox.qemu-riscv64 --smp 4
 ```
 
 支持将 qemu 连接到 gdb：
 
 ```bash
-cargo qemu --arch riscv64 --smp 4 --gdb 1234
+cargo qemu -m busybox.qemu-riscv64 --smp 4 --gdb 1234
 ```
 
 #### **rootfs**

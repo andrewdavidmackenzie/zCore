@@ -1,9 +1,10 @@
 # Cvitek CR1825 RISC-V board (not actively tested)
-default-flavour = "linux"
 arch = "riscv64"
 linker-script = "zCore/hal-impl/src/bare/arch/riscv/platform/linker.ld"
 drivers = ["riscv-intc", "riscv-plic"]
 features = ["thead-maee"]
+boot-method = "raw"
+default-product = "busybox"
 
 [rustc-target]
 llvm-target = "riscv64"

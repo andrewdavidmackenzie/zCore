@@ -1,5 +1,5 @@
-use crate::config::TargetConfig;
-use crate::{Arch, ArchArg, PROJECT_DIR};
+use crate::config::Selection;
+use crate::{Arch, PROJECT_DIR};
 use os_xtask_utils::{dir, BinUtil, Cargo, CommandExt, Ext, Qemu};
 use std::{
     collections::{HashMap, HashSet},
@@ -11,12 +11,15 @@ use std::{
 
 #[derive(Clone, Args)]
 pub(crate) struct BuildArgs {
-    /// Target name (e.g., "qemu-aarch64", "raspi400", "libos").
-    /// Reads configuration from targets/<name>.toml.
+    /// Build selection: `<product>.<board>` (e.g., "petal.qemu-aarch64").
+    /// Reads the board from configs/boards/ and the product from
+    /// configs/products/. A bare board name (e.g., "qemu-aarch64") is
+    /// deprecated legacy syntax that uses the board's default product.
+    /// If omitted, uses the selection saved by `cargo zcore set`.
     #[clap(long, short)]
-    pub machine: String,
+    pub machine: Option<String>,
     /// Flavour: "linux" to add Linux emulation. Omit for Zircon only.
-    /// If not set, uses the target's default-flavour from the TOML.
+    /// If not set, uses the product's `flavour`.
     #[clap(long)]
     pub flavour: Option<String>,
     /// Build as debug mode.
@@ -38,18 +41,21 @@ pub(crate) struct OutArgs {
 
 #[derive(Args)]
 pub(crate) struct QemuArgs {
-    /// Target name (e.g., "qemu-aarch64"). Must have a [qemu] section.
+    /// Build selection: `<product>.<board>` (e.g., "petal.qemu-aarch64").
+    /// The board must have a [qemu] section. If omitted, uses the
+    /// selection saved by `cargo zcore set`.
     #[clap(long, short)]
-    machine: String,
+    machine: Option<String>,
     /// Flavour: "linux" to add Linux emulation. Omit for Zircon only.
     #[clap(long)]
     flavour: Option<String>,
     /// Build as debug mode.
     #[clap(long)]
     debug: bool,
-    /// Log level (error, warn, info, debug, trace). Default: warn.
-    #[clap(long, default_value = "warn")]
-    log: String,
+    /// Log level (error, warn, info, debug, trace).
+    /// Default: the product's `log` field.
+    #[clap(long)]
+    log: Option<String>,
     /// Number of hart (SMP for Symmetrical Multiple Processor).
     #[clap(long)]
     smp: Option<u8>,
@@ -65,55 +71,56 @@ pub(crate) struct QemuArgs {
 
 #[derive(Args)]
 pub(crate) struct GdbArgs {
-    /// Target name (e.g., "qemu-aarch64").
+    /// Build selection: `<product>.<board>`.
     #[clap(long, short)]
-    machine: String,
+    machine: Option<String>,
     #[clap(long)]
     port: u16,
 }
 
 pub(crate) struct BuildConfig {
     arch: Arch,
-    /// Target name (e.g., "qemu-aarch64") -- determines output directory.
-    target_name: String,
-    /// Whether this is a libos (host-native) target.
+    /// The resolved selection (product + board) -- determines the
+    /// output directory and generated target-spec JSON name.
+    selection: Selection,
+    /// Whether this is a libos (host-native) build.
     is_libos: bool,
     debug: bool,
     pub(crate) env: HashMap<OsString, OsString>,
     pub(crate) features: HashSet<String>,
     /// Path to the generated rustc target spec JSON.
     target_json: PathBuf,
-    /// Number of CPU cores from target config.
+    /// Number of CPU cores from the board config.
     cores: u8,
-    /// Features for the UEFI stub build (from target config stub-features).
+    /// Features for the UEFI stub build (from board config stub-features).
     stub_features: Vec<String>,
 }
 
 impl BuildConfig {
     pub fn from_args(args: BuildArgs) -> Self {
-        let target = TargetConfig::load(&args.machine);
+        let selection = Selection::resolve(args.machine.as_deref());
 
-        // Determine flavour: CLI override > TOML default.
+        // Determine flavour: CLI override > product definition.
         // Supports comma-separated list for multiple flavours
         // (e.g. "linux" to add Linux emulation).
         let flavour = args
             .flavour
             .clone()
-            .unwrap_or_else(|| target.default_flavour.clone());
+            .unwrap_or_else(|| selection.product.flavour.clone());
 
-        let is_libos = target.arch == "host";
+        let is_libos = selection.board.arch == "host";
         let arch = if is_libos {
             Arch::host()
         } else {
-            Arch::from_str(&target.arch).unwrap_or_else(|_| {
+            Arch::from_str(&selection.board.arch).unwrap_or_else(|_| {
                 panic!(
-                    "Unknown arch '{}' in target '{}'",
-                    target.arch, args.machine
+                    "Unknown arch '{}' in board '{}'",
+                    selection.board.arch, selection.board_name
                 )
             })
         };
 
-        let mut features: HashSet<String> = target.cargo_features().into_iter().collect();
+        let mut features: HashSet<String> = selection.cargo_features().into_iter().collect();
 
         // Add extra features from CLI.
         if let Some(extra) = &args.extra_features {
@@ -142,36 +149,40 @@ impl BuildConfig {
             }
         }
 
-        // Build ZCORE_CMDLINE from target config.
+        // Build ZCORE_CMDLINE from the product config.
         // Environment override (e.g. from Makefile `LOG=info`) takes precedence.
-        let is_linux = features.contains("linux");
         if let Ok(cmdline) = std::env::var("ZCORE_CMDLINE") {
             env.insert("ZCORE_CMDLINE".into(), cmdline.into());
         } else {
-            let cmdline = target.build_cmdline(None, is_linux);
+            let cmdline = selection.build_cmdline(None);
             env.insert("ZCORE_CMDLINE".into(), cmdline.into());
         }
 
-        // Pass the core count from the target config to the kernel build.
+        // Pass the core count from the board config to the kernel build.
         // Used by hal-impl and executor to size per-CPU data structures.
-        env.insert("ZCORE_MAX_CPUS".into(), target.cores.to_string().into());
+        env.insert(
+            "ZCORE_MAX_CPUS".into(),
+            selection.board.cores.to_string().into(),
+        );
 
         // Pass the linker script path so build.rs can track it for
         // rebuild-on-change. Without this, linker script edits would
         // not trigger a kernel rebuild.
-        if !target.linker_script.is_empty() {
+        if !selection.board.linker_script.is_empty() {
             env.insert(
                 "ZCORE_LINKER_SCRIPT".into(),
-                target.linker_script.clone().into(),
+                selection.board.linker_script.clone().into(),
             );
         }
 
         // Generate the rustc target spec JSON (not needed for libos).
+        // The JSON is named after the full selection so cargo keeps an
+        // independent build directory per product.board pair.
         let target_json = if is_libos {
             // LibOS uses the host's native target -- no JSON needed.
             PathBuf::new()
         } else {
-            target.write_target_json(&args.machine)
+            selection.write_target_json()
         };
 
         // Zircon is always the base — build userstart and petal ZBI
@@ -187,7 +198,10 @@ impl BuildConfig {
             if let Ok(val) = std::env::var("PETAL_ZBI") {
                 env.insert("PETAL_ZBI".into(), val.into());
             } else {
-                let zbi_path = crate::petal::build_petal_zbi(arch, "shell");
+                // See petal::zbi_bin_for: boards without a rootfs boot
+                // the product's init program from the embedded ZBI.
+                let zbi_bin = crate::petal::zbi_bin_for(&selection.product.root_proc);
+                let zbi_path = crate::petal::build_petal_zbi(arch, zbi_bin);
                 env.insert("PETAL_ZBI".into(), zbi_path.into_os_string());
             }
         }
@@ -206,16 +220,32 @@ impl BuildConfig {
             env.insert("RUSTFLAGS".into(), flags.into());
         }
 
+        // LibOS: give each selection its own cargo target directory so
+        // products don't clobber each other's host-build artifacts
+        // (there is no per-selection target-spec JSON for host builds).
+        if is_libos {
+            env.insert(
+                "CARGO_TARGET_DIR".into(),
+                PROJECT_DIR
+                    .join("target")
+                    .join(selection.name())
+                    .into_os_string(),
+            );
+        }
+
+        let stub_features = selection.board.stub_features.clone();
+        let cores = selection.board.cores;
+
         Self {
             arch,
-            target_name: args.machine.clone(),
+            selection,
             is_libos,
             debug: args.debug,
             env,
             features,
             target_json,
-            cores: target.cores,
-            stub_features: target.stub_features,
+            cores,
+            stub_features,
         }
     }
 
@@ -223,7 +253,7 @@ impl BuildConfig {
     pub(crate) fn target_file_path(&self) -> PathBuf {
         PROJECT_DIR
             .join("target")
-            .join(&self.target_name)
+            .join(self.selection.name())
             .join(if self.debug { "debug" } else { "release" })
             .join("kernel")
     }
@@ -301,25 +331,25 @@ impl OutArgs {
 impl QemuArgs {
     /// Launches in qemu.
     pub fn qemu(self) {
-        let target_name = self.machine.clone();
-
-        // Build the kernel -- flavour comes from TOML default or --flavour override.
+        // Build the kernel -- flavour comes from the product or --flavour override.
         let mut build_config = BuildConfig::from_args(BuildArgs {
             extra_features: None,
-            machine: target_name.clone(),
+            machine: self.machine.clone(),
             flavour: self.flavour.clone(),
             debug: self.debug,
         });
+        let selection_name = build_config.selection.name();
+        let manifest =
+            crate::rootfs::Manifest::parse(&build_config.selection.product.rootfs_contents);
 
-        // Zircon is always the base. Linux is additive.
-        let is_linux = build_config.features.contains("linux");
-        // Always provide a rootfs — it contains both Linux and Zircon
-        // binaries regardless of which flavour features are enabled.
+        // Always provide a rootfs — the manifest decides its contents
+        // (busybox + petal for linux-flavour products, petal programs
+        // for zircon-only products).
         let needs_rootfs = true;
         let arch = build_config.arch;
         let arch_str = arch.name();
 
-        // Determine the rootfs image path: custom or default.
+        // Determine the rootfs image path: custom or manifest default.
         let rootfs_img = if let Some(ref custom) = self.rootfs_image {
             if !custom.is_file() {
                 panic!(
@@ -330,21 +360,18 @@ impl QemuArgs {
             println!("Using custom rootfs image: {}", custom.display());
             custom.clone()
         } else {
-            // Build rootfs with all binaries (busybox + petal programs).
-            // Same rootfs regardless of flavour — ROOTPROC selects init.
-            let rootfs = ArchArg { arch }.linux_rootfs();
-            rootfs.image();
-            rootfs.image_path()
+            // Build the rootfs image selected by the product's
+            // rootfs-contents manifest.
+            manifest.build_image(arch)
         };
 
         let obj = build_config.target_file_path();
         // Override the cmdline with --log if specified (QemuArgs has a --log flag).
         // The ZCORE_CMDLINE was already set by BuildConfig::from_args() using
-        // the target config. If --log was explicitly passed, rebuild with that
+        // the product config. If --log was explicitly passed, rebuild with that
         // log level. If ZCORE_CMDLINE came from the environment, don't override.
-        if std::env::var("ZCORE_CMDLINE").is_err() {
-            let target = TargetConfig::load(&target_name);
-            let cmdline = target.build_cmdline(Some(&self.log), is_linux);
+        if std::env::var("ZCORE_CMDLINE").is_err() && self.log.is_some() {
+            let cmdline = build_config.selection.build_cmdline(self.log.as_deref());
             build_config
                 .env
                 .insert("ZCORE_CMDLINE".into(), cmdline.into());
@@ -362,7 +389,19 @@ impl QemuArgs {
         };
         // Set qemu arguments
         let mut qemu = Qemu::system(arch_str);
-        qemu.args(["-m", "2G"])
+        // QEMU launch parameters come from the board's [qemu] section.
+        let qemu_cfg = build_config
+            .selection
+            .board
+            .qemu
+            .clone()
+            .unwrap_or_else(|| {
+                panic!(
+                    "board '{}' has no [qemu] section — it cannot be launched in QEMU",
+                    build_config.selection.board_name
+                )
+            });
+        qemu.args(["-m", &qemu_cfg.memory])
             .args(["-display", "none"])
             .arg("-no-reboot")
             .arg("-nographic")
@@ -375,7 +414,7 @@ impl QemuArgs {
         }
         match arch {
             Arch::Riscv64 => {
-                qemu.args(["-machine", "virt"])
+                qemu.args(["-machine", &qemu_cfg.machine])
                     .arg("-kernel")
                     .arg(&bin)
                     .args(["-bios", "default"])
@@ -389,7 +428,7 @@ impl QemuArgs {
                 // Create a bootable BIOS disk image using the x86-bootimage tool
                 let disk_image = PROJECT_DIR
                     .join("target")
-                    .join(&target_name)
+                    .join(&selection_name)
                     .join(if self.debug { "debug" } else { "release" })
                     .join("boot.img");
 
@@ -447,8 +486,9 @@ impl QemuArgs {
                         "edk2-x86_64-code.fd not found. Install QEMU UEFI firmware \
                          (e.g., `brew install qemu` on macOS or `apt install ovmf` on Ubuntu).",
                     );
-                qemu.args(["-machine", "q35"])
-                    .args(["-cpu", "qemu64,+rdrand"])
+                let cpu = qemu_cfg.cpu.clone().unwrap_or_else(|| "qemu64".to_string());
+                qemu.args(["-machine", &qemu_cfg.machine])
+                    .args(["-cpu", &cpu])
                     .args(["-serial", "mon:stdio"])
                     .args([
                         "-drive",
@@ -464,7 +504,7 @@ impl QemuArgs {
                 // initrd, DTB, and UEFI stub, then boot via edk2 firmware.
                 let release_dir = PROJECT_DIR
                     .join("target")
-                    .join(&target_name)
+                    .join(&selection_name)
                     .join(if self.debug { "debug" } else { "release" });
 
                 // Build UEFI stub
@@ -594,14 +634,20 @@ impl QemuArgs {
                     "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
                     "/usr/share/qemu/edk2-aarch64-code.fd",
                     "/usr/share/AAVMF/AAVMF_CODE.fd",
+                    // Ubuntu's qemu-efi-aarch64 package (installed by make setup)
+                    "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
                 ];
                 let edk2 = edk2_paths
                     .iter()
                     .find(|p| std::path::Path::new(p).exists())
                     .expect("edk2-aarch64-code.fd not found. Install QEMU UEFI firmware.");
 
-                qemu.args(["-machine", "virt"])
-                    .args(["-cpu", "cortex-a72"])
+                let cpu = qemu_cfg
+                    .cpu
+                    .clone()
+                    .unwrap_or_else(|| "cortex-a72".to_string());
+                qemu.args(["-machine", &qemu_cfg.machine])
+                    .args(["-cpu", &cpu])
                     .args(["-nographic"])
                     .args([
                         "-drive",
@@ -617,8 +663,12 @@ impl QemuArgs {
                 // Direct kernel boot with raw binary. QEMU loads it at
                 // RAM base (0x40000000) and passes DTB pointer in x0.
                 // The kernel's boot.s sets up page tables and MMU.
-                qemu.args(["-machine", "virt"])
-                    .args(["-cpu", "cortex-a72"])
+                let cpu = qemu_cfg
+                    .cpu
+                    .clone()
+                    .unwrap_or_else(|| "cortex-a72".to_string());
+                qemu.args(["-machine", &qemu_cfg.machine])
+                    .args(["-cpu", &cpu])
                     .arg("-kernel")
                     .arg(&bin)
                     .args(["-serial", "mon:stdio"]);
@@ -631,6 +681,10 @@ impl QemuArgs {
                 // Zircon mode without rootfs: ZBI is linked into the kernel binary
             }
         }
+        // Append any extra QEMU arguments from the board config.
+        for extra in &qemu_cfg.extra {
+            qemu.arg(extra);
+        }
         qemu.optional(&self.gdb, |qemu, port| {
             qemu.args(["-S", "-gdb", &format!("tcp::{port}")]);
         })
@@ -640,8 +694,8 @@ impl QemuArgs {
 
 impl GdbArgs {
     pub fn gdb(&self) {
-        let target = TargetConfig::load(&self.machine);
-        let arch = Arch::from_str(&target.arch).expect("unknown arch");
+        let selection = Selection::resolve(self.machine.as_deref());
+        let arch = Arch::from_str(&selection.board.arch).expect("unknown arch");
         match arch {
             Arch::Riscv64 => {
                 Ext::new("riscv64-unknown-elf-gdb")

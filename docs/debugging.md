@@ -34,8 +34,8 @@ The unstripped kernel ELF with full debug symbols is at:
 
 | Arch    | Path                                    |
 |---------|-----------------------------------------|
-| x86_64  | `target/qemu-x86_64/release/kernel`     |
-| aarch64 | `target/qemu-aarch64/release/kernel`    |
+| x86_64  | `target/busybox.qemu-x86_64/release/kernel`     |
+| aarch64 | `target/busybox.qemu-aarch64/release/kernel`    |
 
 The `release` profile includes debug info (`debug = true` in
 `Cargo.toml`), so symbols are available even in optimised builds.
@@ -124,7 +124,7 @@ b hal_impl::imp::timer::timer_set
 2. Start QEMU: `make debug-x86-core-tests CORE_TESTS_FILTER='...'`
 3. In RustRover: **Run > Attach to Process > Remote GDB Server**
    - Host: `localhost`, Port: `1234`
-   - Symbol file: `target/qemu-x86_64/release/kernel`
+   - Symbol file: `target/core-tests.qemu-x86_64/release/kernel`
 
 ## Notes
 

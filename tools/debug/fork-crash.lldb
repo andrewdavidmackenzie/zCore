@@ -7,7 +7,7 @@
 # This sets a breakpoint at the crashing instruction (0x4cf55c in busybox)
 # and a breakpoint at the page fault handler to catch the crash.
 
-file target/qemu-aarch64/release/kernel
+file target/busybox.qemu-aarch64/release/kernel
 gdb-remote 1234
 
 # Break at the page fault error path in linux-loader

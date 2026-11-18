@@ -16,11 +16,12 @@ set -euo pipefail
 
 ARCH="x86_64"
 
-# Read core count from target config
+# Read core count from board config
 source "$(dirname "$0")/get-target-cores.sh"
-CORES=$(get_target_cores "$ARCH")
+CORES=$(get_target_cores "qemu-$ARCH")
+CONFIG="core-tests.qemu-$ARCH"
 PREBUILT_DIR="prebuilt/zircon-test/x86_64"
-ROOTFS_DIR="target/rootfs/zircon/$ARCH"
+ROOTFS_DIR="target/rootfs/core-tests/$ARCH"
 SESSION_TIMEOUT=300  # 5 minutes for the full test suite
 
 # Verify prebuilts exist
@@ -49,9 +50,9 @@ echo "   Copied test binary + 7 shared libraries to rootfs"
 echo "==> Building rootfs SFS image..."
 # The xtask zircon-rootfs command builds petal programs too, but we
 # just need the SFS image. Force rebuild by removing the old image.
-ROOTFS_IMG="target/qemu-$ARCH/release/$ARCH-zircon.img"
+ROOTFS_IMG="target/rootfs/images/core-tests-$ARCH.img"
 rm -f "$ROOTFS_IMG"
-cargo xtask zircon-rootfs --arch "$ARCH" 2>&1 | tail -3
+cargo xtask zircon-rootfs --arch "$ARCH" --manifest core-tests 2>&1 | tail -3
 
 if [ ! -f "$ROOTFS_IMG" ]; then
     echo "ERROR: rootfs image not found at $ROOTFS_IMG"
@@ -60,10 +61,10 @@ fi
 
 # Step 3: Build kernel for Zircon mode
 echo "==> Building kernel..."
-ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/core-tests-standalone" cargo bin -m qemu-$ARCH 2>&1 | tail -3
+cargo bin -m "$CONFIG" 2>&1 | tail -3
 
-KERNEL_ELF="target/qemu-$ARCH/release/kernel"
-BOOT_IMG="target/qemu-$ARCH/release/boot.img"
+KERNEL_ELF="target/$CONFIG/release/kernel"
+BOOT_IMG="target/$CONFIG/release/boot.img"
 
 # Build UEFI boot image with rootfs embedded
 BOOTIMAGE_TOOL="tools/x86-bootimage/target/release/x86-bootimage"

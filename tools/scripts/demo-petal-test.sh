@@ -4,7 +4,8 @@
 # /bin/zircon-hello and /bin/linux-hello from the petal prompt, verify
 # both produce the expected output.
 #
-# Usage: tools/scripts/demo-petal-test.sh <arch>
+# Usage: tools/scripts/demo-petal-test.sh <product.board> <arch>
+#   selection: e.g. petal-linux.qemu-aarch64
 #   arch: aarch64
 #
 # Exit code 0 = all tests passed
@@ -12,12 +13,14 @@
 
 set -euo pipefail
 
-ARCH="${1:?Usage: $0 <arch>}"
+CONFIG="${1:?Usage: $0 <product.board> <arch>}"
+ARCH="${2:?Usage: $0 <product.board> <arch>}"
+BOARD="${CONFIG##*.}"
 TIMEOUT=30
 
-# Read core count from target config
+# Read core count from board config
 source "$(dirname "$0")/get-target-cores.sh"
-CORES=$(get_target_cores "$ARCH")
+CORES=$(get_target_cores "$BOARD")
 
 case "$ARCH" in
   aarch64)
@@ -35,12 +38,12 @@ case "$ARCH" in
 esac
 
 # Build the kernel with Linux feature and petal shell as init
-echo "==> Building kernel (petal shell + linux)..."
+echo "==> Building kernel (petal shell + linux, $CONFIG)..."
 ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/shell" \
-  cargo bin -m "qemu-${ARCH}" --flavour linux
+  cargo bin -m "$CONFIG"
 
-KERNEL="target/qemu-${ARCH}/release/kernel.bin"
-ROOTFS="target/qemu-${ARCH}/release/${ARCH}-linux.img"
+KERNEL="target/${CONFIG}/release/kernel.bin"
+ROOTFS="target/rootfs/images/full-${ARCH}.img"
 
 if [ ! -f "$KERNEL" ]; then
   echo "FAIL: kernel not found at $KERNEL"

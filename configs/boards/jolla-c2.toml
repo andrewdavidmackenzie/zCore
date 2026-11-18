@@ -5,16 +5,18 @@
 # Boots from SD card via U-Boot (extlinux.conf).
 #
 # GICv3 interrupt controller, framebuffer console for output.
+#
+# The board ships no rootfs; Zircon-only products boot the petal shell
+# from the ZBI embedded in the kernel image.
 
 arch = "aarch64"
 cores = 8
 linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker_jollac2.ld"
 drivers = ["gic-v3"]
 features = ["board-jollac2"]
-
-[cmdline]
-log = "info"
-root-proc = "/bin/sh"
+boot-method = "sdcard"
+flash-method = "sd"
+default-product = "petal"
 
 # No [qemu] section -- this is real hardware only.
 

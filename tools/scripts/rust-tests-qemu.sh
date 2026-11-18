@@ -2,24 +2,27 @@
 #
 # Run built-in Rust zircon-tests on bare-metal QEMU.
 #
-# Usage: tools/scripts/rust-tests-qemu.sh <arch>
+# Usage: tools/scripts/rust-tests-qemu.sh <arch> [product.board]
 #   arch: aarch64, x86_64, riscv64
+#   selection: defaults to rust-tests.qemu-<arch>
 #
-# The kernel must be built with --features baremetal-test and
-# ROOTPROC=__test__ in the cmdline.
+# The kernel must be built via `make rust-tests-build` (the rust-tests
+# product adds the baremetal-test feature).
 
 set -euo pipefail
 
-ARCH="${1:?Usage: $0 <arch>}"
+ARCH="${1:?Usage: $0 <arch> [product.board]}"
+CONFIG="${2:-rust-tests.qemu-${ARCH}}"
+BOARD="${CONFIG##*.}"
 TIMEOUT="${RUST_TESTS_TIMEOUT:-120}"
 
-# Read core count from target config
+# Read core count from board config
 source "$(dirname "$0")/get-target-cores.sh"
-CORES=$(get_target_cores "$ARCH")
+CORES=$(get_target_cores "$BOARD")
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/qemu-aarch64/release/kernel.bin"
+    KERNEL="target/${CONFIG}/release/kernel.bin"
     QEMU_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
@@ -29,7 +32,7 @@ case "$ARCH" in
     )
     ;;
   x86_64)
-    KERNEL="target/qemu-x86_64/release/boot.img"
+    KERNEL="target/${CONFIG}/release/boot.img"
     # Find OVMF firmware — location varies by distro
     OVMF=""
     for candidate in \
@@ -56,7 +59,7 @@ case "$ARCH" in
     )
     ;;
   riscv64)
-    KERNEL="target/qemu-riscv64/release/kernel.bin"
+    KERNEL="target/${CONFIG}/release/kernel.bin"
     QEMU_CMD=(
       qemu-system-riscv64
       -m 2G -display none -no-reboot -nographic

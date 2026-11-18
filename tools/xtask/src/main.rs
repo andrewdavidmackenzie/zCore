@@ -14,6 +14,7 @@ mod config;
 mod errors;
 mod linux;
 mod petal;
+mod rootfs;
 mod sfs_image;
 
 use arch::{Arch, ArchArg};
@@ -132,6 +133,21 @@ enum Commands {
     /// ```
     AuditTests,
 
+    /// Manages the build configuration: persistent selection and
+    /// discovery of products and boards.
+    ///
+    /// Mirrors Fuchsia's `fx set`/`fx list-products`/`fx list-boards`.
+    ///
+    /// # Example
+    ///
+    /// ```bash
+    /// cargo zcore set petal.qemu-aarch64
+    /// cargo zcore set
+    /// cargo zcore list-products
+    /// cargo zcore list-boards
+    /// ```
+    Zcore(ZcoreArgs),
+
     /// Dumps the kernel disassembly.
     ///
     /// The default output is `target/kernel.asm`.
@@ -143,19 +159,20 @@ enum Commands {
     /// ```
     Asm(OutArgs),
 
-    /// Builds zCore for a target.
+    /// Builds zCore for a selection.
     ///
-    /// Reads configuration from `targets/<name>.toml`. The target
-    /// defines architecture, drivers, and features. Flavour
-    /// defaults to the TOML's `default-flavour` but can be
+    /// Composes a board (configs/boards/) with a product
+    /// (configs/products/). Pass `<product>.<board>` (e.g.
+    /// `petal.qemu-aarch64`); bare board names are deprecated legacy
+    /// syntax. Flavour defaults to the product's `flavour` and can be
     /// overridden with `--flavour`.
     ///
     /// # Example
     ///
     /// ```bash
-    /// cargo zcore-build -m qemu-aarch64
-    /// cargo zcore-build -m raspi400
-    /// cargo zcore-build -m libos --flavour linux
+    /// cargo zcore-build -m petal.qemu-aarch64
+    /// cargo zcore-build -m busybox.qemu-x86_64
+    /// cargo zcore-build -m petal.libos
     /// ```
     ZcoreBuild(BuildArgs),
 
@@ -175,8 +192,8 @@ enum Commands {
     /// # Example
     ///
     /// ```bash
-    /// cargo qemu -m qemu-aarch64 --smp 4
-    /// cargo qemu -m qemu-x86_64 --log info
+    /// cargo qemu -m petal.qemu-aarch64 --smp 4
+    /// cargo qemu -m busybox.qemu-x86_64 --log info
     /// ```
     Qemu(QemuArgs),
 
@@ -185,7 +202,7 @@ enum Commands {
     /// # Example
     ///
     /// ```bash
-    /// cargo gdb -m qemu-riscv64 --port 1234
+    /// cargo gdb -m petal.qemu-riscv64 --port 1234
     /// ```
     Gdb(GdbArgs),
 
@@ -257,6 +274,20 @@ enum Commands {
     /// ```
     Image(ArchArg),
 
+    /// Builds the rootfs image for a selection's product manifest.
+    ///
+    /// The manifest comes from the product's `rootfs-contents` field
+    /// ("full", "petal", or "core-tests"). With `--print-path`, only
+    /// the image path is printed (for scripts) and nothing is built.
+    ///
+    /// # Example
+    ///
+    /// ```bash
+    /// cargo xtask rootfs-image -m petal.qemu-aarch64
+    /// cargo xtask rootfs-image -m petal.qemu-aarch64 --print-path
+    /// ```
+    RootfsImage(RootfsImageArgs),
+
     /// Builds the libos rootfs and puts it into libc test.
     ///
     /// > **NOTICE** This may not be the final form of this command, so this command has no alias.
@@ -304,15 +335,69 @@ enum Commands {
     /// Builds a Zircon rootfs image (SFS format) containing petal programs.
     ///
     /// This creates an SFS image with petal binaries that can be used
-    /// with `cargo qemu --zircon --rootfs-image`. This aligns the
+    /// with `cargo qemu --rootfs-image`. This aligns the
     /// Zircon boot process with Linux: both use an SFS rootfs image.
     ///
     /// # Example
     ///
     /// ```bash
     /// cargo xtask zircon-rootfs --arch aarch64
+    /// cargo xtask zircon-rootfs --arch x86_64 --manifest core-tests
     /// ```
-    ZirconRootfs(ArchArg),
+    ZirconRootfs(ZirconRootfsArgs),
+}
+
+#[derive(Args)]
+struct ZcoreArgs {
+    #[clap(subcommand)]
+    command: ZcoreCommand,
+}
+
+#[derive(Subcommand)]
+enum ZcoreCommand {
+    /// Sets the persistent build selection (`<product>.<board>`).
+    ///
+    /// Validates the pairing and writes it to `configs/config.toml`
+    /// (gitignored). Build commands (`cargo qemu`, `cargo bin`, ...)
+    /// use the saved selection when `-m` is not passed; passing `-m`
+    /// explicitly is a one-off override that does not rewrite the file.
+    ///
+    /// With no argument, prints the current selection.
+    ///
+    /// # Example
+    ///
+    /// ```bash
+    /// cargo zcore set petal.qemu-aarch64
+    /// ```
+    Set {
+        /// Selection to save: `<product>.<board>`.
+        selection: Option<String>,
+    },
+    /// Lists available products, one per line.
+    ListProducts,
+    /// Lists available boards, one per line.
+    ListBoards,
+}
+
+#[derive(Args)]
+struct RootfsImageArgs {
+    /// Build selection: `<product>.<board>` (e.g., "petal.qemu-aarch64").
+    /// If omitted, uses the selection saved by `cargo zcore set`.
+    #[clap(long, short)]
+    machine: Option<String>,
+    /// Print the image path without building (for scripts).
+    #[clap(long)]
+    print_path: bool,
+}
+
+#[derive(Args)]
+struct ZirconRootfsArgs {
+    #[clap(flatten)]
+    arch: ArchArg,
+    /// Rootfs manifest to build: "petal" (petal programs only) or
+    /// "core-tests" (petal + prebuilt Fuchsia test binaries).
+    #[clap(long, default_value = "petal")]
+    manifest: String,
 }
 
 #[derive(Args)]
@@ -372,6 +457,44 @@ fn main() {
         ZcoreBuild(args) => {
             BuildConfig::from_args(args).invoke(os_xtask_utils::Cargo::build);
         }
+        Zcore(ZcoreArgs { command }) => match command {
+            ZcoreCommand::Set { selection } => match selection {
+                Some(spec) => {
+                    let sel = crate::config::Selection::parse(&spec);
+                    sel.save();
+                    println!(
+                        "Saved selection to {}",
+                        crate::config::Selection::config_path().display()
+                    );
+                    sel.print_summary();
+                }
+                None => match crate::config::Selection::saved() {
+                    Some(saved) => {
+                        let sel = crate::config::Selection::parse(&saved);
+                        sel.print_summary();
+                    }
+                    None => {
+                        println!(
+                            "No selection saved. Use: cargo zcore set <product>.<board>\n\
+                             Products: {}\n\
+                             Boards:   {}",
+                            crate::config::ProductConfig::list().join(" "),
+                            crate::config::BoardConfig::list().join(" ")
+                        );
+                    }
+                },
+            },
+            ZcoreCommand::ListProducts => {
+                for p in crate::config::ProductConfig::list() {
+                    println!("{p}");
+                }
+            }
+            ZcoreCommand::ListBoards => {
+                for b in crate::config::BoardConfig::list() {
+                    println!("{b}");
+                }
+            }
+        },
         Asm(args) => args.asm(),
         Bin(args) => {
             // Discard return value
@@ -390,7 +513,24 @@ fn main() {
             petal::build_petal_zbi(arg.arch.arch, &arg.bin);
         }
         ZirconRootfs(arg) => {
-            petal::build_zircon_rootfs_image(arg.arch);
+            let manifest = rootfs::Manifest::parse(&arg.manifest);
+            manifest.build_image(arg.arch.arch);
+        }
+        RootfsImage(args) => {
+            use std::str::FromStr;
+            let selection = config::Selection::resolve(args.machine.as_deref());
+            let arch = Arch::from_str(&selection.board.arch).unwrap_or_else(|_| {
+                panic!(
+                    "board '{}' is not a QEMU/bare-metal board — it has no rootfs image",
+                    selection.board_name
+                )
+            });
+            let manifest = rootfs::Manifest::parse(&selection.product.rootfs_contents);
+            if args.print_path {
+                println!("{}", manifest.image_path(arch).display());
+            } else {
+                manifest.build_image(arch);
+            }
         }
     }
 }
@@ -439,8 +579,9 @@ fn unset_git_proxy(global: bool) {
 /// Checks code style and runs clippy on all code:
 ///   - workspace format check
 ///   - host tools (xtask, zircon-abi)
-///   - libos (linux and zircon flavours, from targets/libos.toml)
-///   - bare-metal kernel for each architecture and flavour (from targets/qemu-<arch>.toml)
+///   - libos (busybox and petal products on the libos board)
+///   - bare-metal kernel for each architecture and product
+///     (busybox.qemu-<arch> and petal.qemu-<arch>)
 ///   - userspace programs (petal, userstart) for each architecture
 ///   - tests (cargo test on host-buildable crates)
 fn check_style() {
@@ -457,44 +598,44 @@ fn check_style() {
         .args(["--", "--deny", "warnings"])
         .invoke();
 
-    println!("==> Clippy: libos (linux)...");
+    println!("==> Clippy: libos (busybox — linux flavour)...");
     BuildConfig::from_args(BuildArgs {
         extra_features: None,
-        machine: "libos".into(),
-        flavour: Some("linux".into()),
-        debug: false,
-    })
-    .invoke(Cargo::clippy);
-
-    println!("==> Clippy: libos (zircon)...");
-    BuildConfig::from_args(BuildArgs {
-        extra_features: None,
-        machine: "libos".into(),
+        machine: Some("busybox.libos".into()),
         flavour: None,
         debug: false,
     })
     .invoke(Cargo::clippy);
 
-    println!("==> Clippy: bare-metal kernel (linux)...");
+    println!("==> Clippy: libos (petal — zircon)...");
+    BuildConfig::from_args(BuildArgs {
+        extra_features: None,
+        machine: Some("petal.libos".into()),
+        flavour: None,
+        debug: false,
+    })
+    .invoke(Cargo::clippy);
+
+    println!("==> Clippy: bare-metal kernel (busybox — linux flavour)...");
     for arch in [Arch::Aarch64, Arch::X86_64, Arch::Riscv64] {
         println!("    {}", arch.name());
         BuildConfig::from_args(BuildArgs {
             extra_features: None,
-            machine: format!("qemu-{}", arch.name()),
-            flavour: Some("linux".into()),
+            machine: Some(format!("busybox.qemu-{}", arch.name())),
+            flavour: None,
             debug: false,
         })
         .invoke(Cargo::clippy);
     }
 
-    println!("==> Clippy: bare-metal kernel (zircon)...");
+    println!("==> Clippy: bare-metal kernel (petal — zircon)...");
     // riscv64 skipped: zircon-abi has compile_error! for 8-arg syscalls
     // on riscv64, which blocks the userstart build needed for zircon clippy.
     for arch in [Arch::Aarch64, Arch::X86_64] {
         println!("    {}", arch.name());
         BuildConfig::from_args(BuildArgs {
             extra_features: None,
-            machine: format!("qemu-{}", arch.name()),
+            machine: Some(format!("petal.qemu-{}", arch.name())),
             flavour: None,
             debug: false,
         })
@@ -612,11 +753,12 @@ mod libos {
     /// Runs an application in libos mode.
     pub(super) fn linux_run(args: String) {
         rootfs(false);
-        // Build via BuildConfig so features come from targets/libos.toml.
+        // Build via BuildConfig so features come from the product/board
+        // selection (busybox.libos).
         let build_config = BuildConfig::from_args(BuildArgs {
             extra_features: None,
-            machine: "libos".into(),
-            flavour: Some("linux".into()),
+            machine: Some("busybox.libos".into()),
+            flavour: None,
             debug: false,
         });
         // Launch!
@@ -640,11 +782,11 @@ mod libos {
             Arch::host().name()
         );
 
-        // BuildConfig::from_args handles everything: features from
-        // targets/libos.toml, flavour, and zircon prerequisites.
+        // BuildConfig::from_args handles everything: features from the
+        // petal.libos selection, and zircon prerequisites.
         let build_config = BuildConfig::from_args(BuildArgs {
             extra_features: None,
-            machine: "libos".into(),
+            machine: Some("petal.libos".into()),
             flavour: None,
             debug: false,
         });

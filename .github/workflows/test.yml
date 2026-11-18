@@ -103,10 +103,10 @@ jobs:
         run: brew install qemu
 
       - name: Build kernel and rootfs
-        run: make build ARCH=aarch64
+        run: make build CONFIG=busybox.qemu-aarch64 ARCH=aarch64
 
       - name: Boot smoke test
-        run: make boot-test ARCH=aarch64
+        run: make boot-test CONFIG=busybox.qemu-aarch64 ARCH=aarch64
 
   boot-smoke-test-x86_64:
     name: Boot Smoke Test (x86_64)
@@ -137,10 +137,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf qemu-utils wget
 
       - name: Build kernel and rootfs
-        run: make build ARCH=x86_64
+        run: make build CONFIG=busybox.qemu-x86_64 ARCH=x86_64
 
       - name: Boot smoke test
-        run: make boot-test ARCH=x86_64
+        run: make boot-test CONFIG=busybox.qemu-x86_64 ARCH=x86_64
 
   boot-smoke-test-riscv64:
     name: Boot Smoke Test (riscv64)
@@ -168,10 +168,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qemu-system-misc qemu-utils wget
 
       - name: Build kernel and rootfs
-        run: make build ARCH=riscv64
+        run: make build CONFIG=busybox.qemu-riscv64 ARCH=riscv64
 
       - name: Boot smoke test
-        run: make boot-test ARCH=riscv64
+        run: make boot-test CONFIG=busybox.qemu-riscv64 ARCH=riscv64
 
   zircon-boot-test:
     name: Zircon Boot Test (aarch64)
@@ -207,7 +207,7 @@ jobs:
         run: make zircon-boot-test ARCH=aarch64
 
       - name: Zircon rootfs boot test
-        run: tools/scripts/zircon-rootfs-test.sh aarch64
+        run: tools/scripts/zircon-rootfs-test.sh zircon-hello.qemu-aarch64 aarch64
 
   zircon-boot-test-x86:
     name: Zircon Boot Test (x86_64)
@@ -360,10 +360,10 @@ jobs:
         run: brew install qemu
 
       - name: Build kernel and rootfs
-        run: make build ARCH=aarch64
+        run: make build CONFIG=busybox.qemu-aarch64 ARCH=aarch64
 
       - name: Run libc-test
-        run: make libc-test ARCH=aarch64
+        run: make libc-test CONFIG=busybox.qemu-aarch64 ARCH=aarch64
 
   libc-test-ubuntu:
     name: Libc Test (aarch64, ubuntu)
@@ -393,10 +393,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-utils wget
 
       - name: Build kernel and rootfs
-        run: make build ARCH=aarch64
+        run: make build CONFIG=busybox.qemu-aarch64 ARCH=aarch64
 
       - name: Run libc-test
-        run: make libc-test ARCH=aarch64
+        run: make libc-test CONFIG=busybox.qemu-aarch64 ARCH=aarch64
 
   libc-test-x86_64:
     name: Libc Test (x86_64)
@@ -426,7 +426,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf qemu-utils wget
 
       - name: Build kernel and rootfs
-        run: make build ARCH=x86_64
+        run: make build CONFIG=busybox.qemu-x86_64 ARCH=x86_64
 
       - name: Run libc-test
-        run: make libc-test ARCH=x86_64
+        run: make libc-test CONFIG=busybox.qemu-x86_64 ARCH=x86_64

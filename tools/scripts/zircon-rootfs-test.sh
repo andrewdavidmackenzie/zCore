@@ -4,7 +4,8 @@
 # image, boot QEMU with it via --rootfs-image, verify the init
 # program runs successfully.
 #
-# Usage: tools/scripts/zircon-rootfs-test.sh <arch>
+# Usage: tools/scripts/zircon-rootfs-test.sh <product.board> <arch>
+#   selection: e.g. zircon-hello.qemu-aarch64
 #   arch: aarch64 (others may be added later)
 #
 # Exit code 0 = test passed
@@ -12,18 +13,19 @@
 
 set -euo pipefail
 
-ARCH="${1:?Usage: $0 <arch>}"
+CONFIG="${1:?Usage: $0 <product.board> <arch>}"
+ARCH="${2:?Usage: $0 <product.board> <arch>}"
+BOARD="${CONFIG##*.}"
 TIMEOUT=30
 
-# Read core count from target config
+# Read core count from board config
 source "$(dirname "$0")/get-target-cores.sh"
-CORES=$(get_target_cores "$ARCH")
+CORES=$(get_target_cores "$BOARD")
 
 case "$ARCH" in
   aarch64)
     RUST_TARGET="aarch64-unknown-none-softfloat"
-    KERNEL="target/qemu-aarch64/release/kernel.bin"
-    ROOTFS_IMG="target/qemu-${ARCH}/release/${ARCH}-zircon.img"
+    KERNEL="target/${CONFIG}/release/kernel.bin"
     QEMU_BASE_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
@@ -39,6 +41,7 @@ esac
 
 echo "==> Building Zircon rootfs image..."
 cargo xtask zircon-rootfs --arch "$ARCH"
+ROOTFS_IMG=$(cargo xtask rootfs-image -m "$CONFIG" --print-path)
 
 if [ ! -f "$ROOTFS_IMG" ]; then
   echo "FAIL: rootfs image not found at $ROOTFS_IMG"
@@ -64,19 +67,19 @@ ZBI="target/petal/${ARCH}/petal.zbi"
 USERSTART_ELF="$(pwd)/$USERSTART" \
   PETAL_ZBI="$(pwd)/$ZBI" \
   ZCORE_CMDLINE="LOG=${LOG:-info} ROOTPROC=/bin/hello" \
-  cargo zcore-build -m "qemu-${ARCH}"
+  cargo zcore-build -m "$CONFIG"
 
 # Strip ELF to raw binary (QEMU needs raw binary for DTB passthrough)
 OBJCOPY=$(find "$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1)
 if [ -n "$OBJCOPY" ]; then
-  "$OBJCOPY" --strip-all -O binary "target/qemu-aarch64/release/kernel" "$KERNEL"
+  "$OBJCOPY" --strip-all -O binary "target/${CONFIG}/release/kernel" "$KERNEL"
 elif command -v llvm-objcopy >/dev/null 2>&1; then
-  llvm-objcopy --strip-all -O binary "target/qemu-aarch64/release/kernel" "$KERNEL"
+  llvm-objcopy --strip-all -O binary "target/${CONFIG}/release/kernel" "$KERNEL"
 elif command -v rust-objcopy >/dev/null 2>&1; then
-  rust-objcopy --strip-all -O binary "target/qemu-aarch64/release/kernel" "$KERNEL"
+  rust-objcopy --strip-all -O binary "target/${CONFIG}/release/kernel" "$KERNEL"
 else
   echo "WARNING: no objcopy found, using ELF (DTB may not work)"
-  cp "target/qemu-aarch64/release/kernel" "$KERNEL"
+  cp "target/${CONFIG}/release/kernel" "$KERNEL"
 fi
 
 echo "==> Running Zircon rootfs boot test..."

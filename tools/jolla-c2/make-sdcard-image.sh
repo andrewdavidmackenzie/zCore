@@ -1,19 +1,22 @@
 #!/bin/bash
 # Build an ext4 boot image and write it to the Jolla C2 SD card.
-# Usage: ./make-sdcard-image.sh /dev/diskN
+# Usage: ./make-sdcard-image.sh /dev/diskN [product.board]
+#   selection defaults to petal.jolla-c2; the kernel is taken from
+#   that selection's build output.
 set -e
 
-DISK="${1:?Usage: $0 /dev/diskN}"
+DISK="${1:?Usage: $0 /dev/diskN [product.board]}"
+CONFIG="${2:-petal.jolla-c2}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-KERNEL="$ROOT/target/jolla-c2/release/kernel.bin"
+KERNEL="$ROOT/target/${CONFIG}/release/kernel.bin"
 DTB="$ROOT/prebuilt/jolla-c2/ums9230-reeder-s19mps.dtb"
 EXTLINUX="$ROOT/tools/jolla-c2/extlinux.conf"
-IMG="$ROOT/target/jolla-c2/release/sdcard-boot.img"
+IMG="$ROOT/target/${CONFIG}/release/sdcard-boot.img"
 
 if [ ! -f "$KERNEL" ]; then
-    echo "Error: kernel not found at $KERNEL -- run 'make jollac2-build' first" >&2
+    echo "Error: kernel not found at $KERNEL -- run 'make build CONFIG=$CONFIG' first" >&2
     exit 1
 fi
 if [ ! -f "$DTB" ]; then

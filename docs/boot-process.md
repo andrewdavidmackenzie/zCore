@@ -328,7 +328,7 @@ primary_main (main.rs)
 
 **Boot image creation:** The `tools/x86-bootimage` helper tool uses the
 `bootloader` crate to create a BIOS-bootable disk image from the kernel
-ELF. Run via xtask: `cargo qemu --arch x86_64`.
+ELF. Run via xtask: `cargo qemu -m busybox.qemu-x86_64`.
 
 **Key addresses:**
 - Kernel base: `0xFFFF_FFFF_8000_0000` (upper 2 GB, kernel code model)
@@ -464,7 +464,7 @@ an SFS rootfs and load an init program from it.
 ```bash
 # Build and run with rootfs
 cargo xtask zircon-rootfs --arch aarch64
-cargo qemu --arch aarch64 --zircon --rootfs-image target/qemu-aarch64/release/aarch64-zircon.img
+cargo qemu -m zircon-hello.qemu-aarch64 --rootfs-image target/rootfs/images/petal-aarch64.img
 ```
 
 #### ZBI-based boot (fallback, Fuchsia-compatible)
@@ -506,11 +506,11 @@ usable with either flavour:
 
 ```bash
 # Linux with custom rootfs
-cargo qemu --arch aarch64 --rootfs-image path/to/custom.img
+cargo qemu -m busybox.qemu-aarch64 --rootfs-image path/to/custom.img
 
 # Zircon with petal rootfs
 cargo xtask zircon-rootfs --arch aarch64
-cargo qemu --arch aarch64 --zircon --rootfs-image target/qemu-aarch64/release/aarch64-zircon.img
+cargo qemu -m zircon-hello.qemu-aarch64 --rootfs-image target/rootfs/images/petal-aarch64.img
 ```
 
 The `cargo xtask zircon-rootfs` command builds an SFS image containing

@@ -1,0 +1,13 @@
+# busybox: Zircon + Linux product with a busybox shell as init.
+#
+# The classic Linux-mode demo: boots to the "/ # " busybox prompt with
+# the full rootfs (busybox applets, musl libc, petal and demo binaries).
+#
+# Standalone (does not extend `petal`): it differs from petal in every
+# dimension (flavour, init program, rootfs) and, unlike the Zircon-only
+# products, runs on all boards including riscv64.
+
+flavour = "linux"
+root-proc = "/bin/busybox?sh"
+log = "warn"
+rootfs-contents = "full"

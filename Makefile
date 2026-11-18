@@ -1,38 +1,98 @@
 # Makefile for top level of zCore
+#
+# Build configurations are `<product>.<board>` pairs, mirroring
+# Fuchsia's `fx set PRODUCT.BOARD`:
+#   products: configs/products/  (busybox, petal, petal-linux, core-tests, zircon-hello)
+#   boards:   configs/boards/    (qemu-aarch64, qemu-x86_64, ..., libos)
+#
+#   make list-products / make list-boards   — discover definitions
+#   cargo zcore set <product>.<board>       — persist a default selection
+#
+# Most targets take CONFIG=<product>.<board> (default: busybox.qemu-aarch64).
+# ARCH keys arch-specific operations (rootfs images, musl toolchains).
 
-ARCH ?= aarch64
+CONFIG ?= busybox.qemu-aarch64
 XTASK ?= 1
 
-# Read core count from target config (defaults to 1).
-# QEMU_CORES uses ARCH (for arch-generic targets like boot-test).
-# X86_CORES always reads from qemu-x86_64.toml (for x86-specific targets).
-QEMU_CORES := $(shell grep '^cores' targets/qemu-$(ARCH).toml 2>/dev/null | awk '{print $$NF}' || echo 1)
-X86_CORES := $(shell grep '^cores' targets/qemu-x86_64.toml 2>/dev/null | awk '{print $$NF}' || echo 1)
+# Split the selection into product and board parts.
+PRODUCT := $(word 1,$(subst ., ,$(CONFIG)))
+BOARD := $(word 2,$(subst ., ,$(CONFIG)))
+
+# Architecture for arch-keyed operations (rootfs images, musl
+# toolchains). Derived from the selected board's TOML unless explicitly
+# overridden on the command line, so e.g. `make boot-test
+# CONFIG=busybox.qemu-x86_64` cannot accidentally test with the aarch64
+# default. The boot/busybox/libc test targets reject a conflicting
+# explicit ARCH.
+BOARD_ARCH := $(shell awk -F'"' '/^arch/ {print $$2}' configs/boards/$(BOARD).toml 2>/dev/null)
+ifeq ($(origin ARCH),undefined)
+ARCH := $(if $(BOARD_ARCH),$(BOARD_ARCH),aarch64)
+endif
+
+# Selection-derived artifact paths (keyed by the full selection).
+KERNEL_DIR := target/$(CONFIG)/release
+KERNEL := $(KERNEL_DIR)/kernel
+KERNEL_BIN := $(KERNEL_DIR)/kernel.bin
+BOOT_IMG := $(KERNEL_DIR)/boot.img
+
+# Read core count from the board config (defaults to 1).
+BOARD_CORES := $(shell grep '^cores' configs/boards/$(BOARD).toml 2>/dev/null | awk '{print $$NF}' || echo 1)
+QEMU_CORES := $(BOARD_CORES)
+X86_CORES := $(shell grep '^cores' configs/boards/qemu-x86_64.toml 2>/dev/null | awk '{print $$NF}' || echo 1)
+
+# How the board's image is written to real hardware (from its TOML):
+# "sd" or "usb". Absent for QEMU/libos boards.
+FLASH_METHOD := $(shell grep '^flash-method' configs/boards/$(BOARD).toml 2>/dev/null | awk '{print $$NF}' | tr -d '"')
 
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
 
-.PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc docs clean \
+.PHONY: help build run test boot-test busybox-test config config-macos setup update rootfs libc-test other-test image clippy-all check doc docs clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
-	petal-shell raspi400-build raspi400-run raspi400-sd raspi400-uefi-sd \
-	jollac2-build jollac2-sd \
-	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon \
-	debug-qemu debug-gdb \
-	pre-push pre-push-quick core-tests core-tests-build demo-busybox demo-petal demo-zircon \
+	list-products list-boards flash \
+	debug-qemu debug-lldb debug-x86-qemu debug-x86-gdb \
+	pre-push pre-push-quick core-tests core-tests-build \
 	boot-logo uefi-firmware
 
-# Build the rootfs image and kernel for the target architecture.
-# cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
-# cargo bin:   compiles the kernel ELF (for riscv64, also objcopy to .bin)
-build:
-	cargo image --arch $(ARCH)
-	cargo bin -m qemu-$(ARCH)
+# List available products and boards (like fx list-products / list-boards).
+list-products:
+	@cargo zcore list-products
+list-boards:
+	@cargo zcore list-boards
 
-# Build (if needed) and run zCore in Linux mode interactively in QEMU.
-# cargo qemu does: build rootfs image, build kernel, launch QEMU.
+# Build the rootfs image and kernel for a selection.
+#   make build CONFIG=petal.qemu-aarch64
+# QEMU boards also build the rootfs image selected by the product's
+# rootfs-contents manifest; real-hardware boards build the kernel only
+# (their boot media is prepared by `make flash`/`make image-uefi`).
+HAS_QEMU := $(shell grep -q '^\[qemu\]' configs/boards/$(BOARD).toml 2>/dev/null && echo yes)
+build:
+ifneq ($(HAS_QEMU),yes)
+	cargo bin -m $(CONFIG)
+else
+	cargo xtask rootfs-image -m $(CONFIG)
+	cargo bin -m $(CONFIG)
+endif
+
+# Build (if needed) and run a selection interactively in QEMU.
+#   make run CONFIG=busybox.qemu-aarch64   — busybox shell ("/ # ")
+#   make run CONFIG=petal.qemu-aarch64     — petal shell
+# Ctrl-A X to exit QEMU.
+run:
+	cargo qemu -m $(CONFIG)
+
+# Backwards-compatible aliases for the old per-flavour run targets.
+# LOG=info (or debug/trace/warn/error) controls log verbosity.
+LOG ?= info
 linux-run:
-	cargo qemu -m qemu-$(ARCH)
+	cargo qemu -m busybox.$(BOARD) --log $(LOG)
+# Zircon mode: petal shell (Zircon-only, no Linux).
+zircon-run:
+	cargo qemu -m petal.$(BOARD) --log $(LOG)
+# Petal shell with Linux available.
+petal-shell:
+	cargo qemu -m petal-linux.$(BOARD) --log $(LOG)
 
 # --- Remote Debugging via QEMU ---
 # See docs/debugging.md for full instructions.
@@ -48,34 +108,47 @@ linux-run:
 debug-qemu: build
 	@echo "==> Starting aarch64 QEMU in debug mode (paused, :1234)..."
 	@echo "    Connect with: make debug-lldb"
-	@echo "    Kernel symbols: target/qemu-aarch64/release/kernel"
-	@qemu-system-aarch64 -m 2G -display none -no-reboot -nographic \
+	@echo "    Kernel symbols: $(KERNEL)"
+	@ROOTFS_IMG=$$(cargo xtask rootfs-image -m $(CONFIG) --print-path); \
+	qemu-system-aarch64 -m 2G -display none -no-reboot -nographic \
 		-machine virt -cpu cortex-a72 -smp $(QEMU_CORES) \
-		-kernel target/qemu-aarch64/release/kernel.bin \
+		-kernel $(KERNEL_BIN) \
 		-serial mon:stdio \
-		-initrd target/qemu-aarch64/release/aarch64-linux.img \
+		-initrd "$$ROOTFS_IMG" \
 		-S -gdb tcp:127.0.0.1:1234
 
 LLDB ?= lldb
 debug-lldb:
 	@echo "==> Connecting lldb to QEMU on :1234..."
 	@$(LLDB) \
-		-o "file target/qemu-aarch64/release/kernel" \
+		-o "file $(KERNEL)" \
 		-o "gdb-remote 1234"
 
 # --- x86_64 debugging ---
 # Start x86_64 Zircon QEMU paused with GDB server on :1234.
-# Build first with: make x86-zircon-build
-debug-x86-qemu: x86-zircon-build
+# Defaults to the petal product on the x86_64 QEMU board; pass an
+# explicit CONFIG=<x86_64 selection> to debug another one.
+DEBUG_X86_CONFIG = $(if $(filter command line,$(origin CONFIG)),$(CONFIG),petal.qemu-x86_64)
+debug-x86-qemu:
+	$(MAKE) build CONFIG=$(DEBUG_X86_CONFIG) ARCH=x86_64
 	@echo "==> Starting x86_64 Zircon QEMU in debug mode (paused, :1234)..."
 	@echo "    Connect with: make debug-x86-gdb"
-	@echo "    Kernel symbols: target/qemu-x86_64/release/kernel"
+	@echo "    Kernel symbols: target/$(DEBUG_X86_CONFIG)/release/kernel"
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
+	ROOTFS_IMG=$$(cargo xtask rootfs-image -m $(DEBUG_X86_CONFIG) --print-path); \
+	RAMDISK_ARGS=""; \
+	case "$$ROOTFS_IMG" in \
+		*/petal-*) ;; \
+		*) RAMDISK_ARGS="--ramdisk $$ROOTFS_IMG" ;; \
+	esac; \
+	tools/x86-bootimage/target/release/x86-bootimage \
+		target/$(DEBUG_X86_CONFIG)/release/kernel \
+		target/$(DEBUG_X86_CONFIG)/release/kernel-zircon.img $$RAMDISK_ARGS; \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
 		-machine q35 -smp $(X86_CORES) -cpu qemu64,+rdrand \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
-		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img \
+		-drive format=raw,file=target/$(DEBUG_X86_CONFIG)/release/kernel-zircon.img \
 		-S -gdb tcp:127.0.0.1:1234
 
 # Start x86_64 core-tests QEMU paused with GDB server on :1234.
@@ -84,91 +157,78 @@ debug-x86-qemu: x86-zircon-build
 debug-x86-core-tests: core-tests-build
 	@echo "==> Starting x86_64 core-tests QEMU in debug mode (paused, :1234)..."
 	@echo "    Connect with: make debug-x86-gdb"
-	@echo "    Kernel symbols: target/qemu-x86_64/release/kernel"
+	@echo "    Kernel symbols: target/core-tests.qemu-x86_64/release/kernel"
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
 		-machine q35 -smp $(X86_CORES) \
 		-cpu qemu64,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
-		-drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
+		-drive "format=raw,file=target/core-tests.qemu-x86_64/release/boot.img" \
 		-S -gdb tcp:127.0.0.1:1234
 
 # Connect GDB to a running x86_64 QEMU debug session.
+# Uses the same selection default as debug-x86-qemu.
 GDB ?= gdb
 debug-x86-gdb:
 	@echo "==> Connecting GDB to QEMU on :1234..."
-	@$(GDB) target/qemu-x86_64/release/kernel \
+	@$(GDB) target/$(DEBUG_X86_CONFIG)/release/kernel \
 		-ex "target remote :1234"
 
-# Build and run zCore in Zircon mode (userstart hello program).
-# Use LOG=info (or debug/trace/warn/error) to control log verbosity.
-LOG ?= info
-zircon-run:
-	cargo qemu -m qemu-$(ARCH) --log $(LOG)
+# ── Rootfs image ────────────────────────────────────────────────────────
+# Build the rootfs image for the current selection. The product's
+# rootfs-contents manifest decides what goes in:
+#   full       — busybox, musl libc, petal programs, demo binaries
+#   petal      — petal programs only
+#   core-tests — petal programs + prebuilt Fuchsia test binaries
+image:
+	cargo xtask rootfs-image -m $(CONFIG)
 
-# Run the petal shell interactively in QEMU.
-# Boots zCore in Zircon mode with the shell as the init program.
-# Type 'help', 'echo hello', 'version', 'exit'. Ctrl-A X to kill QEMU.
-petal-shell:
-	cargo qemu -m qemu-$(ARCH) --log $(LOG)
+# Backwards-compatible alias (the old target was arch-keyed).
+rootfs: image
 
-# ── Mixed rootfs ───────────────────────────────────────────────────────
-# Build the rootfs image containing ALL binaries (busybox, linux-hello,
-# petal shell, zircon-hello). Shared by all demo and test targets.
-ROOTFS_IMG = target/qemu-$(ARCH)/release/$(ARCH)-linux.img
-rootfs: $(ROOTFS_IMG)
-$(ROOTFS_IMG):
-	@mkdir -p $(dir $(ROOTFS_IMG))
-	cargo image --arch $(ARCH)
-
-# ── Dual-flavour demos ─────────────────────────────────────────────────
-# All demos share the SAME rootfs. Only the kernel build (with/without
-# linux feature) and ROOTPROC differ.
+# ── Interactive demos ───────────────────────────────────────────────────
+# Each demo is just `make run` with a product selection. The product
+# decides the kernel flavour (linux feature), ROOTPROC, and rootfs.
 #
 # Demo: boot into busybox shell (Linux init), can run /bin/zircon-hello
-demo-busybox: rootfs
-	ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/busybox?sh" \
-		cargo qemu -m qemu-$(ARCH) --flavour linux --log warn
+demo-busybox:
+	cargo qemu -m busybox.$(BOARD) --log warn
 
 # Demo: boot into petal shell (with Linux available)
-demo-petal: rootfs
-	ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/shell" \
-		cargo qemu -m qemu-$(ARCH) --flavour linux --log warn
+demo-petal:
+	cargo qemu -m petal-linux.$(BOARD) --log warn
+
+# Demo: boot into petal shell (Zircon only, no Linux)
+# /bin/linux-hello should return an error.
+demo-zircon:
+	cargo qemu -m petal.$(BOARD) --log warn
 
 # Test: boot petal shell with Linux, run /bin/zircon-hello and
 # /bin/linux-hello, verify both produce expected output.
-demo-petal-test: rootfs
-	tools/scripts/demo-petal-test.sh $(ARCH)
+demo-petal-test:
+	tools/scripts/demo-petal-test.sh petal-linux.qemu-$(ARCH) $(ARCH)
 
 # Test: boot petal shell with Linux, run /bin/hello.wasm via wasi-runner,
 # verify output.
-demo-wasi-test: rootfs
-	tools/scripts/demo-wasi-test.sh $(ARCH)
+demo-wasi-test:
+	tools/scripts/demo-wasi-test.sh petal-linux.qemu-$(ARCH) $(ARCH)
 
 # ── UEFI boot demos (aarch64 only) ─────────────────────────────────────
 # Same demos but booting via UEFI firmware instead of raw -kernel.
 # Requires: mtools (mformat, mcopy, mmd), edk2-aarch64-code.fd
 
 # Demo: UEFI petal shell (with Linux)
-demo-petal-uefi: rootfs
-	ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/shell" \
-		cargo qemu -m qemu-aarch64-uefi --log warn
+demo-petal-uefi:
+	cargo qemu -m petal-linux.qemu-aarch64-uefi --log warn
 
 # Demo: UEFI busybox shell
-demo-busybox-uefi: rootfs
-	ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/busybox?sh" \
-		cargo qemu -m qemu-aarch64-uefi --log warn
+demo-busybox-uefi:
+	cargo qemu -m busybox.qemu-aarch64-uefi --log warn
 
 # Test: UEFI boot with petal shell, run /bin/zircon-hello
-uefi-boot-test: rootfs
+uefi-boot-test:
 	tools/scripts/uefi-boot-test.sh
-
-# Demo: boot into petal shell (Zircon only, no Linux)
-# /bin/linux-hello should return an error.
-demo-zircon: rootfs
-	ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/shell" \
-		cargo qemu -m qemu-$(ARCH) --flavour "" --log warn
 
 # ── Documentation ──────────────────────────────────────────────────────
 # Build the mdbook documentation site into target/book/.
@@ -180,51 +240,51 @@ book: docs
 
 # Build the kernel for Raspberry Pi 400 in Zircon mode.
 # Userstart, petal ZBI, features, and target spec all come from
-# targets/raspi400.toml via xtask.
-raspi400-build:
-	@echo "==> Building zCore kernel for Raspberry Pi 400..."
-	cargo bin -m raspi400
+# ── Real hardware: generic build/image/flash ────────────────────────────
+# Boards declare their `flash-method` in configs/boards/<board>.toml:
+#   sd  — write boot files into a mounted SD card FAT partition (SD=)
+#   usb — write a raw UEFI disk image to a USB drive (USB=)
+#
+# Usage:
+#   make build CONFIG=petal.raspi400
+#   make image-uefi CONFIG=busybox.x86-laptop OUTPUT=/tmp/zcore.img
+#   make flash CONFIG=petal.raspi400 SD=/Volumes/boot
+#   make flash CONFIG=busybox.x86-laptop USB=/dev/disk5
+#
+# The QEMU raspi4b emulation of the Pi 400 has no [qemu] section in the
+# board config; run it directly:
+#   qemu-system-aarch64 -machine raspi4b -m 2G -display none -nographic \
+#     -serial mon:stdio -kernel target/petal.raspi400/release/kernel.bin
 
-# Build and run zCore on QEMU raspi400 interactively with petal shell.
-# Ctrl-A X to exit QEMU.
-raspi400-run: raspi400-build
-	@echo "==> Starting zCore on QEMU raspi4b (Ctrl-A X to exit)..."
-	@qemu-system-aarch64 -machine raspi4b -m 2G \
-		-display none -no-reboot -nographic \
-		-serial mon:stdio \
-		-kernel target/raspi400/release/kernel.bin
-
-# Prepare an SD card for Raspberry Pi 4 / Pi 400.
-# Usage: make raspi400-sd SD=/Volumes/boot
-#   SD= is the mount point of the SD card's FAT32 partition.
-raspi400-sd: raspi400-build
-	@tools/raspi/prepare-sd.sh "$(SD)"
-ifeq ($(shell uname),Darwin)
-	@echo "==> Ejecting SD card..."
-	@disk=$$(diskutil info "$(SD)" 2>/dev/null | grep "Part of Whole" | awk '{print $$NF}'); \
-	 if [ -n "$$disk" ]; then diskutil eject "/dev/$$disk"; \
-	 else echo "Warning: could not determine disk for $(SD)"; fi
+# Write the current selection to real hardware media.
+# Dispatches on the board's flash-method; builds first.
+flash: build
+ifeq ($(FLASH_METHOD),sd)
+	@tools/flash-sd.sh "$(SD)" "$(CONFIG)"
+else ifeq ($(FLASH_METHOD),usb)
+	$(MAKE) image-uefi CONFIG=$(CONFIG) ARCH=$(ARCH)
+	$(write-usb)
+else
+	$(error board '$(BOARD)' does not declare a flash-method in configs/boards/$(BOARD).toml)
 endif
 
-# --- Jolla C2 (Unisoc UMS9230) ----------------------------------------
-
-# Build zCore for the Jolla C2 phone.
-# Produces target/jolla-c2/release/kernel.bin (ARM64 Image with header).
+# Backwards-compatible aliases for the old per-board targets.
+# The raspi400 board is UEFI-only (the raspi400-uefi board was merged
+# into it); both old SD targets now flash via the UEFI preparation,
+# which builds the kernel for the selection it is given.
+raspi400-build:
+	cargo bin -m petal.raspi400
+raspi400-sd:
+	$(MAKE) flash CONFIG=petal.raspi400 SD=$(SD)
+raspi400-uefi-sd:
+	$(MAKE) flash CONFIG=busybox.raspi400 SD=$(SD)
 jollac2-build:
-	@echo "==> Building zCore kernel for Jolla C2..."
-	cargo bin -m jolla-c2
-
-# Build zCore and write it to an SD card for the Jolla C2.
-# Usage: make jollac2-sd DISK=/dev/diskN
-#   DISK= is the raw disk device of the SD card (NOT a partition).
-#   DISK is required — no default to avoid overwriting the wrong device.
-#   Requires: mkfs.ext4, debugfs (brew install e2fsprogs).
+	cargo bin -m petal.jolla-c2
 jollac2-sd: jollac2-build
 ifndef DISK
 	$(error DISK is required. Usage: make jollac2-sd DISK=/dev/diskN)
 endif
-	@echo "==> Preparing SD card boot image for Jolla C2..."
-	@tools/jolla-c2/make-sdcard-image.sh "$(DISK)"
+	@tools/jolla-c2/make-sdcard-image.sh "$(DISK)" "petal.jolla-c2"
 
 # ── UEFI boot logo and firmware ─────────────────────────────────────────
 
@@ -239,112 +299,81 @@ boot-logo:
 uefi-firmware:
 	@tools/scripts/build-uefi-firmware.sh
 
-# Prepare SD card for Pi 400 UEFI boot (pftf firmware + zCore UEFI stub).
-# If custom firmware exists (from 'make uefi-firmware'), it will be used
-# automatically, showing the Zirconia logo at boot instead of the RPi logo.
-# Usage: make raspi400-uefi-sd SD=/Volumes/boot
-#   SD= is the mount point of the SD card's FAT32 partition.
-raspi400-uefi-sd:
-	@tools/raspi/prepare-sd-uefi.sh "$(SD)"
-ifeq ($(shell uname),Darwin)
-	@echo "==> Ejecting SD card..."
-	@disk=$$(diskutil info "$(SD)" 2>/dev/null | grep "Part of Whole" | awk '{print $$NF}'); \
-	 if [ -n "$$disk" ]; then diskutil eject "/dev/$$disk"; \
-	 else echo "Warning: could not determine disk for $(SD)"; fi
-endif
-
-# Build x86_64 kernel in Linux mode (plus rootfs and boot-image tool).
+# ── x86_64 QEMU ─────────────────────────────────────────────────────────
+# x86_64 always boots via UEFI (OVMF) in QEMU, same as real hardware.
+# Use the generic targets:
+#   make build CONFIG=busybox.qemu-x86_64    — Linux flavour + busybox
+#   make run   CONFIG=petal.qemu-x86_64      — Zircon-only + petal shell
+#   make run   CONFIG=busybox.qemu-x86_64
 x86-linux-build:
-	@echo "==> Building rootfs image..."
-	cargo image --arch x86_64
-	@echo "==> Building x86-bootimage tool..."
-	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
-	@echo "==> Building zCore kernel (Linux, x86_64)..."
-	cargo zcore-build -m qemu-x86_64 --flavour linux
-
-# Build x86_64 kernel in Zircon mode with petal shell.
+	$(MAKE) build CONFIG=busybox.qemu-x86_64 ARCH=x86_64
 x86-zircon-build:
-	@echo "==> Building zCore kernel (Zircon, x86_64)..."
-	cargo zcore-build -m qemu-x86_64
-
-# Build and run x86_64 Linux in QEMU (UEFI boot, same as real hardware).
-# Ctrl-A X to exit QEMU.
-x86-linux-run: x86-linux-build
-	@tools/x86-bootimage/target/release/x86-bootimage \
-		target/qemu-x86_64/release/kernel \
-		target/qemu-x86_64/release/boot.img \
-		--ramdisk target/qemu-x86_64/release/x86_64-linux.img
-	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
-	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
-		-machine q35 -cpu qemu64,+rdrand \
-		-smp $(X86_CORES) \
-		-serial mon:stdio \
-		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
-		-drive format=raw,file=target/qemu-x86_64/release/boot.img
-
-# Build and run x86_64 Zircon with petal shell in QEMU.
-# Ctrl-A X to exit QEMU.
-x86-zircon-run: x86-zircon-build
-	@tools/x86-bootimage/target/release/x86-bootimage \
-		target/qemu-x86_64/release/kernel \
-		target/qemu-x86_64/release/kernel-zircon.img
-	@echo "==> Starting x86_64 Zircon (Ctrl-A X to exit QEMU)..."
-	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
-	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
-		-machine q35 -smp $(X86_CORES) -cpu qemu64,+rdrand \
-		-serial mon:stdio \
-		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
-		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img
+	$(MAKE) build CONFIG=petal.qemu-x86_64 ARCH=x86_64
+x86-linux-run:
+	$(MAKE) run CONFIG=busybox.qemu-x86_64 ARCH=x86_64
+x86-zircon-run:
+	$(MAKE) run CONFIG=petal.qemu-x86_64 ARCH=x86_64
 
 # Create a UEFI-bootable disk image for x86_64 real hardware.
-# Uses the x86-laptop target (no PCI, no UART -- uses framebuffer console).
-# The image can be written to a USB drive with dd.
-# Usage: make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img
-#        make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img MODE=zircon
-MODE ?= linux
-OUTPUT ?= target/x86-laptop/release/kernel-uefi.img
-x86-uefi-image:
-ifeq ($(MODE),zircon)
-	cargo zcore-build -m x86-laptop
-	@KERNEL_ELF=target/x86-laptop/release/kernel tools/scripts/x86-uefi-image.sh $(OUTPUT) none
+# Uses the x86-laptop board (no PCI, no UART -- uses framebuffer console).
+# The image can be written to a USB drive with `make flash USB=`.
+# The ramdisk decision follows the product's rootfs-contents manifest
+# (visible in the image path printed by `rootfs-image --print-path`):
+# full/core-tests images are embedded as the ramdisk; petal-manifest
+# products boot their userspace from the embedded ZBI (no ramdisk),
+# like the old MODE=zircon image.
+# Usage: make image-uefi CONFIG=busybox.x86-laptop OUTPUT=/tmp/zcore-uefi.img
+#        make image-uefi CONFIG=petal.x86-laptop OUTPUT=/tmp/zcore-uefi.img
+OUTPUT ?= target/$(CONFIG)/release/kernel-uefi.img
+image-uefi:
+ifeq ($(BOARD),x86-laptop)
+	cargo xtask rootfs-image -m $(CONFIG)
+	cargo zcore-build -m $(CONFIG)
+	@ROOTFS_IMG=$$(cargo xtask rootfs-image -m $(CONFIG) --print-path); \
+	RAMDISK=auto; \
+	case "$$ROOTFS_IMG" in \
+		*/petal-*) RAMDISK=none ;; \
+	esac; \
+	KERNEL_ELF=$(KERNEL) ROOTFS_IMG="$$ROOTFS_IMG" \
+		tools/scripts/x86-uefi-image.sh $(OUTPUT) $$RAMDISK
 else
-	cargo image --arch x86_64
-	cargo zcore-build -m x86-laptop --flavour linux
-	@KERNEL_ELF=target/x86-laptop/release/kernel \
-		ROOTFS_IMG=target/qemu-x86_64/release/x86_64-linux.img \
-		tools/scripts/x86-uefi-image.sh $(OUTPUT)
+	$(error image-uefi supports x86-laptop boards (got CONFIG=$(CONFIG)))
 endif
+
+# Backwards-compatible alias.
+x86-uefi-image:
+	$(MAKE) image-uefi CONFIG=$(if $(filter zircon,$(MODE)),petal,busybox).x86-laptop ARCH=x86_64
 
 # Create a PXE TFTP directory for x86_64 network boot.
 # Usage: make x86-pxe
-# Then run dnsmasq: sudo dnsmasq --no-daemon -C target/x86-laptop/pxe/dnsmasq.conf
-PXE_DIR ?= target/x86-laptop/pxe/tftpboot
+# Then run dnsmasq: sudo dnsmasq --no-daemon -C target/busybox.x86-laptop/pxe/dnsmasq.conf
+PXE_DIR ?= target/busybox.x86-laptop/pxe/tftpboot
 PXE_SUBNET ?= 192.168.1
 x86-pxe:
-	cargo image --arch x86_64
-	cargo zcore-build -m x86-laptop --flavour linux
+	cargo xtask rootfs-image -m busybox.x86-laptop
+	cargo zcore-build -m busybox.x86-laptop
 	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
 	@rm -rf $(PXE_DIR)/zcore
 	@mkdir -p $(PXE_DIR)/zcore
 	@tools/x86-bootimage/target/release/x86-bootimage \
-		target/x86-laptop/release/kernel \
+		target/busybox.x86-laptop/release/kernel \
 		$(PXE_DIR)/zcore \
-		--ramdisk target/qemu-x86_64/release/x86_64-linux.img \
+		--ramdisk target/rootfs/images/full-x86_64.img \
 		--pxe
-	@mkdir -p target/x86-laptop/pxe
-	@echo "port=0" > target/x86-laptop/pxe/dnsmasq.conf
-	@echo "dhcp-range=$(PXE_SUBNET).0,proxy" >> target/x86-laptop/pxe/dnsmasq.conf
-	@echo "dhcp-no-override" >> target/x86-laptop/pxe/dnsmasq.conf
-	@echo "enable-tftp" >> target/x86-laptop/pxe/dnsmasq.conf
-	@echo "tftp-root=$(abspath $(PXE_DIR))" >> target/x86-laptop/pxe/dnsmasq.conf
-	@echo "dhcp-match=set:efi-x86_64,option:client-arch,7" >> target/x86-laptop/pxe/dnsmasq.conf
-	@echo "dhcp-match=set:efi-x86_64,option:client-arch,9" >> target/x86-laptop/pxe/dnsmasq.conf
-	@echo "dhcp-boot=tag:efi-x86_64,zcore/bootloader" >> target/x86-laptop/pxe/dnsmasq.conf
-	@echo "log-dhcp" >> target/x86-laptop/pxe/dnsmasq.conf
+	@mkdir -p target/busybox.x86-laptop/pxe
+	@echo "port=0" > target/busybox.x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-range=$(PXE_SUBNET).0,proxy" >> target/busybox.x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-no-override" >> target/busybox.x86-laptop/pxe/dnsmasq.conf
+	@echo "enable-tftp" >> target/busybox.x86-laptop/pxe/dnsmasq.conf
+	@echo "tftp-root=$(abspath $(PXE_DIR))" >> target/busybox.x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-match=set:efi-x86_64,option:client-arch,7" >> target/busybox.x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-match=set:efi-x86_64,option:client-arch,9" >> target/busybox.x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-boot=tag:efi-x86_64,zcore/bootloader" >> target/busybox.x86-laptop/pxe/dnsmasq.conf
+	@echo "log-dhcp" >> target/busybox.x86-laptop/pxe/dnsmasq.conf
 	@echo ""
 	@echo "==> PXE TFTP directory ready at $(PXE_DIR)"
 	@echo "==> Start PXE server:"
-	@echo "    sudo /opt/homebrew/opt/dnsmasq/sbin/dnsmasq --no-daemon -C target/x86-laptop/pxe/dnsmasq.conf"
+	@echo "    sudo /opt/homebrew/opt/dnsmasq/sbin/dnsmasq --no-daemon -C target/busybox.x86-laptop/pxe/dnsmasq.conf"
 	@echo "==> On laptop: F12 -> PXE Network Boot"
 
 # Write a UEFI boot image to a USB drive.
@@ -359,25 +388,23 @@ define write-usb
 	@echo "==> Done. Insert USB into target machine and boot from UEFI."
 endef
 
-# Usage: make x86-uefi-usb-linux USB=/dev/disk5 [LOG=info]
+# Usage: make x86-uefi-usb-linux USB=/dev/disk5
 x86-uefi-usb-linux:
-	$(MAKE) x86-uefi-image MODE=linux
-	$(write-usb)
+	$(MAKE) flash CONFIG=busybox.x86-laptop ARCH=x86_64 USB=$(USB)
 
-# Usage: make x86-uefi-usb-zircon USB=/dev/disk5 [LOG=debug]
+# Usage: make x86-uefi-usb-zircon USB=/dev/disk5
 x86-uefi-usb-zircon:
-	$(MAKE) x86-uefi-image MODE=zircon
-	$(write-usb)
+	$(MAKE) flash CONFIG=petal.x86-laptop ARCH=x86_64 USB=$(USB)
 
 # Zircon boot smoke test: build in Zircon mode, start QEMU, wait for
 # userstart hello message, verify clean shutdown.
 zircon-boot-test:
 	@echo "==> Zircon boot smoke test ($(ARCH))..."
-	@tools/scripts/zircon-boot-test.sh $(ARCH)
+	@tools/scripts/zircon-boot-test.sh zircon-hello.qemu-$(ARCH) $(ARCH)
 
 zircon-rootfs-test:
 	@echo "==> Zircon rootfs boot test ($(ARCH))..."
-	@tools/scripts/zircon-rootfs-test.sh $(ARCH)
+	@tools/scripts/zircon-rootfs-test.sh zircon-hello.qemu-$(ARCH) $(ARCH)
 
 # ── Fuchsia core-tests-standalone ──────────────────────────────────────
 # Run core-tests-standalone on x86_64 in QEMU. This target handles the
@@ -419,13 +446,15 @@ CORE_TESTS_FILTER ?=
 #   make core-tests-bootimg  — rebuild boot image only
 
 USERSTART_ELF := $(CURDIR)/target/userstart/x86_64-unknown-none/release/userstart
-KERNEL_ELF    := target/qemu-x86_64/release/kernel
-ROOTFS_IMG    := target/qemu-x86_64/release/x86_64-zircon.img
-BOOT_IMG      := target/qemu-x86_64/release/boot.img
-EXTRA_ARGS    := target/rootfs/zircon/x86_64/etc/extra-args
+KERNEL_ELF    := target/core-tests.qemu-x86_64/release/kernel
+ROOTFS_IMG    := target/rootfs/images/core-tests-x86_64.img
+BOOT_IMG      := target/core-tests.qemu-x86_64/release/boot.img
+EXTRA_ARGS    := target/rootfs/core-tests/x86_64/etc/extra-args
 BOOTIMAGE_BIN := tools/x86-bootimage/target/release/x86-bootimage
 
 # Step 1+2: Build userstart + kernel (cargo handles caching).
+# The core-tests product (configs/products/core-tests.toml) provides the
+# Zircon-only flavour, debugging-syscalls cmdline, and ROOTPROC.
 .PHONY: core-tests-kernel
 core-tests-kernel:
 	@test -f prebuilt/zircon-test/x86_64/core-tests-standalone || \
@@ -434,15 +463,14 @@ core-tests-kernel:
 		cargo build -p userstart --target x86_64-unknown-none \
 		--release --target-dir target/userstart -Z build-std=core,alloc
 	@USERSTART_ELF="$(USERSTART_ELF)" \
-		ZCORE_CMDLINE="LOG=warn kernel.enable-debugging-syscalls=true ROOTPROC=/bin/core-tests-standalone?--gtest_shuffle=false" \
-		cargo zcore-build -m qemu-x86_64 --flavour ""
+		cargo zcore-build -m core-tests.qemu-x86_64
 
 # Step 3: Write extra-args filter file + build rootfs SFS image.
 # Always compare the desired filter against the baked-in extra-args.
 # If they differ (or if the rootfs image is missing), rebuild.
 .PHONY: core-tests-rootfs
 core-tests-rootfs:
-	@mkdir -p target/rootfs/zircon/x86_64/etc
+	@mkdir -p target/rootfs/core-tests/x86_64/etc
 	@REBUILD=0; \
 	CURRENT=$$(cat $(EXTRA_ARGS) 2>/dev/null || true); \
 	if [ -n "$(strip $(CORE_TESTS_FILTER))" ]; then \
@@ -459,7 +487,7 @@ core-tests-rootfs:
 	fi; \
 	if [ ! -f $(ROOTFS_IMG) ] || [ $$REBUILD -eq 1 ]; then \
 		rm -f $(ROOTFS_IMG); \
-		cargo xtask zircon-rootfs --arch x86_64; \
+		cargo xtask zircon-rootfs --arch x86_64 --manifest core-tests; \
 	fi
 
 # Step 4: Create UEFI boot image from kernel + rootfs.
@@ -485,10 +513,10 @@ endif
 	@# Kill any stale QEMU using our boot image
 	@pkill -f 'qemu-system-x86_64.*boot\.img' 2>/dev/null; sleep 1 || true
 	@# Force rootfs rebuild with the new filter
-	@mkdir -p target/rootfs/zircon/x86_64/etc
+	@mkdir -p target/rootfs/core-tests/x86_64/etc
 	@printf '%s\n' '--gtest_filter=$(T)' > $(EXTRA_ARGS)
 	@rm -f $(ROOTFS_IMG) $(BOOT_IMG)
-	@cargo xtask zircon-rootfs --arch x86_64 > /dev/null 2>&1
+	@cargo xtask zircon-rootfs --arch x86_64 --manifest core-tests > /dev/null 2>&1
 	@$(BOOTIMAGE_BIN) $(KERNEL_ELF) $(BOOT_IMG) --ramdisk $(ROOTFS_IMG) > /dev/null 2>&1
 	@echo "==> Filter: $(T)  Timeout: $${CORE_TEST_TIMEOUT:-60}s"
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
@@ -554,7 +582,7 @@ core-tests: core-tests-build
 		-cpu qemu64,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
-		-drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
+		-drive "format=raw,file=target/core-tests.qemu-x86_64/release/boot.img" \
 		> $(CORE_TESTS_LOG) 2>&1 & \
 	PID=$$!; \
 	ELAPSED=0; \
@@ -599,87 +627,72 @@ test: boot-test libc-test
 
 # ── Bare-metal Rust zircon-tests ─────────────────────────────────────
 # Build and run the Rust zircon-tests suite inside QEMU on bare-metal.
-# Usage: make rust-tests ARCH=aarch64
+# The `rust-tests` product (configs/products/rust-tests.toml) adds the
+# `baremetal-test` feature: the kernel runs the suite instead of an
+# init process. Drivers and target spec come from the board.
+# Usage: make rust-tests RUST_TESTS_ARCH=aarch64
 RUST_TESTS_ARCH ?= aarch64
+RUST_TESTS_CONFIG = rust-tests.qemu-$(RUST_TESTS_ARCH)
 
 .PHONY: rust-tests-build rust-tests
 rust-tests-build:
 	@echo "==> Building kernel with baremetal-test for $(RUST_TESTS_ARCH)..."
-	@# Build directly (not via zcore-build) to avoid embedding the
-	@# petal shell ZBI, which would compete with the test runner.
-	@cargo clean -p kernel 2>/dev/null || true
-ifeq ($(RUST_TESTS_ARCH),aarch64)
-	cargo build --package kernel --no-default-features \
-		--features "baremetal-test gic-400 pl011-uart" \
-		--target targets/qemu-aarch64.json \
-		-Z json-target-spec -Z build-std=core,alloc \
-		-Z build-std-features=compiler-builtins-mem --release
-	@OBJCOPY=$$(find "$$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1); \
-		if [ -n "$$OBJCOPY" ]; then "$$OBJCOPY" -O binary target/qemu-aarch64/release/kernel target/qemu-aarch64/release/kernel.bin; \
-		elif command -v llvm-objcopy >/dev/null 2>&1; then llvm-objcopy -O binary target/qemu-aarch64/release/kernel target/qemu-aarch64/release/kernel.bin; \
-		elif command -v rust-objcopy >/dev/null 2>&1; then rust-objcopy -O binary target/qemu-aarch64/release/kernel target/qemu-aarch64/release/kernel.bin; \
-		else echo "ERROR: no objcopy found"; exit 1; fi
-else ifeq ($(RUST_TESTS_ARCH),x86_64)
-	cargo build --package kernel --no-default-features \
-		--features "baremetal-test apic uart-16550 pci" \
-		--target targets/qemu-x86_64.json \
-		-Z json-target-spec -Z build-std=core,alloc \
-		-Z build-std-features=compiler-builtins-mem --release
+	cargo bin -m $(RUST_TESTS_CONFIG)
+ifeq ($(RUST_TESTS_ARCH),x86_64)
 	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
 	@tools/x86-bootimage/target/release/x86-bootimage \
-		target/qemu-x86_64/release/kernel \
-		target/qemu-x86_64/release/boot.img
-else ifeq ($(RUST_TESTS_ARCH),riscv64)
-	cargo build --package kernel --no-default-features \
-		--features "baremetal-test uart-16550 riscv-intc riscv-plic pci" \
-		--target targets/qemu-riscv64.json \
-		-Z json-target-spec -Z build-std=core,alloc \
-		-Z build-std-features=compiler-builtins-mem --release
-	@OBJCOPY=$$(find "$$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1); \
-		if [ -n "$$OBJCOPY" ]; then "$$OBJCOPY" -O binary target/qemu-riscv64/release/kernel target/qemu-riscv64/release/kernel.bin; \
-		elif command -v llvm-objcopy >/dev/null 2>&1; then llvm-objcopy -O binary target/qemu-riscv64/release/kernel target/qemu-riscv64/release/kernel.bin; \
-		elif command -v rust-objcopy >/dev/null 2>&1; then rust-objcopy -O binary target/qemu-riscv64/release/kernel target/qemu-riscv64/release/kernel.bin; \
-		else echo "ERROR: no objcopy found"; exit 1; fi
+		target/$(RUST_TESTS_CONFIG)/release/kernel \
+		target/$(RUST_TESTS_CONFIG)/release/boot.img
 endif
 
 rust-tests: rust-tests-build
-	@tools/scripts/rust-tests-qemu.sh $(RUST_TESTS_ARCH)
+	@tools/scripts/rust-tests-qemu.sh $(RUST_TESTS_ARCH) $(RUST_TESTS_CONFIG)
 
 # Boot smoke test: start QEMU, wait for the "/ # " shell prompt, exit.
 # Proves: boot assembly, MMU, HAL, VirtIO, filesystem, ELF loader, and
 # busybox shell all work end-to-end. Timeout is 60 seconds.
-boot-test: build
-	@echo "==> Boot smoke test ($(ARCH))..."
-	@tools/scripts/boot-test.sh $(ARCH)
+# ARCH is derived from the selected board; a conflicting explicit ARCH
+# is rejected before building (busybox-test and libc-test inherit this).
+.PHONY: check-arch
+check-arch:
+	@if [ -n "$(BOARD_ARCH)" ] && [ "$(BOARD_ARCH)" != "host" ] && [ "$(ARCH)" != "$(BOARD_ARCH)" ]; then \
+		echo "ERROR: ARCH=$(ARCH) conflicts with board '$(BOARD)' (arch $(BOARD_ARCH)) — omit ARCH, it is derived from CONFIG"; \
+		exit 1; \
+	fi
+
+boot-test: check-arch build
+	@echo "==> Boot smoke test ($(CONFIG), $(ARCH))..."
+	@tools/scripts/boot-test.sh $(CONFIG) $(ARCH)
 
 # SMP testing is now integrated into boot-test and other CI targets
-# via the cores count in targets/qemu-<arch>.toml.
+# via the cores count in configs/boards/<board>.toml.
 
 # Run busybox applet tests: echo, ls, cat, pipes, etc.
 # Verifies that common busybox commands work end-to-end in QEMU.
 # Depends on boot-test to ensure serialization under parallel make.
 busybox-test: boot-test
-	@echo "==> Busybox applet test ($(ARCH))..."
-	@tools/scripts/busybox-test.sh $(ARCH)
+	@echo "==> Busybox applet test ($(CONFIG))..."
+	@tools/scripts/busybox-test.sh $(CONFIG) $(ARCH)
 
 # Run musl libc-test functional tests. Reports pass/fail counts but does
 # not fail the build — the pass rate is expected to improve over time as
 # more syscalls are implemented (see issue #16).
 # Depends on boot-test to ensure serialization under parallel make.
 libc-test: boot-test
-	@tools/scripts/libc-test.sh $(ARCH)
+	@tools/scripts/libc-test.sh $(CONFIG) $(ARCH)
 
 # LibOS mode: runs zCore as a host process (no QEMU needed).
 # Requires x86_64 host (Linux or macOS) or aarch64 Linux.
 # Two personalities: Linux (busybox shell) and Zircon (petal programs).
 
-# Build libos in Linux mode
+# Build libos in Linux mode (busybox product)
 libos-build-linux:
-	cargo zcore-build -m libos --flavour linux
+	cargo zcore-build -m busybox.libos
 
-# Build libos in Zircon mode (builds userstart + petal automatically)
+# Build libos in Zircon mode (petal product; builds userstart + petal
+# automatically)
 libos-build-zircon:
-	cargo zcore-build -m libos
+	cargo zcore-build -m petal.libos
 
 # Run libos in Linux mode with busybox shell
 libos-run-linux:
@@ -687,21 +700,22 @@ libos-run-linux:
 
 # Run libos in Zircon mode (known broken -- see #281)
 libos-run-zircon:
-	cargo zcore-build -m libos
-	./target/release/kernel
+	cargo zcore-build -m petal.libos
+	./target/petal.libos/release/kernel
 
-# configure build environment (platform toolchain)
-config:
-ifeq ($(shell uname -s),Darwin)
-	$(MAKE) config-macos
-endif
+# ── Environment setup ──────────────────────────────────────────────────
+# Install all host dependencies needed to build and test zCore:
+# QEMU emulators, UEFI firmware (OVMF + aarch64), mtools, e2fsprogs,
+# rustup cross-targets, and (on macOS) the musl cross-toolchains.
+# Run once after cloning. See tools/scripts/setup.sh for details.
+setup:
+	@tools/scripts/setup.sh
 
-config-linux:
-	sudo apt update
-	sudo apt install qemu-system qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils virt-manager
-	sudo systemctl enable --now libvirtd
+# Backwards-compatible alias (CI and old docs use `make config`).
+config: setup
 
 # install cross-compilation toolchain on macOS via Homebrew
+# (invoked automatically by `make setup` on Darwin)
 config-macos:
 	@echo "==> Installing musl cross-compiler toolchains (macOS)..."
 	@brew tap FiloSottile/musl-cross 2>/dev/null || true
@@ -834,37 +848,22 @@ help:
 update:
 	cargo update-all
 
-# put rootfs for linux mode
+# put rootfs for linux mode (full manifest, arch-keyed)
 rootfs:
 ifeq ($(XTASK), 1)
 	cargo rootfs --arch $(ARCH)
-else ifeq ($(ARCH), riscv64)
-	@rm -rf target/rootfs/riscv && mkdir -p target/rootfs/riscv/bin
-	@wget https://github.com/rcore-os/busybox-prebuilts/raw/master/busybox-1.30.1-riscv64/busybox -O target/rootfs/riscv/bin/busybox
-	@ln -s busybox target/rootfs/riscv/bin/ls
 endif
 
 # put other tests into rootfsw
 other-test:
 	cargo other-test --arch $(ARCH)
 
-# build image from rootfs
-image:
-ifeq ($(XTASK), 1)
-	cargo image --arch $(ARCH)
-else ifeq ($(ARCH), riscv64)
-	@echo building riscv.img
-	@mkdir -p target/qemu-riscv64/release
-	@rcore-fs-fuse target/qemu-riscv64/release/riscv64-linux.img target/rootfs/riscv zip
-	@qemu-img resize -f raw target/qemu-riscv64/release/riscv64-linux.img +5M
-endif
-
 # Pre-push check: mirrors all CI jobs locally.
 # Run this before every push to avoid CI failures.
 # Fast pre-push: clippy + fmt + builds (no QEMU tests).
 # Catches ~90% of CI failures in ~3 minutes.
 pre-push-quick:
-	@echo "==> [1/8] Clippy (all targets + personalities)..."
+	@echo "==> [1/8] Clippy (all selections + personalities)..."
 	cargo check-style
 	@echo "==> [2/8] Workspace build..."
 	cargo build
@@ -873,19 +872,19 @@ pre-push-quick:
 	@echo "==> [4/8] Zircon syscall tests (libos)..."
 	cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
 	@echo "==> [5/8] Bare-metal aarch64..."
-	$(MAKE) build ARCH=aarch64
+	$(MAKE) build CONFIG=busybox.qemu-aarch64 ARCH=aarch64
 	@echo "==> [6/8] Bare-metal x86_64..."
-	$(MAKE) build ARCH=x86_64
+	$(MAKE) build CONFIG=busybox.qemu-x86_64 ARCH=x86_64
 	@echo "==> [7/8] Hardware targets..."
-	cargo bin -m raspi400
-	cargo bin -m x86-laptop
+	cargo bin -m petal.raspi400
+	cargo bin -m petal.x86-laptop
 	@echo "==> [8/8] Done."
 	@echo "==> Quick pre-push checks passed."
 
 # Full pre-push: everything CI checks (slow — includes QEMU boot tests).
 # Requires: qemu-system-aarch64, qemu-system-x86_64.
 pre-push:
-	@echo "==> [1/15] Clippy (all targets + personalities)..."
+	@echo "==> [1/15] Clippy (all selections + personalities)..."
 	cargo check-style
 	@echo "==> [2/15] Workspace build..."
 	cargo build
@@ -894,42 +893,42 @@ pre-push:
 	@echo "==> [3.5/15] Zircon syscall tests (libos)..."
 	cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
 	@echo "==> [4/15] Bare-metal aarch64 (build + rootfs)..."
-	$(MAKE) build ARCH=aarch64
+	$(MAKE) build CONFIG=busybox.qemu-aarch64 ARCH=aarch64
 	@echo "==> [5/15] Boot smoke test (aarch64)..."
-	$(MAKE) boot-test ARCH=aarch64
+	$(MAKE) boot-test CONFIG=busybox.qemu-aarch64 ARCH=aarch64
 	@echo "==> [6/16] Bare-metal riscv64..."
-	cargo zcore-build -m qemu-riscv64
+	cargo zcore-build -m busybox.qemu-riscv64
 	@echo "==> [6.5/16] Boot smoke test (riscv64)..."
-	tools/scripts/riscv64-boot-test.sh
+	tools/scripts/riscv64-boot-test.sh busybox.qemu-riscv64
 	@echo "==> [7/16] Bare-metal x86_64 (build + rootfs)..."
-	$(MAKE) build ARCH=x86_64
+	$(MAKE) build CONFIG=busybox.qemu-x86_64 ARCH=x86_64
 	@echo "==> [8/15] Boot smoke test (x86_64)..."
-	$(MAKE) boot-test ARCH=x86_64
+	$(MAKE) boot-test CONFIG=busybox.qemu-x86_64 ARCH=x86_64
 	@echo "==> [9/15] Bare-metal x86_64 zircon..."
-	cargo bin -m qemu-x86_64
+	cargo bin -m petal.qemu-x86_64
 	@echo "==> [10/16] Dual flavour (build-only)..."
-	cargo bin -m qemu-aarch64 --flavour linux
+	cargo bin -m busybox.qemu-aarch64
 	@echo "==> [11/16] LibOS (Linux + Zircon)..."
-	cargo zcore-build -m libos --flavour linux
-	cargo zcore-build -m libos
+	cargo zcore-build -m busybox.libos
+	cargo zcore-build -m petal.libos
 	@echo "==> [12/16] Hardware targets (build-only)..."
-	cargo bin -m raspi400
-	cargo bin -m x86-laptop
+	cargo bin -m petal.raspi400
+	cargo bin -m petal.x86-laptop
 	@echo "==> [13/18] Zircon boot test (aarch64)..."
 	$(MAKE) zircon-boot-test ARCH=aarch64
-	@tools/scripts/zircon-rootfs-test.sh aarch64
+	@tools/scripts/zircon-rootfs-test.sh zircon-hello.qemu-aarch64 aarch64
 	@echo "==> [14/18] Zircon boot test (x86_64)..."
 	$(MAKE) zircon-boot-test ARCH=x86_64
 	@echo "==> [15/18] Libc tests (aarch64 + x86_64)..."
-	$(MAKE) libc-test ARCH=aarch64
-	$(MAKE) libc-test ARCH=x86_64
+	$(MAKE) libc-test CONFIG=busybox.qemu-aarch64 ARCH=aarch64
+	$(MAKE) libc-test CONFIG=busybox.qemu-x86_64 ARCH=x86_64
 	@echo "==> [16/18] Check all feature combinations..."
 	$(MAKE) check-all-features
 	@echo "==> [17/18] Done."
 	@echo "==> All pre-push checks passed."
 
-# Run clippy for all architectures (catches cross-platform issues).
-# Features come from targets/qemu-<arch>.toml via xtask.
+# Run clippy for all selections (catches cross-platform issues).
+# Features come from configs/ via xtask.
 clippy-all:
 	cargo check-style
 

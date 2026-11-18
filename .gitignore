@@ -14,8 +14,8 @@
 /rootfs
 /zCore/disk
 
-# Generated target spec JSON files (built by xtask from targets/*.toml)
-targets/*.json
+# Persistent user build selection (cargo zcore set)
+configs/config.toml
 
 .DS_Store
 __pycache__

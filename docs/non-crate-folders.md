@@ -195,7 +195,7 @@ To add a new utility: 1. Cross-compile it: `aarch64-linux-musl-gcc -o myutil
 myutil.c -static` (or `cargo build
 --target aarch64-unknown-linux-musl`) 2. Copy the binary to
 `rootfs/linux/aarch64/bin/` 3. Rebuild the image: `cargo image --arch aarch64` 4.
-Run: `cargo qemu --arch aarch64`, then at the shell prompt: `/bin/myutil` For
+Run: `cargo qemu -m busybox.qemu-aarch64`, then at the shell prompt: `/bin/myutil` For
 permanent inclusion, add the binary name to the symlink list in
 `tools/xtask/src/linux/mod.rs:67` (if it's a busybox applet) or add a copy step to
 `LinuxRootfs::make()`.

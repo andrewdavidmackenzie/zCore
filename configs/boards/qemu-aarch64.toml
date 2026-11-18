@@ -1,23 +1,23 @@
-# QEMU aarch64 virt machine -- UEFI boot
+# QEMU aarch64 virt machine
 #
-# Same hardware as qemu-aarch64, but boots via UEFI firmware (edk2)
-# instead of raw -kernel. The kernel is linked at 0x80200000 to avoid
-# overlap with the UEFI stub loaded by firmware.
-#
-# Use: cargo qemu -m qemu-aarch64-uefi
+# Standard QEMU virtual machine with PL011 UART, GIC-400, VirtIO block.
+# Used for development and CI testing.
 
-default-flavour = "linux"
 arch = "aarch64"
 cores = 4
-linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker-uefi.ld"
+linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker.ld"
 drivers = ["pl011-uart", "gic-400"]
-features = ["uefi-boot"]
+boot-method = "raw"
+default-product = "busybox"
 
 [qemu]
 machine = "virt"
 cpu = "cortex-a72"
 memory = "2G"
 
+# Rustc target specification.
+# These fields are written to a JSON file at build time and passed
+# to rustc via --target.
 [rustc-target]
 llvm-target = "aarch64-unknown-linux-gnu"
 data-layout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32"

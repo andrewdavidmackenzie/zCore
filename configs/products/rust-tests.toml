@@ -1,0 +1,18 @@
+# rust-tests: bare-metal kernel test runner.
+#
+# Builds the kernel with the `baremetal-test` feature: instead of
+# booting an init process, the kernel runs the Rust zircon-tests
+# suite directly (`make rust-tests`). The suite runs on all CPUs and
+# reports results over the serial console.
+#
+# root-proc/rootfs are unused at runtime (baremetal-test replaces
+# the normal boot path); the values keep the config valid.
+
+flavour = ""
+root-proc = "/bin/hello"
+log = "info"
+rootfs-contents = "petal"
+features = ["baremetal-test"]
+
+# The in-kernel test runner is wired up for the QEMU boards used in CI.
+supported-boards = ["qemu-aarch64", "qemu-x86_64"]

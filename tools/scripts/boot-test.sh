@@ -3,26 +3,33 @@
 # Boot smoke test: start zCore in QEMU, wait for the shell prompt,
 # run "poweroff -f" to verify clean shutdown, then exit.
 #
-# Usage: tools/scripts/boot-test.sh <arch>
-#   arch: aarch64 (others may be added later)
+# Usage: tools/scripts/boot-test.sh <product.board> <arch>
+#   selection: e.g. busybox.qemu-aarch64
+#   arch:      aarch64, x86_64, riscv64
 #
 # Exit code 0 = shell prompt reached and clean shutdown (boot success)
 # Exit code 1 = timeout or error (boot failure)
 
 set -euo pipefail
 
-ARCH="${1:?Usage: $0 <arch>}"
+CONFIG="${1:?Usage: $0 <product.board> <arch>}"
+ARCH="${2:?Usage: $0 <product.board> <arch>}"
+BOARD="${CONFIG##*.}"
+KERNEL_DIR="target/${CONFIG}/release"
 TIMEOUT=60
 PROMPT_PATTERN='/ # '
 
-# Read core count from target config
+# Read core count from board config
 source "$(dirname "$0")/get-target-cores.sh"
-CORES=$(get_target_cores "$ARCH")
+CORES=$(get_target_cores "$BOARD")
+
+# Resolve the rootfs image for the selection's product manifest.
+ROOTFS_IMG=$(cargo xtask rootfs-image -m "$CONFIG" --print-path)
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/qemu-aarch64/release/kernel.bin"
-    IMAGE="target/qemu-aarch64/release/aarch64-linux.img"
+    KERNEL="$KERNEL_DIR/kernel.bin"
+    IMAGE="$ROOTFS_IMG"
     QEMU_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
@@ -35,9 +42,8 @@ case "$ARCH" in
   x86_64)
     # x86_64 uses a BIOS bootable disk image that bundles kernel + rootfs.
     # Build the boot image from the kernel ELF + rootfs SFS image.
-    KERNEL_ELF="target/qemu-x86_64/release/kernel"
-    BOOT_IMG="target/qemu-x86_64/release/boot.img"
-    ROOTFS_IMG="target/qemu-x86_64/release/x86_64-linux.img"
+    KERNEL_ELF="$KERNEL_DIR/kernel"
+    BOOT_IMG="$KERNEL_DIR/boot.img"
     BOOTIMAGE_TOOL="tools/x86-bootimage/target/release/x86-bootimage"
 
     if [ ! -f "$BOOTIMAGE_TOOL" ]; then
@@ -64,8 +70,8 @@ case "$ARCH" in
     )
     ;;
   riscv64)
-    KERNEL="target/qemu-riscv64/release/kernel.bin"
-    IMAGE="target/qemu-riscv64/release/riscv64-linux.img"
+    KERNEL="$KERNEL_DIR/kernel.bin"
+    IMAGE="$ROOTFS_IMG"
     QEMU_CMD=(
       qemu-system-riscv64
       -m 2G -display none -no-reboot -nographic
@@ -85,7 +91,7 @@ esac
 # Verify required files exist
 for f in "$KERNEL"; do
   if [ ! -f "$f" ]; then
-    echo "ERROR: $f not found. Run 'make build ARCH=$ARCH' first."
+    echo "ERROR: $f not found. Run 'make build CONFIG=$CONFIG' first."
     exit 1
   fi
 done

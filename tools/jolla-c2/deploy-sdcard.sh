@@ -14,7 +14,7 @@ set -e
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <disk-device> <zcore-binary>" >&2
-    echo "Example: $0 /dev/disk6 ../../target/jolla-c2/release/kernel.bin" >&2
+    echo "Example: $0 /dev/disk6 ../../target/petal.jolla-c2/release/kernel.bin" >&2
     exit 1
 fi
 

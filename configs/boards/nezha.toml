@@ -1,17 +1,10 @@
-# QEMU riscv64 virt machine -- Linux
-#
-# Standard QEMU virtual machine with 16550 UART (via device tree),
-# RISC-V PLIC interrupt controller.
-
-default-flavour = "linux"
+# Allwinner Nezha D1 RISC-V board (not actively tested)
 arch = "riscv64"
-cores = 1
 linker-script = "zCore/hal-impl/src/bare/arch/riscv/platform/linker.ld"
-drivers = ["uart-16550", "riscv-intc", "riscv-plic", "pci"]
-
-[qemu]
-machine = "virt"
-memory = "2G"
+drivers = ["riscv-intc", "riscv-plic"]
+features = ["allwinner-drivers"]
+boot-method = "raw"
+default-product = "busybox"
 
 [rustc-target]
 llvm-target = "riscv64"

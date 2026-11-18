@@ -36,7 +36,7 @@ They are copied to the rootfs at `/bin/core-tests-standalone` and `/lib/`.
 ### Building
 
 ```bash
-cargo qemu --arch x86_64
+cargo qemu -m busybox.qemu-x86_64
 # Or specifically for testing:
 ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/core-tests-standalone" cargo bin -m qemu-x86_64
 ```

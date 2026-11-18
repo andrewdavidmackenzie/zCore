@@ -50,12 +50,35 @@ loop and task collection. Tasks are distributed across CPUs via
 - Hardware exception delivery (breakpoints, #GP, #DB)
 - These block 7 Threads tests and 2 Property tests
 
+## Build configuration: products and boards
+Builds are configured as `<product>.<board>` pairs (like Fuchsia's
+`fx set PRODUCT.BOARD`):
+
+- **Boards** (`configs/boards/*.toml`): hardware — arch, cores, drivers,
+  linker script, QEMU config, boot/flash method.
+- **Products** (`configs/products/*.toml`): software — flavour (Zircon
+  only vs Zircon+Linux), init program (root-proc), rootfs contents,
+  log level, extra cmdline. Products may `extends` another product.
+
+Products: `busybox` (Zircon+Linux, busybox shell), `petal` (Zircon only,
+petal shell), `petal-linux`, `zircon-hello` (bringup), `core-tests`
+(x86_64 QEMU only), `rust-tests` (in-kernel test runner).
+Boards: `qemu-aarch64`, `qemu-x86_64`, `qemu-riscv64`, `raspi400`,
+`x86-laptop`, `jolla-c2`, `libos`, plus RISC-V boards.
+
+List them: `make list-products` / `make list-boards`.
+Persist a default: `cargo zcore set petal.qemu-aarch64` (then plain
+`cargo qemu` uses it). Output artifacts are keyed by the full selection:
+`target/<product>.<board>/release/kernel`.
+
 ## Default build command
 To build and run zCore the default command to use is:
 
 ```bash
-cargo qemu --arch aarch64
+cargo qemu -m busybox.qemu-aarch64
 ```
+
+(equivalently `make run`; boots QEMU aarch64 with the busybox shell).
 
 ## Pre-push checks
 **Always run `make pre-push` before pushing commits.** This runs the same

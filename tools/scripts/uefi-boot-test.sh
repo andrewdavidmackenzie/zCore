@@ -51,7 +51,7 @@ fi
 
 echo "==> Building UEFI kernel and stub..."
 ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/shell" \
-  cargo qemu -m qemu-aarch64-uefi --log warn 2>&1 &
+  cargo qemu -m petal-linux.qemu-aarch64-uefi --log warn 2>&1 &
 # cargo qemu runs QEMU directly — we need to intercept it.
 # Instead, use the xtask to just build, then run QEMU ourselves.
 kill %1 2>/dev/null; wait %1 2>/dev/null || true
@@ -60,22 +60,22 @@ kill %1 2>/dev/null; wait %1 2>/dev/null || true
 # Actually we need a different approach — build then test separately
 echo "==> Building kernel..."
 ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/shell" \
-  cargo zcore-build -m qemu-aarch64-uefi
+  cargo zcore-build -m petal-linux.qemu-aarch64-uefi
 
 echo "==> Building UEFI stub..."
 cargo build --manifest-path tools/aarch64-uefi-stub/Cargo.toml \
   --target aarch64-unknown-uefi --release
 
 echo "==> Building rootfs..."
-cargo image --arch aarch64
+cargo xtask rootfs-image -m petal-linux.qemu-aarch64-uefi
 
 echo "==> Generating DTB..."
 qemu-system-aarch64 -M virt,dumpdtb=/tmp/zcore-uefi-test-virt.dtb \
   -cpu cortex-a72 -m 2G -smp "$CORES" 2>/dev/null || true
 
 echo "==> Stripping kernel..."
-KERNEL="target/qemu-aarch64-uefi/release/kernel"
-KERNEL_STRIPPED="target/qemu-aarch64-uefi/release/kernel.stripped"
+KERNEL="target/petal-linux.qemu-aarch64-uefi/release/kernel"
+KERNEL_STRIPPED="target/petal-linux.qemu-aarch64-uefi/release/kernel.stripped"
 OBJCOPY=$(find "$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1)
 if [ -n "$OBJCOPY" ]; then
   "$OBJCOPY" --strip-debug "$KERNEL" "$KERNEL_STRIPPED"
@@ -93,7 +93,7 @@ TMPD=$(mktemp -d)
 ESP="$TMPD/esp.img"
 VARS="$TMPD/vars.fd"
 STUB="tools/aarch64-uefi-stub/target/aarch64-unknown-uefi/release/aarch64-uefi-stub.efi"
-ROOTFS="target/qemu-aarch64/release/aarch64-linux.img"
+ROOTFS="target/rootfs/images/full-aarch64.img"
 
 dd if=/dev/zero of="$ESP" bs=1M count=128 2>/dev/null
 mformat -i "$ESP" -F ::
