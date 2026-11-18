@@ -2574,3 +2574,31 @@ pub async fn run_all() {
     yield_with_non_zero_option_is_invalid_args().await;
     yield_with_zero_option_is_ok().await;
 }
+
+/// Kernel-API-only thread tests that don't use UserInPtr/UserOutPtr.
+/// These run on bare-metal in kernel mode.
+pub fn run_kernel_tests() {
+    #[cfg(target_arch = "x86_64")]
+    {
+        debug_registers_dr6_correct_after_breakpoint_removal();
+        debug_registers_dr6_reset_on_debug_exception();
+        debug_registers_validation();
+        debug_registers_watchpoint_syscall_panic_repro();
+        noncanonical_rip_address_iretq();
+        noncanonical_rip_address_syscall();
+        start_regs();
+        start_regs_noncanonical_tp();
+        syscall_debugger_modify_result();
+        thread_local_register_state();
+        write_read_debug_register_state();
+        write_thread_state_with_invalid_mxcsr_is_invalid_args();
+        writing_single_step_state();
+        writing_vector_register_state_unsupported_fields_ignored();
+        watchpoint_syscall_panic();
+        x86_ac_flag_user_copy();
+    }
+    nonstarted_thread();
+    get_affinity();
+    invalid_rights();
+    thread_start_invalid_entry();
+}
