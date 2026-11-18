@@ -50,7 +50,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)
 
 .PHONY: help build run test boot-test busybox-test config config-macos setup update rootfs libc-test other-test image clippy-all check doc docs clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
-	list-products list-boards flash \
+	list-products list-boards flash petal-test \
 	debug-qemu debug-lldb debug-x86-qemu debug-x86-gdb \
 	pre-push pre-push-quick core-tests core-tests-build \
 	boot-logo uefi-firmware
@@ -647,6 +647,16 @@ endif
 
 rust-tests: rust-tests-build
 	@tools/scripts/rust-tests-qemu.sh $(RUST_TESTS_ARCH) $(RUST_TESTS_CONFIG)
+
+# ── Petal user-mode tests ──────────────────────────────────────────────
+# Run a single petal user-mode test binary in QEMU (the 66 syscall-layer
+# tests ported from zircon-tests; see configs/products + issue #706).
+# Usage: make petal-test BIN=counter-test [ARCH=aarch64|x86_64]
+petal-test:
+ifndef BIN
+	$(error BIN is required. Usage: make petal-test BIN=counter-test [ARCH=aarch64])
+endif
+	@tools/scripts/petal-test.sh $(ARCH) $(BIN)
 
 # Boot smoke test: start QEMU, wait for the "/ # " shell prompt, exit.
 # Proves: boot assembly, MMU, HAL, VirtIO, filesystem, ELF loader, and

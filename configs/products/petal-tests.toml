@@ -1,0 +1,14 @@
+# petal-tests: run all petal user-mode test binaries in one boot.
+#
+# Boots the kernel with the test-runner program as init; it spawns each
+# petal test binary from the petal rootfs via zx_debug_exec and prints
+# START/END markers plus the tests' own PASS/FAIL output to the serial
+# console. Used by `make petal-tests` (CI).
+
+flavour = ""
+root-proc = "/bin/test-runner"
+log = "warn"
+rootfs-contents = "petal"
+
+# The petal rootfs and runner work on the QEMU boards.
+supported-boards = ["qemu-aarch64", "qemu-x86_64"]
