@@ -18,7 +18,9 @@
 //! Per-test pass/fail is reported by the tests themselves (`PASS` /
 //! `FAIL: ...` lines, same output the per-binary `petal-test.sh`
 //! parses). This runner reports exec errors (binary missing, exec
-//! failed) and hangs are detectable as a START without a matching END.
+//! failed) and nonzero child exit codes (a test that called fail()
+//! or panicked exits 1), and hangs are detectable as a START without
+//! a matching END.
 //!
 //! The test list must match the `[[bin]]` entries in `petal/Cargo.toml`
 //! (minus `hello`, `shell`, and this runner); a stale entry shows up as
@@ -29,8 +31,6 @@
 
 extern crate alloc;
 extern crate petal;
-
-use zx::sys::*;
 
 const TESTS: &[&str] = &[
     "alloc-test",
@@ -111,6 +111,7 @@ pub fn main() {
     write(b" tests) ===\n");
 
     let mut exec_failures = 0;
+    let mut exit_failures = 0;
     for (i, name) in TESTS.iter().enumerate() {
         write(b"\n=== petal-test-runner: START [");
         write(alloc::format!("{}/{}", i + 1, TESTS.len()).as_bytes());
@@ -121,13 +122,23 @@ pub fn main() {
         let path = alloc::format!("/bin/{}", name);
         let status = zx::sys::debug_exec(&path);
 
-        if status != ZX_OK {
+        if status < 0 {
+            // Negative: zx_status_t error from the spawn itself.
             write(b"=== petal-test-runner: EXEC-FAIL ");
             write(name.as_bytes());
             write(b" status=");
             write(alloc::format!("{}", status).as_bytes());
             write(b" ===\n");
             exec_failures += 1;
+        } else if status != 0 {
+            // Positive: the child ran but exited nonzero — petal's
+            // fail() and panic handler both exit with code 1.
+            write(b"=== petal-test-runner: EXIT-FAIL ");
+            write(name.as_bytes());
+            write(b" code=");
+            write(alloc::format!("{}", status).as_bytes());
+            write(b" ===\n");
+            exit_failures += 1;
         } else {
             write(b"=== petal-test-runner: END ");
             write(name.as_bytes());
@@ -137,5 +148,7 @@ pub fn main() {
 
     write(b"\n=== petal-test-runner: DONE (exec failures: ");
     write(alloc::format!("{}", exec_failures).as_bytes());
+    write(b", exit failures: ");
+    write(alloc::format!("{}", exit_failures).as_bytes());
     write(b") ===\n");
 }

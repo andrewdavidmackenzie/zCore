@@ -130,14 +130,18 @@ fn set_get_property_name() {
         b"set name",
     );
 
-    // Get name
-    let mut buf = [0u8; 32];
+    // Get name. Fill with a sentinel first: the property must return
+    // exactly "test-proc" plus its NUL terminator, zero-padded to the
+    // full 32-byte buffer.
+    let mut buf = [0xA5u8; 32];
     assert_ok(
         unsafe { zx_object_get_property(proc_h, ZX_PROP_NAME, buf.as_mut_ptr(), buf.len()) },
         name,
         b"get name",
     );
-    if &buf[..9] != b"test-proc" {
+    let mut expected = [0u8; 32];
+    expected[..10].copy_from_slice(b"test-proc\0");
+    if buf != expected {
         fail(name, b"name mismatch");
     }
 

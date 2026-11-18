@@ -95,8 +95,11 @@ fn port_queue_access_denied() {
     let name = b"port_queue_access_denied";
     let port_h = port_create();
 
-    // Reduce rights via replace (Fuchsia's pattern): ports lack the
-    // DUPLICATE right by default, so zx_handle_duplicate would fail.
+    // Reduce rights via replace, dropping WRITE — zx_port_queue
+    // requires it (the C++ test replaces with
+    // ZX_DEFAULT_PORT_RIGHTS & ~ZX_RIGHT_WRITE). The mask must only
+    // request rights the port actually has: default port rights —
+    // (BASIC & !WAIT) | IO — include DUPLICATE but not WAIT.
     let mut read_only: HandleValue = 0;
     assert_ok(
         unsafe { zx_handle_replace(port_h, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut read_only) },
@@ -224,7 +227,8 @@ fn port_cancel_access_denied() {
     let name = b"port_cancel_access_denied";
     let port_h = port_create();
 
-    // Reduce rights via replace (ports lack the DUPLICATE right).
+    // Reduce rights via replace, dropping WRITE — zx_port_cancel
+    // requires it (the C++ test drops ZX_RIGHT_WRITE from the port).
     let mut read_only: HandleValue = 0;
     assert_ok(
         unsafe { zx_handle_replace(port_h, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut read_only) },
@@ -256,7 +260,9 @@ fn port_wait_async_port_access_denied() {
     let name = b"port_wait_async_port_access_denied";
     let port_h = port_create();
 
-    // Reduce rights via replace (ports lack the DUPLICATE right).
+    // Reduce rights via replace, dropping WRITE — wait_async queues
+    // packets into the port, which requires WRITE on it (the C++ test
+    // drops ZX_RIGHT_WRITE from the port).
     let mut read_only: HandleValue = 0;
     assert_ok(
         unsafe { zx_handle_replace(port_h, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut read_only) },

@@ -19,7 +19,9 @@ const ZX_VMO_OP_LOCK: u32 = 3;
 const ZX_VMO_OP_TRY_LOCK: u32 = 11;
 const ZX_VMO_OP_UNLOCK: u32 = 4;
 
-// Lock state result struct: { offset: u64, size: u64, state: u32, padding: u32 }
+// zx_vmo_lock_state_t: { offset: u64, size: u64, discarded_offset: u64,
+// discarded_size: u64 } — 32 bytes. Nothing is discarded at LOCK time,
+// so the kernel zero-fills the discarded_* fields.
 const LOCK_STATE_SIZE: usize = 32;
 
 fn pass(name: &[u8]) {

@@ -20,7 +20,13 @@ ARCH="${1:?Usage: $0 <arch>}"
 CONFIG="petal-tests.qemu-${ARCH}"
 KERNEL_DIR="target/${CONFIG}/release"
 TIMEOUT="${PETAL_TESTS_TIMEOUT:-1800}"
-LOG="${PETAL_TESTS_LOG:-/tmp/petal-tests-${ARCH}.log}"
+# Private log directory per run: two concurrent runs on the same host
+# (e.g. both arches, or runs from separate checkouts) must not share a
+# log — one script could read the other guest's DONE marker, stop its
+# unfinished QEMU, and report success from the shared output.
+# PETAL_TESTS_LOG overrides this with a fixed path for debugging.
+LOG_DIR=$(mktemp -d /tmp/petal-tests.XXXXXXXX)
+LOG="${PETAL_TESTS_LOG:-$LOG_DIR/qemu.log}"
 
 source "$(dirname "$0")/get-target-cores.sh"
 CORES=$(get_target_cores "qemu-${ARCH}")
@@ -71,9 +77,20 @@ else
   )
 fi
 
-echo "==> Running petal test suite on $ARCH QEMU (timeout=${TIMEOUT}s)..."
+echo "==> Running petal test suite on $ARCH QEMU (timeout=${TIMEOUT}s, log: $LOG)..."
 "${QEMU_CMD[@]}" > "$LOG" 2>&1 &
 QEMU_PID=$!
+
+# Kill QEMU on any exit path, including cancellation (SIGTERM/SIGINT):
+# if a supervisor signals only this script, the shell can otherwise
+# exit before reaching a kill and leave the QEMU process running.
+cleanup() {
+  kill "$QEMU_PID" 2>/dev/null || true
+  wait "$QEMU_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 DONE=0
 ELAPSED=0
@@ -85,12 +102,22 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   if ! kill -0 "$QEMU_PID" 2>/dev/null; then
     break
   fi
-  sleep 5
-  ELAPSED=$((ELAPSED + 5))
+  # Bound each sleep by the remaining time and re-check at the
+  # deadline: a DONE written during the final sleep interval must
+  # still be seen, not reported as a timeout.
+  remaining=$((TIMEOUT - ELAPSED))
+  step=5
+  if [ "$remaining" -lt 5 ]; then
+    step=$remaining
+  fi
+  sleep "$step"
+  ELAPSED=$((ELAPSED + step))
 done
-
-kill "$QEMU_PID" 2>/dev/null || true
-wait "$QEMU_PID" 2>/dev/null || true
+# Final check: QEMU may have written DONE (or exited) during the last
+# sleep, after the loop's final grep.
+if [ "$DONE" -ne 1 ] && grep -q "petal-test-runner: DONE" "$LOG" 2>/dev/null; then
+  DONE=1
+fi
 
 # Strip ANSI colors for reliable parsing.
 CLEAN="${LOG}.clean"
@@ -99,11 +126,12 @@ tr -d '\000' < "$LOG" | sed 's/\x1b\[[0-9;]*m//g' > "$CLEAN"
 PASSED=$(grep -c " PASS$" "$CLEAN" || true)
 FAILED=$(grep -c "^FAIL:" "$CLEAN" || true)
 EXEC_FAILS=$(grep -c "petal-test-runner: EXEC-FAIL" "$CLEAN" || true)
+EXIT_FAILS=$(grep -c "petal-test-runner: EXIT-FAIL" "$CLEAN" || true)
 STARTED=$(grep -c "petal-test-runner: START" "$CLEAN" || true)
 ENDED=$(grep -c "petal-test-runner: END" "$CLEAN" || true)
 
 echo "=== Petal test results ($ARCH, ${ELAPSED}s) ==="
-echo "Tests passed: $PASSED  Failed: $FAILED  Exec failures: $EXEC_FAILS"
+echo "Tests passed: $PASSED  Failed: $FAILED  Exec failures: $EXEC_FAILS  Exit failures: $EXIT_FAILS"
 echo "Binaries started: $STARTED  completed: $ENDED"
 
 if [ "$FAILED" -gt 0 ]; then
@@ -114,12 +142,19 @@ if [ "$EXEC_FAILS" -gt 0 ]; then
   echo "Exec failures:"
   grep "petal-test-runner: EXEC-FAIL" "$CLEAN" | sed 's/^/  /'
 fi
+if [ "$EXIT_FAILS" -gt 0 ]; then
+  echo "Nonzero exit codes:"
+  grep "petal-test-runner: EXIT-FAIL" "$CLEAN" | sed 's/^/  /'
+fi
 if [ "$DONE" -ne 1 ]; then
-  LAST_START=$(grep "petal-test-runner: START" "$CLEAN" | tail -1 | sed 's/.*START \[[0-9/]*\] //;s/ ===//')
-  echo "HANG: runner did not finish (last started: $LAST_START)"
+  # grep finds nothing if QEMU died before the first START: with
+  # pipefail + errexit, a failing pipeline in this assignment would
+  # abort the script before printing the diagnostic.
+  LAST_START=$(grep "petal-test-runner: START" "$CLEAN" | tail -1 | sed 's/.*START \[[0-9/]*\] //;s/ ===//' || true)
+  echo "HANG: runner did not finish (last started: ${LAST_START:-none})"
 fi
 
-if [ "$DONE" -eq 1 ] && [ "$FAILED" -eq 0 ] && [ "$EXEC_FAILS" -eq 0 ]; then
+if [ "$DONE" -eq 1 ] && [ "$FAILED" -eq 0 ] && [ "$EXEC_FAILS" -eq 0 ] && [ "$EXIT_FAILS" -eq 0 ]; then
   echo "OK: all petal tests passed"
   exit 0
 fi

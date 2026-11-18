@@ -99,8 +99,11 @@ fn cancel_key_access_denied() {
     let mut port: HandleValue = 0;
     assert_ok(unsafe { zx_port_create(0, &mut port) }, name, b"create");
 
-    // Reduce rights via replace (Fuchsia's pattern): ports lack the
-    // DUPLICATE right by default, so zx_handle_duplicate would fail.
+    // Reduce rights via replace, dropping WRITE — zx_port_cancel_key
+    // requires it (the C++ Cancel* tests replace with
+    // ZX_DEFAULT_PORT_RIGHTS & ~ZX_RIGHT_WRITE). The mask must only
+    // request rights the port actually has: default port rights —
+    // (BASIC & !WAIT) | IO — include DUPLICATE but not WAIT.
     let mut ro: HandleValue = 0;
     assert_ok(
         unsafe { zx_handle_replace(port, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut ro) },

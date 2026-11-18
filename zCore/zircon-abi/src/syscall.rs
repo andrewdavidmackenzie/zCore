@@ -453,7 +453,10 @@ pub fn debug_read(resource: HandleValue, buf: &mut [u8]) -> Result<usize, ZxStat
 /// Execute a program from the rootfs (safe wrapper).
 ///
 /// Takes a path to a binary in the rootfs. The kernel reads it,
-/// detects the flavour from the ELF header, and spawns it.
+/// detects the flavour from the ELF header, spawns it, waits for it
+/// to terminate, and returns its exit code: 0 = clean exit, positive
+/// = the child's nonzero exit code, negative = zx_status_t error
+/// from the spawn.
 pub fn debug_exec(path: &str) -> ZxStatus {
     unsafe { zx_debug_exec(path.as_ptr(), path.len()) }
 }

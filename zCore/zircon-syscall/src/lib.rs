@@ -1234,8 +1234,17 @@ impl Syscall<'_> {
             }
             Sys::TIMER_CREATE => self.sys_timer_create(a0 as _, a1 as _, a2.into()),
             Sys::DEBUG_WRITE => self.sys_debug_write(a0.into(), a1 as _),
+            // debug_exec returns the child's exit code directly in the
+            // return register (like DEBUGLOG_READ returns the byte count):
+            // 0 = clean exit, positive = the child's exit code, negative
+            // = zx_status_t error from the spawn.
             #[cfg(feature = "elf")]
-            Sys::DEBUG_EXEC => self.sys_debug_exec(a0.into(), a1 as _).await,
+            Sys::DEBUG_EXEC => {
+                return match self.sys_debug_exec(a0.into(), a1 as _).await {
+                    Ok(code) => code as isize,
+                    Err(err) => err as isize,
+                };
+            }
             #[cfg(not(feature = "elf"))]
             Sys::DEBUG_EXEC => Err(ZxError::NOT_SUPPORTED),
             Sys::DEBUGLOG_CREATE => self.sys_debuglog_create(a0 as _, a1 as _, a2.into()),

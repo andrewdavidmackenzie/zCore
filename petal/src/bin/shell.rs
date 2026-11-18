@@ -191,7 +191,9 @@ fn run_command(line: &str, ctx: &Ctx) -> bool {
         _ => {
             // Try to exec as a program path
             let status = zx::sys::debug_exec(parts[0]);
-            if status != 0 {
+            // Negative = zx_status_t error from the exec; nonnegative
+            // is the child's exit code (the command ran).
+            if status < 0 {
                 if !parts[0].starts_with('/') {
                     zx::debug_write(b"unknown command: ");
                     zx::debug_write(parts[0].as_bytes());
@@ -238,7 +240,7 @@ fn cmd_exec(args: &[&str]) {
     }
     let path = args[0];
     let status = zx::sys::debug_exec(path);
-    if status != 0 {
+    if status < 0 {
         zx::debug_write(b"exec failed: ");
         zx::debug_write(path.as_bytes());
         zx::debug_write(b"\r\n");

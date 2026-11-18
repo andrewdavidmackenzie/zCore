@@ -167,16 +167,36 @@ pub unsafe fn copy_to_user(dst: *mut u8, src: *const u8, len: usize) -> Result<(
 #[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
 const X86_64_USER_ADDR_LIMIT: usize = 1usize << 47;
 
-/// Check that `[addr, addr+len)` lies within the **user** address space
-/// on x86_64 (below the architectural user limit). Bad user pointers
-/// must be rejected before the copy starts — see
-/// [`X86_64_USER_ADDR_LIMIT`].
+/// Check that `[addr, addr+len)` is safe to access on x86_64.
 ///
-/// Only enforced for syscalls entered from user mode: in-kernel test
-/// code (the baremetal-test runner) calls the syscall interface
-/// directly and legitimately passes kernel addresses as buffers.
+/// Non-canonical addresses are always rejected, for user and kernel
+/// callers alike: accessing them raises #GP, which the guarded copy's
+/// fault recovery cannot intercept (unlike a page fault).
+///
+/// The user-half range check (below the architectural user limit, see
+/// [`X86_64_USER_ADDR_LIMIT`]) is only enforced for syscalls entered
+/// from user mode: in-kernel test code (the baremetal-test runner)
+/// calls the syscall interface directly and legitimately passes
+/// kernel addresses as buffers.
 #[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
 fn validate_canonical_user_range(addr: usize, len: usize) -> Result<()> {
+    // A canonical address has bits 63..47 all zero (user half) or all
+    // one (kernel half).
+    let is_canonical = |a: usize| -> bool {
+        let top = a >> 47;
+        top == 0 || top == 0x1FFFF
+    };
+    if !is_canonical(addr) {
+        return Err(Error::InvalidPointer);
+    }
+    if len > 0 {
+        // The whole range must be canonical — a copy that reaches a
+        // non-canonical address raises #GP part-way through.
+        match addr.checked_add(len) {
+            Some(end) if is_canonical(end - 1) => {}
+            _ => return Err(Error::InvalidPointer),
+        }
+    }
     if !crate::thread::in_user_syscall() {
         return Ok(());
     }
