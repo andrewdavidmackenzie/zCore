@@ -107,33 +107,41 @@ fn replace_success_orig_invalid() {
 fn replace_failure_both_invalid() {
     let name = b"replace_failure_both_invalid";
 
-    // Create event, duplicate with READ only
+    // Create event, duplicate with a reduced subset of its rights
+    // (WAIT | INSPECT are in ZX_DEFAULT_EVENT_RIGHTS).
     let mut h: HandleValue = 0;
     assert_ok(unsafe { zx_event_create(0, &mut h) }, name, b"event create");
 
-    let mut read_only: HandleValue = 0;
+    let mut reduced: HandleValue = 0;
     assert_ok(
-        unsafe { zx_handle_duplicate(h, ZX_RIGHT_READ, &mut read_only) },
+        unsafe { zx_handle_duplicate(h, ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT, &mut reduced) },
         name,
-        b"duplicate with READ",
+        b"duplicate with reduced rights",
     );
     unsafe { zx_handle_close(h) };
 
-    // Try to replace with rights that include WRITE (escalation) — should fail
+    // Try to replace with rights that include SIGNAL (escalation) —
+    // should fail: replace may only reduce rights.
     let mut h2: HandleValue = 0;
-    let s = unsafe { zx_handle_replace(read_only, ZX_RIGHT_READ | ZX_RIGHT_WRITE, &mut h2) };
+    let s = unsafe {
+        zx_handle_replace(
+            reduced,
+            ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT | ZX_RIGHT_SIGNAL,
+            &mut h2,
+        )
+    };
     if s == ZX_OK {
         fail(name, b"escalation should fail");
     }
 
     // In zCore, replace does NOT consume the source on failure
     assert_ok(
-        unsafe { zx_handle_check_valid(read_only) },
+        unsafe { zx_handle_check_valid(reduced) },
         name,
         b"source still valid",
     );
 
-    unsafe { zx_handle_close(read_only) };
+    unsafe { zx_handle_close(reduced) };
     pass(name);
 }
 

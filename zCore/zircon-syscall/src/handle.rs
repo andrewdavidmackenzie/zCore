@@ -80,7 +80,9 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         proc.get_handle_info(handle)
             .map(|_| ())
-            .map_err(|_| ZxError::NOT_FOUND)
+            // Fuchsia reports invalid handles as ZX_ERR_BAD_HANDLE
+            // (matching zx_handle_close on a dead handle value).
+            .map_err(|_| ZxError::BAD_HANDLE)
     }
 
     /// Close a handle and reclaim the underlying object if no other handles to it exist.

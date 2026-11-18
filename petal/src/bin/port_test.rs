@@ -99,18 +99,13 @@ fn cancel_key_access_denied() {
     let mut port: HandleValue = 0;
     assert_ok(unsafe { zx_port_create(0, &mut port) }, name, b"create");
 
-    // Dup without WRITE
+    // Reduce rights via replace (Fuchsia's pattern): ports lack the
+    // DUPLICATE right by default, so zx_handle_duplicate would fail.
     let mut ro: HandleValue = 0;
     assert_ok(
-        unsafe {
-            zx_handle_duplicate(
-                port,
-                ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
-                &mut ro,
-            )
-        },
+        unsafe { zx_handle_replace(port, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut ro) },
         name,
-        b"dup",
+        b"replace",
     );
 
     assert_status(
@@ -121,7 +116,6 @@ fn cancel_key_access_denied() {
     );
 
     unsafe { zx_handle_close(ro) };
-    unsafe { zx_handle_close(port) };
     pass(name);
 }
 

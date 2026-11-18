@@ -207,16 +207,18 @@ fn write_without_write_right() {
     let name = b"write_without_write_right";
     let (h0, h1) = channel_create();
     let mut ro: HandleValue = 0;
+    // Reduce rights via replace (Fuchsia's pattern): channels lack the
+    // DUPLICATE right by default, so zx_handle_duplicate would fail.
     assert_ok(
         unsafe {
-            zx_handle_duplicate(
+            zx_handle_replace(
                 h0,
                 ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
                 &mut ro,
             )
         },
         name,
-        b"dup",
+        b"replace",
     );
     let data = b"test";
     assert_status(
@@ -226,7 +228,6 @@ fn write_without_write_right() {
         b"",
     );
     unsafe { zx_handle_close(ro) };
-    unsafe { zx_handle_close(h0) };
     unsafe { zx_handle_close(h1) };
     pass(name);
 }
@@ -235,17 +236,19 @@ fn write_without_write_right() {
 fn read_without_read_right() {
     let name = b"read_without_read_right";
     let (h0, h1) = channel_create();
+    // Reduce rights via replace (Fuchsia's pattern): channels lack the
+    // DUPLICATE right by default, so zx_handle_duplicate would fail.
     let mut wo: HandleValue = 0;
     assert_ok(
         unsafe {
-            zx_handle_duplicate(
+            zx_handle_replace(
                 h0,
                 ZX_RIGHT_WRITE | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
                 &mut wo,
             )
         },
         name,
-        b"dup",
+        b"replace",
     );
     let mut buf = [0u8; 32];
     let mut ab: u32 = 0;
@@ -268,7 +271,6 @@ fn read_without_read_right() {
         b"",
     );
     unsafe { zx_handle_close(wo) };
-    unsafe { zx_handle_close(h0) };
     unsafe { zx_handle_close(h1) };
     pass(name);
 }

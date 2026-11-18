@@ -95,18 +95,13 @@ fn port_queue_access_denied() {
     let name = b"port_queue_access_denied";
     let port_h = port_create();
 
-    // Duplicate with READ only (no WRITE)
+    // Reduce rights via replace (Fuchsia's pattern): ports lack the
+    // DUPLICATE right by default, so zx_handle_duplicate would fail.
     let mut read_only: HandleValue = 0;
     assert_ok(
-        unsafe {
-            zx_handle_duplicate(
-                port_h,
-                ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
-                &mut read_only,
-            )
-        },
+        unsafe { zx_handle_replace(port_h, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut read_only) },
         name,
-        b"dup read-only",
+        b"replace read-only",
     );
 
     let packet = [0u8; PORT_PACKET_SIZE];
@@ -118,7 +113,6 @@ fn port_queue_access_denied() {
     );
 
     unsafe { zx_handle_close(read_only) };
-    unsafe { zx_handle_close(port_h) };
     pass(name);
 }
 
@@ -230,18 +224,12 @@ fn port_cancel_access_denied() {
     let name = b"port_cancel_access_denied";
     let port_h = port_create();
 
-    // Dup port with READ only
+    // Reduce rights via replace (ports lack the DUPLICATE right).
     let mut read_only: HandleValue = 0;
     assert_ok(
-        unsafe {
-            zx_handle_duplicate(
-                port_h,
-                ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
-                &mut read_only,
-            )
-        },
+        unsafe { zx_handle_replace(port_h, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut read_only) },
         name,
-        b"dup read-only",
+        b"replace read-only",
     );
 
     let mut event_h: HandleValue = 0;
@@ -259,7 +247,6 @@ fn port_cancel_access_denied() {
     );
 
     unsafe { zx_handle_close(read_only) };
-    unsafe { zx_handle_close(port_h) };
     unsafe { zx_handle_close(event_h) };
     pass(name);
 }
@@ -269,17 +256,12 @@ fn port_wait_async_port_access_denied() {
     let name = b"port_wait_async_port_access_denied";
     let port_h = port_create();
 
+    // Reduce rights via replace (ports lack the DUPLICATE right).
     let mut read_only: HandleValue = 0;
     assert_ok(
-        unsafe {
-            zx_handle_duplicate(
-                port_h,
-                ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
-                &mut read_only,
-            )
-        },
+        unsafe { zx_handle_replace(port_h, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut read_only) },
         name,
-        b"dup read-only port",
+        b"replace read-only port",
     );
 
     let mut event_h: HandleValue = 0;
@@ -297,7 +279,6 @@ fn port_wait_async_port_access_denied() {
     );
 
     unsafe { zx_handle_close(read_only) };
-    unsafe { zx_handle_close(port_h) };
     unsafe { zx_handle_close(event_h) };
     pass(name);
 }
