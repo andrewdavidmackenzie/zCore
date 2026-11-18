@@ -432,8 +432,7 @@ pub fn build_zircon_rootfs(arch: Arch, fuchsia: bool) -> PathBuf {
     // there — notably etc/extra-args, which carries the gtest filter
     // and must survive rootfs rebuilds.
     dir::clear(&bin_dir).unwrap();
-    dir::clear(&rootfs_dir.join("lib")).unwrap();
-
+    dir::clear(rootfs_dir.join("lib")).unwrap();
     // The core-tests manifest is defined to include the prebuilt
     // Fuchsia test binaries: fail early (instead of at boot time) when
     // they are missing.
