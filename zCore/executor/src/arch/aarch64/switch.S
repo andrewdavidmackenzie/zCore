@@ -44,7 +44,8 @@ switch:
         mrs     x2, fpcr
         mrs     x3, fpsr
         add     x4, x0, #512
-        stp     w2, w3, [x4]
+        str     w2, [x4]
+        str     w3, [x4, #4]
 
         # --- Restore from new context (x1) ---
 
@@ -89,7 +90,8 @@ switch:
         ldp     q30, q31, [x1, #480]
         # Restore FPCR and FPSR
         add     x2, x1, #512
-        ldp     w3, w4, [x2]
+        ldr     w3, [x2]
+        ldr     w4, [x2, #4]
         msr     fpcr, x3
         msr     fpsr, x4
 
