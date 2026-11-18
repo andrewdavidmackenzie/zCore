@@ -62,3 +62,18 @@ pub mod libos_frame {
 pub mod cow {
     pub use crate::imp::cow_handler::{install_cow_handler, register_cow_callback};
 }
+
+/// Get per-CPU scheduler statistics.
+pub fn cpu_sched_stats(cpu_id: usize) -> (u64, u64, u64, u64) {
+    let stats = executor::cpu_stats(cpu_id);
+    (
+        stats
+            .context_switches
+            .load(core::sync::atomic::Ordering::Relaxed),
+        stats
+            .reschedules
+            .load(core::sync::atomic::Ordering::Relaxed),
+        stats.preempts.load(core::sync::atomic::Ordering::Relaxed),
+        stats.yields.load(core::sync::atomic::Ordering::Relaxed),
+    )
+}

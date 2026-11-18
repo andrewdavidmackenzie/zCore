@@ -252,14 +252,23 @@ fn check_exit_code(proc: Arc<Process>) -> i32 {
 
 #[cfg(feature = "baremetal-test")]
 fn run_builtin_tests() -> ! {
-    warn!("=== Running built-in Rust zircon-tests ===");
+    // Use console_write_fmt for markers that must survive LTO.
+    // warn!/info! macros get stripped by LTO in release builds.
+    hal_impl::console::console_write_fmt(format_args!(
+        "=== Running built-in Rust zircon-tests ===\n"
+    ));
     let future = async {
         zircon_tests::run_all().await;
-        warn!("=== All tests passed ===");
         0i32
     };
     let exit_code = hal_impl::run_executor(future);
-    info!("test runner exiting with code {}", exit_code);
+    if exit_code == 0 {
+        hal_impl::console::console_write_fmt(format_args!("=== All tests passed ===\n"));
+    }
+    hal_impl::console::console_write_fmt(format_args!(
+        "test runner exiting with code {}\n",
+        exit_code
+    ));
     hal_impl::cpu::reset()
 }
 

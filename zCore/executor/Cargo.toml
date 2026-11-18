@@ -11,6 +11,13 @@ edition = "2021"
 # and timers.
 libos = []
 
+# Fair scheduler (WFQ): proportional CPU sharing based on priority
+# weights. Without this, the strict-priority round-robin scheduler
+# is used (higher priority always preempts lower).
+sched-fair = []
+
+
+
 [dependencies]
 slab = { version = "0.4", default-features = false }
 bit-iter = "1.0.0"

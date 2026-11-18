@@ -113,6 +113,13 @@ impl Futex {
         self.inner.lock().owner.clone()
     }
 
+    /// Try to get the owner without blocking. Returns `None` if the
+    /// futex inner lock is already held (avoids deadlock in the
+    /// transitive priority inheritance path).
+    pub fn try_owner(&self) -> Option<Arc<Thread>> {
+        self.inner.try_lock().and_then(|g| g.owner.clone())
+    }
+
     /// Wait on a futex.
     ///
     /// This atomically verifies that `value_ptr` still contains the value `current_value`

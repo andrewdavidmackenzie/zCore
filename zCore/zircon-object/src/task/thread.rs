@@ -454,15 +454,61 @@ impl Thread {
     /// (e.g., when the highest-priority waiter leaves). Updates the
     /// scheduler and time slice if the effective priority changes.
     pub fn boost_priority(&self, boost: usize) {
-        let (new_effective, task_sched) = {
+        let (new_effective, task_sched, blocking_addr) = {
             let mut inner = self.inner.lock();
             inner.inherited_priority = boost;
             let effective = inner.priority.max(inner.inherited_priority);
             inner.time_slice_ns = priority_to_time_slice_ns(effective);
-            (effective, inner.task_sched)
+            (effective, inner.task_sched, inner.blocking_futex_addr)
         };
         if let Some((task_key, task_cpu)) = task_sched {
             hal_impl::thread::change_task_priority(task_cpu, task_key, new_effective);
+        }
+        // Transitive priority inheritance: if this thread is blocked
+        // on a futex, propagate the boost to that futex's owner.
+        // Uses try_lock to avoid deadlock when the caller holds the
+        // futex inner lock (common in the futex wait path).
+        if blocking_addr != 0 && new_effective > 0 {
+            Self::propagate_pi_chain(self, new_effective, 8);
+        }
+    }
+
+    /// Propagate priority inheritance transitively through the futex
+    /// ownership chain, up to `max_depth` levels.
+    ///
+    /// Uses `Futex::try_owner()` to avoid deadlock when the caller
+    /// already holds a futex inner lock (which happens when
+    /// `boost_priority` is called from within `futex.wait_with_owner`).
+    fn propagate_pi_chain(start: &Self, priority: usize, max_depth: usize) {
+        let mut current_addr = {
+            let inner = start.inner.lock();
+            inner.blocking_futex_addr
+        };
+        let proc = start.proc();
+        for _ in 0..max_depth {
+            if current_addr == 0 {
+                break;
+            }
+            let futex = proc.get_futex(current_addr);
+            // Use try_owner to avoid deadlock: if the futex lock is
+            // already held (by our caller), skip this level.
+            let owner = futex.try_owner();
+            drop(futex);
+            let owner = match owner {
+                Some(o) if priority > o.effective_priority() => o,
+                _ => break,
+            };
+            let (effective, task_sched, next_addr) = {
+                let mut inner = owner.inner.lock();
+                inner.inherited_priority = inner.inherited_priority.max(priority);
+                let eff = inner.priority.max(inner.inherited_priority);
+                inner.time_slice_ns = priority_to_time_slice_ns(eff);
+                (eff, inner.task_sched, inner.blocking_futex_addr)
+            };
+            if let Some((task_key, task_cpu)) = task_sched {
+                hal_impl::thread::change_task_priority(task_cpu, task_key, effective);
+            }
+            current_addr = next_addr;
         }
     }
 
