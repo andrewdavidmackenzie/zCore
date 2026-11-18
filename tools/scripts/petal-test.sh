@@ -48,7 +48,7 @@ case "$ARCH" in
       -m 4G -display none -no-reboot -nographic
       -machine q35 -cpu qemu64,+rdrand,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16,+fsgsbase -smp "$CORES"
       -serial mon:stdio
-      -bios "$OVMF"
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF"
     )
     ;;
   riscv64)
