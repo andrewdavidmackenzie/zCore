@@ -171,8 +171,15 @@ const X86_64_USER_ADDR_LIMIT: usize = 1usize << 47;
 /// on x86_64 (below the architectural user limit). Bad user pointers
 /// must be rejected before the copy starts — see
 /// [`X86_64_USER_ADDR_LIMIT`].
+///
+/// Only enforced for syscalls entered from user mode: in-kernel test
+/// code (the baremetal-test runner) calls the syscall interface
+/// directly and legitimately passes kernel addresses as buffers.
 #[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
 fn validate_canonical_user_range(addr: usize, len: usize) -> Result<()> {
+    if !crate::thread::in_user_syscall() {
+        return Ok(());
+    }
     if addr >= X86_64_USER_ADDR_LIMIT {
         return Err(Error::InvalidPointer);
     }
