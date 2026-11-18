@@ -108,10 +108,9 @@ impl Executor {
     pub fn run(&mut self) {
         loop {
             let task_info = self.task_collection.take_task();
-            // Note: work stealing is disabled. Stolen tasks retain their
-            // original CPU's waker page, so waker notifications go to the
-            // wrong CPU, causing tasks to never wake up. All tasks stay on
-            // the CPU where they were spawned. (#680)
+            // Work stealing: idle CPUs steal tasks from busy CPUs.
+            // Stolen tasks are re-inserted into the local task collection
+            // with new waker pages, so the next poll() updates wakers.
             if let Some((key, task, waker_ref, droper)) = task_info {
                 let waker_ref = Arc::new(waker_ref);
                 let waker = woke::waker_ref(&waker_ref);
@@ -131,6 +130,9 @@ impl Executor {
                         // so take_task can re-queue it AFTER scanning
                         // new notifications (fairness: new tasks first).
                         if crate::take_yield_pending() {
+                            crate::cpu_stats(crate::arch::cpu_id() as usize)
+                                .yields
+                                .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
                             self.task_collection.set_pending_yield(key);
                         }
                     }
@@ -181,6 +183,11 @@ impl Executor {
                 } else if weak_executor != 0 {
                     crate::runtime::sched_yield();
                 } else {
+                    // Work stealing infrastructure is in place (WakerTarget
+                    // indirection, steal_one_task, accept_stolen_task,
+                    // CPU_TASK_COLLECTIONS) but disabled pending x86_64
+                    // debugging — crashes on multi-threaded core-tests.
+                    // See #783 Phase 6 follow-up.
                     crate::arch::wait_for_interrupt();
                 }
             }

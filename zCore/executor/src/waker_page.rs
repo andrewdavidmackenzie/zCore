@@ -180,46 +180,144 @@ impl WakerPage {
         self.borrowed.fetch_and(mask)
     }
 
+    /// Create a `WakerRef` for a slot, with a fresh `WakerTarget`.
+    /// All clones of this `WakerRef` share the same `WakerTarget`,
+    /// which can be redirected during task migration.
     pub fn make_waker(self: &Arc<Self>, idx: usize, dropped: &Arc<AtomicBool>) -> WakerRef {
         WakerRef {
-            page: self.clone(),
-            idx,
+            target: WakerTarget::new(self.clone(), idx),
             dropped: dropped.clone(),
         }
+    }
+
+    /// Create a `WakerRef` that shares an existing `WakerTarget`.
+    /// Used when re-creating a waker after task migration — the
+    /// `WakerTarget` is shared with all previous waker clones so
+    /// redirecting it updates everyone.
+    pub fn make_waker_with_target(dropped: &Arc<AtomicBool>, target: Arc<WakerTarget>) -> WakerRef {
+        WakerRef {
+            target,
+            dropped: dropped.clone(),
+        }
+    }
+}
+
+/// Indirection cell for waker targeting. Shared by all `WakerRef`
+/// clones for a single task. When a task migrates between CPUs, the
+/// `WakerTarget` is atomically updated to point at the new CPU's
+/// waker page and slot index. Existing `Waker` clones captured by
+/// the future's internals continue to work correctly because they
+/// dereference the `WakerTarget` on every `wake_by_ref()` call.
+pub struct WakerTarget {
+    inner: spin::Mutex<WakerTargetInner>,
+}
+
+struct WakerTargetInner {
+    page: Arc<WakerPage>,
+    idx: usize,
+}
+
+impl WakerTarget {
+    /// Create a new waker target pointing at the given page and slot.
+    pub fn new(page: Arc<WakerPage>, idx: usize) -> Arc<Self> {
+        Arc::new(Self {
+            inner: spin::Mutex::new(WakerTargetInner { page, idx }),
+        })
+    }
+
+    /// Atomically redirect this waker target to a new page and slot.
+    /// Called during task migration.
+    pub fn redirect(&self, new_page: Arc<WakerPage>, new_idx: usize) {
+        let mut inner = self.inner.lock();
+        inner.page = new_page;
+        inner.idx = new_idx;
+    }
+
+    /// Atomically redirect to a new page+slot AND clear the old slot,
+    /// transferring any pending notification. This is called during
+    /// task migration to ensure no wake is lost between redirect and
+    /// old-slot clear.
+    ///
+    /// The sequence under the lock is:
+    /// 1. Read old page's notified bit for our slot
+    /// 2. Update inner to point at new page+slot
+    /// 3. Clear old page slot (notified, dropped, borrowed)
+    /// 4. If old slot was notified, set notified on new page
+    ///
+    /// Any concurrent `wake_by_ref()` will either:
+    /// - Arrive before we lock: sets old page notified → we transfer it
+    /// - Arrive after we lock: blocks until we're done, then uses new page
+    pub fn redirect_and_clear_old(
+        &self,
+        new_page: Arc<WakerPage>,
+        new_idx: usize,
+        old_page: &WakerPage,
+        old_idx: usize,
+    ) {
+        let mut inner = self.inner.lock();
+        // Check if the old slot had a pending notification.
+        let old_notified = old_page.peek_notified() & (1u64 << old_idx);
+        // Switch to new target.
+        inner.page = new_page;
+        inner.idx = new_idx;
+        // Clear old slot entirely.
+        old_page.clear(old_idx);
+        // Transfer notification to new slot if present, and IPI the
+        // new CPU so it wakes from HLT/WFI to see the notification.
+        if old_notified != 0 {
+            inner.page.notify(inner.idx);
+            crate::ipi_wakeup(inner.page.owner_cpu());
+        }
+    }
+
+    /// Notify the current target page and send IPI to its CPU.
+    fn notify(&self) {
+        let inner = self.inner.lock();
+        inner.page.notify(inner.idx);
+        crate::ipi_wakeup(inner.page.owner_cpu());
+    }
+
+    /// Set or clear the borrowed bit on the current target page.
+    fn mark_borrowed(&self, borrowed: bool) {
+        let inner = self.inner.lock();
+        inner.page.mark_borrowed(inner.idx, borrowed);
+    }
+
+    /// Mark the current target page slot as dropped.
+    fn mark_dropped(&self) {
+        let inner = self.inner.lock();
+        inner.page.mark_dropped(inner.idx);
     }
 }
 
 pub type DroperRef = WakerRef;
 
 pub struct WakerRef {
-    page: Arc<WakerPage>,
-    idx: usize,
+    target: Arc<WakerTarget>,
     dropped: Arc<AtomicBool>,
 }
 
 impl WakerRef {
-    // pub fn mark_complete(&self) {
-    //     self.page.mark_completed(self.idx);
-    // }
-
     pub fn mark_borrowed(&self, borrowed: bool) {
-        self.page.mark_borrowed(self.idx, borrowed);
+        self.target.mark_borrowed(borrowed);
     }
 
     pub fn wake_by_ref(&self) {
         if !self.dropped.load(Ordering::SeqCst) {
-            self.page.notify(self.idx);
-            // If the owning CPU is different from ours, send an IPI
-            // to break it out of HLT/WFI so it sees the notification
-            // immediately instead of waiting for the next timer tick.
-            crate::ipi_wakeup(self.page.owner_cpu());
+            self.target.notify();
         }
     }
 
     pub fn drop_by_ref(&self) {
         if !self.dropped.swap(true, Ordering::SeqCst) {
-            self.page.mark_dropped(self.idx);
+            self.target.mark_dropped();
         }
+    }
+
+    /// Get the shared waker target. Used during task migration to
+    /// redirect all existing waker clones to the new CPU's page.
+    pub fn waker_target(&self) -> &Arc<WakerTarget> {
+        &self.target
     }
 }
 
@@ -232,8 +330,7 @@ impl Woke for WakerRef {
 impl Clone for WakerRef {
     fn clone(&self) -> Self {
         WakerRef {
-            page: self.page.clone(),
-            idx: self.idx,
+            target: self.target.clone(),
             dropped: self.dropped.clone(),
         }
     }

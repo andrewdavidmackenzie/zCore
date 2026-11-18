@@ -1009,9 +1009,15 @@ impl Syscall<'_> {
                 let max_entries = buffer_size / entry_size;
                 let count = max_entries.min(num_cpus);
                 for i in 0..count {
+                    let (ctx_switches, reschedules, preempts, yields) =
+                        hal_impl::cpu_sched_stats(i);
                     let entry = CpuStatsInfo {
                         cpu_number: i as u32,
                         flags: 1, // ZX_INFO_CPU_STATS_FLAG_ONLINE
+                        context_switches: ctx_switches,
+                        reschedules,
+                        preempts,
+                        yields,
                         ..Default::default()
                     };
                     let mut ptr = UserOutPtr::<CpuStatsInfo>::from_addr_size(

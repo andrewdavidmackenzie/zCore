@@ -50,7 +50,13 @@ pub fn on_task_removed(state: &mut SchedState, key: Key) {
 
 /// Called when a task is woken (notified).
 pub fn on_task_notified(state: &mut SchedState, key: Key) {
-    let p = state.task_priorities.get(&key).copied().unwrap_or(4);
+    // Only enqueue tasks that are known to the scheduler. After a task
+    // is stolen (on_task_removed), stale notifications from the old
+    // waker page may arrive — ignore them.
+    let p = match state.task_priorities.get(&key).copied() {
+        Some(p) => p,
+        None => return,
+    };
     if !state.queues[p].contains(&key) {
         state.queues[p].push_back(key);
         state.ready_bitmap |= 1 << p;
@@ -129,3 +135,10 @@ pub fn steal_task(state: &mut SchedState) -> Option<Key> {
     }
     Some(key)
 }
+
+/// Stub: set a task as deadline (no-op in priority scheduler — deadline
+/// tasks are just priority 31).
+pub fn set_deadline(_state: &mut SchedState, _key: Key, _relative_deadline_ns: u64) {}
+
+/// Stub: set a task as fair (no-op in priority scheduler).
+pub fn set_fair(_state: &mut SchedState, _key: Key) {}

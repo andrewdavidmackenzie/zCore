@@ -1,4 +1,4 @@
-use crate::waker_page::{DroperRef, WakerPage, WakerRef, WAKER_PAGE_SIZE};
+use crate::waker_page::{DroperRef, WakerPage, WakerRef, WakerTarget, WAKER_PAGE_SIZE};
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -28,6 +28,12 @@ pub struct Task {
     future: Mutex<Pin<Box<dyn Future<Output = ()> + Send>>>,
     inner: Mutex<TaskInner>,
     finish: Arc<AtomicBool>,
+    /// Shared waker target for this task. All `WakerRef` clones
+    /// (including those captured by the future's internals) share
+    /// this target. During migration, the target is redirected to
+    /// the new CPU's waker page slot, so existing wakers continue
+    /// to reach the task on its new CPU.
+    waker_target: Mutex<Option<Arc<WakerTarget>>>,
 }
 
 struct TaskInner {
@@ -63,6 +69,7 @@ impl Task {
                 intr_enable: true,
             }),
             finish: Arc::new(AtomicBool::new(false)),
+            waker_target: Mutex::new(None),
         }
     }
     pub fn poll(&self, cx: &mut Context) -> Poll<()> {
@@ -78,6 +85,18 @@ impl Task {
 
     pub fn id(&self) -> usize {
         self.id
+    }
+
+    /// Set the waker target for this task. Called when the task's
+    /// waker is first created (in `take_task`).
+    pub fn set_waker_target(&self, target: Arc<WakerTarget>) {
+        *self.waker_target.lock() = Some(target);
+    }
+
+    /// Get the current waker target. Returns `None` if the task
+    /// has never been polled (no waker created yet).
+    pub fn waker_target(&self) -> Option<Arc<WakerTarget>> {
+        self.waker_target.lock().clone()
     }
 }
 
@@ -122,6 +141,32 @@ impl FutureCollection {
         page.initialize(subpage_idx);
         // self.vec.push_back(key);
         key
+    }
+
+    /// Insert an existing `Arc<Task>` (e.g., one stolen from another CPU).
+    /// Returns the slab key (without priority bits). The slot is initialized
+    /// as notified so it will be polled immediately.
+    pub fn insert_task(&mut self, task: Arc<Task>) -> Key {
+        let key = self.slab.insert(task);
+        while key >= self.pages.len() * WAKER_PAGE_SIZE {
+            self.pages.push(WakerPage::new_for_cpu(self.owner_cpu));
+        }
+        let (page, subpage_idx) = self.page(key);
+        page.initialize(subpage_idx);
+        key
+    }
+
+    /// Extract a task from this collection by slab key, clearing its
+    /// waker page slot. Returns the `Arc<Task>` if found.
+    pub fn extract(&mut self, key: Key) -> Option<Arc<Task>> {
+        let slab_key = unmask_priority(key);
+        if self.slab.contains(slab_key) {
+            let (page, subpage_idx) = self.page(key);
+            page.clear(subpage_idx);
+            Some(self.slab.remove(slab_key))
+        } else {
+            None
+        }
     }
 
     pub fn remove(&mut self, key: Key) -> bool {
@@ -274,6 +319,87 @@ impl TaskCollection {
         crate::sched::change_priority(&mut sched, key, new_priority);
     }
 
+    /// Steal one runnable task from this collection.
+    /// Returns `(Arc<Task>, priority, old_page, old_subpage_idx)`.
+    /// The task is removed from the slab and scheduler. The old waker
+    /// page slot is NOT cleared yet — the caller must clear it after
+    /// redirecting the waker target to avoid losing notifications
+    /// that arrive between steal and accept.
+    pub fn steal_one_task(&self) -> Option<(Arc<Task>, usize, Arc<WakerPage>, usize)> {
+        // Lock ordering: sched_state first, then future_collections.
+        let mut sched = self.sched_state.lock();
+        // Pick the next runnable task from the scheduler.
+        let key = crate::sched::pick_next(&mut sched)?;
+        let priority = key >> PRIORITY_SHIFT;
+        if priority >= MAX_PRIORITY {
+            return None;
+        }
+        let mut inner = self.get_mut_inner(priority);
+        let slab_key = unmask_priority(key);
+        if !inner.slab.contains(slab_key) {
+            // Slab entry was already removed (race with take_task).
+            // Re-add the key to the scheduler so it can be cleaned up.
+            return None;
+        }
+        // Extract the task from the slab but DON'T clear the page slot.
+        // The waker target still points here; clearing the slot would
+        // lose notifications that arrive before the target is redirected.
+        let (_, page_idx, subpage_idx) = unpack_key(slab_key);
+        if page_idx >= inner.pages.len() {
+            return None;
+        }
+        let old_page = inner.pages[page_idx].clone();
+        let task = inner.slab.remove(slab_key);
+        crate::sched::on_task_removed(&mut sched, key);
+        self.task_num.fetch_sub(1, Ordering::Relaxed);
+        Some((task, priority, old_page, subpage_idx))
+    }
+
+    /// Accept a stolen task into this collection. The task is inserted
+    /// into the appropriate priority's FutureCollection with a new key
+    /// and new waker page (owned by this CPU). The slot is marked
+    /// notified so it will be polled immediately.
+    ///
+    /// If the task has an existing `WakerTarget`, it is redirected to
+    /// the new page+slot so that all outstanding waker clones (captured
+    /// by the future's internals) now notify this CPU. The old page
+    /// slot is cleared AFTER the redirect to avoid losing notifications.
+    pub fn accept_stolen_task(
+        &self,
+        task: Arc<Task>,
+        priority: usize,
+        old_page: Arc<WakerPage>,
+        old_subpage_idx: usize,
+    ) -> Key {
+        debug_assert!(priority < MAX_PRIORITY);
+        let mut sched = self.sched_state.lock();
+        let mut inner = self.future_collections[priority].lock();
+        let slab_key = inner.insert_task(task.clone());
+        debug_assert!(slab_key < TASK_NUM_PER_PRIORITY);
+        let full_key = slab_key | (priority << PRIORITY_SHIFT);
+        // Atomically redirect the waker target to the new page+slot
+        // AND clear the old slot, transferring any pending notification.
+        // This is done under the WakerTarget's lock to prevent any
+        // concurrent wake_by_ref() from slipping through during the
+        // transition.
+        let (_, page_idx, subpage_idx) = unpack_key(slab_key);
+        if let Some(target) = task.waker_target() {
+            target.redirect_and_clear_old(
+                inner.pages[page_idx].clone(),
+                subpage_idx,
+                &old_page,
+                old_subpage_idx,
+            );
+        } else {
+            // No waker target yet (task never polled). Just clear old slot.
+            old_page.clear(old_subpage_idx);
+        }
+        drop(inner);
+        crate::sched::on_task_added(&mut sched, full_key, priority);
+        self.task_num.fetch_add(1, Ordering::Relaxed);
+        full_key
+    }
+
     /// Store the key of a task that yielded voluntarily.
     pub fn set_pending_yield(&self, key: Key) {
         *self.pending_yield.lock() = Some(key);
@@ -295,7 +421,19 @@ impl TaskCollection {
         let (priority, page_idx, subpage_idx) = unpack_key(key);
         let inner = self.get_mut_inner(priority);
         let task = inner.slab.get(unmask_priority(key))?.clone();
-        let waker = inner.pages[page_idx].make_waker(subpage_idx, &task.finish);
+        // If the task already has a WakerTarget (e.g., from a previous
+        // poll or migration), reuse it so all existing waker clones
+        // share the same target. Otherwise create a fresh one.
+        let waker = if let Some(existing_target) = task.waker_target() {
+            // Redirect the existing target to this page+idx (may have
+            // changed due to migration or slab reuse).
+            existing_target.redirect(inner.pages[page_idx].clone(), subpage_idx);
+            WakerPage::make_waker_with_target(&task.finish, existing_target)
+        } else {
+            let w = inner.pages[page_idx].make_waker(subpage_idx, &task.finish);
+            task.set_waker_target(w.waker_target().clone());
+            w
+        };
         let droper = waker.clone();
         Some((key, task, waker, droper))
     }

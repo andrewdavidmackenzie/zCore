@@ -1,8 +1,4 @@
-use crate::{
-    executor::Executor,
-    task_collection::*,
-    waker_page::{DroperRef, WakerRef},
-};
+use crate::{executor::Executor, task_collection::*};
 
 #[cfg(target_arch = "x86_64")]
 use crate::context::Context;
@@ -115,6 +111,15 @@ unsafe impl Sync for ExecutorRuntime {}
 /// Uses a spin::Once<HashMap> populated during SMP boot.
 static CPU_RUNTIMES: spin::Once<hashbrown::HashMap<u8, Mutex<ExecutorRuntime>>> = spin::Once::new();
 
+/// Per-CPU task collections, accessible without the runtime lock.
+/// Used by work stealing to avoid deadlock: the runtime lock and
+/// sched_state lock must never be held simultaneously by different
+/// CPUs (the timer handler on the source CPU holds sched_state via
+/// the executor, while trying to acquire the runtime lock in
+/// sched_yield).
+static CPU_TASK_COLLECTIONS: spin::Once<hashbrown::HashMap<u8, Arc<TaskCollection>>> =
+    spin::Once::new();
+
 /// Initialize executor runtimes for a set of CPU IDs.
 /// Called once by the BSP during boot, before any AP starts using the executor.
 pub fn init_runtimes(cpu_ids: &[u8]) {
@@ -122,6 +127,15 @@ pub fn init_runtimes(cpu_ids: &[u8]) {
         let mut map = hashbrown::HashMap::with_capacity(cpu_ids.len());
         for &id in cpu_ids {
             map.insert(id, Mutex::new(ExecutorRuntime::new(id)));
+        }
+        map
+    });
+    CPU_TASK_COLLECTIONS.call_once(|| {
+        let runtimes = CPU_RUNTIMES.get().unwrap();
+        let mut map = hashbrown::HashMap::with_capacity(cpu_ids.len());
+        for &id in cpu_ids {
+            let rt = runtimes.get(&id).unwrap().lock();
+            map.insert(id, rt.task_collection.clone());
         }
         map
     });
@@ -135,33 +149,40 @@ fn get_runtime(cpu_id: u8) -> &'static Mutex<ExecutorRuntime> {
         .unwrap_or_else(|| panic!("no runtime for cpu_id {}", cpu_id))
 }
 
-// obtain a task from other cpu.
-/// Scan ALL other CPUs' task collections for notified tasks.
-/// Returns the first notified task found, or None.
+/// Steal one runnable task from another CPU for immediate polling.
 ///
-/// This is used by idle CPUs to find cross-CPU notifications that
-/// the owning CPU hasn't processed (e.g., because IPI delivery
-/// failed in QEMU TCG mode).
+/// Returns `(Arc<Task>, priority, old_page, old_subpage_idx)` if a
+/// task was stolen. The caller polls the task immediately (like
+/// Zircon's `steal_work`, which context-switches directly to the
+/// stolen thread). If the task returns `Pending`, the caller inserts
+/// it into the local task collection via `accept_stolen_task`.
 ///
-/// Note: stolen tasks retain their original CPU's waker page, so
-/// future notifications go to the wrong CPU. For one-shot wakes
-/// (oneshot channels) this is fine. For recurring wakes, the next
-/// steal scan will find them.
-pub(crate) fn steal_task_from_other_cpu() -> Option<(Key, Arc<Task>, WakerRef, DroperRef)> {
-    let map = CPU_RUNTIMES.get()?;
+/// Only steals from CPUs with > 1 task to avoid starving them.
+/// Accesses task collections via `CPU_TASK_COLLECTIONS` (not via the
+/// runtime lock) to prevent deadlock with the timer handler.
+pub(crate) fn steal_task_from_other_cpu(
+) -> Option<(Arc<Task>, usize, Arc<crate::waker_page::WakerPage>, usize)> {
+    let tc_map = CPU_TASK_COLLECTIONS.get()?;
     let current = crate::arch::cpu_id();
-    for (&cpu_id, runtime) in map.iter() {
+    for (&cpu_id, source_tc) in tc_map.iter() {
         if cpu_id == current {
             continue;
         }
-        let rt = runtime.lock();
-        if let Some(task_info) = rt.task_collection.take_task() {
-            return Some(task_info);
+        if source_tc.task_num() <= 1 {
+            continue;
+        }
+        if let Some(stolen) = source_tc.steal_one_task() {
+            return Some(stolen);
         }
     }
     None
 }
 
+/// Get the local CPU's task collection for accepting stolen tasks.
+pub(crate) fn local_task_collection() -> Option<&'static Arc<TaskCollection>> {
+    let tc_map = CPU_TASK_COLLECTIONS.get()?;
+    tc_map.get(&crate::arch::cpu_id())
+}
 // per-cpu scheduler.
 pub fn run_until_idle() -> bool {
     debug!("run_until_idle");
@@ -181,6 +202,9 @@ pub fn run_until_idle() -> bool {
         // stay disabled across the switch to prevent sched_yield
         // from re-entering the runtime context.
         drop(runtime);
+        crate::cpu_stats(crate::arch::cpu_id() as usize)
+            .context_switches
+            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         switch(runtime_cx, executor_cx);
         // Interrupts stay disabled from the intr_off at loop top.
         // Re-acquire runtime lock (still under intr_off).
@@ -196,6 +220,9 @@ pub fn run_until_idle() -> bool {
         // a fresh strong executor. Fall through to run all weak
         // executors so the preempted one can finish and release locks.
         if runtime.strong_executor.is_running_future() {
+            crate::cpu_stats(crate::arch::cpu_id() as usize)
+                .preempts
+                .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             runtime.downgrade_strong_executor();
         }
         // Run all pending weak executors. This is critical for
@@ -358,6 +385,10 @@ pub fn change_task_priority(cpu_id: u8, key: Key, new_priority: usize) {
 /// coroutines.
 pub fn handle_timeout() {
     debug!("handle kernel timeout");
+    let cpu = crate::arch::cpu_id() as usize;
+    crate::cpu_stats(cpu)
+        .reschedules
+        .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     super::run_with_intr_saved_off! {
         sched_yield()
     }

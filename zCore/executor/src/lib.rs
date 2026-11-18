@@ -28,14 +28,61 @@ extern crate alloc;
 #[macro_use]
 extern crate log;
 
-#[path = "sched/priority.rs"]
-pub mod sched;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "sched-fair")] {
+        #[path = "sched/fair.rs"]
+        pub mod sched;
+    } else {
+        #[path = "sched/priority.rs"]
+        pub mod sched;
+    }
+}
 
 mod context;
 mod executor;
 mod runtime;
 pub mod task_collection;
 mod waker_page;
+
+// ── Per-CPU scheduler statistics ────────────────────────────────────
+
+use core::sync::atomic::AtomicU64;
+
+/// Per-CPU scheduler statistics, updated atomically.
+pub struct CpuSchedStats {
+    /// Number of context switches on this CPU.
+    pub context_switches: AtomicU64,
+    /// Number of times the timer caused a reschedule.
+    pub reschedules: AtomicU64,
+    /// Number of preemptions (timer interrupt during task execution).
+    pub preempts: AtomicU64,
+    /// Number of voluntary yields.
+    pub yields: AtomicU64,
+    /// Number of tasks stolen from other CPUs.
+    pub stolen_tasks: AtomicU64,
+}
+
+impl CpuSchedStats {
+    const fn new() -> Self {
+        Self {
+            context_switches: AtomicU64::new(0),
+            reschedules: AtomicU64::new(0),
+            preempts: AtomicU64::new(0),
+            yields: AtomicU64::new(0),
+            stolen_tasks: AtomicU64::new(0),
+        }
+    }
+}
+
+static CPU_STATS: [CpuSchedStats; 64] = {
+    const INIT: CpuSchedStats = CpuSchedStats::new();
+    [INIT; 64]
+};
+
+/// Get the scheduler stats for a CPU.
+pub fn cpu_stats(cpu_id: usize) -> &'static CpuSchedStats {
+    &CPU_STATS[cpu_id.min(63)]
+}
 
 /// Per-CPU yield-pending flag. Set by PreemptYieldFuture::poll,
 /// consumed by Executor::run after polling a task. Using per-CPU
