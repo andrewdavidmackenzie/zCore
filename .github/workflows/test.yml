@@ -283,6 +283,38 @@ jobs:
       # - name: Run petal vmar_test (user mode)
       #   run: tools/scripts/petal-test.sh ${{ matrix.arch }} vmar_test
 
+  petal-tests-qemu:
+    name: Petal User-Mode Tests (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            qemu-pkg: qemu-system-arm
+          - arch: x86_64
+            qemu-pkg: qemu-system-x86 ovmf
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-09-19
+          components: rust-src, llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: petal-tests-${{ matrix.arch }}
+
+      - name: Install QEMU
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.qemu-pkg }}
+
+      - name: Run petal user-mode test suite (single boot)
+        run: tools/scripts/petal-tests.sh ${{ matrix.arch }}
+
   zircon-core-tests-x86:
     name: Zircon Core Tests (x86_64)
     runs-on: ubuntu-latest
