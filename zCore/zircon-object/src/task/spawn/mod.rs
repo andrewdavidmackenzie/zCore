@@ -203,6 +203,7 @@ pub fn spawn_process(
 ) -> crate::ZxResult<Arc<Process>> {
     use crate::util::elf_loader::*;
     use xmas_elf::ElfFile;
+    use xmas_elf::program::Type;
 
     // Check for PT_INTERP (dynamic linking).
     let elf_check = ElfFile::new(elf_data).map_err(|_| crate::ZxError::INVALID_ARGS)?;
@@ -250,48 +251,100 @@ pub fn spawn_process(
     let thread = Thread::create(&proc, &format!("{}-main", name))?;
     let vmar = proc.vmar();
 
-    // Load the ELF segments (interpreter if PT_INTERP, main program otherwise).
-    // Avoid allocating at vaddr 0: PIE binaries like ld.so.1 have PT_LOAD
-    // starting at vaddr 0, and loading at base 0 causes fsbase=0 to alias
-    // the ELF header, corrupting TLS accesses via %fs:0.
-    // vDSO: map FIRST so it's at a low address that ld.so.1's unmap
-    // of the image range won't reach. ld.so.1 unmaps the entire image
-    // region when re-mapping shared libraries, which would destroy the
-    // vDSO mapping if it was adjacent to the image.
-    let vdso_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
-    let vdso_code_addr = vmar.map(
-        None,
-        config.vdso_vmo.clone(),
-        0,
-        config.vdso_code_size,
-        vdso_flags,
-    )?;
-    // Record the vDSO code range so the kernel can verify syscalls
-    // come from the vDSO (BAD_SYSCALL policy check).
-    proc.set_vdso_code_range(vdso_code_addr, config.vdso_code_size);
-
     let size = elf.load_segment_size();
-    let min_offset = if elf.header.pt2.entry_point() < size as u64 {
-        Some(0x10_0000) // 1 MiB minimum offset for PIE/shared objects
-    } else {
-        None // Statically-linked at a fixed address
-    };
-    let image_vmar = vmar.allocate(
-        min_offset,
-        size,
-        VmarFlags::CAN_MAP_RXW | VmarFlags::CAN_MAP_SPECIFIC,
-        PAGE_SIZE,
-    )?;
-    let _vmo = image_vmar.load_from_elf(&elf)?;
-    let base = image_vmar.addr();
-    let entry = base + elf.header.pt2.entry_point() as usize;
 
-    // Apply ELF relocations only for statically-linked executables.
-    if !has_interp {
-        if let Err(e) = elf.relocate(image_vmar.clone()) {
-            warn!("spawn_process: ELF relocation failed: {}", e);
+    // Fixed-base (non-PIE) static executables — e.g. petal programs,
+    // linked at USER_ASPACE_BASE — contain absolute addresses and have
+    // no relocations: they must be mapped AT their link base. userstart's
+    // loader relies on the same convention (the first allocation of an
+    // empty process VMAR is the link base).
+    //
+    // PIE executables (elf_base == 0) are position-independent: the
+    // vDSO is mapped first at the low end of the address space and the
+    // image is placed at a 1 MiB offset, then relocations are applied.
+    let elf_base = {
+        let min_vaddr = elf
+            .program_iter()
+            .filter(|ph| ph.get_type().ok() == Some(Type::Load))
+            .map(|ph| ph.virtual_addr())
+            .min()
+            .unwrap_or(0) as usize;
+        min_vaddr & !(PAGE_SIZE - 1)
+    };
+    let fixed_base = !has_interp && elf_base != 0;
+
+    let (image_vmar, entry, vdso_code_addr) = if fixed_base {
+        // Place the image VMAR at the ELF's link base (before the vDSO,
+        // so the low addresses the code references belong to the image),
+        // and map segments at (vaddr - elf_base) within it.
+        let Some(offset) = elf_base.checked_sub(vmar.addr() as usize) else {
+            return Err(crate::ZxError::INVALID_ARGS);
+        };
+        let span = size.saturating_sub(elf_base);
+        let image_vmar = vmar.allocate(
+            Some(offset),
+            span,
+            VmarFlags::CAN_MAP_RXW | VmarFlags::CAN_MAP_SPECIFIC,
+            PAGE_SIZE,
+        )?;
+        image_vmar.load_from_elf_rebased(&elf, elf_base)?;
+        // No relocations to apply: a fixed-base executable has none.
+        let entry =
+            image_vmar.addr() as usize + (elf.header.pt2.entry_point() as usize - elf_base);
+        // Map the vDSO after the image (first fit lands above it).
+        let vdso_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
+        let vdso_code_addr = vmar.map(
+            None,
+            config.vdso_vmo.clone(),
+            0,
+            config.vdso_code_size,
+            vdso_flags,
+        )?;
+        proc.set_vdso_code_range(vdso_code_addr, config.vdso_code_size);
+        (image_vmar, entry, vdso_code_addr)
+    } else {
+        // vDSO: map FIRST so it's at a low address that ld.so.1's unmap
+        // of the image range won't reach. ld.so.1 unmaps the entire image
+        // region when re-mapping shared libraries, which would destroy the
+        // vDSO mapping if it was adjacent to the image.
+        let vdso_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
+        let vdso_code_addr = vmar.map(
+            None,
+            config.vdso_vmo.clone(),
+            0,
+            config.vdso_code_size,
+            vdso_flags,
+        )?;
+        // Record the vDSO code range so the kernel can verify syscalls
+        // come from the vDSO (BAD_SYSCALL policy check).
+        proc.set_vdso_code_range(vdso_code_addr, config.vdso_code_size);
+
+        // Avoid allocating at vaddr 0: PIE binaries like ld.so.1 have PT_LOAD
+        // starting at vaddr 0, and loading at base 0 causes fsbase=0 to alias
+        // the ELF header, corrupting TLS accesses via %fs:0.
+        let min_offset = if elf.header.pt2.entry_point() < size as u64 {
+            Some(0x10_0000) // 1 MiB minimum offset for PIE/shared objects
+        } else {
+            None // Statically-linked at a fixed address
+        };
+        let image_vmar = vmar.allocate(
+            min_offset,
+            size,
+            VmarFlags::CAN_MAP_RXW | VmarFlags::CAN_MAP_SPECIFIC,
+            PAGE_SIZE,
+        )?;
+        let _vmo = image_vmar.load_from_elf(&elf)?;
+        let base = image_vmar.addr();
+        let entry = base + elf.header.pt2.entry_point() as usize;
+
+        // Apply ELF relocations only for statically-linked executables.
+        if !has_interp {
+            if let Err(e) = elf.relocate(image_vmar.clone()) {
+                warn!("spawn_process: ELF relocation failed: {}", e);
+            }
         }
-    }
+        (image_vmar, entry, vdso_code_addr)
+    };
 
     // Stack
     let stack_size = config.stack_pages * PAGE_SIZE;
@@ -306,7 +359,7 @@ pub fn spawn_process(
     // We resolve _zx_* and zx_* JUMP_SLOT entries to their vDSO addresses.
     #[cfg(feature = "dynamic-linking")]
     if has_interp {
-        vdso_plt::resolve_vdso_plt(load_data, base, vdso_code_addr, &vmar);
+        vdso_plt::resolve_vdso_plt(load_data, image_vmar.addr(), vdso_code_addr, &vmar);
     }
 
     // Bootstrap channel -- construct a Fuchsia processargs message.

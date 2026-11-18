@@ -13,6 +13,9 @@ pub trait VmarExt {
     /// Create `VMObject` from all LOAD segments of `elf` and map them to this VMAR.
     /// Return the first `VMObject`.
     fn load_from_elf(&self, elf: &ElfFile) -> ZxResult<Arc<VmObject>>;
+    /// Load a fixed-base (non-PIE) ELF rebased by `elf_base` (see
+    /// [`VmarExt::load_from_elf_rebased` on `VmAddressRegion`]).
+    fn load_from_elf_rebased(&self, elf: &ElfFile, elf_base: usize) -> ZxResult<Arc<VmObject>>;
     /// Same as `load_from_elf`, but the `vmo` is an existing one instead of a lot of new ones.
     fn map_from_elf(&self, elf: &ElfFile, vmo: Arc<VmObject>) -> ZxResult;
 }
@@ -48,6 +51,27 @@ impl VmarExt for VmAddressRegion {
             );
             first_vmo.get_or_insert(vmo);
             seg_idx += 1;
+        }
+        Ok(first_vmo.unwrap())
+    }
+    /// Load a fixed-base (non-PIE) ELF: segments are mapped at
+    /// `(vaddr - elf_base)` within this VMAR, so when the VMAR is
+    /// placed at the ELF's link base the segments land at their
+    /// absolute virtual addresses. Used for statically-linked
+    /// executables that contain absolute addresses and cannot be
+    /// relocated (e.g. petal programs linked at `USER_ASPACE_BASE`).
+    fn load_from_elf_rebased(&self, elf: &ElfFile, elf_base: usize) -> ZxResult<Arc<VmObject>> {
+        let mut first_vmo = None;
+        for ph in elf.program_iter() {
+            if ph.get_type().unwrap() != Type::Load {
+                continue;
+            }
+            let vmo = make_vmo(elf, ph)?;
+            let offset = (ph.virtual_addr() as usize).saturating_sub(elf_base);
+            let offset = offset / PAGE_SIZE * PAGE_SIZE;
+            let flags = ph.flags().to_mmu_flags();
+            self.map_at(offset, vmo.clone(), 0, vmo.len(), flags)?;
+            first_vmo.get_or_insert(vmo);
         }
         Ok(first_vmo.unwrap())
     }
