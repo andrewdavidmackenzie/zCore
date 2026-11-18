@@ -248,7 +248,20 @@ impl ThreadInner {
             ThreadState::New | ThreadState::Dying => base.signal_clear(
                 Signal::THREAD_RUNNING | Signal::THREAD_SUSPENDED | Signal::THREAD_TERMINATED,
             ),
+            // A held suspend token must keep ZX_THREAD_SUSPENDED asserted
+            // and ZX_THREAD_RUNNING deasserted, regardless of the thread's
+            // underlying state. This includes BlockedException: the state
+            // accessor deliberately reports the raw state (so the exception
+            // can be delivered while suspended — Fuchsia gives exceptions
+            // priority over suspension), but the SIGNAL must still reflect
+            // the suspension. Fuchsia's ThreadDispatcher::UpdateState
+            // computes the signals from the suspend count independently of
+            // the exception state.
             ThreadState::Suspended => base.signal_change(
+                Signal::THREAD_RUNNING | Signal::THREAD_TERMINATED,
+                Signal::THREAD_SUSPENDED,
+            ),
+            _ if self.suspend_count > 0 => base.signal_change(
                 Signal::THREAD_RUNNING | Signal::THREAD_TERMINATED,
                 Signal::THREAD_SUSPENDED,
             ),

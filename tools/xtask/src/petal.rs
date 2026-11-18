@@ -425,9 +425,14 @@ pub fn build_zircon_rootfs(arch: Arch, fuchsia: bool) -> PathBuf {
         .join(arch.name());
     let bin_dir = rootfs_dir.join("bin");
 
-    // The manifest owns its directory: clear stale files so content
-    // from other manifests (or old layouts) cannot leak into the image.
-    dir::clear(&rootfs_dir).unwrap();
+    // The manifest owns its bin/ and lib/ content: clear stale files
+    // so content from other manifests (or old layouts) cannot leak
+    // into the image. The etc/ directory is NOT cleared: callers
+    // (e.g. the Makefile core-tests pipeline) inject configuration
+    // there — notably etc/extra-args, which carries the gtest filter
+    // and must survive rootfs rebuilds.
+    dir::clear(&bin_dir).unwrap();
+    dir::clear(&rootfs_dir.join("lib")).unwrap();
 
     // The core-tests manifest is defined to include the prebuilt
     // Fuchsia test binaries: fail early (instead of at boot time) when

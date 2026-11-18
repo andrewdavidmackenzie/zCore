@@ -512,7 +512,9 @@ ifndef T
 endif
 	@# Kill any stale QEMU using our boot image
 	@pkill -f 'qemu-system-x86_64.*boot\.img' 2>/dev/null; sleep 1 || true
-	@# Force rootfs rebuild with the new filter
+	@# Write the filter first: the manifest builder preserves etc/
+	@# (it only clears bin/ and lib/), so extra-args survives the
+	@# rootfs staging below.
 	@mkdir -p target/rootfs/core-tests/x86_64/etc
 	@printf '%s\n' '--gtest_filter=$(T)' > $(EXTRA_ARGS)
 	@rm -f $(ROOTFS_IMG) $(BOOT_IMG)
