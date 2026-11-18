@@ -125,6 +125,11 @@ pub unsafe fn copy_from_user(dst: *mut u8, src: *const u8, len: usize) -> Result
     // In libos mode, check that the source (user) address is readable.
     #[cfg(feature = "libos")]
     check_user_access_libos(src as usize, len, false)?;
+    // On x86_64 bare-metal, non-canonical addresses raise #GP instead
+    // of #PF, which the guarded-copy fault recovery does not catch.
+    // Reject them up front, like the libos path does for bad ranges.
+    #[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
+    validate_canonical_user_range(src as usize, len)?;
     guarded_user_copy(dst, src, len)
 }
 
@@ -146,7 +151,31 @@ pub unsafe fn copy_to_user(dst: *mut u8, src: *const u8, len: usize) -> Result<(
     // In libos mode, check that the destination (user) address is writable.
     #[cfg(feature = "libos")]
     check_user_access_libos(dst as usize, len, true)?;
+    // On x86_64 bare-metal, non-canonical addresses raise #GP instead
+    // of #PF, which the guarded-copy fault recovery does not catch.
+    #[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
+    validate_canonical_user_range(dst as usize, len)?;
     guarded_user_copy(dst, src, len)
+}
+
+/// Check that `[addr, addr+len)` lies within the canonical 48-bit user
+/// address form on x86_64 (bits 63:48 must replicate bit 47). Accessing
+/// a non-canonical address raises #GP rather than #PF, which the
+/// guarded user-copy fault recovery cannot intercept — so bad user
+/// pointers must be rejected before the copy starts.
+#[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
+fn validate_canonical_user_range(addr: usize, len: usize) -> Result<()> {
+    fn canonical(a: usize) -> bool {
+        let upper = a >> 47;
+        upper == 0 || upper == (1usize << 17) - 1
+    }
+    if !canonical(addr) {
+        return Err(Error::InvalidPointer);
+    }
+    match addr.checked_add(len) {
+        Some(end) if len == 0 || canonical(end - 1) => Ok(()),
+        _ => Err(Error::InvalidPointer),
+    }
 }
 
 /// Perform a guarded memory copy that recovers from page faults.
