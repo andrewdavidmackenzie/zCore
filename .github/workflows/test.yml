@@ -165,7 +165,12 @@ jobs:
           key: boot-riscv64
 
       - name: Install QEMU and tools
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-misc qemu-utils wget
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-misc qemu-utils wget
+          # Verify QEMU riscv64 is available (may be in qemu-system-misc or qemu-system-riscv)
+          which qemu-system-riscv64 || sudo apt-get install -y qemu-system-riscv || true
+          qemu-system-riscv64 --version
 
       - name: Build kernel and rootfs
         run: make build CONFIG=busybox.qemu-riscv64 ARCH=riscv64

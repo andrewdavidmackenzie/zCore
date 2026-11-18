@@ -43,9 +43,63 @@ trap_from_kernel:
     mrs     x2, tpidr_el1
     add     x1, sp, #38*8
     stp     x1, x2, [sp, #32]
+
+    # Save FPU/SIMD registers (q0-q31, FPCR, FPSR) on the stack.
+    # The Rust trap handler may use NEON/FP instructions, which would
+    # clobber the interrupted code's FP state without this save.
+    # 32 Q-regs * 16 bytes + FPCR(4) + FPSR(4) + 8 padding = 528
+    sub     sp, sp, #528
+    stp     q0,  q1,  [sp, #0]
+    stp     q2,  q3,  [sp, #32]
+    stp     q4,  q5,  [sp, #64]
+    stp     q6,  q7,  [sp, #96]
+    stp     q8,  q9,  [sp, #128]
+    stp     q10, q11, [sp, #160]
+    stp     q12, q13, [sp, #192]
+    stp     q14, q15, [sp, #224]
+    stp     q16, q17, [sp, #256]
+    stp     q18, q19, [sp, #288]
+    stp     q20, q21, [sp, #320]
+    stp     q22, q23, [sp, #352]
+    stp     q24, q25, [sp, #384]
+    stp     q26, q27, [sp, #416]
+    stp     q28, q29, [sp, #448]
+    stp     q30, q31, [sp, #480]
+    mrs     x3, fpcr
+    mrs     x4, fpsr
+    add     x5, sp, #512
+    str     w3, [x5]
+    str     w4, [x5, #4]
+
     # go to rust
-    mov     x0, sp
+    # x0 = trap frame pointer (above FPU save area)
+    add     x0, sp, #528
     bl      trap_handler
+
+    # Restore FPU/SIMD registers
+    ldp     q0,  q1,  [sp, #0]
+    ldp     q2,  q3,  [sp, #32]
+    ldp     q4,  q5,  [sp, #64]
+    ldp     q6,  q7,  [sp, #96]
+    ldp     q8,  q9,  [sp, #128]
+    ldp     q10, q11, [sp, #160]
+    ldp     q12, q13, [sp, #192]
+    ldp     q14, q15, [sp, #224]
+    ldp     q16, q17, [sp, #256]
+    ldp     q18, q19, [sp, #288]
+    ldp     q20, q21, [sp, #320]
+    ldp     q22, q23, [sp, #352]
+    ldp     q24, q25, [sp, #384]
+    ldp     q26, q27, [sp, #416]
+    ldp     q28, q29, [sp, #448]
+    ldp     q30, q31, [sp, #480]
+    add     x5, sp, #512
+    ldr     w3, [x5]
+    ldr     w4, [x5, #4]
+    msr     fpcr, x3
+    msr     fpsr, x4
+    add     sp, sp, #528
+
     # load tpidr
     ldr     x1, [sp, #40]
     msr     tpidr_el1, x1
