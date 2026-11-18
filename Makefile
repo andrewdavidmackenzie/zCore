@@ -50,7 +50,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)
 
 .PHONY: help build run test boot-test busybox-test config config-macos setup update rootfs libc-test other-test image clippy-all check doc docs clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
-	list-products list-boards flash petal-test \
+	list-products list-boards flash petal-test petal-tests \
 	debug-qemu debug-lldb debug-x86-qemu debug-x86-gdb \
 	pre-push pre-push-quick core-tests core-tests-build \
 	boot-logo uefi-firmware
@@ -622,8 +622,9 @@ core-tests: core-tests-build
 		echo "FAIL: incomplete run ($$P passed of $$T expected) — hung on: $$HUNG (after: $$LAST_OK)"; exit 1; \
 	fi
 
-# Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
-test: boot-test libc-test
+# Run all tests: boot smoke, libc conformance, and the petal
+# user-mode test suite (single QEMU boot).
+test: boot-test libc-test petal-tests
 
 # ── Bare-metal Rust zircon-tests ─────────────────────────────────────
 # Build and run the Rust zircon-tests suite inside QEMU on bare-metal.
@@ -657,6 +658,13 @@ ifndef BIN
 	$(error BIN is required. Usage: make petal-test BIN=counter-test [ARCH=aarch64])
 endif
 	@tools/scripts/petal-test.sh $(ARCH) $(BIN)
+
+# Run the FULL petal user-mode test suite in a single QEMU boot
+# (all 65 binaries, one kernel, one rootfs). This is the CI entry
+# point — the petal equivalent of `make rust-tests`.
+# Usage: make petal-tests [ARCH=aarch64|x86_64]
+petal-tests:
+	@tools/scripts/petal-tests.sh $(ARCH)
 
 # Boot smoke test: start QEMU, wait for the "/ # " shell prompt, exit.
 # Proves: boot assembly, MMU, HAL, VirtIO, filesystem, ELF loader, and
@@ -894,47 +902,50 @@ pre-push-quick:
 # Full pre-push: everything CI checks (slow — includes QEMU boot tests).
 # Requires: qemu-system-aarch64, qemu-system-x86_64.
 pre-push:
-	@echo "==> [1/15] Clippy (all selections + personalities)..."
+	@echo "==> [1/19] Clippy (all selections + personalities)..."
 	cargo check-style
-	@echo "==> [2/15] Workspace build..."
+	@echo "==> [2/19] Workspace build..."
 	cargo build
-	@echo "==> [3/15] Unit tests..."
+	@echo "==> [3/19] Unit tests..."
 	cargo test --no-fail-fast
-	@echo "==> [3.5/15] Zircon syscall tests (libos)..."
+	@echo "==> [3.5/19] Zircon syscall tests (libos)..."
 	cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
-	@echo "==> [4/15] Bare-metal aarch64 (build + rootfs)..."
+	@echo "==> [4/19] Bare-metal aarch64 (build + rootfs)..."
 	$(MAKE) build CONFIG=busybox.qemu-aarch64 ARCH=aarch64
-	@echo "==> [5/15] Boot smoke test (aarch64)..."
+	@echo "==> [5/19] Boot smoke test (aarch64)..."
 	$(MAKE) boot-test CONFIG=busybox.qemu-aarch64 ARCH=aarch64
-	@echo "==> [6/16] Bare-metal riscv64..."
+	@echo "==> [6/19] Bare-metal riscv64..."
 	cargo zcore-build -m busybox.qemu-riscv64
-	@echo "==> [6.5/16] Boot smoke test (riscv64)..."
+	@echo "==> [6.5/19] Boot smoke test (riscv64)..."
 	tools/scripts/riscv64-boot-test.sh busybox.qemu-riscv64
-	@echo "==> [7/16] Bare-metal x86_64 (build + rootfs)..."
+	@echo "==> [7/19] Bare-metal x86_64 (build + rootfs)..."
 	$(MAKE) build CONFIG=busybox.qemu-x86_64 ARCH=x86_64
-	@echo "==> [8/15] Boot smoke test (x86_64)..."
+	@echo "==> [8/19] Boot smoke test (x86_64)..."
 	$(MAKE) boot-test CONFIG=busybox.qemu-x86_64 ARCH=x86_64
-	@echo "==> [9/15] Bare-metal x86_64 zircon..."
+	@echo "==> [9/19] Bare-metal x86_64 zircon..."
 	cargo bin -m petal.qemu-x86_64
-	@echo "==> [10/16] Dual flavour (build-only)..."
+	@echo "==> [10/19] Dual flavour (build-only)..."
 	cargo bin -m busybox.qemu-aarch64
-	@echo "==> [11/16] LibOS (Linux + Zircon)..."
+	@echo "==> [11/19] LibOS (Linux + Zircon)..."
 	cargo zcore-build -m busybox.libos
 	cargo zcore-build -m petal.libos
-	@echo "==> [12/16] Hardware targets (build-only)..."
+	@echo "==> [12/19] Hardware targets (build-only)..."
 	cargo bin -m petal.raspi400
 	cargo bin -m petal.x86-laptop
-	@echo "==> [13/18] Zircon boot test (aarch64)..."
+	@echo "==> [13/19] Zircon boot test (aarch64)..."
 	$(MAKE) zircon-boot-test ARCH=aarch64
 	@tools/scripts/zircon-rootfs-test.sh zircon-hello.qemu-aarch64 aarch64
-	@echo "==> [14/18] Zircon boot test (x86_64)..."
+	@echo "==> [14/19] Zircon boot test (x86_64)..."
 	$(MAKE) zircon-boot-test ARCH=x86_64
-	@echo "==> [15/18] Libc tests (aarch64 + x86_64)..."
+	@echo "==> [15/19] Libc tests (aarch64 + x86_64)..."
 	$(MAKE) libc-test CONFIG=busybox.qemu-aarch64 ARCH=aarch64
 	$(MAKE) libc-test CONFIG=busybox.qemu-x86_64 ARCH=x86_64
-	@echo "==> [16/18] Check all feature combinations..."
+	@echo "==> [16/19] Check all feature combinations..."
 	$(MAKE) check-all-features
-	@echo "==> [17/18] Done."
+	@echo "==> [17/19] Petal user-mode test suite (aarch64 + x86_64)..."
+	$(MAKE) petal-tests ARCH=aarch64
+	$(MAKE) petal-tests ARCH=x86_64
+	@echo "==> [18/19] Done."
 	@echo "==> All pre-push checks passed."
 
 # Run clippy for all selections (catches cross-platform issues).
