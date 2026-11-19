@@ -1,29 +1,54 @@
-import socket, sys, time
+import re
+import socket
+import sys
+import time
+
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-s.connect(sys.argv[1]); s.settimeout(0.5)
+s.connect(sys.argv[1])
+s.settimeout(0.5)
+
+
 def cmd(c, wait=0.4):
-    s.sendall((c + "\n").encode()); time.sleep(wait)
+    s.sendall((c + "\n").encode())
+    time.sleep(wait)
     out = b""
     try:
         while True:
             d = s.recv(65536)
-            if not d: break
+            if not d:
+                break
             out += d
-    except socket.timeout: pass
+    except socket.timeout:
+        pass
     return out.decode(errors="replace")
+
+
 cmd("", 0.2)
-print("== info lapic (cpu0) =="); print(cmd("info lapic"))
-# LAPIC MMIO (xAPIC mode): timer regs + spurious + LVT timer
-# 0xFEE000F0 spurious (bit8=APIC enable), 0xFEE00320 timer ICR,
-# 0xFEE00328 timer current, 0xFEE00330 LVT timer, 0xFEE00380 ICR lo
-print("== LAPIC MMIO cpu0 ==")
-print(cmd("xp /1gx 0xfee000f0"))
-print(cmd("xp /2gx 0xfee00320"))
-print(cmd("xp /1gx 0xfee00330"))
-print(cmd("xp /1gx 0xfee00380"))
-# switch to cpu 1 and repeat spurious + timer
-cmd("cpu 1")
-print("== LAPIC MMIO cpu1 ==")
-print(cmd("xp /1gx 0xfee000f0"))
-print(cmd("xp /2gx 0xfee00320"))
-print(cmd("xp /1gx 0xfee00330"))
+# Enumerate the guest CPUs from `info cpus` instead of assuming a count.
+info = cmd("info cpus")
+cpus = sorted(int(m) for m in re.findall(r"CPU #(\d+)", info))
+if not cpus:
+    cpus = [0]
+
+print("== info lapic (cpu0) ==")
+print(cmd("info lapic"))
+
+# x86 LAPIC MMIO offsets (relative to 0xFEE00000):
+#   0x0F0 spurious-interrupt vector register (bit 8 = APIC software enable)
+#   0x320 LVT timer register
+#   0x380 timer initial-count register (TICR)
+#   0x390 timer current-count register (TCCR)
+#   0x380 ICR is written via 0x300/0x310 on xAPIC; ICR low is at 0x300.
+REGS = [
+    ("SPIV (0xF0)", 0x0F0),
+    ("LVT timer (0x320)", 0x320),
+    ("timer initial count (0x380)", 0x380),
+    ("timer current count (0x390)", 0x390),
+    ("ICR low (0x300)", 0x300),
+]
+
+for n in cpus:
+    cmd("cpu %d" % n)
+    print("== LAPIC MMIO cpu%d ==" % n)
+    for name, off in REGS:
+        print("  %s: %s" % (name, cmd("xp /1gx 0x%x" % (0xFEE00000 + off)).strip().splitlines()[-1]))

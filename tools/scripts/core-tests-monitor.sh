@@ -11,7 +11,7 @@ MON=${3:?monitor socket}
 CORES=${4:-8}
 BOOT_IMG=target/core-tests.qemu-x86_64/release/boot.img
 
-pkill -f 'qemu-system-x86_64.*boot\.img' 2>/dev/null
+# Do not pkill other sessions' QEMU; only manage our own child via $PID below.
 sleep 1
 rm -f "$MON"
 

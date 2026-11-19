@@ -1,18 +1,36 @@
-import socket, sys, time, re
+import re
+import socket
+import sys
+import time
+
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-s.connect(sys.argv[1]); s.settimeout(0.5)
+s.connect(sys.argv[1])
+s.settimeout(0.5)
+
+
 def cmd(c, wait=0.35):
-    s.sendall((c + "\n").encode()); time.sleep(wait)
+    s.sendall((c + "\n").encode())
+    time.sleep(wait)
     out = b""
     try:
         while True:
             d = s.recv(65536)
-            if not d: break
+            if not d:
+                break
             out += d
-    except socket.timeout: pass
+    except socket.timeout:
+        pass
     return out.decode(errors="replace")
+
+
 cmd("", 0.2)
-for n in range(8):
+# Enumerate the guest CPUs from `info cpus` instead of assuming a count.
+info = cmd("info cpus")
+cpus = sorted(int(m) for m in re.findall(r"CPU #(\d+)", info))
+if not cpus:
+    cpus = [0]
+
+for n in cpus:
     cmd("cpu %d" % n)
     regs = cmd("info registers")
     rip = re.search(r"RIP=([0-9a-f]+)", regs)

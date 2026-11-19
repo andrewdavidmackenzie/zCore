@@ -10,7 +10,7 @@ GRACE=${2:-90}
 CORES=${3:-8}
 BOOT_IMG=target/core-tests.qemu-x86_64/release/boot.img
 
-pkill -f 'qemu-system-x86_64.*boot\.img' 2>/dev/null
+# Do not pkill other sessions' QEMU; only manage our own child via $PID below.
 sleep 1
 
 . "$(dirname "$0")/find-ovmf.sh"

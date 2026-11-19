@@ -331,15 +331,15 @@ impl TaskCollection {
     /// CPU's scanner, so no wake-up can be lost in transit and the
     /// source's freed slot cannot be reused before it is retired.
     ///
-    /// Only default-priority tasks are migrated. Higher-priority tasks
-    /// (Zircon threads, system tasks) are popped and re-queued so the
-    /// source CPU keeps them — migrating them would disrupt
-    /// time-sensitive threads (see #783).
+    /// Only default-priority tasks are migrated. All other priorities
+    /// (including Zircon threads at priority 16) are popped and
+    /// re-queued so the source CPU keeps them.
     ///
-    /// Lock order: source.sched → source.fc → dest.sched → dest.fc.
-    /// This nesting is safe: every other lock site takes sched→fc of a
-    /// single collection and never blocks on a second collection while
-    /// holding the first, so this function is always a leaf holder.
+    /// Lock order: source.sched → source.fc, then the destination
+    /// locks via `try_lock` (never blocking). Blocking on a second
+    /// collection's locks while holding the source's could deadlock
+    /// against a mirror-image steal on another CPU; try_lock makes
+    /// this function a leaf holder that always makes progress.
     pub fn steal_into(&self, dest: &TaskCollection) -> Option<usize> {
         // Lock ordering: sched_state first, then future_collections.
         let mut sched = self.sched_state.lock();
@@ -351,10 +351,14 @@ impl TaskCollection {
         if priority >= MAX_PRIORITY {
             return None;
         }
-        // Only steal default-priority tasks. Higher-priority tasks are
-        // system tasks or time-sensitive threads that should not be
-        // migrated. Re-queue the task so the source CPU keeps it.
-        if priority > DEFAULT_PRIORITY {
+        // Only default-priority tasks migrate. Higher-priority tasks
+        // (Zircon threads at 16, system tasks) must stay on their
+        // spawn CPU — migrating them disrupts time-sensitive threads
+        // (see #783). Sub-default priorities (0-3) are re-queued too:
+        // only the kernel's default-priority futures (e.g. the loader
+        // service) are migratable. Re-queue so the source CPU keeps
+        // the task either way.
+        if priority != DEFAULT_PRIORITY {
             crate::sched::on_task_notified(&mut sched, key);
             return None;
         }
@@ -373,8 +377,28 @@ impl TaskCollection {
         // Reserve the destination slot while still holding the source
         // locks. The slot is initialized notified, so the destination
         // CPU's scanner will queue and poll the task.
-        let mut dest_sched = dest.sched_state.lock();
-        let mut dest_inner = dest.future_collections[priority].lock();
+        //
+        // The destination locks are taken with try_lock: if another
+        // CPU concurrently holds them (e.g. it is stealing from us),
+        // we skip this attempt instead of blocking. Blocking here
+        // while holding the source locks could deadlock against the
+        // other CPU doing the mirror-image steal.
+        let mut dest_sched = match dest.sched_state.try_lock() {
+            Some(guard) => guard,
+            None => {
+                // Put the popped key back so the source keeps the task.
+                crate::sched::on_task_notified(&mut sched, key);
+                return None;
+            }
+        };
+        let mut dest_inner = match dest.future_collections[priority].try_lock() {
+            Some(guard) => guard,
+            None => {
+                drop(dest_sched);
+                crate::sched::on_task_notified(&mut sched, key);
+                return None;
+            }
+        };
         let new_slab_key = dest_inner.insert_task(task.clone());
         let new_full_key = new_slab_key | (priority << PRIORITY_SHIFT);
         let (_, new_page_idx, new_subpage_idx) = unpack_key(new_slab_key);
@@ -428,15 +452,30 @@ impl TaskCollection {
         if priority >= MAX_PRIORITY {
             return;
         }
-        let inner = self.future_collections[priority].lock();
-        let (_, page_idx, subpage_idx) = unpack_key(key);
-        if page_idx >= inner.pages.len() {
-            return;
+        // Disable interrupts while holding the collection lock so a
+        // timer preemption cannot context-switch away with the lock
+        // held (the lock would stay held until the preempted context
+        // resumes).
+        let enable = crate::arch::intr_get();
+        if enable {
+            crate::arch::intr_off();
         }
-        let page = inner.pages[page_idx].clone();
-        drop(inner);
-        page.notify(subpage_idx);
-        crate::ipi_wakeup(self.cpu_id);
+        let page = {
+            let inner = self.future_collections[priority].lock();
+            let (_, page_idx, subpage_idx) = unpack_key(key);
+            if page_idx >= inner.pages.len() {
+                None
+            } else {
+                Some((inner.pages[page_idx].clone(), subpage_idx))
+            }
+        };
+        if enable {
+            crate::arch::intr_on();
+        }
+        if let Some((page, subpage_idx)) = page {
+            page.notify(subpage_idx);
+            crate::ipi_wakeup(self.cpu_id);
+        }
     }
 
     /// Select the next task to run using the scheduler.

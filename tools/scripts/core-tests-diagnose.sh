@@ -11,7 +11,7 @@ MON=${3:?monitor socket}
 CORES=${4:-8}
 BOOT_IMG=target/core-tests.qemu-x86_64/release/boot.img
 
-pkill -f 'qemu-system-x86_64.*boot\.img' 2>/dev/null
+# Do not pkill other sessions' QEMU; only manage our own child via $PID below.
 sleep 1
 rm -f "$MON"
 
@@ -69,18 +69,22 @@ print("===== info status ====="); print(cmd("info status"))
 print("===== info irq (sample 1) ====="); print(cmd("info irq"))
 time.sleep(5)
 print("===== info irq (sample 2, 5s later) ====="); print(cmd("info irq"))
-print("===== injecting NMIs to all cpus =====")
-for n in range(cores):
-    print(cmd(f"nmi {n}"))
+print("===== injecting NMI (HMP `nmi` takes no args on QEMU 8.x) =====")
+print(cmd("nmi"))
 print("===== info registers cpu 0 (post-NMI) =====")
 print(cmd("cpu 0")); print(cmd("info registers"))
 EOF
-        echo "==> Waiting 90s to see if kernel revives..."
+        # Baseline for the revival comparison is taken immediately
+        # before the observation window (after the monitor queries,
+        # which take time) so pre-injection progress is not
+        # misattributed to the NMI.
+        HB_BASE=$(tr -d '\000' < "$LOG" | grep -c "scan: cpu=" || true)
+        echo "==> Waiting 90s to observe post-NMI progress..."
         sleep 90
         HB_AFTER=$(tr -d '\000' < "$LOG" | grep -c "scan: cpu=" || true)
-        echo "heartbeats before=$HB_BEFORE after=$HB_AFTER"
-        if [ "$HB_AFTER" -gt "$HB_BEFORE" ]; then
-            echo "==> KERNEL REVIVED BY NMI — CPUs were halt-stuck, interrupt sources dead"
+        echo "heartbeats baseline=$HB_BASE (pre-diagnostics: $HB_BEFORE) after=$HB_AFTER"
+        if [ "$HB_AFTER" -gt "$HB_BASE" ]; then
+            echo "==> Progress observed after NMI — CPUs were halt-stuck (report, not proof of causation)"
             echo "===== registers after revival (cpu 0) ====="
             python3 - "$MON" <<'EOF'
 import socket, sys, time
