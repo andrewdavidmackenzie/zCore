@@ -3,8 +3,15 @@
 //! A clock maintains a synthetic timeline that can be read and adjusted.
 //! The clock's time is computed from the monotonic clock via a linear
 //! transformation: `clock_time = (mono - reference_mono) * rate + offset`.
+//!
+//! `zx_vmar_map_clock` mappings are backed by a single shared state
+//! page per clock (see [`Clock::create_state_vmo`]); every successful
+//! [`Clock::update`] republishes the transformation to it, so mapped
+//! readers observe updates without remapping (issue #831).
 
+use crate::mutex::KernelMutex;
 use crate::object::*;
+use core::sync::atomic::{fence, Ordering};
 use hal_impl::timer::timer_now;
 use lock::Mutex;
 
@@ -13,12 +20,49 @@ pub const ZX_CLOCK_OPT_MONOTONIC: u64 = 1 << 0;
 pub const ZX_CLOCK_OPT_CONTINUOUS: u64 = 1 << 1;
 pub const ZX_CLOCK_OPT_AUTO_START: u64 = 1 << 2;
 
+/// Length of the transformation struct at the start of the state page.
+///
+/// The struct has the same layout as the bytes returned by
+/// [`Clock::get_details`] (`zx_clock_details_v1_t`-style):
+///
+/// - offset 0: options (u64)
+/// - offset 8: mono_to_synthetic numerator (u32)
+/// - offset 12: mono_to_synthetic denominator (u32)
+/// - offset 16: mono_to_synthetic reference offset (i64)
+/// - offset 24: mono_to_synthetic synthetic offset (i64)
+/// - offset 32: error_bound (u64)
+/// - offset 40: query_ticks (i64)
+/// - offset 48: last_value_update_ticks (i64)
+/// - offset 56: last_rate_adjust_update_ticks (i64)
+const STATE_DETAILS_LEN: usize = 64;
+
+/// Offset of the seqlock generation counter in the clock state page.
+///
+/// The last 8 bytes of the page hold the generation counter used by
+/// mapped readers to detect in-progress updates (see
+/// [`Clock::publish_state`]). Everything between the transformation
+/// struct and the counter is zero padding.
+const STATE_GEN_OFFSET: usize = hal::PAGE_SIZE - 8;
+
+/// Shared clock state page backing `zx_vmar_map_clock` mappings.
+struct ClockStatePage {
+    /// The shared state VMO, created lazily on the first map. Every
+    /// mapping of the clock maps this same VMO.
+    vmo: Option<alloc::sync::Arc<crate::vm::VmObject>>,
+    /// The clock generation currently published on the page. Updates
+    /// snapshot their state before publishing, so a late publisher
+    /// with an older snapshot must not overwrite a newer publication.
+    published_generation: u64,
+}
+
 /// A Zircon clock kernel object.
 pub struct Clock {
     base: KObjectBase,
     inner: Mutex<ClockInner>,
     /// Options set at creation time.
     options: u64,
+    /// Shared state page for `zx_vmar_map_clock` (issue #831).
+    state: KernelMutex<ClockStatePage>,
 }
 
 impl_kobject!(Clock);
@@ -36,8 +80,11 @@ struct ClockInner {
     rate_den: u32,
     /// Error bound in nanoseconds (0 = unknown).
     error_bound: u64,
-    /// Generation counter (incremented on each update).
-    generation: u32,
+    /// Generation counter (incremented on each update). Also orders
+    /// publications to the shared state page (see `published_generation`);
+    /// u64 so the "publish only newer" check survives practically
+    /// unbounded updates.
+    generation: u64,
 }
 
 impl Default for ClockInner {
@@ -67,6 +114,10 @@ impl Clock {
             base: KObjectBase::new(),
             inner: Mutex::new(inner),
             options,
+            state: KernelMutex::new(ClockStatePage {
+                vmo: None,
+                published_generation: 0,
+            }),
         })
     }
 
@@ -97,8 +148,6 @@ impl Clock {
     /// - offset 16: reference_value (i64) -- monotonic reference point
     /// - offset 24: error_bound (u64) -- error bound in ns
     pub fn update(&self, options: u64, args: &[u8]) -> ZxResult {
-        let mut inner = self.inner.lock();
-
         // Option bits indicate which fields are valid.
         const OPT_VALUE: u64 = 1 << 0;
         const OPT_RATE: u64 = 1 << 1;
@@ -109,64 +158,163 @@ impl Clock {
             return Err(ZxError::INVALID_ARGS);
         }
 
-        if options & OPT_VALUE != 0 {
-            let value = i64::from_le_bytes(args[8..16].try_into().unwrap());
-            inner.synthetic_offset = value;
-        }
+        let (details, generation) = {
+            let mut inner = self.inner.lock();
 
-        if options & OPT_REFERENCE != 0 {
-            let reference = i64::from_le_bytes(args[16..24].try_into().unwrap());
-            inner.reference_mono = reference;
-        } else if options & OPT_VALUE != 0 {
-            // If setting value without reference, use current monotonic
-            inner.reference_mono = timer_now().as_nanos() as i64;
-        }
+            if options & OPT_VALUE != 0 {
+                let value = i64::from_le_bytes(args[8..16].try_into().unwrap());
+                inner.synthetic_offset = value;
+            }
 
-        if options & OPT_RATE != 0 {
-            let rate_ppm = i32::from_le_bytes(args[0..4].try_into().unwrap());
-            // rate_adjust is in PPM: actual_rate = 1 + rate_ppm / 1_000_000
-            // Store as ratio: num = 1_000_000 + rate_ppm, den = 1_000_000
-            inner.rate_num = (1_000_000i64 + rate_ppm as i64) as u32;
-            inner.rate_den = 1_000_000;
-        }
-
-        if options & OPT_ERROR != 0 {
-            let error = u64::from_le_bytes(args[24..32].try_into().unwrap());
-            inner.error_bound = error;
-        }
-
-        // Start the clock on first update if not auto-started.
-        if !inner.started {
-            inner.started = true;
-            if options & OPT_REFERENCE == 0 && options & OPT_VALUE == 0 {
+            if options & OPT_REFERENCE != 0 {
+                let reference = i64::from_le_bytes(args[16..24].try_into().unwrap());
+                inner.reference_mono = reference;
+            } else if options & OPT_VALUE != 0 {
+                // If setting value without reference, use current monotonic
                 inner.reference_mono = timer_now().as_nanos() as i64;
             }
-        }
 
-        inner.generation = inner.generation.wrapping_add(1);
+            if options & OPT_RATE != 0 {
+                let rate_ppm = i32::from_le_bytes(args[0..4].try_into().unwrap());
+                // rate_adjust is in PPM: actual_rate = 1 + rate_ppm / 1_000_000
+                // Store as ratio: num = 1_000_000 + rate_ppm, den = 1_000_000
+                inner.rate_num = (1_000_000i64 + rate_ppm as i64) as u32;
+                inner.rate_den = 1_000_000;
+            }
 
-        // Signal that the clock was updated.
+            if options & OPT_ERROR != 0 {
+                let error = u64::from_le_bytes(args[24..32].try_into().unwrap());
+                inner.error_bound = error;
+            }
+
+            // Start the clock on first update if not auto-started.
+            if !inner.started {
+                inner.started = true;
+                if options & OPT_REFERENCE == 0 && options & OPT_VALUE == 0 {
+                    inner.reference_mono = timer_now().as_nanos() as i64;
+                }
+            }
+
+            inner.generation = inner.generation.wrapping_add(1);
+            // Snapshot the new state for publication to the shared
+            // page. Taken while still holding `inner` so the snapshot
+            // matches this update's generation exactly.
+            (
+                Self::details_bytes(&inner, self.options, timer_now().as_nanos() as i64),
+                inner.generation,
+            )
+        }; // `inner` released here: publication takes the VMO's kernel
+           // mutex, which may yield and must not run under the spinlock.
+
+        // Publish the new transformation to the shared state page so
+        // mapped readers observe this update without remapping
+        // (issue #831).
+        let publish_result = self.publish_state(&details, generation);
+
+        // The signal reflects the clock state change itself (which did
+        // happen), so fire it even if publication failed; readers of a
+        // failed publication fall back to `zx_clock_read` (the page's
+        // generation is left odd, marking it mid-update).
         self.base.signal_set(Signal::CLOCK_STARTED);
+
+        publish_result?;
 
         Ok(())
     }
 
-    /// Create a VMO containing the clock's transformation state.
+    /// Create the VMO containing the clock's transformation state.
     ///
-    /// The VMO holds the clock details struct that userspace can
-    /// read to compute clock time without a syscall.  The entire
-    /// page is zero-filled first, then the struct is written on
-    /// top.  This ensures all padding bytes are zero (preventing
-    /// kernel memory leakage).
+    /// The VMO is created once per clock and shared by every
+    /// `zx_vmar_map_clock` mapping, and each successful
+    /// [`Clock::update`] republishes the transformation to it (see
+    /// [`Clock::publish_state`]). This matches Fuchsia, where the
+    /// clock's transformation lives directly in the mapped page and
+    /// updates are published to it under a seqlock.
+    ///
+    /// The entire page is zero-filled first, then the transformation
+    /// struct and the generation counter are written on top. This
+    /// ensures all padding bytes are zero (preventing kernel memory
+    /// leakage; see the `MappableClockPaddingLeak` test).
     pub fn create_state_vmo(&self) -> ZxResult<alloc::sync::Arc<crate::vm::VmObject>> {
-        let details = self.get_details()?;
-        let vmo = crate::vm::VmObject::new_paged(1);
-        // Zero-fill the page, then write the clock details.
+        // Fast path: the shared page already exists.
+        {
+            let state = self.state.lock();
+            if let Some(vmo) = state.vmo.as_ref() {
+                return Ok(vmo.clone());
+            }
+        }
+        // Slow path: create the page. All creation work happens under
+        // `state`, so a racing update either mutated before the
+        // snapshot below (its state is included) or publishes after
+        // the page is registered (it finds the VMO and republishes).
+        let mut state = self.state.lock();
+        if let Some(vmo) = state.vmo.as_ref() {
+            return Ok(vmo.clone()); // raced with another creator
+        }
+        // Snapshot the current state under `inner`, inside `state`, so
+        // the page registers with state that is current as of
+        // registration.
+        let (details, generation) = {
+            let inner = self.inner.lock();
+            let mono_now = timer_now().as_nanos() as i64;
+            (
+                Self::details_bytes(&inner, self.options, mono_now),
+                inner.generation,
+            )
+        };
         let mut page = [0u8; hal::PAGE_SIZE];
-        page[..details.len()].copy_from_slice(&details);
+        page[..STATE_DETAILS_LEN].copy_from_slice(&details);
+        page[STATE_GEN_OFFSET..].copy_from_slice(&(generation * 2).to_le_bytes());
+        let vmo = crate::vm::VmObject::new_paged(1);
         vmo.write(0, &page)?;
         vmo.set_name("clock-state");
+        state.vmo = Some(vmo.clone());
+        state.published_generation = generation;
         Ok(vmo)
+    }
+
+    /// Publish `details` at `generation` to the shared state page.
+    ///
+    /// Uses a seqlock protocol, like Fuchsia's `fasttime`
+    /// `ClockTransformation` which lives directly in the mapped page:
+    ///
+    /// 1. Write an odd generation — marks an update in progress.
+    /// 2. Write the transformation struct.
+    /// 3. Write an even generation — marks the update complete.
+    ///
+    /// A reader loads the generation, reads the struct, and re-loads
+    /// the generation; if either load was odd, or the two loads
+    /// differ, the read raced with an update and must be retried
+    /// (after bounded retries, fall back to `zx_clock_read` /
+    /// `zx_clock_get_details`).
+    ///
+    /// Publication is skipped when no page exists yet (no mappings),
+    /// and when a newer generation is already on the page (a racing
+    /// update snapshotted and published after this one). If a write
+    /// fails midway the generation is left odd, so readers never
+    /// consume a torn struct; the error is propagated to the updater.
+    fn publish_state(&self, details: &[u8; STATE_DETAILS_LEN], generation: u64) -> ZxResult {
+        let mut state = self.state.lock();
+        let Some(vmo) = state.vmo.as_ref() else {
+            return Ok(()); // no mappings — nothing to publish
+        };
+        if generation < state.published_generation {
+            // A newer update already published; don't overwrite it
+            // with this older snapshot.
+            return Ok(());
+        }
+        let even = generation * 2;
+        let odd = even | 1;
+        // The `SeqCst` fences order the generation marks against the
+        // struct stores on weakly-ordered machines; the reader side
+        // mirrors them with its own fences.
+        vmo.write(STATE_GEN_OFFSET, &odd.to_le_bytes())?;
+        fence(Ordering::SeqCst);
+        vmo.write(0, details)?;
+        fence(Ordering::SeqCst);
+        vmo.write(STATE_GEN_OFFSET, &even.to_le_bytes())?;
+        state.published_generation = generation;
+        Ok(())
     }
 
     /// Get detailed clock information.
@@ -175,10 +323,19 @@ impl Clock {
     pub fn get_details(&self) -> ZxResult<[u8; 64]> {
         let inner = self.inner.lock();
         let mono_now = timer_now().as_nanos() as i64;
+        Ok(Self::details_bytes(&inner, self.options, mono_now))
+    }
 
+    /// Serialize the clock's transformation into
+    /// `zx_clock_details_v1_t`-layout bytes.
+    ///
+    /// `mono_now` is the reference instant for `query_ticks`; callers
+    /// choose it (query time for `get_details`, publication time for
+    /// the shared page).
+    fn details_bytes(inner: &ClockInner, options: u64, mono_now: i64) -> [u8; 64] {
         let mut details = [0u8; 64];
         // options (u64) at offset 0
-        details[0..8].copy_from_slice(&self.options.to_le_bytes());
+        details[0..8].copy_from_slice(&options.to_le_bytes());
         // mono_to_synthetic numerator (u32) at offset 8
         details[8..12].copy_from_slice(&inner.rate_num.to_le_bytes());
         // mono_to_synthetic denominator (u32) at offset 12
@@ -195,8 +352,7 @@ impl Clock {
         details[48..56].copy_from_slice(&inner.reference_mono.to_le_bytes());
         // last_rate_adjust_update_ticks (i64) at offset 56
         details[56..64].copy_from_slice(&inner.reference_mono.to_le_bytes());
-
-        Ok(details)
+        details
     }
 }
 
@@ -234,5 +390,115 @@ mod tests {
         // Rate denominator (offset 12) defaults to 1
         let rate_den = u32::from_le_bytes(details[12..16].try_into().unwrap());
         assert_eq!(rate_den, 1);
+    }
+
+    /// Build a `zx_clock_update_args_v2_t` buffer setting a synthetic
+    /// value (options = VALUE_VALID).
+    fn update_args_value(value: i64) -> [u8; 32] {
+        let mut args = [0u8; 32];
+        args[8..16].copy_from_slice(&value.to_le_bytes());
+        args
+    }
+
+    /// Read the synthetic offset field from a clock state page.
+    fn page_synthetic_offset(page: &[u8]) -> i64 {
+        i64::from_le_bytes(page[24..32].try_into().unwrap())
+    }
+
+    /// Read the seqlock generation counter from a clock state page.
+    fn page_generation(page: &[u8]) -> u64 {
+        let off = page.len() - 8;
+        u64::from_le_bytes(page[off..off + 8].try_into().unwrap())
+    }
+
+    /// Issue #831: all mappings of a clock share one state VMO
+    /// (instead of a private snapshot per map).
+    #[test]
+    fn state_vmo_is_shared() {
+        let clock = Clock::new(0).unwrap();
+        let vmo1 = clock.create_state_vmo().unwrap();
+        let vmo2 = clock.create_state_vmo().unwrap();
+        assert!(
+            alloc::sync::Arc::ptr_eq(&vmo1, &vmo2),
+            "state VMO must be shared, not a per-map copy"
+        );
+    }
+
+    /// Issue #831: a successful update republishes the transformation
+    /// to the shared state page, so a reader holding a mapping sees
+    /// the new state without remapping.
+    #[test]
+    fn state_vmo_sees_updates() {
+        let clock = Clock::new(0).unwrap();
+        // Start the clock at 1000.
+        clock.update(1 << 0, &update_args_value(1000)).unwrap();
+        let vmo = clock.create_state_vmo().unwrap();
+        let mut page = [0u8; hal::PAGE_SIZE];
+        vmo.read(0, &mut page).unwrap();
+        assert_eq!(page_synthetic_offset(&page), 1000);
+        let gen1 = page_generation(&page);
+        assert_eq!(gen1 % 2, 0, "generation must be even (stable) at rest");
+
+        // Update again — the page must follow without remapping.
+        clock.update(1 << 0, &update_args_value(2000)).unwrap();
+        let mut page = [0u8; hal::PAGE_SIZE];
+        vmo.read(0, &mut page).unwrap();
+        assert_eq!(
+            page_synthetic_offset(&page),
+            2000,
+            "mapped state page is stale after update (issue #831)"
+        );
+        let gen2 = page_generation(&page);
+        assert_eq!(gen2 % 2, 0, "generation must be even (stable) at rest");
+        assert!(gen2 > gen1, "generation must increase across updates");
+
+        // The syscall view and the mapped page must agree.
+        assert!(clock.read().unwrap() >= 2000);
+    }
+
+    /// Mapping the clock before any update, then updating: the page
+    /// follows the update.
+    #[test]
+    fn state_vmo_created_before_update() {
+        let clock = Clock::new(0).unwrap();
+        let vmo = clock.create_state_vmo().unwrap();
+        let mut page = [0u8; hal::PAGE_SIZE];
+        vmo.read(0, &mut page).unwrap();
+        assert_eq!(page_synthetic_offset(&page), 0);
+        assert_eq!(
+            page_generation(&page),
+            0,
+            "fresh clock publishes generation 0"
+        );
+
+        clock.update(1 << 0, &update_args_value(1234)).unwrap();
+        vmo.read(0, &mut page).unwrap();
+        assert_eq!(page_synthetic_offset(&page), 1234);
+    }
+
+    /// The padding between the transformation struct and the
+    /// generation counter stays zero across updates (no kernel data
+    /// leaks through the shared page).
+    #[test]
+    fn state_vmo_padding_stays_zero() {
+        let clock = Clock::new(0).unwrap();
+        clock.update(1 << 0, &update_args_value(1000)).unwrap();
+        let vmo = clock.create_state_vmo().unwrap();
+        for value in 2000..2003 {
+            clock.update(1 << 0, &update_args_value(value)).unwrap();
+        }
+        let mut page = [0u8; hal::PAGE_SIZE];
+        vmo.read(0, &mut page).unwrap();
+        for (i, &b) in page[STATE_DETAILS_LEN..hal::PAGE_SIZE - 8]
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(
+                b,
+                0,
+                "padding byte at offset {} must stay zero (no kernel data leaks)",
+                STATE_DETAILS_LEN + i
+            );
+        }
     }
 }
