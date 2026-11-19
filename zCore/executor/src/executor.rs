@@ -188,24 +188,26 @@ impl Executor {
                     // busy CPU, accept it into the local collection,
                     // and loop to poll it (its waker slot is
                     // initialized notified, so take_task picks it up).
-                    if let Some((task, priority, old_page, old_subpage_idx)) =
-                        crate::runtime::steal_task_from_other_cpu()
-                    {
-                        crate::cpu_stats(crate::arch::cpu_id() as usize)
-                            .stolen_tasks
-                            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                        // DEBUG(ws783): trace stolen task ids.
-                        warn!(
-                            "STEAL: cpu{} accepted task id={} prio={}",
-                            crate::arch::cpu_id(),
-                            task.id(),
-                            priority
-                        );
-                        if let Some(local) = crate::runtime::local_task_collection() {
-                            local.accept_stolen_task(task, priority, old_page, old_subpage_idx);
-                            continue;
-                        }
-                    }
+                    // BISECT(ws783): steal disabled — isolate whether the
+                    // steal call is the lost-wake trigger.
+                    let _ = crate::runtime::steal_task_from_other_cpu;
+                    // if let Some((task, priority, old_page, old_subpage_idx)) =
+                    //     crate::runtime::steal_task_from_other_cpu()
+                    // {
+                    //     crate::cpu_stats(crate::arch::cpu_id() as usize)
+                    //         .stolen_tasks
+                    //         .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                    //     warn!(
+                    //         "STEAL: cpu{} accepted task id={} prio={}",
+                    //         crate::arch::cpu_id(),
+                    //         task.id(),
+                    //         priority
+                    //     );
+                    //     if let Some(local) = crate::runtime::local_task_collection() {
+                    //         local.accept_stolen_task(task, priority, old_page, old_subpage_idx);
+                    //         continue;
+                    //     }
+                    // }
                     crate::arch::wait_for_interrupt();
                 }
             }
