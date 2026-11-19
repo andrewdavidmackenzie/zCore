@@ -2,6 +2,7 @@
 
 use crate::arch::Arch;
 use crate::PROJECT_DIR;
+use os_xtask_utils::dir;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -46,6 +47,46 @@ fn petal_target(arch: Arch) -> &'static str {
         Arch::Aarch64 => "aarch64-unknown-none-softfloat",
         Arch::Riscv64 => "riscv64gc-unknown-none-elf",
         Arch::X86_64 => "x86_64-unknown-none",
+    }
+}
+
+/// Build multiple petal programs for the given architecture in one
+/// cargo invocation, then patch each ELF's OS/ABI byte. Returns the
+/// output directory containing the built binaries.
+pub fn build_petal_batch(arch: Arch, names: &[String]) {
+    if names.is_empty() {
+        return;
+    }
+    let target = petal_target(arch);
+    println!(
+        "Building {} petal programs for {} (target: {})",
+        names.len(),
+        arch.name(),
+        target
+    );
+
+    let target_dir = PROJECT_DIR.join("target/petal");
+    let mut cmd = Command::new("cargo");
+    cmd.args(["build", "--release"])
+        .args(["-p", "petal"])
+        .arg("--target")
+        .arg(target)
+        .arg("--target-dir")
+        .arg(&target_dir);
+    for name in names {
+        cmd.arg("--bin").arg(name);
+    }
+    cmd.args(["-Z", "build-std=core,alloc"])
+        .args(["-Z", "build-std-features=compiler-builtins-mem"])
+        .env("RUSTFLAGS", "-C relocation-model=static");
+    let status = cmd.status().expect("failed to run cargo build for petal");
+    if !status.success() {
+        panic!("petal batch build failed");
+    }
+
+    for name in names {
+        let elf_path = target_dir.join(target).join("release").join(name);
+        set_elf_osabi(&elf_path, ELFOSABI_ZIRCON);
     }
 }
 
@@ -345,18 +386,28 @@ pub fn copy_petal_to_linux_rootfs(arch: Arch) {
     }
 }
 
-/// All petal program binary names. Used to build the Zircon rootfs and
-/// to decide which program the embedded petal ZBI carries.
-pub const PETAL_BINS: &[&str] = &[
-    "hello",
-    "channel-test",
-    "vmo-test",
-    "vdso-test",
-    "alloc-test",
-    "shell",
-    "process-mem-test",
-    "exception-test",
-];
+/// All petal program binary names, parsed from `petal/Cargo.toml`
+/// (`[[bin]]` entries). Used to build the Zircon rootfs and to decide
+/// which program the embedded petal ZBI carries.
+pub fn petal_bin_names() -> Vec<String> {
+    #[derive(serde_derive::Deserialize)]
+    struct Bin {
+        name: String,
+    }
+    #[derive(serde_derive::Deserialize)]
+    struct Manifest {
+        #[serde(default)]
+        bin: Vec<Bin>,
+    }
+    let path = PROJECT_DIR.join("petal/Cargo.toml");
+    let content = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e));
+    let manifest: Manifest = toml::from_str(&content)
+        .unwrap_or_else(|e| panic!("failed to parse {}: {}", path.display(), e));
+    let mut names: Vec<String> = manifest.bin.into_iter().map(|b| b.name).collect();
+    names.sort();
+    names
+}
 
 /// Build all petal programs and create a Zircon rootfs directory.
 /// The directory layout mirrors the Linux rootfs: `bin/hello`,
@@ -374,6 +425,14 @@ pub fn build_zircon_rootfs(arch: Arch, fuchsia: bool) -> PathBuf {
         .join(arch.name());
     let bin_dir = rootfs_dir.join("bin");
 
+    // The manifest owns its bin/ and lib/ content: clear stale files
+    // so content from other manifests (or old layouts) cannot leak
+    // into the image. The etc/ directory is NOT cleared: callers
+    // (e.g. the Makefile core-tests pipeline) inject configuration
+    // there — notably etc/extra-args, which carries the gtest filter
+    // and must survive rootfs rebuilds.
+    dir::clear(&bin_dir).unwrap();
+    dir::clear(rootfs_dir.join("lib")).unwrap();
     // The core-tests manifest is defined to include the prebuilt
     // Fuchsia test binaries: fail early (instead of at boot time) when
     // they are missing.
@@ -392,7 +451,7 @@ pub fn build_zircon_rootfs(arch: Arch, fuchsia: bool) -> PathBuf {
 
     // Always run the build steps below. Cargo handles caching
     // internally (skipping compilation if sources haven't changed),
-    // so calling build_petal() is cheap when nothing changed. The
+    // so building is cheap when nothing changed. The
     // previous check (exit if output files exist) skipped rebuilds
     // even when petal source code had changed, causing stale
     // binaries in the rootfs.
@@ -400,11 +459,17 @@ pub fn build_zircon_rootfs(arch: Arch, fuchsia: bool) -> PathBuf {
     std::fs::create_dir_all(&bin_dir)
         .unwrap_or_else(|e| panic!("failed to create {}: {}", bin_dir.display(), e));
 
-    // Build each petal program and copy the ELF to rootfs.
-    // The kernel loads ELF directly (proper segment mapping with
-    // permissions), no objcopy stripping needed.
-    for name in PETAL_BINS {
-        let elf = build_petal(arch, name);
+    // Build every petal program (one batched cargo invocation) and copy
+    // the ELFs to rootfs. The kernel loads ELF directly (proper segment
+    // mapping with permissions), no objcopy stripping needed.
+    let names = petal_bin_names();
+    build_petal_batch(arch, &names);
+    let petal_out = PROJECT_DIR
+        .join("target/petal")
+        .join(petal_target(arch))
+        .join("release");
+    for name in &names {
+        let elf = petal_out.join(name);
         let dest = bin_dir.join(name);
         if copy_if_newer(&elf, &dest) {
             println!("  {} (ELF) -> {}", name, dest.display());
@@ -474,6 +539,22 @@ pub fn build_zircon_rootfs_image(arch: Arch, fuchsia: bool, image: PathBuf) -> P
     use zcore_fs::vfs::FileSystem;
     use zcore_sfs::SimpleFileSystem;
 
+    // Size the image from the staged content instead of a fixed
+    // pre-allocation: the petal manifest alone is ~35 MiB (all petal
+    // test binaries) and the core-tests manifest adds the prebuilt
+    // Fuchsia binaries on top. Content + 50% + 4 MiB slack, aligned to
+    // the 4 KiB block size.
+    let content_bytes: u64 = ["bin", "lib", "etc"]
+        .iter()
+        .filter_map(|sub| rootfs_dir.join(sub).read_dir().ok())
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.metadata().ok().map(|m| m.len()))
+        .sum();
+    let max_space = {
+        let space = (content_bytes as usize * 3 / 2) + 4 * 1024 * 1024;
+        (space + 4095) & !4095
+    };
     let file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -481,11 +562,9 @@ pub fn build_zircon_rootfs_image(arch: Arch, fuchsia: bool, image: PathBuf) -> P
         .truncate(true)
         .open(&image)
         .expect("failed to open zircon rootfs image");
-    const MAX_SPACE: usize = 32 * 1024 * 1024; // 32 MiB (needs space for Fuchsia test binaries)
-                                               // Pre-allocate the file so all SFS blocks are backed by disk.
-    file.set_len(MAX_SPACE as u64)
+    file.set_len(max_space as u64)
         .expect("failed to pre-allocate rootfs image");
-    let fs = SimpleFileSystem::create(Arc::new(Mutex::new(file)), MAX_SPACE)
+    let fs = SimpleFileSystem::create(Arc::new(Mutex::new(file)), max_space)
         .expect("failed to create sfs");
     zip_dir(&rootfs_dir, fs.root_inode()).expect("failed to zip zircon rootfs");
 
@@ -502,17 +581,17 @@ pub fn build_zircon_rootfs_image(arch: Arch, fuchsia: bool, image: PathBuf) -> P
 /// binary. Root processes that are not petal programs (busybox,
 /// core-tests-standalone) need a rootfs; those boards fall back to the
 /// petal shell in the embedded ZBI.
-pub fn zbi_bin_for(root_proc: &str) -> &'static str {
+pub fn zbi_bin_for(root_proc: &str) -> &str {
     let name = root_proc
         .split('?')
         .next()
         .unwrap_or("")
         .trim_start_matches("/bin/");
-    PETAL_BINS
-        .iter()
-        .find(|&&bin| bin == name)
-        .copied()
-        .unwrap_or("shell")
+    if petal_bin_names().iter().any(|n| n == name) {
+        name
+    } else {
+        "shell"
+    }
 }
 
 /// Build a petal program and package it into a ZBI file.

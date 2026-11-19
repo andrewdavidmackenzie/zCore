@@ -28,6 +28,33 @@ const DEFAULT_USIZE: PerCpuCell<usize> = PerCpuCell::new(0);
 /// Whether the current CPU is inside a guarded user-copy region.
 static USER_COPY_ACTIVE: [PerCpuCell<bool>; MAX_CORE_NUM] = [DEFAULT_BOOL; MAX_CORE_NUM];
 
+/// Whether the current CPU is servicing a syscall entered from **user
+/// mode** (via the trap handler). When set, user-buffer copies enforce
+/// the user/kernel address-space split: kernel-half addresses are
+/// rejected as invalid user pointers. In-kernel test code (the
+/// baremetal-test runner) calls syscalls directly without a trap and
+/// legitimately passes kernel addresses, so the check must not apply.
+static USER_SYSCALL: [PerCpuCell<bool>; MAX_CORE_NUM] = [DEFAULT_BOOL; MAX_CORE_NUM];
+
+/// Mark the start of a user-mode syscall on this CPU (called from the
+/// user trap handler).
+pub fn user_syscall_enter() {
+    let idx = super::cpu::cpu_index();
+    *USER_SYSCALL[idx].get_mut() = true;
+}
+
+/// Mark the end of a user-mode syscall on this CPU.
+pub fn user_syscall_leave() {
+    let idx = super::cpu::cpu_index();
+    *USER_SYSCALL[idx].get_mut() = false;
+}
+
+/// Whether the current CPU is inside a user-mode syscall.
+pub fn in_user_syscall() -> bool {
+    let idx = super::cpu::cpu_index();
+    *USER_SYSCALL[idx].get()
+}
+
 /// The PC to jump to when a user-copy fault occurs. Set before the
 /// copy and read by the trap handler.
 static USER_COPY_RECOVERY_PC: [PerCpuCell<usize>; MAX_CORE_NUM] = [DEFAULT_USIZE; MAX_CORE_NUM];

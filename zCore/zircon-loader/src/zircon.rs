@@ -27,7 +27,9 @@ use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
 use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::kcounter;
 use zircon_object::object::{Handle, KernelObject, Rights};
-use zircon_object::task::{CurrentThread, ExceptionType, Job, Process, Thread, ThreadState};
+use zircon_object::task::{
+    CurrentThread, ExceptionType, Job, Process, Thread, ThreadFn, ThreadState,
+};
 
 use zircon_object::util::elf_loader::ElfExt;
 use zircon_object::vm::VmObject;
@@ -349,7 +351,12 @@ async fn run_user(thread: CurrentThread) {
     loop {
         // wait
         let mut ctx = thread.wait_for_run().await;
-        if thread.state() == ThreadState::Dying {
+        // Break on terminal states. Dying is the normal kill path;
+        // Dead can be observed if the thread's own teardown completed
+        // between wait_for_run returning and this check — re-entering
+        // user mode with a leftover context would execute a "death
+        // rattle" of garbage instructions.
+        if matches!(thread.state(), ThreadState::Dying | ThreadState::Dead) {
             break;
         }
 
@@ -414,6 +421,64 @@ struct ExceptionInfo {
     synth_code: u32,
 }
 
+/// Dispatch a syscall entered from user mode: run the syscall, write
+/// the return value into the saved user context, and yield.
+///
+/// The caller marks the user-syscall flag around this call.
+async fn run_syscall(
+    thread: &CurrentThread,
+    thread_fn: ThreadFn,
+    mut ctx: Box<UserContext>,
+    num: usize,
+    args: [usize; 8],
+) -> Result<(), ExceptionInfo> {
+    let reason = ctx.trap_reason();
+    ctx.advance_pc(reason);
+    thread.put_context(ctx);
+    let mut syscall = zircon_syscall::Syscall { thread, thread_fn };
+    // Pass the full 64-bit syscall number so values with upper
+    // bits set (e.g. 0xff00ff0000000000) are correctly rejected
+    // as invalid syscall numbers instead of being truncated to
+    // a valid 32-bit syscall number.
+    let ret = syscall.syscall(num, args).await as usize;
+    // When a blocked syscall is interrupted by suspend + debugger
+    // write_state, the debugger may have modified rax (the return
+    // value register). Check if the return value register in the
+    // saved context differs from what the syscall returned. If a
+    // debugger modified rax via write_state, use the debugger's
+    // value instead of the syscall's result. This matches Fuchsia's
+    // INTR_RETRY mechanism where the kernel returns the debugger-
+    // modified rax directly after resume.
+    let ret = if thread.take_debugger_return_override() {
+        thread
+            .with_context(|ctx| ctx.get_field(UserContextField::ReturnValue))
+            .unwrap_or(ret)
+    } else {
+        ret
+    };
+    thread
+        .with_context(|ctx| ctx.set_field(UserContextField::ReturnValue, ret))
+        .map_err(|_| ExceptionInfo {
+            type_: ExceptionType::ThreadExiting,
+            synth_code: 0,
+        })?;
+    // Yield after every syscall to give other threads a chance to
+    // run. Use preempt_yield (deferred re-queue) when:
+    //   1. The timer interrupt set preempt-pending, OR
+    //   2. This thread has exhausted its time slice quantum
+    // Otherwise use yield_now (lightweight self-wake).
+    if hal_impl::thread::take_preempt_pending()
+        || thread.quantum_exhausted()
+        || thread.should_force_preempt_yield()
+    {
+        thread.reset_quantum();
+        hal_impl::thread::preempt_yield().await;
+    } else {
+        hal_impl::thread::yield_now().await;
+    }
+    Ok(())
+}
+
 async fn handler_user_trap(
     thread: &CurrentThread,
     mut ctx: Box<UserContext>,
@@ -423,31 +488,29 @@ async fn handler_user_trap(
     if let TrapReason::Syscall = reason {
         let num = syscall_num(&ctx);
         let args = syscall_args(&ctx);
-        // BAD_SYSCALL policy check: if this process has a vDSO mapped,
-        // verify the syscall came from within it. Raw `syscall`
-        // instructions from user code bypass vDSO security wrappers.
+        // BAD_SYSCALL policy check: if this process has a vDSO code
+        // range recorded, verify the syscall came from within it. Raw
+        // `syscall`/`svc` instructions from user code bypass the vDSO
+        // security wrappers — Threads.BadSyscallCaller relies on this
+        // (a valid syscall number must still fail when called outside
+        // the vDSO).
+        //
+        // The code range is only recorded for dynamically-linked
+        // processes (spawn_process sets it when the binary has a
+        // PT_INTERP): static binaries (petal, busybox) legitimately
+        // issue raw syscalls, and rejecting those deadlocked any
+        // single-threaded petal program with an exception channel.
         // On x86_64, RCX holds the return address after `syscall`.
         // On aarch64, the return address is in ELR_EL1 (saved as RIP).
-        // Get the return address of the syscall instruction.
-        // On x86_64: RCX (hardware-saved by syscall).
-        // On aarch64: ELR_EL1 (saved by trap handler, NOT x30/LR).
-        // On riscv64: ra (return address register).
         let ret_addr = {
             cfg_if! {
                 if #[cfg(target_arch = "x86_64")] {
                     ctx.general().rcx
                 } else {
-                    // aarch64 and riscv64: use the saved instruction
-                    // pointer (ELR_EL1 / sepc) which points to the
-                    // instruction after svc/ecall — inside the vDSO.
                     ctx.get_field(UserContextField::InstrPointer)
                 }
             }
         };
-        // Only enforce BAD_SYSCALL when the process has an exception
-        // channel attached (the test sets one up before triggering).
-        // Without this guard, petal binaries (which use inline syscalls
-        // instead of the vDSO) would be killed on every syscall.
         if thread.proc().has_exception_channel()
             && thread.proc().is_syscall_from_outside_vdso(ret_addr)
         {
@@ -469,61 +532,15 @@ async fn handler_user_trap(
             hal_impl::thread::yield_now().await;
             return Ok(());
         }
-        ctx.advance_pc(reason);
-        thread.put_context(ctx);
-        let mut syscall = zircon_syscall::Syscall { thread, thread_fn };
-        // Pass the full 64-bit syscall number so values with upper
-        // bits set (e.g. 0xff00ff0000000000) are correctly rejected
-        // as invalid syscall numbers instead of being truncated to
-        // a valid 32-bit syscall number.
-        let ret = syscall.syscall(num, args).await as usize;
-        // When a blocked syscall is interrupted by suspend + debugger
-        // write_state, the debugger may have modified rax (the return
-        // value register). Check if the return value register in the
-        // saved context differs from what the syscall returned. If a
-        // debugger modified rax via write_state, use the debugger's
-        // value instead of the syscall's result. This matches Fuchsia's
-        // INTR_RETRY mechanism where the kernel returns the debugger-
-        // modified rax directly after resume.
-        // When a debugger modifies the return value register during a
-        // suspend (via write_state after rax was set to INTR_RETRY),
-        // use the modified value instead of the syscall's result.
-        let ret = if thread.take_debugger_return_override() {
-            thread
-                .with_context(|ctx| ctx.get_field(UserContextField::ReturnValue))
-                .unwrap_or(ret)
-        } else {
-            ret
-        };
-        thread
-            .with_context(|ctx| ctx.set_field(UserContextField::ReturnValue, ret))
-            .map_err(|_| ExceptionInfo {
-                type_: ExceptionType::ThreadExiting,
-                synth_code: 0,
-            })?;
-        // Yield after every syscall to give other threads a chance to
-        // run. Use preempt_yield (deferred re-queue) when:
-        //   1. The timer interrupt set preempt-pending, OR
-        //   2. This thread has exhausted its time slice quantum
-        // Otherwise use yield_now (lightweight self-wake).
-        //
-        // preempt_yield puts the task at the back of the queue AFTER
-        // scanning for newly-notified tasks, ensuring other same-
-        // priority threads get a turn. yield_now self-wakes immediately
-        // so the task stays near the front (lower latency for threads
-        // doing infrequent syscalls).
-        if hal_impl::thread::take_preempt_pending()
-            || thread.quantum_exhausted()
-            || thread.should_force_preempt_yield()
-        {
-            thread.reset_quantum();
-            hal_impl::thread::preempt_yield().await;
-        } else {
-            hal_impl::thread::yield_now().await;
-        }
-        return Ok(());
+        // Mark this as a user-mode syscall so user-buffer copies
+        // enforce the user/kernel address split. In-kernel test code
+        // (baremetal-test) calls the Syscall interface directly,
+        // bypassing this trap handler, and passes kernel addresses.
+        hal_impl::thread::user_syscall_enter();
+        let result = run_syscall(thread, thread_fn, ctx, num, args).await;
+        hal_impl::thread::user_syscall_leave();
+        return result;
     }
-
     thread.put_context(ctx);
     match reason {
         TrapReason::Interrupt(vector) => {

@@ -374,10 +374,10 @@ fn default_rights_and_type() {
         b"get_info",
     );
 
-    // obj_type at offset 12: Fifo = 24
+    // obj_type at offset 12: Fifo = 19 (ZX_OBJ_TYPE_FIFO)
     let obj_type = u32::from_le_bytes(buf[12..16].try_into().unwrap());
-    if obj_type != 24 {
-        fail(name, b"wrong obj_type (expected 24=Fifo)");
+    if obj_type != 19 {
+        fail(name, b"wrong obj_type (expected 19=Fifo)");
     }
 
     unsafe { zx_handle_close(h0) };

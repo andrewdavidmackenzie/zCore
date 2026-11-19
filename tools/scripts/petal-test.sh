@@ -14,7 +14,10 @@
 set -euo pipefail
 
 ARCH="${1:?Usage: $0 <arch> <binary_name>}"
+# Cargo bin targets use dashes (counter-test); accept underscores too
+# (counter_test) since docs and scripts use both spellings.
 BIN="${2:?Usage: $0 <arch> <binary_name>}"
+BIN="${BIN//_/-}"
 TIMEOUT="${PETAL_TEST_TIMEOUT:-30}"
 
 CONFIG="zircon-hello.qemu-${ARCH}"
@@ -37,12 +40,15 @@ case "$ARCH" in
   x86_64)
     RUST_TARGET="x86_64-unknown-none"
     KERNEL="target/${CONFIG}/release/boot.img"
+    # Locate OVMF firmware — location varies by distro/package.
+    source "$(dirname "$0")/find-ovmf.sh"
+    OVMF=$(find_ovmf) || exit 1
     QEMU_CMD=(
       qemu-system-x86_64
       -m 4G -display none -no-reboot -nographic
-      -machine q35 -cpu qemu64,+fsgsbase -smp "$CORES"
+      -machine q35 -cpu qemu64,+rdrand,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16,+fsgsbase -smp "$CORES"
       -serial mon:stdio
-      -bios /usr/share/ovmf/OVMF.fd
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF"
     )
     ;;
   riscv64)
@@ -78,6 +84,14 @@ if [ "$ARCH" != "x86_64" ]; then
   elif command -v llvm-objcopy >/dev/null 2>&1; then
     llvm-objcopy -O binary "target/${CONFIG}/release/kernel" "$KERNEL"
   fi
+else
+  # x86_64 boots via UEFI: create the boot image from the kernel ELF.
+  # The petal ZBI is embedded in the kernel; no ramdisk is needed.
+  if [ ! -f tools/x86-bootimage/target/release/x86-bootimage ]; then
+    cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
+  fi
+  tools/x86-bootimage/target/release/x86-bootimage \
+    "target/${CONFIG}/release/kernel" "$KERNEL"
 fi
 
 echo "==> Running petal $BIN on $ARCH QEMU (timeout=${TIMEOUT}s)..."

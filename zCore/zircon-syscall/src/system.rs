@@ -397,6 +397,11 @@ impl Syscall<'_> {
         if info == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Null output_count → INVALID_ARGS (Fuchsia rejects it before
+        // writing anything, since the caller could not learn the count).
+        if output_count.is_null() {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let entries = online_cpus;
         {
             let mut out: UserOutPtr<u8> = info.into();

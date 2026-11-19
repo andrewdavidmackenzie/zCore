@@ -25,3 +25,21 @@ hal_fn_impl! {
         }
     }
 }
+
+/// Whether the current thread is servicing a syscall entered from user
+/// mode. In libos mode syscalls are invoked directly from the host
+/// process (no trap handler), so this is always false — matching the
+/// bare-metal behavior for in-kernel callers: user-buffer copies fall
+/// back to the libos VMAR validation instead of the user/kernel
+/// address-space split.
+pub fn user_syscall_enter() {}
+
+/// Leave the user-syscall region (no-op in libos; see
+/// [`user_syscall_enter`]).
+pub fn user_syscall_leave() {}
+
+/// Whether the current CPU is inside a user-mode syscall (always false
+/// in libos mode).
+pub fn in_user_syscall() -> bool {
+    false
+}

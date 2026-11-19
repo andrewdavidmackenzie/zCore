@@ -6,7 +6,7 @@ use hal::TrapReason;
 use hal_impl::context::UserContext;
 use lock::Mutex;
 
-use super::{Job, Task, Thread};
+use super::{Job, Task, Thread, ThreadState};
 use crate::ipc::{Channel, MessagePacket};
 use crate::object::{Handle, KObjectBase, KernelObject, KoID, Rights, Signal};
 use crate::{impl_kobject, ZxError, ZxResult};
@@ -507,6 +507,26 @@ impl Exception {
     /// Note that it's possible that this may returns before exception was send to any exception channel.
     /// This happens only when the thread is killed before we send the exception.
     pub async fn handle(self: &Arc<Self>) {
+        // An exception raised on a thread that is already dying or dead
+        // is dropped without dispatch. The thread is on its way out: it
+        // cannot run a handler, and dispatching would either block its
+        // teardown in exception delivery or kill its process through
+        // the unhandled-exception path below. This routinely happens
+        // when a thread is killed while executing user mode — the kill
+        // cannot interrupt the vCPU, so the thread keeps executing
+        // until its next trap, and that "death rattle" trap raises an
+        // exception on an already-dying thread. Lifecycle exceptions
+        // (ThreadStarting/ThreadExiting/ProcessStarting) are exempt:
+        // ThreadExiting is delivered during teardown by design.
+        let is_lifecycle = matches!(
+            self.type_,
+            ExceptionType::ThreadStarting
+                | ExceptionType::ThreadExiting
+                | ExceptionType::ProcessStarting
+        );
+        if !is_lifecycle && matches!(self.thread.state(), ThreadState::Dying | ThreadState::Dead) {
+            return;
+        }
         let result = match self.type_ {
             ExceptionType::ProcessStarting => {
                 self.handle_with(JobDebuggerIterator::new(self.thread.proc().job()), true)

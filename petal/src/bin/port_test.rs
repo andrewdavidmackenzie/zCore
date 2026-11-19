@@ -99,18 +99,16 @@ fn cancel_key_access_denied() {
     let mut port: HandleValue = 0;
     assert_ok(unsafe { zx_port_create(0, &mut port) }, name, b"create");
 
-    // Dup without WRITE
+    // Reduce rights via replace, dropping WRITE — zx_port_cancel_key
+    // requires it (the C++ Cancel* tests replace with
+    // ZX_DEFAULT_PORT_RIGHTS & ~ZX_RIGHT_WRITE). The mask must only
+    // request rights the port actually has: default port rights —
+    // (BASIC & !WAIT) | IO — include DUPLICATE but not WAIT.
     let mut ro: HandleValue = 0;
     assert_ok(
-        unsafe {
-            zx_handle_duplicate(
-                port,
-                ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
-                &mut ro,
-            )
-        },
+        unsafe { zx_handle_replace(port, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut ro) },
         name,
-        b"dup",
+        b"replace",
     );
 
     assert_status(
@@ -121,7 +119,6 @@ fn cancel_key_access_denied() {
     );
 
     unsafe { zx_handle_close(ro) };
-    unsafe { zx_handle_close(port) };
     pass(name);
 }
 

@@ -248,10 +248,36 @@ impl ThreadInner {
             ThreadState::New | ThreadState::Dying => base.signal_clear(
                 Signal::THREAD_RUNNING | Signal::THREAD_SUSPENDED | Signal::THREAD_TERMINATED,
             ),
+            // A held suspend token keeps ZX_THREAD_SUSPENDED asserted and
+            // ZX_THREAD_RUNNING deasserted while the thread is actually
+            // stopped in the kernel. This includes BlockedException: the
+            // state accessor deliberately reports the raw state (so the
+            // exception can be delivered while suspended — Fuchsia gives
+            // exceptions priority over suspension for the *state*), but the
+            // *signals* still reflect the suspension, like Fuchsia's
+            // ThreadDispatcher::UpdateState.
+            //
+            // The signal must NOT be asserted before the suspension takes
+            // effect: a thread that is still executing — running user code
+            // with no saved context, or inside a nonsuspendable kernel
+            // block — keeps ZX_THREAD_RUNNING until it next enters the
+            // kernel and parks. This matches Fuchsia's asynchronous
+            // suspension of running threads: observers that wait for
+            // ZX_THREAD_SUSPENDED may assume the thread has actually
+            // stopped (e.g. Threads.SuspendStopsThread relies on this).
             ThreadState::Suspended => base.signal_change(
                 Signal::THREAD_RUNNING | Signal::THREAD_TERMINATED,
                 Signal::THREAD_SUSPENDED,
             ),
+            _ if self.suspend_count > 0
+                && self.context.is_some()
+                && !self.in_nonsuspendable_block =>
+            {
+                base.signal_change(
+                    Signal::THREAD_RUNNING | Signal::THREAD_TERMINATED,
+                    Signal::THREAD_SUSPENDED,
+                )
+            }
             _ => base.signal_change(
                 Signal::THREAD_TERMINATED | Signal::THREAD_SUSPENDED,
                 Signal::THREAD_RUNNING,

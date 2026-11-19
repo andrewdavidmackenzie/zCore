@@ -175,16 +175,18 @@ fn write_without_write_right() {
 
     // Dup h0 without WRITE
     let mut ro: HandleValue = 0;
+    // Reduce rights via replace (Fuchsia's pattern): channels lack the
+    // DUPLICATE right by default, so zx_handle_duplicate would fail.
     assert_ok(
         unsafe {
-            zx_handle_duplicate(
+            zx_handle_replace(
                 h0,
                 ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
                 &mut ro,
             )
         },
         name,
-        b"dup",
+        b"replace",
     );
 
     let data = b"test";
@@ -205,7 +207,6 @@ fn write_without_write_right() {
     );
 
     unsafe { zx_handle_close(ro) };
-    unsafe { zx_handle_close(h0) };
     unsafe { zx_handle_close(h1) };
     pass(name);
 }

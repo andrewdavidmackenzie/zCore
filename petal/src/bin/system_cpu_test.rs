@@ -125,12 +125,33 @@ fn set_performance_info_argument_validation(resource: HandleValue) {
 }
 
 /// Get performance info argument validation
+/// Discover the online CPU count at runtime: the kernel requires
+/// `count == num_cpus` exactly, so probe with a valid query (matching
+/// the C++ test's GetCpuCount helper).
+fn probe_cpu_count(resource: HandleValue) -> usize {
+    let mut info = [0u8; 12 * 64]; // large enough for any QEMU -smp
+    let mut count: usize = 0;
+    for cpus in 1..=64usize {
+        let s = unsafe {
+            zx_system_get_performance_info(
+                resource,
+                ZX_CPU_DEFAULT_PERF_SCALE,
+                cpus,
+                info.as_mut_ptr(),
+                &mut count,
+            )
+        };
+        if s == ZX_OK {
+            return cpus;
+        }
+    }
+    1
+}
+
 fn get_performance_info_argument_validation(resource: HandleValue) {
     let name = b"get_perf_info_validation";
 
-    // Need to know online CPU count — get it via a valid query first
-    // For now, use 1 as minimum
-    let online_cpus: usize = 1; // conservative
+    let online_cpus: usize = probe_cpu_count(resource);
 
     // Invalid handle
     let mut info = [0u8; 12];

@@ -1,6 +1,6 @@
 //! ELF loading of Zircon and Linux.
 use crate::{error::*, vm::*};
-use alloc::sync::Arc;
+use alloc::{sync::Arc, vec, vec::Vec};
 use xmas_elf::{
     program::{Flags, ProgramHeader, SegmentData, Type},
     sections::SectionData,
@@ -13,6 +13,9 @@ pub trait VmarExt {
     /// Create `VMObject` from all LOAD segments of `elf` and map them to this VMAR.
     /// Return the first `VMObject`.
     fn load_from_elf(&self, elf: &ElfFile) -> ZxResult<Arc<VmObject>>;
+    /// Load a fixed-base (non-PIE) ELF rebased by `elf_base` (see
+    /// [`VmarExt::load_from_elf_rebased` on `VmAddressRegion`]).
+    fn load_from_elf_rebased(&self, elf: &ElfFile, elf_base: usize) -> ZxResult<Arc<VmObject>>;
     /// Same as `load_from_elf`, but the `vmo` is an existing one instead of a lot of new ones.
     fn map_from_elf(&self, elf: &ElfFile, vmo: Arc<VmObject>) -> ZxResult;
 }
@@ -48,6 +51,65 @@ impl VmarExt for VmAddressRegion {
             );
             first_vmo.get_or_insert(vmo);
             seg_idx += 1;
+        }
+        Ok(first_vmo.unwrap())
+    }
+    /// Load a fixed-base (non-PIE) ELF: segments are mapped at
+    /// `(vaddr - elf_base)` within this VMAR, so when the VMAR is
+    /// placed at the ELF's link base the segments land at their
+    /// absolute virtual addresses. Used for statically-linked
+    /// executables that contain absolute addresses and cannot be
+    /// relocated (e.g. petal programs linked at `USER_ASPACE_BASE`).
+    ///
+    /// Segments whose page ranges overlap (e.g. a small RW segment
+    /// packed into the same page as the preceding RX segment — common
+    /// in static no_std binaries) are merged into a single mapping
+    /// with the union of their permissions, since page granularity
+    /// makes separate mappings impossible.
+    fn load_from_elf_rebased(&self, elf: &ElfFile, elf_base: usize) -> ZxResult<Arc<VmObject>> {
+        // Collect PT_LOAD segments as (page_start, page_end, vaddr, data, flags).
+        let mut segs: Vec<(usize, usize, usize, &[u8], MMUFlags)> = Vec::new();
+        for ph in elf.program_iter() {
+            if ph.get_type().unwrap() != Type::Load {
+                continue;
+            }
+            let vaddr = ph.virtual_addr() as usize;
+            let start = vaddr & !(PAGE_SIZE - 1);
+            let end = (vaddr + ph.mem_size() as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+            let data = match ph.get_data(elf).unwrap() {
+                SegmentData::Undefined(data) => data,
+                _ => return Err(ZxError::INVALID_ARGS),
+            };
+            segs.push((start, end, vaddr, data, ph.flags().to_mmu_flags()));
+        }
+        segs.sort_by_key(|s| s.0);
+
+        // Merge overlapping/adjacent page ranges into groups.
+        // A group: (page_start, page_end, union_flags, [(vaddr, data)]).
+        type SegmentGroup<'a> = (usize, usize, MMUFlags, Vec<(usize, &'a [u8])>);
+        let mut groups: Vec<SegmentGroup> = Vec::new();
+        for (start, end, vaddr, data, flags) in segs {
+            match groups.last_mut() {
+                Some(g) if start < g.1 => {
+                    // Overlaps the current group: extend it.
+                    g.1 = g.1.max(end);
+                    g.2 |= flags;
+                    g.3.push((vaddr, data));
+                }
+                _ => groups.push((start, end, flags, vec![(vaddr, data)])),
+            }
+        }
+
+        // Map each group as one VMO with the merged permissions.
+        let mut first_vmo = None;
+        for (start, end, flags, segments) in groups {
+            let len = end - start;
+            let vmo = VmObject::new_paged(pages(len));
+            for (vaddr, data) in segments {
+                vmo.write(vaddr - start, data)?;
+            }
+            self.map_at(start - elf_base, vmo.clone(), 0, len, flags)?;
+            first_vmo.get_or_insert(vmo);
         }
         Ok(first_vmo.unwrap())
     }

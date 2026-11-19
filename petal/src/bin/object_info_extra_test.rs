@@ -11,7 +11,7 @@ extern crate petal;
 use zx::sys::*;
 
 const ZX_INFO_HANDLE_BASIC: u32 = 2;
-const ZX_INFO_HANDLE_COUNT: u32 = 20;
+const ZX_INFO_HANDLE_COUNT: u32 = 19;
 const ZX_INFO_PROCESS: u32 = 3;
 
 fn pass(name: &[u8]) {

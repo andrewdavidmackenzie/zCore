@@ -125,6 +125,11 @@ pub unsafe fn copy_from_user(dst: *mut u8, src: *const u8, len: usize) -> Result
     // In libos mode, check that the source (user) address is readable.
     #[cfg(feature = "libos")]
     check_user_access_libos(src as usize, len, false)?;
+    // On x86_64 bare-metal, non-canonical addresses raise #GP instead
+    // of #PF, which the guarded-copy fault recovery does not catch.
+    // Reject them up front, like the libos path does for bad ranges.
+    #[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
+    validate_canonical_user_range(src as usize, len)?;
     guarded_user_copy(dst, src, len)
 }
 
@@ -146,7 +151,62 @@ pub unsafe fn copy_to_user(dst: *mut u8, src: *const u8, len: usize) -> Result<(
     // In libos mode, check that the destination (user) address is writable.
     #[cfg(feature = "libos")]
     check_user_access_libos(dst as usize, len, true)?;
+    // On x86_64 bare-metal, non-canonical addresses raise #GP instead
+    // of #PF, which the guarded-copy fault recovery does not catch.
+    #[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
+    validate_canonical_user_range(dst as usize, len)?;
     guarded_user_copy(dst, src, len)
+}
+
+/// The x86_64 architectural user-space limit: user addresses are the
+/// lower canonical half, `[0, 2^47)`. Addresses at or above it are
+/// either non-canonical (accessing them raises #GP, which the guarded
+/// user-copy fault recovery cannot intercept) or in the kernel half
+/// (supervisor-mapped, so a copy would wrongly succeed). Mirrors the
+/// libos validation's `LIBOS_KERNEL_ASPACE_BASE` boundary.
+#[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
+const X86_64_USER_ADDR_LIMIT: usize = 1usize << 47;
+
+/// Check that `[addr, addr+len)` is safe to access on x86_64.
+///
+/// Non-canonical addresses are always rejected, for user and kernel
+/// callers alike: accessing them raises #GP, which the guarded copy's
+/// fault recovery cannot intercept (unlike a page fault).
+///
+/// The user-half range check (below the architectural user limit, see
+/// [`X86_64_USER_ADDR_LIMIT`]) is only enforced for syscalls entered
+/// from user mode: in-kernel test code (the baremetal-test runner)
+/// calls the syscall interface directly and legitimately passes
+/// kernel addresses as buffers.
+#[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
+fn validate_canonical_user_range(addr: usize, len: usize) -> Result<()> {
+    // A canonical address has bits 63..47 all zero (user half) or all
+    // one (kernel half).
+    let is_canonical = |a: usize| -> bool {
+        let top = a >> 47;
+        top == 0 || top == 0x1FFFF
+    };
+    if !is_canonical(addr) {
+        return Err(Error::InvalidPointer);
+    }
+    if len > 0 {
+        // The whole range must be canonical — a copy that reaches a
+        // non-canonical address raises #GP part-way through.
+        match addr.checked_add(len) {
+            Some(end) if is_canonical(end - 1) => {}
+            _ => return Err(Error::InvalidPointer),
+        }
+    }
+    if !crate::thread::in_user_syscall() {
+        return Ok(());
+    }
+    if addr >= X86_64_USER_ADDR_LIMIT {
+        return Err(Error::InvalidPointer);
+    }
+    match addr.checked_add(len) {
+        Some(end) if len == 0 || end <= X86_64_USER_ADDR_LIMIT => Ok(()),
+        _ => Err(Error::InvalidPointer),
+    }
 }
 
 /// Perform a guarded memory copy that recovers from page faults.

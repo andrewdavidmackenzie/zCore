@@ -282,3 +282,7 @@ path = "src/bin/wake_reports_test.rs"
 [[bin]]
 name = "object-wait-extra-test"
 path = "src/bin/object_wait_extra_test.rs"
+
+[[bin]]
+name = "test-runner"
+path = "src/bin/test_runner.rs"

@@ -11,16 +11,18 @@ extern crate petal;
 use zx::sys::*;
 
 // VMO options
-const ZX_VMO_DISCARDABLE: u32 = 1 << 1;
+const ZX_VMO_DISCARDABLE: u32 = 1 << 2;
 const ZX_VMO_RESIZABLE: u32 = 1 << 1; // Note: different meaning, same bit
 
 // VMO op_range operations
-const ZX_VMO_OP_LOCK: u32 = 6;
-const ZX_VMO_OP_TRY_LOCK: u32 = 7;
-const ZX_VMO_OP_UNLOCK: u32 = 8;
+const ZX_VMO_OP_LOCK: u32 = 3;
+const ZX_VMO_OP_TRY_LOCK: u32 = 11;
+const ZX_VMO_OP_UNLOCK: u32 = 4;
 
-// Lock state result struct: { offset: u64, size: u64, state: u32, padding: u32 }
-const LOCK_STATE_SIZE: usize = 24;
+// zx_vmo_lock_state_t: { offset: u64, size: u64, discarded_offset: u64,
+// discarded_size: u64 } — 32 bytes. Nothing is discarded at LOCK time,
+// so the kernel zero-fills the discarded_* fields.
+const LOCK_STATE_SIZE: usize = 32;
 
 fn pass(name: &[u8]) {
     zx::debug_write(b"  vmo_discardable_test: ");

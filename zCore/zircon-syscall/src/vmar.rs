@@ -559,6 +559,13 @@ impl Syscall<'_> {
             Rights::READ | Rights::MAP,
         )?;
 
+        // Fault-beyond-stream-size mappings require a stream-size
+        // manager on the VMO (Fuchsia's vmo->stream_size_manager());
+        // clock state VMOs have none — reject like Fuchsia does.
+        if options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE) {
+            return Err(ZxError::INVALID_ARGS);
+        }
+
         // Create a VMO with the clock's transformation state.
         let vmo = clock.create_state_vmo()?;
         let map_len = if len > 0 {

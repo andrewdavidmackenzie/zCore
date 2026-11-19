@@ -23,6 +23,38 @@ use crate::errors::ZxStatus;
 
 /// Raw syscall with 0 arguments.
 #[inline(always)]
+/// Raw-value syscall: like [`syscall0`], but returns the full 64-bit
+/// value from the kernel without truncating to `zx_status_t`. Used by
+/// syscalls that return raw values (timestamps, tick counts) rather
+/// than status codes.
+pub unsafe fn syscall0_i64(num: u32) -> i64 {
+    let ret: i64;
+    #[cfg(target_arch = "aarch64")]
+    core::arch::asm!(
+        "svc #0",
+        in("x16") num as u64,
+        lateout("x0") ret,
+        options(nostack),
+    );
+    #[cfg(target_arch = "x86_64")]
+    core::arch::asm!(
+        "syscall",
+        in("eax") num,
+        lateout("rax") ret,
+        out("rcx") _,
+        out("r11") _,
+        options(nostack),
+    );
+    #[cfg(target_arch = "riscv64")]
+    core::arch::asm!(
+        "ecall",
+        in("a7") num as u64,
+        lateout("a0") ret,
+        options(nostack),
+    );
+    ret
+}
+
 pub unsafe fn syscall0(num: u32) -> ZxStatus {
     let ret: i64;
     #[cfg(target_arch = "aarch64")]
@@ -421,7 +453,10 @@ pub fn debug_read(resource: HandleValue, buf: &mut [u8]) -> Result<usize, ZxStat
 /// Execute a program from the rootfs (safe wrapper).
 ///
 /// Takes a path to a binary in the rootfs. The kernel reads it,
-/// detects the flavour from the ELF header, and spawns it.
+/// detects the flavour from the ELF header, spawns it, waits for it
+/// to terminate, and returns its exit code: 0 = clean exit, positive
+/// = the child's nonzero exit code, negative = zx_status_t error
+/// from the spawn.
 pub fn debug_exec(path: &str) -> ZxStatus {
     unsafe { zx_debug_exec(path.as_ptr(), path.len()) }
 }
@@ -1628,7 +1663,9 @@ pub unsafe fn zx_task_create_exception_channel(
 /// this as a lightweight syscall so every userspace program can
 /// obtain the page size at runtime without hardcoding it.
 pub fn zx_system_get_page_size() -> usize {
-    unsafe { syscall0(crate::consts::SYS_SYSTEM_GET_PAGE_SIZE) as usize }
+    // Raw-value syscall: 64-bit return (page size is small, but keep
+    // the raw path for correctness).
+    unsafe { syscall0_i64(crate::consts::SYS_SYSTEM_GET_PAGE_SIZE) as usize }
 }
 
 // ── Missing syscall stubs for petal test ports ──────────────────────
@@ -1788,7 +1825,9 @@ pub unsafe fn zx_clock_adjust(resource: HandleValue, clock_id: u32, offset: i64)
 
 /// Get monotonic time via kernel (not vDSO).
 pub unsafe fn zx_clock_get_monotonic_via_kernel() -> i64 {
-    syscall0(crate::consts::SYS_CLOCK_GET_MONOTONIC_VIA_KERNEL) as i64
+    // Raw-value syscall: use the 64-bit return path — a ZxStatus
+    // (i32) return would truncate and sign-extend the timestamp.
+    syscall0_i64(crate::consts::SYS_CLOCK_GET_MONOTONIC_VIA_KERNEL)
 }
 
 /// Add entropy to the CPRNG.
@@ -1981,7 +2020,7 @@ pub unsafe fn zx_vmar_map_clock(
     mapped_addr: *mut usize,
 ) -> ZxStatus {
     syscall6(
-        crate::consts::SYS_VMAR_MAP,
+        crate::consts::SYS_VMAR_MAP_CLOCK,
         vmar as u64,
         options as u64,
         offset,

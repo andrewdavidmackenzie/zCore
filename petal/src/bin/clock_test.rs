@@ -106,15 +106,15 @@ fn fault_beyond_stream_size_returns_error(root_vmar: HandleValue) {
     let page_size = zx_system_get_page_size();
     let mut mapped_addr: usize = 0;
 
-    // This should fail with INVALID_ARGS
+    // This should fail with INVALID_ARGS (clock state VMOs have no
+    // stream-size manager, so fault-beyond-stream-size is rejected).
     let s = unsafe {
-        zx_vmar_map(
+        zx_vmar_map_clock(
             root_vmar,
             options,
             0,
             clock_h,
-            0,
-            page_size,
+            page_size as u64,
             &mut mapped_addr,
         )
     };
@@ -141,13 +141,12 @@ fn mappable_clock_padding_leak(root_vmar: HandleValue) {
 
     assert_ok(
         unsafe {
-            zx_vmar_map(
+            zx_vmar_map_clock(
                 root_vmar,
                 options,
                 0,
                 clock_h,
-                0,
-                page_size,
+                page_size as u64,
                 &mut mapped_addr,
             )
         },

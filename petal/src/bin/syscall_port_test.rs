@@ -95,18 +95,16 @@ fn port_queue_access_denied() {
     let name = b"port_queue_access_denied";
     let port_h = port_create();
 
-    // Duplicate with READ only (no WRITE)
+    // Reduce rights via replace, dropping WRITE — zx_port_queue
+    // requires it (the C++ test replaces with
+    // ZX_DEFAULT_PORT_RIGHTS & ~ZX_RIGHT_WRITE). The mask must only
+    // request rights the port actually has: default port rights —
+    // (BASIC & !WAIT) | IO — include DUPLICATE but not WAIT.
     let mut read_only: HandleValue = 0;
     assert_ok(
-        unsafe {
-            zx_handle_duplicate(
-                port_h,
-                ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
-                &mut read_only,
-            )
-        },
+        unsafe { zx_handle_replace(port_h, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut read_only) },
         name,
-        b"dup read-only",
+        b"replace read-only",
     );
 
     let packet = [0u8; PORT_PACKET_SIZE];
@@ -118,7 +116,6 @@ fn port_queue_access_denied() {
     );
 
     unsafe { zx_handle_close(read_only) };
-    unsafe { zx_handle_close(port_h) };
     pass(name);
 }
 
@@ -230,18 +227,13 @@ fn port_cancel_access_denied() {
     let name = b"port_cancel_access_denied";
     let port_h = port_create();
 
-    // Dup port with READ only
+    // Reduce rights via replace, dropping WRITE — zx_port_cancel
+    // requires it (the C++ test drops ZX_RIGHT_WRITE from the port).
     let mut read_only: HandleValue = 0;
     assert_ok(
-        unsafe {
-            zx_handle_duplicate(
-                port_h,
-                ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
-                &mut read_only,
-            )
-        },
+        unsafe { zx_handle_replace(port_h, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut read_only) },
         name,
-        b"dup read-only",
+        b"replace read-only",
     );
 
     let mut event_h: HandleValue = 0;
@@ -259,7 +251,6 @@ fn port_cancel_access_denied() {
     );
 
     unsafe { zx_handle_close(read_only) };
-    unsafe { zx_handle_close(port_h) };
     unsafe { zx_handle_close(event_h) };
     pass(name);
 }
@@ -269,17 +260,14 @@ fn port_wait_async_port_access_denied() {
     let name = b"port_wait_async_port_access_denied";
     let port_h = port_create();
 
+    // Reduce rights via replace, dropping WRITE — wait_async queues
+    // packets into the port, which requires WRITE on it (the C++ test
+    // drops ZX_RIGHT_WRITE from the port).
     let mut read_only: HandleValue = 0;
     assert_ok(
-        unsafe {
-            zx_handle_duplicate(
-                port_h,
-                ZX_RIGHT_READ | ZX_RIGHT_WAIT | ZX_RIGHT_INSPECT,
-                &mut read_only,
-            )
-        },
+        unsafe { zx_handle_replace(port_h, ZX_RIGHT_READ | ZX_RIGHT_INSPECT, &mut read_only) },
         name,
-        b"dup read-only port",
+        b"replace read-only port",
     );
 
     let mut event_h: HandleValue = 0;
@@ -297,7 +285,6 @@ fn port_wait_async_port_access_denied() {
     );
 
     unsafe { zx_handle_close(read_only) };
-    unsafe { zx_handle_close(port_h) };
     unsafe { zx_handle_close(event_h) };
     pass(name);
 }

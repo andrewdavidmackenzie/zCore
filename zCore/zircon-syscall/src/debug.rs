@@ -56,7 +56,7 @@ impl Syscall<'_> {
     /// spawns it, and waits for it to terminate before returning.
     /// Requires the `elf` feature on `zircon-object`.
     #[cfg(feature = "elf")]
-    pub async fn sys_debug_exec(&self, path_ptr: UserInPtr<u8>, path_len: usize) -> ZxResult {
+    pub async fn sys_debug_exec(&self, path_ptr: UserInPtr<u8>, path_len: usize) -> ZxResult<i64> {
         if path_len == 0 || path_len > 256 {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -79,16 +79,23 @@ impl Syscall<'_> {
         // Wait for the process to terminate. Use timed sleeps to
         // yield the executor — wait_signal doesn't reliably wake
         // across executor tasks on different CPUs.
-        // Wait for the process to terminate. Use timed sleeps to
-        // yield the executor — wait_signal doesn't reliably wake
-        // across executor tasks on different CPUs.
-        while proc.exit_code().is_none() {
-            hal_impl::thread::sleep_until(
-                hal_impl::timer::timer_now() + core::time::Duration::from_millis(1),
-            )
-            .await;
-        }
-        Ok(())
+        let exit_code = loop {
+            match proc.exit_code() {
+                Some(code) => break code,
+                None => {
+                    hal_impl::thread::sleep_until(
+                        hal_impl::timer::timer_now() + core::time::Duration::from_millis(1),
+                    )
+                    .await;
+                }
+            }
+        };
+        // Return the child's exit code in the syscall return register:
+        // 0 = clean exit, positive = the child's nonzero exit code
+        // (petal's fail() and panic handler both exit with 1) — the
+        // petal test runner counts those as failures. Negative values
+        // stay reserved for the zx_status_t errors above.
+        Ok(exit_code)
     }
 
     /// Send a command string to the kernel debug console.

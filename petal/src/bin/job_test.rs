@@ -174,18 +174,42 @@ fn job_set_policy_bad_handle() {
 }
 
 /// Job set critical
-fn job_set_critical(job_h: HandleValue, proc_h: HandleValue) {
+fn job_set_critical(job_h: HandleValue, _proc_h: HandleValue) {
     let name = b"job_set_critical";
+    // Fuchsia requires the critical job to be the process's containing
+    // job or an ANCESTOR of it (ProcessDispatcher::SetCriticalToJob
+    // walks up from the process's job). Create a process inside a
+    // child job and mark that process critical to the child job.
     let child = create_child_job(job_h);
 
-    // Set the current process as critical to the child job
-    // This means: if the process exits, the job is killed
+    let pname = b"critical-proc\0";
+    let mut cproc: HandleValue = 0;
+    let mut cvmar: HandleValue = 0;
     assert_ok(
-        unsafe { zx_job_set_critical(child, 0, proc_h) },
+        unsafe {
+            zx_process_create(
+                child,
+                pname.as_ptr(),
+                pname.len() - 1,
+                0,
+                &mut cproc,
+                &mut cvmar,
+            )
+        },
+        name,
+        b"process create",
+    );
+
+    // Mark the child process critical to its own containing job:
+    // if it exits, the job is killed.
+    assert_ok(
+        unsafe { zx_job_set_critical(child, 0, cproc) },
         name,
         b"set critical",
     );
 
+    unsafe { zx_handle_close(cproc) };
+    unsafe { zx_handle_close(cvmar) };
     unsafe { zx_handle_close(child) };
     pass(name);
 }
