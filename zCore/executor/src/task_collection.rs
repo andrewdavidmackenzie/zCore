@@ -34,6 +34,9 @@ pub struct Task {
     /// the new CPU's waker page slot, so existing wakers continue
     /// to reach the task on its new CPU.
     waker_target: Mutex<Option<Arc<WakerTarget>>>,
+    /// DEBUG(ws783): first-poll flag — distinguishes "never ran"
+    /// from "ran and parked".
+    polled: AtomicBool,
 }
 
 struct TaskInner {
@@ -70,12 +73,17 @@ impl Task {
             }),
             finish: Arc::new(AtomicBool::new(false)),
             waker_target: Mutex::new(None),
+            polled: AtomicBool::new(false),
         };
         // DEBUG(ws783): task lifecycle tracing.
         warn!("TASK+ id={} prio={}", t.id, priority);
         t
     }
     pub fn poll(&self, cx: &mut Context) -> Poll<()> {
+        // DEBUG(ws783): first-poll tracing.
+        if !self.polled.swap(true, Ordering::SeqCst) {
+            warn!("TASKPOLL1 id={} on cpu{}", self.id, crate::arch::cpu_id());
+        }
         let mut f = self.future.lock();
         if self.inner.lock().intr_enable {
             crate::arch::intr_on();
