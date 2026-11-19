@@ -194,6 +194,13 @@ impl Executor {
                         crate::cpu_stats(crate::arch::cpu_id() as usize)
                             .stolen_tasks
                             .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                        // DEBUG(ws783): trace stolen task ids.
+                        warn!(
+                            "STEAL: cpu{} accepted task id={} prio={}",
+                            crate::arch::cpu_id(),
+                            task.id(),
+                            priority
+                        );
                         if let Some(local) = crate::runtime::local_task_collection() {
                             local.accept_stolen_task(task, priority, old_page, old_subpage_idx);
                             continue;

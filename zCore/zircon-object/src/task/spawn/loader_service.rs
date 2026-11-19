@@ -26,7 +26,7 @@ pub(crate) fn spawn_loader_service(channel: Arc<Channel>) {
     // It exits when the channel is closed (ld.so.1 drops its end
     // after finishing loading).
     hal_impl::thread::spawn(async move {
-        info!("loader_service: started");
+        warn!("loader_service: started");
         loop {
             // Wait for a message from ld.so.1.
             let object: Arc<dyn KernelObject> = channel.clone();
@@ -36,7 +36,7 @@ pub(crate) fn spawn_loader_service(channel: Arc<Channel>) {
 
             // Check if the channel was closed.
             if channel.signal().contains(Signal::PEER_CLOSED) {
-                info!("loader_service: channel closed, exiting");
+                warn!("loader_service: channel closed, exiting");
                 break;
             }
 
@@ -142,7 +142,7 @@ pub(crate) fn spawn_loader_service(channel: Arc<Channel>) {
                 }
             }
         }
-        info!("loader_service: done");
+        warn!("loader_service: done");
     });
 }
 

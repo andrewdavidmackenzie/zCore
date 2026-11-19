@@ -277,9 +277,21 @@ impl TaskCollection {
                         notified_bits |= n;
                     }
                 }
+                // DEBUG(ws783): dump task ids per priority collection.
+                let mut dump = alloc::string::String::new();
+                for priority in 0..MAX_PRIORITY {
+                    let inner = self.get_mut_inner(priority);
+                    let count = inner.slab.len();
+                    if count > 0 {
+                        let ids: alloc::vec::Vec<usize> =
+                            inner.slab.iter().map(|(_, t)| t.id()).take(8).collect();
+                        use core::fmt::Write;
+                        let _ = write!(dump, " [p{}: n={} ids={:?}]", priority, count, ids);
+                    }
+                }
                 warn!(
-                    "scan: cpu={} scan#{} found={} tasks={} pages={} notified_bits={:#x}",
-                    self.cpu_id, scan_num, found, task_num, total_pages, notified_bits
+                    "scan: cpu={} scan#{} found={} tasks={} pages={} notified_bits={:#x}{}",
+                    self.cpu_id, scan_num, found, task_num, total_pages, notified_bits, dump
                 );
             }
         }
