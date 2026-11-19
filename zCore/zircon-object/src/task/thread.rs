@@ -646,6 +646,12 @@ impl Thread {
         inner.context_before.take()
     }
 
+    /// Get this thread's executor task identifiers `(task_key, cpu_id)`,
+    /// if it has been started. Used to re-fire wake-ups at process exit.
+    pub fn task_sched(&self) -> Option<(usize, u8)> {
+        self.inner.lock().task_sched
+    }
+
     /// Start execution on the thread.
     pub fn start(self: &Arc<Self>, thread_fn: ThreadFn) -> ZxResult {
         let priority = {

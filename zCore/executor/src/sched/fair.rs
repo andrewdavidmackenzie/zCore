@@ -260,27 +260,16 @@ pub fn change_priority(state: &mut SchedState, key: Key, new_priority: usize) ->
     }
 }
 
-/// Steal the task with the highest vruntime (least starved = lowest
-/// impact on fairness when migrated to another CPU).
-pub fn steal_task(state: &mut SchedState) -> Option<Key> {
-    // Steal the least-urgent task: highest vruntime fair task, or
-    // longest-deadline deadline task.
-    // Prefer stealing fair tasks over deadline tasks.
-    if let Some(&(vruntime, key)) = state.fair_tree.keys().next_back() {
-        state.fair_tree.remove(&(vruntime, key));
-        if let Some(ts) = state.tasks.get_mut(&key) {
-            ts.in_ready_tree = false;
-        }
-        return Some(key);
+/// Select the least-important ready task (for work stealing).
+/// For the fair scheduler, this is the highest-vruntime fair task.
+/// Deadline tasks are never stolen.
+pub fn pick_lowest(state: &mut SchedState) -> Option<Key> {
+    let (&(vruntime, key), _) = state.fair_tree.iter().next_back()?;
+    state.fair_tree.remove(&(vruntime, key));
+    if let Some(ts) = state.tasks.get_mut(&key) {
+        ts.in_ready_tree = false;
     }
-    if let Some(&(deadline, key)) = state.deadline_tree.keys().next_back() {
-        state.deadline_tree.remove(&(deadline, key));
-        if let Some(ts) = state.tasks.get_mut(&key) {
-            ts.in_ready_tree = false;
-        }
-        return Some(key);
-    }
-    None
+    Some(key)
 }
 
 /// Set a task's scheduling class to deadline with the given parameters.

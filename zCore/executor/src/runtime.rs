@@ -149,19 +149,26 @@ fn get_runtime(cpu_id: u8) -> &'static Mutex<ExecutorRuntime> {
         .unwrap_or_else(|| panic!("no runtime for cpu_id {}", cpu_id))
 }
 
-/// Steal one runnable task from another CPU for immediate polling.
+/// Steal one runnable task from another CPU directly into the local
+/// CPU's collection.
 ///
-/// Returns `(Arc<Task>, priority, old_page, old_subpage_idx)` if a
-/// task was stolen. The caller polls the task immediately (like
-/// Zircon's `steal_work`, which context-switches directly to the
-/// stolen thread). If the task returns `Pending`, the caller inserts
-/// it into the local task collection via `accept_stolen_task`.
+/// The whole migration happens atomically under the source's
+/// scheduler lock (see [`TaskCollection::steal_into`]) — there is no
+/// transit window in which the task is unreachable by either CPU's
+/// scanner, so wake-ups cannot be lost during migration.
 ///
 /// Only steals from CPUs with > 1 task to avoid starving them.
 /// Accesses task collections via `CPU_TASK_COLLECTIONS` (not via the
 /// runtime lock) to prevent deadlock with the timer handler.
-pub(crate) fn steal_task_from_other_cpu(
-) -> Option<(Arc<Task>, usize, Arc<crate::waker_page::WakerPage>, usize)> {
+///
+/// Returns the stolen task's id.
+///
+/// NOTE: currently unused — the executor's idle path keeps work
+/// stealing disabled pending the wake-loss race tracked in the
+/// follow-up to #783. Kept compiled (and exercised by future
+/// re-enablement) with the rest of the Phase 6 infrastructure.
+#[allow(dead_code)]
+pub(crate) fn steal_task_from_other_cpu_into(dest: &Arc<TaskCollection>) -> Option<usize> {
     let tc_map = CPU_TASK_COLLECTIONS.get()?;
     let current = crate::arch::cpu_id();
     for (&cpu_id, source_tc) in tc_map.iter() {
@@ -171,11 +178,27 @@ pub(crate) fn steal_task_from_other_cpu(
         if source_tc.task_num() <= 1 {
             continue;
         }
-        if let Some(stolen) = source_tc.steal_one_task() {
-            return Some(stolen);
+        if let Some(task_id) = source_tc.steal_into(dest) {
+            return Some(task_id);
         }
     }
     None
+}
+
+/// Force-notify a task's waker slot on its owning CPU, re-firing a
+/// potentially lost wake-up. Safe to call from any CPU.
+///
+/// Used at process exit so shutdown does not depend on every kill
+/// wake-up having been delivered (see the exit sweep in
+/// `Process::exit`).
+pub fn force_wake_task(cpu_id: u8, key: usize) {
+    let Some(map) = CPU_TASK_COLLECTIONS.get() else {
+        return;
+    };
+    let Some(tc) = map.get(&cpu_id) else {
+        return;
+    };
+    tc.force_notify(key);
 }
 
 /// Get the local CPU's task collection for accepting stolen tasks.

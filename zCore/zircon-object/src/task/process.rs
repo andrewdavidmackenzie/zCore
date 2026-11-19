@@ -383,6 +383,25 @@ impl Process {
                     t.kill();
                 }
             }
+            // Exit sweep: re-fire the kill wake-ups for every remaining
+            // started thread. Thread::kill() wakes each thread via its
+            // killer channel or parked waker, but a wake-up can be lost
+            // (e.g. a race in cross-CPU wake delivery). Re-notify each
+            // thread's executor task slot directly so shutdown never
+            // depends on perfect wake delivery; a spurious re-notify
+            // just polls the task once more.
+            let sweep: alloc::vec::Vec<(usize, u8)> = inner
+                .threads
+                .iter()
+                .filter_map(|t| t.upgrade())
+                .filter(|t| !unstarted.contains(&t.id()))
+                .filter_map(|t| t.task_sched())
+                .collect();
+            drop(inner);
+            for (task_key, task_cpu) in sweep {
+                hal_impl::thread::force_wake_task(task_cpu, task_key);
+            }
+            let mut inner = self.inner.lock();
             // Remove unstarted threads — they can never call
             // remove_thread().  Started threads (now Dying) will
             // call remove_thread() when their CurrentThread drops.
