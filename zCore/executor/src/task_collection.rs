@@ -328,10 +328,19 @@ impl TaskCollection {
     pub fn steal_one_task(&self) -> Option<(Arc<Task>, usize, Arc<WakerPage>, usize)> {
         // Lock ordering: sched_state first, then future_collections.
         let mut sched = self.sched_state.lock();
-        // Pick the next runnable task from the scheduler.
-        let key = crate::sched::pick_next(&mut sched)?;
+        // Pick the lowest-priority runnable task from the scheduler.
+        // Stealing the least-important task minimizes disruption to
+        // the source CPU.
+        let key = crate::sched::pick_lowest(&mut sched)?;
         let priority = key >> PRIORITY_SHIFT;
         if priority >= MAX_PRIORITY {
+            return None;
+        }
+        // Only steal default-priority tasks. Higher-priority tasks are
+        // system tasks or time-sensitive threads that should not be
+        // migrated. Re-queue the task so the source CPU keeps it.
+        if priority > DEFAULT_PRIORITY {
+            crate::sched::on_task_notified(&mut sched, key);
             return None;
         }
         let mut inner = self.get_mut_inner(priority);

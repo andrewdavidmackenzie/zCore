@@ -183,11 +183,22 @@ impl Executor {
                 } else if weak_executor != 0 {
                     crate::runtime::sched_yield();
                 } else {
-                    // Work stealing infrastructure is in place (WakerTarget
-                    // indirection, steal_one_task, accept_stolen_task,
-                    // CPU_TASK_COLLECTIONS) but disabled pending x86_64
-                    // debugging — crashes on multi-threaded core-tests.
-                    // See #783 Phase 6 follow-up.
+                    // Work stealing: this CPU is idle but still holds
+                    // blocked tasks. Steal one runnable task from a
+                    // busy CPU, accept it into the local collection,
+                    // and loop to poll it (its waker slot is
+                    // initialized notified, so take_task picks it up).
+                    if let Some((task, priority, old_page, old_subpage_idx)) =
+                        crate::runtime::steal_task_from_other_cpu()
+                    {
+                        crate::cpu_stats(crate::arch::cpu_id() as usize)
+                            .stolen_tasks
+                            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                        if let Some(local) = crate::runtime::local_task_collection() {
+                            local.accept_stolen_task(task, priority, old_page, old_subpage_idx);
+                            continue;
+                        }
+                    }
                     crate::arch::wait_for_interrupt();
                 }
             }

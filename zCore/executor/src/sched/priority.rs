@@ -122,12 +122,14 @@ pub fn change_priority(state: &mut SchedState, key: Key, new_priority: usize) ->
     Some(old_p)
 }
 
-/// Try to steal a task for another CPU (return lowest-priority ready task).
-pub fn steal_task(state: &mut SchedState) -> Option<Key> {
+/// Select the lowest-priority ready task (for work stealing).
+/// Stealing the lowest-priority task minimizes disruption to the
+/// source CPU — high-priority system tasks stay where they are.
+pub fn pick_lowest(state: &mut SchedState) -> Option<Key> {
     if state.ready_bitmap == 0 {
         return None;
     }
-    // Steal lowest-priority task to minimize impact.
+    // Lowest set bit = lowest priority with ready tasks.
     let p = state.ready_bitmap.trailing_zeros() as usize;
     let key = state.queues[p].pop_front()?;
     if state.queues[p].is_empty() {
