@@ -661,6 +661,11 @@ impl Thread {
             ThreadSwitchFuture::new(self.clone(), future),
             priority,
         );
+        // DEBUG(ws783): thread->task mapping.
+        warn!(
+            "THREAD+ koid={} prio={} task_key={:#x} task_cpu={}",
+            self.base.id, priority, task_key, task_cpu
+        );
         // Store the executor task identifiers and reconcile priority.
         // If set_priority() or boost_priority() raced between reading
         // inner.priority above and this point, the scheduler has the
@@ -1034,6 +1039,8 @@ impl Thread {
     /// Terminate the current running thread.
     fn terminate(&self) {
         let mut inner = self.inner.lock();
+        // DEBUG(ws783): thread termination tracing.
+        warn!("THREADterm koid={}", self.base.id);
         self.exceptionate.shutdown();
         // Clear task identifiers so a stale set_priority() cannot
         // address a reused executor slab slot.

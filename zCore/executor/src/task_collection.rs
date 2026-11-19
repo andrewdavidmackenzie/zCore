@@ -60,7 +60,7 @@ fn alloc_id() -> usize {
 
 impl Task {
     pub fn new(future: impl Future<Output = ()> + Send + 'static, priority: usize) -> Self {
-        Self {
+        let t = Self {
             id: alloc_id(),
             future: Mutex::new(Box::pin(future)),
             inner: Mutex::new(TaskInner {
@@ -70,7 +70,10 @@ impl Task {
             }),
             finish: Arc::new(AtomicBool::new(false)),
             waker_target: Mutex::new(None),
-        }
+        };
+        // DEBUG(ws783): task lifecycle tracing.
+        warn!("TASK+ id={} prio={}", t.id, priority);
+        t
     }
     pub fn poll(&self, cx: &mut Context) -> Poll<()> {
         let mut f = self.future.lock();
@@ -315,6 +318,10 @@ impl TaskCollection {
                 if dropped != 0 {
                     for subpage_idx in BitIter::from(dropped) {
                         let key = pack_key(priority, page_idx, subpage_idx);
+                        // DEBUG(ws783): task removal tracing.
+                        if let Some(t) = inner.slab.get(unmask_priority(key)) {
+                            warn!("TASK- id={} (dropped bit)", t.id());
+                        }
                         if inner.remove(key) {
                             self.task_num.fetch_sub(1, Ordering::Relaxed);
                             crate::sched::on_task_removed(&mut sched, key);
@@ -358,32 +365,33 @@ impl TaskCollection {
             crate::sched::on_task_notified(&mut sched, key);
             return None;
         }
-        // BISECT(ws783): attempts-only — exercise the full lock/pop/
-        // re-queue traffic but never actually migrate the task.
-        crate::sched::on_task_notified(&mut sched, key);
-        return None;
-        #[allow(unreachable_code)]
-        {
-            let mut inner = self.get_mut_inner(priority);
-            let slab_key = unmask_priority(key);
-            if !inner.slab.contains(slab_key) {
-                // Slab entry was already removed (race with take_task).
-                // Re-add the key to the scheduler so it can be cleaned up.
-                return None;
-            }
-            // Extract the task from the slab but DON'T clear the page slot.
-            // The waker target still points here; clearing the slot would
-            // lose notifications that arrive before the target is redirected.
-            let (_, page_idx, subpage_idx) = unpack_key(slab_key);
-            if page_idx >= inner.pages.len() {
-                return None;
-            }
-            let old_page = inner.pages[page_idx].clone();
-            let task = inner.slab.remove(slab_key);
-            crate::sched::on_task_removed(&mut sched, key);
-            self.task_num.fetch_sub(1, Ordering::Relaxed);
-            Some((task, priority, old_page, subpage_idx))
+        let mut inner = self.get_mut_inner(priority);
+        let slab_key = unmask_priority(key);
+        if !inner.slab.contains(slab_key) {
+            // Slab entry was already removed (race with take_task).
+            // Re-add the key to the scheduler so it can be cleaned up.
+            return None;
         }
+        // Extract the task from the slab but DON'T clear the page slot.
+        // The waker target still points here; clearing the slot would
+        // lose notifications that arrive before the target is redirected.
+        let (_, page_idx, subpage_idx) = unpack_key(slab_key);
+        if page_idx >= inner.pages.len() {
+            return None;
+        }
+        let old_page = inner.pages[page_idx].clone();
+        let task = inner.slab.remove(slab_key);
+        // DEBUG(ws783): migration tracing.
+        warn!(
+            "STEAL: cpu{} takes task id={} prio={} from cpu{}",
+            crate::arch::cpu_id(),
+            task.id(),
+            priority,
+            self.cpu_id
+        );
+        crate::sched::on_task_removed(&mut sched, key);
+        self.task_num.fetch_sub(1, Ordering::Relaxed);
+        Some((task, priority, old_page, subpage_idx))
     }
 
     /// Accept a stolen task into this collection. The task is inserted

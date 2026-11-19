@@ -122,7 +122,8 @@ impl Executor {
                 waker_ref.mark_borrowed(false);
                 match ret {
                     Poll::Ready(()) => {
-                        debug!("task over id = {}", task.id());
+                        // DEBUG(ws783): task completion tracing.
+                        warn!("TASKdone id={} on cpu{}", task.id(), crate::arch::cpu_id());
                         droper.drop_by_ref();
                     }
                     Poll::Pending => {
@@ -188,26 +189,22 @@ impl Executor {
                     // busy CPU, accept it into the local collection,
                     // and loop to poll it (its waker slot is
                     // initialized notified, so take_task picks it up).
-                    // BISECT(ws783): steal disabled — isolate whether the
-                    // steal call is the lost-wake trigger.
-                    let _ = crate::runtime::steal_task_from_other_cpu;
-                    // if let Some((task, priority, old_page, old_subpage_idx)) =
-                    //     crate::runtime::steal_task_from_other_cpu()
-                    // {
-                    //     crate::cpu_stats(crate::arch::cpu_id() as usize)
-                    //         .stolen_tasks
-                    //         .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                    //     warn!(
-                    //         "STEAL: cpu{} accepted task id={} prio={}",
-                    //         crate::arch::cpu_id(),
-                    //         task.id(),
-                    //         priority
-                    //     );
-                    //     if let Some(local) = crate::runtime::local_task_collection() {
-                    //         local.accept_stolen_task(task, priority, old_page, old_subpage_idx);
-                    //         continue;
-                    //     }
-                    // }
+                    // Work stealing: this CPU is idle but still holds
+                    // blocked tasks. Steal one runnable task from a
+                    // busy CPU, accept it into the local collection,
+                    // and loop to poll it (its waker slot is
+                    // initialized notified, so take_task picks it up).
+                    if let Some((task, priority, old_page, old_subpage_idx)) =
+                        crate::runtime::steal_task_from_other_cpu()
+                    {
+                        crate::cpu_stats(crate::arch::cpu_id() as usize)
+                            .stolen_tasks
+                            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                        if let Some(local) = crate::runtime::local_task_collection() {
+                            local.accept_stolen_task(task, priority, old_page, old_subpage_idx);
+                            continue;
+                        }
+                    }
                     crate::arch::wait_for_interrupt();
                 }
             }
