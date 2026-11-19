@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use bit_iter::BitIter;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use slab::Slab;
 use spin::{Mutex, MutexGuard};
 use {
@@ -189,6 +189,9 @@ pub struct TaskCollection {
     pub sched_state: Mutex<crate::sched::SchedState>,
     /// Key of a task that yielded voluntarily, pending re-queue.
     pending_yield: Mutex<Option<Key>>,
+    /// DEBUG(ws783): per-CPU scan counter — each scanning CPU emits a
+    /// heartbeat, revealing CPUs that stop scanning (stuck executors).
+    scan_count: AtomicU64,
 }
 
 impl TaskCollection {
@@ -199,6 +202,7 @@ impl TaskCollection {
             task_num: AtomicUsize::new(0),
             sched_state: Mutex::new(crate::sched::new(cpu_id)),
             pending_yield: Mutex::new(None),
+            scan_count: AtomicU64::new(0),
         });
         let tc = Arc::get_mut(&mut task_collection).expect("Arc just created, must be unique");
         for priority in 0..MAX_PRIORITY {
@@ -258,10 +262,9 @@ impl TaskCollection {
     /// Feeds notified tasks into the scheduler and removes dropped ones.
     fn scan_notifications(&self) {
         use core::sync::atomic::{AtomicU64, Ordering as AtOrd};
-        static SCAN_COUNT: AtomicU64 = AtomicU64::new(0);
         static FOUND_COUNT: AtomicU64 = AtomicU64::new(0);
-        let scan_num = SCAN_COUNT.fetch_add(1, AtOrd::Relaxed);
-        if scan_num > 0 && scan_num % 500_000 == 0 {
+        let scan_num = self.scan_count.fetch_add(1, AtOrd::Relaxed);
+        if scan_num > 0 && scan_num % 20_000 == 0 {
             let found = FOUND_COUNT.load(AtOrd::Relaxed);
             let task_num = self.task_num.load(Ordering::Relaxed);
             if task_num > 0 {

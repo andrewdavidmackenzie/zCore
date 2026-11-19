@@ -440,6 +440,13 @@ impl Process {
         }
 
         self.base.signal_set(Signal::PROCESS_TERMINATED);
+        // DEBUG(ws783): confirm termination signal is visible.
+        warn!(
+            "proc {} TERMINATED (code {}), signal now {:?}",
+            self.base.id,
+            retcode,
+            self.base.signal()
+        );
         self.exceptionate.shutdown();
         self.debug_exceptionate.shutdown();
         // Destroy the process's address space. After this, any

@@ -225,12 +225,14 @@ fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
         let future = core::future::pending::<i32>();
         hal_impl::run_executor(future)
     };
-    info!("exiting with code {}", exit_code);
+    warn!("exiting with code {}", exit_code);
     hal_impl::cpu::reset()
 }
 
 fn check_exit_code(proc: Arc<Process>) -> i32 {
     let code = proc.exit_code().unwrap_or(-1);
+    // DEBUG(ws783): survives LTO — marks the BSP wait_for_exit wake.
+    warn!("INIT EXIT observed: code={}", code);
     if code != 0 {
         error!(
             "process {:?}({}) exited with code {:?}",
