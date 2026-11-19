@@ -558,25 +558,13 @@ impl Thread {
     pub fn set_cpu_affinity_mask(&self, mask: [u64; 8]) {
         let mut inner = self.inner.lock();
         inner.cpu_affinity_mask = mask;
-
-        // Update task_sched to report the target CPU if the current
-        // CPU is not in the mask.
-        if let Some((key, current_cpu)) = inner.task_sched {
-            let current_in_mask = mask
-                .get((current_cpu as usize) / 64)
-                .is_some_and(|word| word & (1u64 << (current_cpu as usize % 64)) != 0);
-            if !current_in_mask {
-                // Find the first CPU in the mask.
-                for (word_idx, &word) in mask.iter().enumerate() {
-                    if word != 0 {
-                        let bit = word.trailing_zeros() as u8;
-                        let target_cpu = (word_idx as u8) * 64 + bit;
-                        inner.task_sched = Some((key, target_cpu));
-                        break;
-                    }
-                }
-            }
-        }
+        // NOTE: `task_sched` deliberately keeps the executor task's
+        // REAL owning CPU. It routes scheduler operations (priority
+        // changes, the process-exit wake sweep) to the CPU whose
+        // collection actually holds the task — the task is not
+        // migrated on affinity changes (the waker page is bound to
+        // the spawn CPU, #680). `last_cpu()` reports the
+        // affinity-adjusted CPU instead.
     }
 
     /// Get the CPU affinity mask.
@@ -644,6 +632,12 @@ impl Thread {
     pub fn fetch_backup_context(&self) -> Option<(UserContext, usize, usize)> {
         let mut inner = self.inner.lock();
         inner.context_before.take()
+    }
+
+    /// Get this thread's executor task identifiers `(task_key, cpu_id)`,
+    /// if it has been started. Used to re-fire wake-ups at process exit.
+    pub fn task_sched(&self) -> Option<(usize, u8)> {
+        self.inner.lock().task_sched
     }
 
     /// Start execution on the thread.
@@ -912,10 +906,26 @@ impl Thread {
     /// Returns 0xFFFFFFFF if the thread hasn't been started yet.
     pub fn last_cpu(&self) -> u32 {
         let inner = self.inner.lock();
-        inner
-            .task_sched
-            .map(|(_, cpu)| cpu as u32)
-            .unwrap_or(0xFFFF_FFFFu32)
+        let Some((_, cpu)) = inner.task_sched else {
+            return 0xFFFF_FFFFu32;
+        };
+        // Report the affinity-adjusted CPU: the executor task is not
+        // migrated on affinity changes, so if its owning CPU is no
+        // longer in the mask, report the first CPU in the mask (where
+        // the thread is scheduled to run next).
+        let mask = inner.cpu_affinity_mask;
+        let owner_in_mask = mask
+            .get(cpu as usize / 64)
+            .is_some_and(|w| w & (1u64 << (cpu as usize % 64)) != 0);
+        if owner_in_mask {
+            return cpu as u32;
+        }
+        for (word_idx, &word) in mask.iter().enumerate() {
+            if word != 0 {
+                return (word_idx as u32) * 64 + word.trailing_zeros();
+            }
+        }
+        cpu as u32
     }
 
     pub fn get_time(&self) -> u64 {

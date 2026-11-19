@@ -183,11 +183,13 @@ impl Executor {
                 } else if weak_executor != 0 {
                     crate::runtime::sched_yield();
                 } else {
-                    // Work stealing infrastructure is in place (WakerTarget
-                    // indirection, steal_one_task, accept_stolen_task,
-                    // CPU_TASK_COLLECTIONS) but disabled pending x86_64
-                    // debugging — crashes on multi-threaded core-tests.
-                    // See #783 Phase 6 follow-up.
+                    // Work stealing: infrastructure is in place and the
+                    // migration is atomic (see TaskCollection::steal_into),
+                    // but the steal call is DISABLED pending the wake-loss
+                    // race tracked in the follow-up issue — with it
+                    // enabled, parked thread tasks occasionally never
+                    // receive wake-ups, hanging the machine after
+                    // core-tests. See #783 Phase 6.
                     crate::arch::wait_for_interrupt();
                 }
             }

@@ -383,6 +383,33 @@ impl Process {
                     t.kill();
                 }
             }
+            // Exit sweep: re-fire the kill wake-ups for every remaining
+            // started thread. Thread::kill() wakes each thread via its
+            // killer channel or parked waker, but a wake-up can be lost
+            // (e.g. a race in cross-CPU wake delivery). Re-notify each
+            // thread's executor task slot directly so shutdown never
+            // depends on perfect wake delivery; a spurious re-notify
+            // just polls the task once more.
+            //
+            // Collect strong references under the process lock but
+            // read `task_sched()` after releasing it: `task_sched()`
+            // takes the thread's inner lock, and a thread calling
+            // `terminate()` → `remove_thread()` holds that lock while
+            // waiting for the process lock — taking both in opposite
+            // orders from two CPUs would deadlock.
+            let sweep_threads: alloc::vec::Vec<alloc::sync::Arc<super::Thread>> = inner
+                .threads
+                .iter()
+                .filter_map(|t| t.upgrade())
+                .filter(|t| !unstarted.contains(&t.id()))
+                .collect();
+            drop(inner);
+            for t in &sweep_threads {
+                if let Some((task_key, task_cpu)) = t.task_sched() {
+                    hal_impl::thread::force_wake_task(task_cpu, task_key);
+                }
+            }
+            let mut inner = self.inner.lock();
             // Remove unstarted threads — they can never call
             // remove_thread().  Started threads (now Dying) will
             // call remove_thread() when their CurrentThread drops.
@@ -409,6 +436,12 @@ impl Process {
     /// own threads while `Thread.proc` holds the process).
     fn terminate(&self) {
         let mut inner = self.inner.lock();
+        // Finalize only once: exit() and the last remove_thread() can
+        // race to call terminate(), and running it twice would
+        // double-count the process's CPU/queue time in the parent job.
+        if inner.terminated {
+            return;
+        }
         let retcode = match inner.status {
             Status::Exited(retcode) => retcode,
             _ => {
