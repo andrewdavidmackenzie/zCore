@@ -365,33 +365,40 @@ impl TaskCollection {
             crate::sched::on_task_notified(&mut sched, key);
             return None;
         }
-        let mut inner = self.get_mut_inner(priority);
-        let slab_key = unmask_priority(key);
-        if !inner.slab.contains(slab_key) {
-            // Slab entry was already removed (race with take_task).
-            // Re-add the key to the scheduler so it can be cleaned up.
-            return None;
+        // BISECT2(ws783): attempts-only trial 2 — is the earlier clean
+        // result reproducible?
+        crate::sched::on_task_notified(&mut sched, key);
+        return None;
+        #[allow(unreachable_code)]
+        {
+            let mut inner = self.get_mut_inner(priority);
+            let slab_key = unmask_priority(key);
+            if !inner.slab.contains(slab_key) {
+                // Slab entry was already removed (race with take_task).
+                // Re-add the key to the scheduler so it can be cleaned up.
+                return None;
+            }
+            // Extract the task from the slab but DON'T clear the page slot.
+            // The waker target still points here; clearing the slot would
+            // lose notifications that arrive before the target is redirected.
+            let (_, page_idx, subpage_idx) = unpack_key(slab_key);
+            if page_idx >= inner.pages.len() {
+                return None;
+            }
+            let old_page = inner.pages[page_idx].clone();
+            let task = inner.slab.remove(slab_key);
+            // DEBUG(ws783): migration tracing.
+            warn!(
+                "STEAL: cpu{} takes task id={} prio={} from cpu{}",
+                crate::arch::cpu_id(),
+                task.id(),
+                priority,
+                self.cpu_id
+            );
+            crate::sched::on_task_removed(&mut sched, key);
+            self.task_num.fetch_sub(1, Ordering::Relaxed);
+            Some((task, priority, old_page, subpage_idx))
         }
-        // Extract the task from the slab but DON'T clear the page slot.
-        // The waker target still points here; clearing the slot would
-        // lose notifications that arrive before the target is redirected.
-        let (_, page_idx, subpage_idx) = unpack_key(slab_key);
-        if page_idx >= inner.pages.len() {
-            return None;
-        }
-        let old_page = inner.pages[page_idx].clone();
-        let task = inner.slab.remove(slab_key);
-        // DEBUG(ws783): migration tracing.
-        warn!(
-            "STEAL: cpu{} takes task id={} prio={} from cpu{}",
-            crate::arch::cpu_id(),
-            task.id(),
-            priority,
-            self.cpu_id
-        );
-        crate::sched::on_task_removed(&mut sched, key);
-        self.task_num.fetch_sub(1, Ordering::Relaxed);
-        Some((task, priority, old_page, subpage_idx))
     }
 
     /// Accept a stolen task into this collection. The task is inserted
