@@ -467,9 +467,9 @@ impl TaskCollection {
             // Redirect the existing target to this page+idx (may have
             // changed due to migration or slab reuse).
             existing_target.redirect(inner.pages[page_idx].clone(), subpage_idx);
-            WakerPage::make_waker_with_target(&task.finish, existing_target)
+            WakerPage::make_waker_with_target(&task.finish, existing_target, task.id())
         } else {
-            let w = inner.pages[page_idx].make_waker(subpage_idx, &task.finish);
+            let w = inner.pages[page_idx].make_waker(subpage_idx, &task.finish, task.id());
             task.set_waker_target(w.waker_target().clone());
             w
         };

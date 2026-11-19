@@ -160,6 +160,12 @@ impl Executor {
                     waker_ref.mark_borrowed(false);
                     match ret {
                         Poll::Ready(()) => {
+                            // DEBUG(ws783): task completion tracing.
+                            warn!(
+                                "TASKdone(retry) id={} on cpu{}",
+                                task.id(),
+                                crate::arch::cpu_id()
+                            );
                             droper.drop_by_ref();
                         }
                         Poll::Pending => {

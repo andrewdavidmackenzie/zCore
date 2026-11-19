@@ -183,10 +183,16 @@ impl WakerPage {
     /// Create a `WakerRef` for a slot, with a fresh `WakerTarget`.
     /// All clones of this `WakerRef` share the same `WakerTarget`,
     /// which can be redirected during task migration.
-    pub fn make_waker(self: &Arc<Self>, idx: usize, dropped: &Arc<AtomicBool>) -> WakerRef {
+    pub fn make_waker(
+        self: &Arc<Self>,
+        idx: usize,
+        dropped: &Arc<AtomicBool>,
+        task_id: usize,
+    ) -> WakerRef {
         WakerRef {
             target: WakerTarget::new(self.clone(), idx),
             dropped: dropped.clone(),
+            task_id,
         }
     }
 
@@ -194,10 +200,15 @@ impl WakerPage {
     /// Used when re-creating a waker after task migration — the
     /// `WakerTarget` is shared with all previous waker clones so
     /// redirecting it updates everyone.
-    pub fn make_waker_with_target(dropped: &Arc<AtomicBool>, target: Arc<WakerTarget>) -> WakerRef {
+    pub fn make_waker_with_target(
+        dropped: &Arc<AtomicBool>,
+        target: Arc<WakerTarget>,
+        task_id: usize,
+    ) -> WakerRef {
         WakerRef {
             target,
             dropped: dropped.clone(),
+            task_id,
         }
     }
 }
@@ -295,6 +306,8 @@ pub type DroperRef = WakerRef;
 pub struct WakerRef {
     target: Arc<WakerTarget>,
     dropped: Arc<AtomicBool>,
+    /// DEBUG(ws783): owning task id for wake-suppression diagnostics.
+    task_id: usize,
 }
 
 impl WakerRef {
@@ -305,6 +318,10 @@ impl WakerRef {
     pub fn wake_by_ref(&self) {
         if !self.dropped.load(Ordering::SeqCst) {
             self.target.notify();
+        } else {
+            // DEBUG(ws783): wake suppression — the task's finish flag
+            // is set but the task may not actually be gone.
+            warn!("WAKE-SUPPRESSED task_id={}", self.task_id);
         }
     }
 
@@ -332,6 +349,7 @@ impl Clone for WakerRef {
         WakerRef {
             target: self.target.clone(),
             dropped: self.dropped.clone(),
+            task_id: self.task_id,
         }
     }
 }
