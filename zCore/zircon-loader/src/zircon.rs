@@ -351,7 +351,12 @@ async fn run_user(thread: CurrentThread) {
     loop {
         // wait
         let mut ctx = thread.wait_for_run().await;
-        if thread.state() == ThreadState::Dying {
+        // Break on terminal states. Dying is the normal kill path;
+        // Dead can be observed if the thread's own teardown completed
+        // between wait_for_run returning and this check — re-entering
+        // user mode with a leftover context would execute a "death
+        // rattle" of garbage instructions.
+        if matches!(thread.state(), ThreadState::Dying | ThreadState::Dead) {
             break;
         }
 
