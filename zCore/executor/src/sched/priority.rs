@@ -9,7 +9,7 @@
 //! yielding to same-priority peers, but does NOT provide cross-priority
 //! proportional sharing — higher-priority threads always preempt lower.
 
-use crate::task_collection::Key;
+use crate::task_collection::{Key, MAX_PRIORITY};
 use alloc::collections::VecDeque;
 use hashbrown::HashMap;
 
@@ -46,6 +46,18 @@ pub fn on_task_removed(state: &mut SchedState, key: Key) {
             state.ready_bitmap &= !(1 << p);
         }
     }
+}
+
+/// Look up a task's CURRENT scheduling priority. The key's priority
+/// bits encode the spawn priority and can be stale after
+/// `change_priority`; this reads the live mapping. Returns
+/// `MAX_PRIORITY` for unknown keys (treated as non-migratable).
+pub fn current_priority(state: &SchedState, key: Key) -> usize {
+    state
+        .task_priorities
+        .get(&key)
+        .copied()
+        .unwrap_or(MAX_PRIORITY)
 }
 
 /// Called when a task is woken (notified).

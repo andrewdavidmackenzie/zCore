@@ -347,22 +347,24 @@ impl TaskCollection {
         // Stealing the least-important task minimizes disruption to
         // the source CPU.
         let key = crate::sched::pick_lowest(&mut sched)?;
-        let priority = key >> PRIORITY_SHIFT;
-        if priority >= MAX_PRIORITY {
+        // The key's priority bits are the SPAWN priority and can go
+        // stale after change_task_priority(); the slab entry is
+        // addressed by them, but migration eligibility must use the
+        // scheduler's CURRENT priority.
+        let storage_priority = key >> PRIORITY_SHIFT;
+        if storage_priority >= MAX_PRIORITY {
             return None;
         }
-        // Only default-priority tasks migrate. Higher-priority tasks
-        // (Zircon threads at 16, system tasks) must stay on their
-        // spawn CPU — migrating them disrupts time-sensitive threads
-        // (see #783). Sub-default priorities (0-3) are re-queued too:
-        // only the kernel's default-priority futures (e.g. the loader
-        // service) are migratable. Re-queue so the source CPU keeps
-        // the task either way.
-        if priority != DEFAULT_PRIORITY {
+        // Only default-priority tasks migrate. All other priorities
+        // (including Zircon threads at 16, system tasks) are popped
+        // and re-queued so the source CPU keeps them: migrating them
+        // would disrupt time-sensitive threads (see #783).
+        let current_priority = crate::sched::current_priority(&sched, key);
+        if current_priority != DEFAULT_PRIORITY {
             crate::sched::on_task_notified(&mut sched, key);
             return None;
         }
-        let mut inner = self.get_mut_inner(priority);
+        let mut inner = self.get_mut_inner(storage_priority);
         let slab_key = unmask_priority(key);
         if !inner.slab.contains(slab_key) {
             // Slab entry was already removed (race with take_task).
@@ -391,7 +393,7 @@ impl TaskCollection {
                 return None;
             }
         };
-        let mut dest_inner = match dest.future_collections[priority].try_lock() {
+        let mut dest_inner = match dest.future_collections[current_priority].try_lock() {
             Some(guard) => guard,
             None => {
                 drop(dest_sched);
@@ -400,7 +402,9 @@ impl TaskCollection {
             }
         };
         let new_slab_key = dest_inner.insert_task(task.clone());
-        let new_full_key = new_slab_key | (priority << PRIORITY_SHIFT);
+        // The new key encodes the CURRENT priority so the destination's
+        // take_task finds the slab entry in the matching collection.
+        let new_full_key = new_slab_key | (current_priority << PRIORITY_SHIFT);
         let (_, new_page_idx, new_subpage_idx) = unpack_key(new_slab_key);
 
         // Redirect the task's waker target to the destination slot and
@@ -425,7 +429,7 @@ impl TaskCollection {
         // slot was already cleared under the target lock above.
         inner.slab.remove(slab_key);
         drop(dest_inner);
-        crate::sched::on_task_added(&mut dest_sched, new_full_key, priority);
+        crate::sched::on_task_added(&mut dest_sched, new_full_key, current_priority);
         drop(dest_sched);
         drop(inner);
         crate::sched::on_task_removed(&mut sched, key);

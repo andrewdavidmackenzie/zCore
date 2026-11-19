@@ -11,7 +11,7 @@
 //!
 //! Selection is O(log n) via BTreeMap for both fair and deadline tasks.
 
-use crate::task_collection::Key;
+use crate::task_collection::{Key, MAX_PRIORITY};
 use alloc::collections::BTreeMap;
 use hashbrown::HashMap;
 
@@ -103,6 +103,18 @@ pub fn on_task_removed(state: &mut SchedState, key: Key) {
             }
         }
     }
+}
+
+/// Look up a task's CURRENT scheduling priority. The key's priority
+/// bits encode the spawn priority and can be stale after
+/// `change_priority`; this reads the live mapping. Returns
+/// `MAX_PRIORITY` for unknown keys (treated as non-migratable).
+pub fn current_priority(state: &SchedState, key: Key) -> usize {
+    state
+        .tasks
+        .get(&key)
+        .map(|ts| ts.priority)
+        .unwrap_or(MAX_PRIORITY)
 }
 
 /// Called when a task is woken (notification fired).
