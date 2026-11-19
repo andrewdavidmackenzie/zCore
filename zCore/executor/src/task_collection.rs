@@ -420,6 +420,13 @@ impl TaskCollection {
         debug_assert!(priority < MAX_PRIORITY);
         let mut sched = self.sched_state.lock();
         let mut inner = self.future_collections[priority].lock();
+        // DEBUG(ws783): accept tracing — catches unlogged migrations.
+        warn!(
+            "ACCEPT: cpu{} task id={} prio={}",
+            crate::arch::cpu_id(),
+            task.id(),
+            priority
+        );
         let slab_key = inner.insert_task(task.clone());
         debug_assert!(slab_key < TASK_NUM_PER_PRIORITY);
         let full_key = slab_key | (priority << PRIORITY_SHIFT);

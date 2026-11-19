@@ -355,6 +355,8 @@ pub fn spawn_task(
     // Without this, a halted CPU won't poll the task until its
     // next timer interrupt (~10ms), causing WaitForBlocked timeouts.
     crate::ipi_wakeup(actual_cpu);
+    // DEBUG(ws783): where spawns land.
+    warn!("SPAWN-LAND key={:#x} cpu={}", key, actual_cpu);
     (key, actual_cpu)
 }
 

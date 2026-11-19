@@ -240,6 +240,15 @@ impl WakerTarget {
     /// Called during task migration.
     pub fn redirect(&self, new_page: Arc<WakerPage>, new_idx: usize) {
         let mut inner = self.inner.lock();
+        // DEBUG(ws783): catch real (page/slot-changing) redirects.
+        let old_ptr = Arc::as_ptr(&inner.page) as usize;
+        let new_ptr = Arc::as_ptr(&new_page) as usize;
+        if old_ptr != new_ptr || inner.idx != new_idx {
+            warn!(
+                "REDIRECT: {:x}[{}] -> {:x}[{}]",
+                old_ptr, inner.idx, new_ptr, new_idx
+            );
+        }
         inner.page = new_page;
         inner.idx = new_idx;
     }
