@@ -1,0 +1,30 @@
+# C++ core-tests that intentionally have no Rust 1:1 port.
+#
+# These are host-threaded stress tests (std::thread / async_std) that
+# cannot run inside the no_std kernel test runner. The original Rust
+# ports were removed when the crate dropped its host-threading
+# dependencies; zCore-specific port stress coverage lives in
+# zircon-tests/src/port_stress_extra.rs.
+#
+# The C++ originals are exercised by the prebuilt
+# core-tests-standalone suite in the CI "Zircon Core Tests (x86_64)"
+# job: the current full run reports 1774 passed / 4 skipped with
+# PortStressTest absent from the skip list. (AGENTS.md's older
+# "known hangs: PortStressTest.*" note predates the current skip-list
+# state and is stale.)
+#
+# The audit excludes these from the missing-in-Rust check but reports
+# the count, and fails if any entry here also has a Rust counterpart
+# (keeping this list honest).
+PortStressTest.CancelKeyActiveObserverRace
+PortStressTest.CancelKeyCloseRace
+PortStressTest.CancelKeyDestructorReentersPortLock
+PortStressTest.CancelKeyDuringMatchRace
+PortStressTest.CancelKeyDuringRegistrationRace
+PortStressTest.CancelKeySharedKeyRace
+PortStressTest.ChannelCallWaitQueuePanicRepro
+PortStressTest.CloseWaitRace
+PortStressTest.MatchHandleCloseRace
+PortStressTest.QueuePacketAfterPortClosedConcurrentRace
+PortStressTest.SignalCloseWait
+PortStressTest.WaitSignalCancel
