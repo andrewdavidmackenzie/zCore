@@ -23,7 +23,7 @@ use spin::Mutex as SpinMutex;
 use zcore_fs::vfs::{FileSystem, INode};
 
 use zircon_object::{
-    object::{KernelObject, KoID, Signal},
+    object::{KernelObject, KoID, Observe, Signal, SignalHandler},
     signal::Futex,
     task::{Job, Process, Status},
     ZxResult,
@@ -103,16 +103,22 @@ impl ProcessExt for Process {
 
         // notify parent on terminated
         let parent = parent.clone();
-        new_proc.add_signal_callback(Box::new(move |signal| {
-            if signal.contains(Signal::PROCESS_TERMINATED) {
-                info!("Received signal: {:?}", signal);
+        new_proc.add_signal_callback(SignalHandler::permanent(
+            move |signal: Signal| {
+                if signal.contains(Signal::PROCESS_TERMINATED) {
+                    Observe::Yes
+                } else {
+                    Observe::No
+                }
+            },
+            move |_| {
+                info!("Received signal: PROCESS_TERMINATED");
                 // Set the Zircon object signal (wakes wait_child_any).
                 // This also wakes any thread blocked in poll/select
                 // via the signal callback mechanism.
                 parent.signal_set(Signal::SIGCHLD);
-            }
-            false
-        }));
+            },
+        ));
         Ok(new_proc)
     }
 }

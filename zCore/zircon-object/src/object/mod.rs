@@ -96,7 +96,7 @@
 
 use {
     crate::signal::*,
-    alloc::{boxed::Box, string::String, sync::Arc, vec::Vec},
+    alloc::{string::String, sync::Arc, vec::Vec},
     core::{
         fmt::Debug,
         future::Future,
@@ -313,27 +313,50 @@ impl KObjectBase {
 
     /// Change signal status: first `clear` then `set` indicated bits.
     ///
-    /// All signal callbacks will be called.
+    /// Handlers are checked under the lock; satisfied handlers' delivery
+    /// actions run after releasing it (one-shots are removed under the
+    /// lock; permanent handlers stay registered so no change is missed
+    /// during the delivery window). `RemoveOnly` handlers are removed
+    /// without delivery. Atomicity with registration is preserved by
+    /// the lock.
     pub fn signal_change(&self, clear: Signal, set: Signal) {
-        let mut inner = self.inner.lock();
-        let old_signal = inner.signal;
-        inner.signal.remove(clear);
-        inner.signal.insert(set);
-        let new_signal = inner.signal;
-        if new_signal == old_signal {
-            return;
-        }
-        // Fire callbacks in reverse (LIFO) order, matching Fuchsia's
-        // kernel behavior where the most recently registered observer
-        // is notified first. Use order-preserving `remove` so that
-        // surviving callbacks retain their relative order for future
-        // signal changes.
-        let mut i = inner.signal_callbacks.len();
-        while i > 0 {
-            i -= 1;
-            if inner.signal_callbacks[i](new_signal) {
-                drop(inner.signal_callbacks.remove(i));
+        // Collect delivery actions under the lock, scanning in reverse
+        // (LIFO) order matching Fuchsia's behavior where the most
+        // recently registered observer is notified first.
+        let (new_signal, to_fire) = {
+            let mut inner = self.inner.lock();
+            let old_signal = inner.signal;
+            inner.signal.remove(clear);
+            inner.signal.insert(set);
+            let new_signal = inner.signal;
+            if new_signal == old_signal {
+                return;
             }
+            let mut to_fire = Vec::new();
+            let mut i = inner.signal_callbacks.len();
+            while i > 0 {
+                i -= 1;
+                match inner.signal_callbacks[i].check(new_signal) {
+                    Observe::Yes => {
+                        let action = inner.signal_callbacks[i].fire_action_clone();
+                        if inner.signal_callbacks[i].is_oneshot() {
+                            inner.signal_callbacks.remove(i);
+                        }
+                        to_fire.push(action);
+                    }
+                    Observe::RemoveOnly => {
+                        inner.signal_callbacks.remove(i);
+                    }
+                    Observe::No => {}
+                }
+            }
+            (new_signal, to_fire)
+        };
+        // Deliver outside the lock. Permanent handlers were NOT
+        // removed above, so changes arriving during this window are
+        // still observed by them.
+        for action in to_fire {
+            action(new_signal);
         }
     }
 
@@ -355,20 +378,56 @@ impl KObjectBase {
 
     /// Add `callback` for signal status changes.
     ///
-    /// The `callback` is a function of `Fn(Signal) -> bool`.
-    /// It returns a bool indicating whether the handle process is over.
-    /// If true, the function will never be called again.
+    /// The handler's predicate is checked against the current signal
+    /// under the lock. An immediately-satisfied handler is delivered
+    /// as follows:
     ///
-    /// Enforces `MAX_SIGNAL_CALLBACKS` — silently drops the callback
-    /// if the limit is reached. Used by internal `wait_signal` paths
-    /// where the caller cannot propagate errors.
+    /// - **One-shot**: delivered OUTSIDE the lock. One-shot deliveries
+    ///   are token-guarded or idempotent (wakes, guarded port pushes),
+    ///   so a concurrent newer change cannot corrupt them. Firing
+    ///   under the lock would take nested locks (e.g. a port
+    ///   observer's push takes the port lock while holding the object
+    ///   lock — an ABBA against the port's own push path, which takes
+    ///   the port lock and then signals the object).
+    ///
+    /// - **Permanent**: delivered while still holding the lock, to
+    ///   preserve ordering with concurrent signal changes (a permanent
+    ///   observer's initial delivery must not be reordered after —
+    ///   and overwritten by — a newer change). Registration happens
+    ///   from task context only.
+    ///
+    /// A satisfied one-shot is not stored; a satisfied permanent
+    /// handler is stored AND delivered.
     pub fn add_signal_callback(&self, callback: SignalHandler) {
-        let mut inner = self.inner.lock();
-        // Check the callback immediately, in case that a signal arrives just before the call of
-        // `add_signal_callback` (since lock is acquired inside it) and the callback is not triggered
-        // in time.
-        if !callback(inner.signal) && inner.signal_callbacks.len() < Self::MAX_SIGNAL_CALLBACKS {
-            inner.signal_callbacks.push(callback);
+        let fire_now = {
+            let mut inner = self.inner.lock();
+            match callback.check(inner.signal) {
+                Observe::Yes => {
+                    let action = callback.fire_action_clone();
+                    let signal = inner.signal;
+                    if !callback.is_oneshot() {
+                        if inner.signal_callbacks.len() < Self::MAX_SIGNAL_CALLBACKS {
+                            inner.signal_callbacks.push(callback);
+                        }
+                        // Permanent: deliver under the lock (see above).
+                        action(signal);
+                        None
+                    } else {
+                        // One-shot: deliver outside the lock.
+                        Some((action, signal))
+                    }
+                }
+                Observe::RemoveOnly => None,
+                Observe::No => {
+                    if inner.signal_callbacks.len() < Self::MAX_SIGNAL_CALLBACKS {
+                        inner.signal_callbacks.push(callback);
+                    }
+                    None
+                }
+            }
+        };
+        if let Some((action, signal)) = fire_now {
+            action(signal);
         }
     }
 
@@ -393,13 +452,41 @@ impl KObjectBase {
     /// observer limit is reached. Atomically checks count and inserts
     /// under the same lock to prevent TOCTOU races. Used by
     /// `send_signal_to_port_async` (wait_async syscall).
+    ///
+    /// Delivery semantics match `add_signal_callback`: one-shots fire
+    /// outside the lock, permanents under it.
     pub fn try_add_signal_callback(&self, callback: SignalHandler) -> ZxResult {
-        let mut inner = self.inner.lock();
-        if !callback(inner.signal) {
-            if inner.signal_callbacks.len() >= Self::MAX_SIGNAL_CALLBACKS {
-                return Err(ZxError::NO_MEMORY);
+        let fire_now = {
+            let mut inner = self.inner.lock();
+            match callback.check(inner.signal) {
+                Observe::Yes => {
+                    let action = callback.fire_action_clone();
+                    let signal = inner.signal;
+                    if !callback.is_oneshot() {
+                        if inner.signal_callbacks.len() >= Self::MAX_SIGNAL_CALLBACKS {
+                            return Err(ZxError::NO_MEMORY);
+                        }
+                        inner.signal_callbacks.push(callback);
+                        // Permanent: deliver under the lock.
+                        action(signal);
+                        None
+                    } else {
+                        // One-shot: deliver outside the lock.
+                        Some((action, signal))
+                    }
+                }
+                Observe::RemoveOnly => None,
+                Observe::No => {
+                    if inner.signal_callbacks.len() >= Self::MAX_SIGNAL_CALLBACKS {
+                        return Err(ZxError::NO_MEMORY);
+                    }
+                    inner.signal_callbacks.push(callback);
+                    None
+                }
             }
-            inner.signal_callbacks.push(callback);
+        };
+        if let Some((action, signal)) = fire_now {
+            action(signal);
         }
         Ok(())
     }
@@ -432,17 +519,18 @@ impl dyn KernelObject {
                 // signal state: if the signal was set between our check
                 // above and the registration, the callback fires
                 // immediately and isn't stored, so we get re-polled.
-                self.object.add_signal_callback(Box::new({
-                    let signal = self.signal;
-                    let waker = cx.waker().clone();
+                let signal = self.signal;
+                let waker = cx.waker().clone();
+                self.object.add_signal_callback(SignalHandler::oneshot(
                     move |s| {
                         if (s & signal).is_empty() {
-                            return false;
+                            Observe::No
+                        } else {
+                            Observe::Yes
                         }
-                        waker.wake_by_ref();
-                        true
-                    }
-                }));
+                    },
+                    move |_| waker.wake_by_ref(),
+                ));
                 Poll::Pending
             }
         }
@@ -527,8 +615,11 @@ impl dyn KernelObject {
                     },
                     self.id(),
                 );
-                // Remove the subscription since we already fired.
-                port.cancel_async(self.id(), key).ok();
+                // Retire only OUR subscription (identified by its
+                // cancellation token) — key-wide cancellation here
+                // could kill a concurrently re-armed subscription for
+                // the same (source, key).
+                port.retire_async(self.id(), key, &cancelled);
                 return Ok(());
             }
         }
@@ -536,30 +627,38 @@ impl dyn KernelObject {
         // (skip immediate signal check) so the callback only fires on
         // future signal transitions.
         let cancelled_for_error = cancelled.clone();
-        let callback: SignalHandler = Box::new({
-            let port = port.clone();
-            let source_koid = self.id();
+        let source_koid = self.id();
+        let port = port.clone();
+        let callback = SignalHandler::oneshot(
+            // Predicate (pure, runs under the object lock): a cancelled
+            // observer is REMOVED WITHOUT DELIVERY — its delivery would
+            // re-enter the port lock, which the canceller may hold (a
+            // port observing its own queue). Otherwise, satisfied when
+            // the observed signal matches.
+            {
+                let cancelled = cancelled.clone();
+                move |s| {
+                    if cancelled.load(core::sync::atomic::Ordering::Relaxed) {
+                        Observe::RemoveOnly
+                    } else if (s & signal).is_empty() {
+                        Observe::No
+                    } else {
+                        Observe::Yes
+                    }
+                }
+            },
+            // Delivery (runs OUTSIDE the object lock): push the packet
+            // under the port lock. `push_if_not_cancelled` atomically
+            // re-checks the cancellation flag under the port lock,
+            // preventing the TOCTOU race where cancel_by_key drains
+            // the queue between the predicate check and the push.
             move |s| {
-                // Check cancellation before pushing. Use Relaxed here
-                // as a fast-path only; the definitive check is inside
-                // push_if_not_cancelled under the port lock.
-                if cancelled.load(core::sync::atomic::Ordering::Relaxed) {
-                    return true; // cancelled, remove callback
-                }
-                if (s & signal).is_empty() {
-                    return false;
-                }
                 let ts = if timestamp {
                     hal_impl::timer::timer_now().as_nanos() as u64
                 } else {
                     0
                 };
-                // Atomically check the cancellation flag and push under
-                // the port lock. This prevents the TOCTOU race where
-                // cancel_by_key drains the queue between our flag check
-                // and the push, allowing a packet to sneak through after
-                // cancellation.
-                if !port.push_if_not_cancelled(
+                if port.push_if_not_cancelled(
                     PortPacketRepr {
                         key,
                         status: ZxError::OK,
@@ -574,13 +673,15 @@ impl dyn KernelObject {
                     source_koid,
                     &cancelled,
                 ) {
-                    return true; // cancelled, remove callback
+                    // Retire ONLY this subscription (identified by its
+                    // cancellation token). Key-wide cancel_async here
+                    // would race with a consumer that dequeued the
+                    // packet and re-armed the same (source, key) with
+                    // a fresh subscription before this cleanup runs.
+                    port.retire_async(source_koid, key, &cancelled);
                 }
-                // Clean up subscription after one-shot delivery.
-                port.cancel_async(source_koid, key).ok();
-                true
-            }
-        });
+            },
+        );
         // Check observer limit before registering. The limit is
         // enforced inside add_signal_callback/add_signal_callback_deferred
         // as well, but we check here to return an error to the caller.
@@ -634,17 +735,18 @@ pub fn wait_signal_many(
             // callback may have been consumed by a signal that was
             // then cleared before we were re-polled.
             for (object, signal) in self.targets.iter() {
-                object.add_signal_callback(Box::new({
-                    let signal = *signal;
-                    let waker = cx.waker().clone();
-                    move |s| {
+                let signal = *signal;
+                let waker = cx.waker().clone();
+                object.add_signal_callback(SignalHandler::oneshot(
+                    move |s: Signal| {
                         if (s & signal).is_empty() {
-                            return false;
+                            Observe::No
+                        } else {
+                            Observe::Yes
                         }
-                        waker.wake_by_ref();
-                        true
-                    }
-                }));
+                    },
+                    move |_| waker.wake_by_ref(),
+                ));
             }
             Poll::Pending
         }
@@ -744,8 +846,95 @@ macro_rules! define_count_helper {
 /// The type of kernel object ID.
 pub type KoID = u64;
 
-/// The type of kernel object signal handler.
-pub type SignalHandler = Box<dyn Fn(Signal) -> bool + Send>;
+/// Result of evaluating a signal handler's predicate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Observe {
+    /// Not satisfied — the handler stays registered.
+    No,
+    /// Satisfied — the delivery action runs (outside the object lock
+    /// on the signal-change path) and a one-shot handler is removed.
+    Yes,
+    /// Remove the handler WITHOUT running its delivery action. Used
+    /// for cancelled observers whose delivery would re-enter a lock
+    /// held by the canceller (e.g. a port observing its own queue:
+    /// the queue update signals READABLE while holding the port
+    /// lock, and the delivery would try to take it again).
+    RemoveOnly,
+}
+
+/// A signal-change observer.
+///
+/// The handler is split into a pure **predicate** and a **delivery
+/// action** so that satisfaction can be checked while holding the
+/// object lock while the (side-effecting) delivery runs only OUTSIDE
+/// it on the signal-change path. This avoids nested locking from
+/// interrupt context: the timer IRQ signals objects (Timer, Port
+/// deadlines), and delivery actions wake tasks (WakerTarget lock +
+/// IPI) or push port packets (the port lock) — invoking those under
+/// the object lock is a lock-ordering hazard.
+///
+/// NOTE: the registration path (`add_signal_callback`) delivers an
+/// immediately-satisfied handler while still holding the lock, to
+/// preserve ordering with concurrent signal changes (an initial
+/// delivery must not be reordered after a newer change). Registration
+/// happens from task context only, so this does not reintroduce the
+/// interrupt-context hazard.
+pub struct SignalHandler {
+    /// Pure predicate: how does this handler respond to the signal?
+    /// Evaluated while holding the object lock — MUST NOT take locks
+    /// or have side effects.
+    observe: Arc<dyn Fn(Signal) -> Observe + Send + Sync>,
+    /// Delivery action, invoked with the signal that satisfied the
+    /// predicate. Runs outside the object lock on the signal-change
+    /// path; runs under it on the registration path (see NOTE above).
+    fire: Arc<dyn Fn(Signal) + Send + Sync>,
+    /// Remove the handler from the observer list after it fires.
+    oneshot: bool,
+}
+
+impl SignalHandler {
+    /// A handler that fires once and is removed.
+    pub fn oneshot(
+        observe: impl Fn(Signal) -> Observe + Send + Sync + 'static,
+        fire: impl Fn(Signal) + Send + Sync + 'static,
+    ) -> Self {
+        SignalHandler {
+            observe: Arc::new(observe),
+            fire: Arc::new(fire),
+            oneshot: true,
+        }
+    }
+
+    /// A handler that fires on every matching change and stays
+    /// registered.
+    pub fn permanent(
+        observe: impl Fn(Signal) -> Observe + Send + Sync + 'static,
+        fire: impl Fn(Signal) + Send + Sync + 'static,
+    ) -> Self {
+        SignalHandler {
+            observe: Arc::new(observe),
+            fire: Arc::new(fire),
+            oneshot: false,
+        }
+    }
+
+    /// Evaluate the predicate (pure — safe under the object lock).
+    fn check(&self, signal: Signal) -> Observe {
+        (self.observe)(signal)
+    }
+
+    /// Whether the handler is removed after firing.
+    fn is_oneshot(&self) -> bool {
+        self.oneshot
+    }
+
+    /// Clone the delivery action so it can be invoked independently
+    /// of the handler's storage (permanent handlers stay registered
+    /// while their action runs outside the lock).
+    fn fire_action_clone(&self) -> Arc<dyn Fn(Signal) + Send + Sync> {
+        self.fire.clone()
+    }
+}
 
 /// Empty kernel object. Just for test.
 pub struct DummyObject {
