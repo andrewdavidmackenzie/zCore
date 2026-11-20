@@ -341,6 +341,86 @@ async fn suspend_process() {
     as_kobject(&t2).wait_signal(Signal::THREAD_TERMINATED).await;
 }
 
+/// Issue #834 regression: suspend/resume/exit must not deadlock
+/// against concurrently terminating threads.
+///
+/// `Thread::terminate()` holds the thread lock while calling
+/// `Process::remove_thread` (process lock). `Process::suspend()`,
+/// `resume()` and `exit()` used to hold the process lock while
+/// calling `Thread::suspend()`/`resume()`/`kill()` (thread lock) —
+/// an ABBA pattern between two interrupt-disabling spinlocks. When
+/// a dying thread's `terminate()` raced a process suspend (the
+/// `ProcessTest.SuspendWithDyingThread` recipe: one thread exits
+/// while the process is suspended), both CPUs spun forever with
+/// interrupts disabled, freezing their executors: the test thread
+/// never returned from the suspend syscall, parked threads never
+/// received wake-ups, and the machine hung.
+///
+/// This test drives many rounds of that recipe — workers dying
+/// while the process is suspended, resumed, and exited. A regression
+/// hangs the test runner (the deadlock leaves the suspended workers'
+/// wakers unfired, so `PROCESS_TERMINATED` never arrives).
+async fn suspend_resume_race_with_dying_threads() {
+    helpers::ensure_hal_init();
+    const ROUNDS: usize = 30;
+    for _round in 0..ROUNDS {
+        let job = Job::root();
+        let proc = Process::create(&job, "race-proc").unwrap();
+        // Workers that terminate quickly; their `terminate()` →
+        // `remove_thread()` (thread lock → process lock) must be
+        // able to proceed while this task holds the process lock in
+        // suspend/resume/exit below.
+        let mut workers = alloc::vec::Vec::new();
+        for _ in 0..4 {
+            let t = Thread::create(&proc, "worker").unwrap();
+            t.start(helpers::test_loop_thread_fn).unwrap();
+            workers.push(t);
+        }
+        // Let the workers reach their run loops.
+        for _ in 0..2 {
+            hal_impl::thread::yield_now().await;
+        }
+        // Kill half the workers so their terminate() runs on other
+        // CPUs exactly while this CPU suspends/resumes the process —
+        // the SuspendWithDyingThread interleaving.
+        for t in &workers[..2] {
+            t.kill();
+        }
+        let token = {
+            let task: Arc<dyn Task> = proc.clone();
+            SuspendToken::create(&task)
+        };
+        // Wait for the survivors to actually park suspended, then
+        // resume (the suspend-token drop path) while the killed
+        // workers are still terminating.
+        for t in &workers[2..] {
+            as_kobject(t).wait_signal(Signal::THREAD_SUSPENDED).await;
+        }
+        drop(token);
+        for t in &workers[2..] {
+            as_kobject(t).wait_signal(Signal::THREAD_RUNNING).await;
+        }
+        // Exit races any terminate() still in flight: the kill loop
+        // must not spin on a thread lock held by a terminator waiting
+        // for this process's lock.
+        proc.exit(0);
+        // Every thread must terminate and the process must reach
+        // PROCESS_TERMINATED — a lost wake or deadlock makes this
+        // wait hang.
+        for t in &workers {
+            as_kobject(t).wait_signal(Signal::THREAD_TERMINATED).await;
+        }
+        as_kobject_proc(&proc)
+            .wait_signal(Signal::PROCESS_TERMINATED)
+            .await;
+    }
+}
+
+/// Helper: cast Arc<Process> to Arc<dyn KernelObject> for wait_signal.
+fn as_kobject_proc(proc: &Arc<Process>) -> Arc<dyn KernelObject> {
+    proc.clone()
+}
+
 /// Run all tests in this module.
 pub async fn run_all() {
     suspend_thread().await;
@@ -352,4 +432,5 @@ pub async fn run_all() {
     suspended_thread_state().await;
     write_state_while_suspended().await;
     suspend_process().await;
+    suspend_resume_race_with_dying_threads().await;
 }
