@@ -435,7 +435,7 @@ mod tests {
         let peer_closed = Arc::new(AtomicBool::new(false));
         channel0.add_signal_callback(SignalHandler::permanent(
             // Fire on every signal change.
-            |_| true,
+            |_| Observe::Yes,
             {
                 let readable = readable.clone();
                 let peer_closed = peer_closed.clone();

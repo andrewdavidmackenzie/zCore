@@ -113,6 +113,27 @@ impl Port {
         }
     }
 
+    /// Retire the single subscription identified by `token`, leaving
+    /// any other subscriptions for the same (source, key) — e.g. a
+    /// fresh re-arm by a consumer that already dequeued the packet —
+    /// intact.
+    ///
+    /// Called after one-shot delivery: key-wide `cancel_async` there
+    /// would race with a consumer that re-armed the same source and
+    /// key between the packet's enqueue and this cleanup, silently
+    /// cancelling the new subscription.
+    pub fn retire_async(&self, source_koid: KoID, key: u64, token: &Arc<AtomicBool>) {
+        let mut inner = self.inner.lock();
+        let mut remove_entry = false;
+        if let Some(flags) = inner.async_subscriptions.get_mut(&(source_koid, key)) {
+            flags.retain(|f| !Arc::ptr_eq(f, token));
+            remove_entry = flags.is_empty();
+        }
+        if remove_entry {
+            inner.async_subscriptions.remove(&(source_koid, key));
+        }
+    }
+
     /// Cancel async signal subscriptions AND drain queued signal packets.
     ///
     /// This is the full cancel used by `zx_port_cancel` — it removes
