@@ -380,31 +380,54 @@ impl KObjectBase {
     ///
     /// The handler's predicate is checked against the current signal
     /// under the lock. An immediately-satisfied handler is delivered
-    /// while still holding the lock — this preserves ordering with
-    /// concurrent signal changes (the initial delivery must not be
-    /// reordered after a newer change) and matches the pre-split
-    /// behavior. Registration happens from task context only, so the
-    /// under-lock delivery does not reintroduce the interrupt-context
-    /// hazard that `signal_change`'s out-of-lock delivery removes.
+    /// as follows:
+    ///
+    /// - **One-shot**: delivered OUTSIDE the lock. One-shot deliveries
+    ///   are token-guarded or idempotent (wakes, guarded port pushes),
+    ///   so a concurrent newer change cannot corrupt them. Firing
+    ///   under the lock would take nested locks (e.g. a port
+    ///   observer's push takes the port lock while holding the object
+    ///   lock — an ABBA against the port's own push path, which takes
+    ///   the port lock and then signals the object).
+    ///
+    /// - **Permanent**: delivered while still holding the lock, to
+    ///   preserve ordering with concurrent signal changes (a permanent
+    ///   observer's initial delivery must not be reordered after —
+    ///   and overwritten by — a newer change). Registration happens
+    ///   from task context only.
+    ///
     /// A satisfied one-shot is not stored; a satisfied permanent
     /// handler is stored AND delivered.
     pub fn add_signal_callback(&self, callback: SignalHandler) {
-        let mut inner = self.inner.lock();
-        match callback.check(inner.signal) {
-            Observe::Yes => {
-                (callback.fire_action_clone())(inner.signal);
-                if !callback.is_oneshot()
-                    && inner.signal_callbacks.len() < Self::MAX_SIGNAL_CALLBACKS
-                {
-                    inner.signal_callbacks.push(callback);
+        let fire_now = {
+            let mut inner = self.inner.lock();
+            match callback.check(inner.signal) {
+                Observe::Yes => {
+                    let action = callback.fire_action_clone();
+                    let signal = inner.signal;
+                    if !callback.is_oneshot() {
+                        if inner.signal_callbacks.len() < Self::MAX_SIGNAL_CALLBACKS {
+                            inner.signal_callbacks.push(callback);
+                        }
+                        // Permanent: deliver under the lock (see above).
+                        action(signal);
+                        None
+                    } else {
+                        // One-shot: deliver outside the lock.
+                        Some((action, signal))
+                    }
+                }
+                Observe::RemoveOnly => None,
+                Observe::No => {
+                    if inner.signal_callbacks.len() < Self::MAX_SIGNAL_CALLBACKS {
+                        inner.signal_callbacks.push(callback);
+                    }
+                    None
                 }
             }
-            Observe::RemoveOnly => {}
-            Observe::No => {
-                if inner.signal_callbacks.len() < Self::MAX_SIGNAL_CALLBACKS {
-                    inner.signal_callbacks.push(callback);
-                }
-            }
+        };
+        if let Some((action, signal)) = fire_now {
+            action(signal);
         }
     }
 
@@ -429,25 +452,41 @@ impl KObjectBase {
     /// observer limit is reached. Atomically checks count and inserts
     /// under the same lock to prevent TOCTOU races. Used by
     /// `send_signal_to_port_async` (wait_async syscall).
+    ///
+    /// Delivery semantics match `add_signal_callback`: one-shots fire
+    /// outside the lock, permanents under it.
     pub fn try_add_signal_callback(&self, callback: SignalHandler) -> ZxResult {
-        let mut inner = self.inner.lock();
-        match callback.check(inner.signal) {
-            Observe::Yes => {
-                (callback.fire_action_clone())(inner.signal);
-                if !callback.is_oneshot() {
+        let fire_now = {
+            let mut inner = self.inner.lock();
+            match callback.check(inner.signal) {
+                Observe::Yes => {
+                    let action = callback.fire_action_clone();
+                    let signal = inner.signal;
+                    if !callback.is_oneshot() {
+                        if inner.signal_callbacks.len() >= Self::MAX_SIGNAL_CALLBACKS {
+                            return Err(ZxError::NO_MEMORY);
+                        }
+                        inner.signal_callbacks.push(callback);
+                        // Permanent: deliver under the lock.
+                        action(signal);
+                        None
+                    } else {
+                        // One-shot: deliver outside the lock.
+                        Some((action, signal))
+                    }
+                }
+                Observe::RemoveOnly => None,
+                Observe::No => {
                     if inner.signal_callbacks.len() >= Self::MAX_SIGNAL_CALLBACKS {
                         return Err(ZxError::NO_MEMORY);
                     }
                     inner.signal_callbacks.push(callback);
+                    None
                 }
             }
-            Observe::RemoveOnly => {}
-            Observe::No => {
-                if inner.signal_callbacks.len() >= Self::MAX_SIGNAL_CALLBACKS {
-                    return Err(ZxError::NO_MEMORY);
-                }
-                inner.signal_callbacks.push(callback);
-            }
+        };
+        if let Some((action, signal)) = fire_now {
+            action(signal);
         }
         Ok(())
     }
