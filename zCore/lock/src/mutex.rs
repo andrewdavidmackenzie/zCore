@@ -1,7 +1,8 @@
 //! Kernel mutex: adaptive spin-then-yield mutex.
 //!
-//! This is the standard mutex for all kernel object state. It matches
-//! Fuchsia's `Mutex` / `CriticalMutex` semantics:
+//! This is the standard mutex for kernel object state that is only
+//! accessed from task context. It matches Fuchsia's `Mutex` /
+//! `CriticalMutex` semantics:
 //!
 //! 1. **Fast path**: Uncontended CAS acquire (single atomic).
 //! 2. **Spin phase**: Spin for ~150µs with `hint::spin_loop()`.
@@ -9,14 +10,10 @@
 //!    lock holder run, then retry.
 //!
 //! Unlike [`InterruptSpinLock`](crate::Mutex), this mutex does NOT
-//! disable interrupts. Interrupt handlers must not acquire a
-//! `KernelMutex`.
-//!
-//! # Lock ordering
-//!
-//! Each `KernelMutex` has an associated [`LockLevel`]. When the
-//! `lockdep` feature is enabled, the runtime checker verifies that
-//! locks are acquired in descending level order.
+//! disable interrupts — the holder may be preempted mid-critical-
+//! section (the executor resumes it via the weak-executor mechanism)
+//! and waiters yield instead of burning CPU. Interrupt handlers must
+//! NOT acquire a `KernelMutex` (see the lock-ordering work in #829).
 //!
 //! # Yield function
 //!
@@ -27,19 +24,12 @@
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::ops::{Deref, DerefMut};
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-
-use crate::lockdep::LockLevel;
-
-/// Maximum spin iterations before yielding.
-/// At ~1ns per iteration on a multi-GHz CPU, this is ~150µs — matching
-/// Fuchsia's `SPIN_MAX_DURATION = ZX_USEC(150)`.
-const SPIN_MAX_ITERS: u32 = 150_000;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 // ── Yield function registration ─────────────────────────────────────
 
 /// Stored yield function pointer. 0 = not set (pure spin).
-static YIELD_FN: AtomicUsize = AtomicUsize::new(0);
+static YIELD_FN: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
 /// Register the platform's yield function.
 ///
@@ -70,14 +60,17 @@ fn do_yield() {
 
 // ── KernelMutex ─────────────────────────────────────────────────────
 
+/// Maximum spin iterations before yielding.
+/// At ~1ns per iteration on a multi-GHz CPU, this is ~150µs — matching
+/// Fuchsia's `SPIN_MAX_DURATION = ZX_USEC(150)`.
+const SPIN_MAX_ITERS: u32 = 150_000;
+
 /// Adaptive kernel mutex: CAS → spin → yield.
 ///
 /// Does NOT disable interrupts. For interrupt-safe locks, use
 /// [`InterruptSpinLock`](crate::Mutex).
 pub struct KernelMutex<T: ?Sized> {
     locked: AtomicBool,
-    #[cfg_attr(not(feature = "lockdep"), allow(dead_code))]
-    level: LockLevel,
     data: UnsafeCell<T>,
 }
 
@@ -85,20 +78,10 @@ unsafe impl<T: ?Sized + Send> Send for KernelMutex<T> {}
 unsafe impl<T: ?Sized + Send> Sync for KernelMutex<T> {}
 
 impl<T> KernelMutex<T> {
-    /// Create a new unlocked mutex with `Unordered` lock level.
+    /// Create a new unlocked mutex.
     pub const fn new(val: T) -> Self {
         Self {
             locked: AtomicBool::new(false),
-            level: LockLevel::Unordered,
-            data: UnsafeCell::new(val),
-        }
-    }
-
-    /// Create a new unlocked mutex with a specific lock ordering level.
-    pub const fn new_with_level(val: T, level: LockLevel) -> Self {
-        Self {
-            locked: AtomicBool::new(false),
-            level,
             data: UnsafeCell::new(val),
         }
     }
@@ -118,12 +101,6 @@ impl<T: ?Sized> KernelMutex<T> {
     ///
     /// Does NOT disable interrupts.
     pub fn lock(&self) -> KernelMutexGuard<'_, T> {
-        #[cfg(feature = "lockdep")]
-        crate::lockdep::check_lock_order(self.level);
-
-        #[cfg(feature = "lockdep")]
-        let mut total_spins: u64 = 0;
-
         loop {
             // Fast path: try to acquire immediately.
             if self
@@ -131,8 +108,6 @@ impl<T: ?Sized> KernelMutex<T> {
                 .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
                 .is_ok()
             {
-                #[cfg(feature = "lockdep")]
-                crate::lockdep::on_lock_acquired(self.level);
                 return KernelMutexGuard { mutex: self };
             }
 
@@ -144,43 +119,21 @@ impl<T: ?Sized> KernelMutex<T> {
                 }
                 core::hint::spin_loop();
                 spins += 1;
-                #[cfg(feature = "lockdep")]
-                {
-                    total_spins += 1;
-                }
                 if spins >= SPIN_MAX_ITERS {
                     do_yield();
                     break;
                 }
-            }
-
-            #[cfg(feature = "lockdep")]
-            if total_spins == 100_000_000 {
-                let held = crate::lockdep::held_levels();
-                log::warn!(
-                    "LOCKDEP: possible deadlock! KernelMutex spinning on {:?} (level {}), \
-                     held_levels={:#04x}, total_spins={}",
-                    self.level,
-                    self.level as u8,
-                    held,
-                    total_spins,
-                );
             }
         }
     }
 
     /// Try to acquire the mutex without blocking.
     pub fn try_lock(&self) -> Option<KernelMutexGuard<'_, T>> {
-        #[cfg(feature = "lockdep")]
-        crate::lockdep::check_lock_order(self.level);
-
         if self
             .locked
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_ok()
         {
-            #[cfg(feature = "lockdep")]
-            crate::lockdep::on_lock_acquired(self.level);
             Some(KernelMutexGuard { mutex: self })
         } else {
             None
@@ -220,8 +173,6 @@ impl<T: ?Sized> DerefMut for KernelMutexGuard<'_, T> {
 
 impl<T: ?Sized> Drop for KernelMutexGuard<'_, T> {
     fn drop(&mut self) {
-        #[cfg(feature = "lockdep")]
-        crate::lockdep::on_lock_released(self.mutex.level);
         self.mutex.locked.store(false, Ordering::Release);
     }
 }

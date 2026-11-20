@@ -7,21 +7,19 @@ use core::{
 };
 
 use crate::interrupt::{pop_off, push_off};
-use crate::lockdep::LockLevel;
 
 /// Interrupt-disabling ticket spinlock.
 ///
 /// Disables interrupts on acquire, restores on drop. Use ONLY for
 /// locks that are accessed from interrupt handlers (timer, console,
-/// heap allocator). For kernel object state, use `KernelMutex` from
-/// `zircon-object::mutex` instead.
+/// heap allocator) or that must not be preempted while held. For
+/// kernel object state accessed only from task context, use
+/// `KernelMutex` instead (see #829).
 ///
 /// Re-exported as `lock::Mutex` for backward compatibility.
 pub struct InterruptSpinLock<T: ?Sized> {
     next_ticket: AtomicUsize,
     next_serving: AtomicUsize,
-    /// Lock ordering level for deadlock detection. See `lockdep.rs`.
-    level: LockLevel,
     data: UnsafeCell<T>,
 }
 
@@ -41,37 +39,18 @@ pub struct InterruptSpinLockGuard<'a, T: ?Sized + 'a> {
     data: &'a mut T,
     /// Whether interrupts were enabled before this lock was acquired.
     irq_was_enabled: bool,
-    /// Lock ordering level for tracking.
-    #[cfg_attr(not(feature = "lockdep"), allow(dead_code))]
-    level: LockLevel,
 }
 
 unsafe impl<T: ?Sized + Send> Sync for TicketMutex<T> {}
 unsafe impl<T: ?Sized + Send> Send for TicketMutex<T> {}
 
 impl<T> TicketMutex<T> {
-    /// Create a new mutex with `Unordered` lock level (no ordering checks).
+    /// Create a new mutex.
     #[inline(always)]
     pub const fn new(data: T) -> Self {
         TicketMutex {
             next_ticket: AtomicUsize::new(0),
             next_serving: AtomicUsize::new(0),
-            level: LockLevel::Unordered,
-            data: UnsafeCell::new(data),
-        }
-    }
-
-    /// Create a new mutex with a specific lock ordering level.
-    ///
-    /// The lock ordering checker will assert at runtime (debug builds)
-    /// that this lock is never acquired while holding a lock at the
-    /// same or lower level. See `lockdep.rs` for the level hierarchy.
-    #[inline(always)]
-    pub const fn new_with_level(data: T, level: LockLevel) -> Self {
-        TicketMutex {
-            next_ticket: AtomicUsize::new(0),
-            next_serving: AtomicUsize::new(0),
-            level,
             data: UnsafeCell::new(data),
         }
     }
@@ -89,58 +68,21 @@ impl<T> TicketMutex<T> {
 
 impl<T: ?Sized> TicketMutex<T> {
     pub fn lock(&self) -> InterruptSpinLockGuard<'_, T> {
-        #[cfg(feature = "lockdep")]
-        crate::lockdep::check_lock_order(self.level);
         let irq_was_enabled = push_off();
         let ticket = self.next_ticket.fetch_add(1, Ordering::Relaxed);
-        #[cfg(feature = "lockdep")]
-        {
-            /// Spin threshold before emitting a warning. ~100M iterations ≈
-            /// several seconds on a multi-GHz CPU — well beyond any
-            /// legitimate critical section.
-            const SPIN_WARN_THRESHOLD: u64 = 100_000_000;
-            let mut spins: u64 = 0;
-            while self.next_serving.load(Ordering::Acquire) != ticket {
-                core::hint::spin_loop();
-                spins += 1;
-                if spins == SPIN_WARN_THRESHOLD {
-                    let serving = self.next_serving.load(Ordering::Relaxed);
-                    let next = self.next_ticket.load(Ordering::Relaxed);
-                    let held = crate::lockdep::held_levels();
-                    log::warn!(
-                        "LOCKDEP: possible deadlock! Spinning on {:?} (level {}), \
-                         my_ticket={}, serving={}, next_ticket={}, \
-                         held_levels={:#04x}, spins={}",
-                        self.level,
-                        self.level as u8,
-                        ticket,
-                        serving,
-                        next,
-                        held,
-                        spins,
-                    );
-                }
-            }
-        }
-        #[cfg(not(feature = "lockdep"))]
         while self.next_serving.load(Ordering::Acquire) != ticket {
             core::hint::spin_loop();
         }
-        #[cfg(feature = "lockdep")]
-        crate::lockdep::on_lock_acquired(self.level);
         InterruptSpinLockGuard {
             next_serving: &self.next_serving,
             ticket,
             data: unsafe { &mut *self.data.get() },
             irq_was_enabled,
-            level: self.level,
         }
     }
 
     #[inline(always)]
     pub fn try_lock(&self) -> Option<InterruptSpinLockGuard<'_, T>> {
-        #[cfg(feature = "lockdep")]
-        crate::lockdep::check_lock_order(self.level);
         let irq_was_enabled = push_off();
         let ticket = self
             .next_ticket
@@ -152,14 +94,11 @@ impl<T: ?Sized> TicketMutex<T> {
                 }
             });
         if let Ok(ticket) = ticket {
-            #[cfg(feature = "lockdep")]
-            crate::lockdep::on_lock_acquired(self.level);
             Some(InterruptSpinLockGuard {
                 next_serving: &self.next_serving,
                 ticket,
                 data: unsafe { &mut *self.data.get() },
                 irq_was_enabled,
-                level: self.level,
             })
         } else {
             pop_off(irq_was_enabled);
@@ -181,8 +120,6 @@ impl<T: ?Sized> TicketMutex<T> {
 
 impl<'a, T: ?Sized> Drop for InterruptSpinLockGuard<'a, T> {
     fn drop(&mut self) {
-        #[cfg(feature = "lockdep")]
-        crate::lockdep::on_lock_released(self.level);
         let new_ticket = self.ticket + 1;
         self.next_serving.store(new_ticket, Ordering::Release);
         pop_off(self.irq_was_enabled);

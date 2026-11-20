@@ -233,6 +233,10 @@ pub fn primary_init() {
     let num = crate::config::MAX_CORE_NUM.min(255);
     let cpu_ids: alloc::vec::Vec<u8> = (0..num as u8).collect();
     executor::init_runtimes(&cpu_ids);
+    // Register the executor's context switch as the KernelMutex yield
+    // function so contending tasks yield to the lock holder instead of
+    // spinning (see #829). Must run after the runtimes exist.
+    lock::set_yield_fn(executor::sched_yield);
     executor::set_ipi_wakeup(|target_cpu| {
         let _ = crate::interrupt::send_ipi(target_cpu as usize, 0);
     });
