@@ -1067,6 +1067,14 @@ impl Thread {
         if let Some(killer) = inner.killer.take() {
             let _ = killer.send(());
         }
+        // Release the thread lock BEFORE taking the process lock in
+        // remove_thread: Process::exit/suspend/resume take the process
+        // lock and then call Thread::kill()/state() (thread lock), so
+        // holding both in this order is an ABBA cycle (the same edge
+        // #838 fixes from the process side; dropping the guard here
+        // removes it from the thread side too). Nothing after this
+        // point uses `inner`.
+        drop(inner);
         self.proc.remove_thread(self.base.id);
     }
 }

@@ -366,17 +366,33 @@ impl Job {
     /// child jobs (recursive).  Used by the thread sampler to enumerate
     /// all running threads in the system.
     pub fn get_all_threads(&self) -> Vec<Arc<Thread>> {
-        let inner = self.inner.lock();
+        // Snapshot the process/child lists under the lock, then
+        // release it before calling into Process (proc.threads() takes
+        // Process::inner). Holding Job.inner across that call inverts
+        // the order against Process::remove_thread, which holds
+        // Process.inner while calling Job::is_killed()/return_code()
+        // (Job.inner) — an ABBA cycle. Same pattern as
+        // total_cpu_time() above.
+        let (processes, children) = {
+            let inner = self.inner.lock();
+            (
+                inner
+                    .processes
+                    .iter()
+                    .filter_map(|p| p.upgrade())
+                    .collect::<Vec<_>>(),
+                inner
+                    .children
+                    .iter()
+                    .filter_map(|j| j.upgrade())
+                    .collect::<Vec<_>>(),
+            )
+        };
         let mut threads = Vec::new();
-        for proc_weak in &inner.processes {
-            if let Some(proc) = proc_weak.upgrade() {
-                threads.extend(proc.threads());
-            }
+        for proc in &processes {
+            threads.extend(proc.threads());
         }
-        // Collect from child jobs — drop lock first to avoid deadlock.
-        let children: Vec<Arc<Job>> = inner.children.iter().filter_map(|j| j.upgrade()).collect();
-        drop(inner);
-        for child in children {
+        for child in &children {
             threads.extend(child.get_all_threads());
         }
         threads
