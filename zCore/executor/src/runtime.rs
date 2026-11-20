@@ -76,7 +76,11 @@ impl ExecutorRuntime {
     }
 
     // Add a task. Its initial state is notified, meaning it is ready to execute.
-    fn add_task<F: Future<Output = ()> + 'static + Send>(&self, priority: usize, future: F) -> Key {
+    fn add_task<F: Future<Output = ()> + 'static + Send>(
+        &self,
+        priority: usize,
+        future: F,
+    ) -> (Key, usize) {
         debug_assert!(priority < MAX_PRIORITY);
         self.task_collection.priority_add_task(priority, future)
     }
@@ -119,6 +123,29 @@ static CPU_RUNTIMES: spin::Once<hashbrown::HashMap<u8, Mutex<ExecutorRuntime>>> 
 /// sched_yield).
 static CPU_TASK_COLLECTIONS: spin::Once<hashbrown::HashMap<u8, Arc<TaskCollection>>> =
     spin::Once::new();
+
+/// Global shutdown request, set by the kernel's shutdown path (the
+/// `run_executor` wrapper once its future completes). Checked by
+/// `run_until_idle`'s loop so the caller regains control even while
+/// this CPU still has parked tasks: the loop otherwise spins inside
+/// the executor's idle hlt until every task is gone, and a task whose
+/// wake-up was lost (an issue #834 zombie) parks forever, hanging
+/// shutdown.
+static SHUTDOWN_REQUESTED: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
+/// Request that all CPUs' `run_until_idle` loops return to their
+/// callers. Called by `run_executor` when its wrapped future
+/// completes (the init process exited — the machine is shutting
+/// down).
+pub fn request_shutdown() {
+    SHUTDOWN_REQUESTED.store(true, core::sync::atomic::Ordering::Release);
+}
+
+/// Whether shutdown has been requested.
+pub fn shutdown_requested() -> bool {
+    SHUTDOWN_REQUESTED.load(core::sync::atomic::Ordering::Acquire)
+}
 
 /// Initialize executor runtimes for a set of CPU IDs.
 /// Called once by the BSP during boot, before any AP starts using the executor.
@@ -185,20 +212,37 @@ pub(crate) fn steal_task_from_other_cpu_into(dest: &Arc<TaskCollection>) -> Opti
     None
 }
 
-/// Force-notify a task's waker slot on its owning CPU, re-firing a
-/// potentially lost wake-up. Safe to call from any CPU.
+/// Force-notify a task's waker slot, re-firing a potentially lost
+/// wake-up. Safe to call from any CPU.
 ///
 /// Used at process exit so shutdown does not depend on every kill
 /// wake-up having been delivered (see the exit sweep in
 /// `Process::exit`).
-pub fn force_wake_task(cpu_id: u8, key: usize) {
+///
+/// The saved `(cpu_id, key)` from `spawn_with_priority` can go
+/// stale when work stealing migrates the task to another CPU (the
+/// old slot is cleared and recycled). The task id disambiguates:
+/// if the slot no longer holds that task, every collection is
+/// searched for the id and the task is woken where it lives now.
+/// A spurious re-notify is harmless: the task is simply polled
+/// once more and re-parks if its wait is not satisfied.
+pub fn force_wake_task(cpu_id: u8, key: usize, task_id: usize) {
     let Some(map) = CPU_TASK_COLLECTIONS.get() else {
         return;
     };
     let Some(tc) = map.get(&cpu_id) else {
         return;
     };
-    tc.force_notify(key);
+    if tc.force_notify_verified(key, task_id) {
+        return;
+    }
+    // Stale location (e.g. the task was migrated and the slot
+    // recycled): find the task by id and wake it where it is now.
+    for (_, other) in map.iter() {
+        if other.force_notify_by_id(task_id) {
+            return;
+        }
+    }
 }
 
 /// Get the local CPU's task collection for accepting stolen tasks.
@@ -237,6 +281,15 @@ pub fn run_until_idle() -> bool {
             drop(runtime);
             crate::arch::intr_on();
             return false;
+        }
+        // When shutdown is requested, return to the caller even if
+        // tasks remain: the caller (run_executor) is shutting the
+        // machine down and must not wait for parked tasks whose
+        // wake-ups may never arrive.
+        if shutdown_requested() {
+            drop(runtime);
+            crate::arch::intr_on();
+            return true;
         }
         // When the strong executor was preempted mid-poll (holding
         // kernel locks, etc.), demote it to a weak executor and create
@@ -299,14 +352,15 @@ pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
 /// Uses the least-loaded CPU for load-balancing when multiple CPUs
 /// are available. Falls back to current CPU if the executor hasn't
 /// been initialized yet (early boot).
-/// Spawn a future with a specific priority, distributed across CPUs.
 ///
-/// Returns `(task_key, cpu_id)` so the caller can later change the
-/// task's priority via `change_task_priority`.
+/// Returns `(task_key, cpu_id, task_id)` so the caller can later
+/// change the task's priority via `change_task_priority` and
+/// force-wake it via `force_wake_task` (the task id makes the wake
+/// robust to work-stealing migration).
 pub fn spawn_with_priority(
     future: impl Future<Output = ()> + Send + 'static,
     priority: usize,
-) -> (Key, u8) {
+) -> (Key, u8, usize) {
     let enable = crate::arch::intr_get();
     if enable {
         crate::arch::intr_off();
@@ -332,12 +386,12 @@ pub fn spawn_with_priority(
 /// Default priority: DEFAULT_PRIORITY
 /// Default CPU: the one with fewest tasks
 ///
-/// Returns `(task_key, cpu_id)`.
+/// Returns `(task_key, cpu_id, task_id)`.
 pub fn spawn_task(
     future: impl Future<Output = ()> + Send + 'static,
     priority: Option<usize>,
     cpu_id: Option<u8>,
-) -> (Key, u8) {
+) -> (Key, u8, usize) {
     debug!("try to spawn {:?} cpu_id={:?}", priority, cpu_id);
     let priority = priority.unwrap_or(DEFAULT_PRIORITY);
     // Disable interrupts while holding runtime locks. The timer
@@ -369,7 +423,7 @@ pub fn spawn_task(
             (best_rt, *best_cpu)
         }
     };
-    let key = runtime.lock().add_task(priority, future);
+    let (key, task_id) = runtime.lock().add_task(priority, future);
     if enable {
         crate::arch::intr_on();
     }
@@ -378,7 +432,7 @@ pub fn spawn_task(
     // Without this, a halted CPU won't poll the task until its
     // next timer interrupt (~10ms), causing WaitForBlocked timeouts.
     crate::ipi_wakeup(actual_cpu);
-    (key, actual_cpu)
+    (key, actual_cpu, task_id)
 }
 
 /// Change the scheduling priority of a task identified by its key on

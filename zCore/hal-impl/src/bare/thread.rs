@@ -143,7 +143,7 @@ hal_fn_impl! {
             executor::spawn(future);
         }
 
-        fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) -> (usize, u8) {
+        fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) -> (usize, u8, usize) {
             executor::spawn_with_priority(future, priority)
         }
 
@@ -151,8 +151,8 @@ hal_fn_impl! {
             executor::change_task_priority(cpu_id, task_key, new_priority);
         }
 
-        fn force_wake_task(cpu_id: u8, task_key: usize) {
-            executor::force_wake_task(cpu_id, task_key);
+        fn force_wake_task(cpu_id: u8, task_key: usize, task_id: usize) {
+            executor::force_wake_task(cpu_id, task_key, task_id);
         }
 
         fn set_current_thread(thread: Option<Arc<dyn Any + Send + Sync>>) {

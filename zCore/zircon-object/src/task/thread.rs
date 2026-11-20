@@ -207,10 +207,13 @@ struct ThreadInner {
     /// Default: all online CPUs (bit 0 for single-CPU).
     /// Set via `zx_object_set_profile()` with CPU_MASK flag.
     cpu_affinity_mask: [u64; 8],
-    /// Executor task key and CPU ID, set when the thread is started.
-    /// Used to update the scheduler when priority changes at runtime.
-    /// `None` before `start()` or after `terminate()`.
-    task_sched: Option<(usize, u8)>,
+    /// Executor task identifiers `(task_key, cpu_id, task_id)`, set
+    /// when the thread is started. `task_key`/`cpu_id` address the
+    /// task for priority changes; `task_id` additionally makes the
+    /// process-exit force-wake robust to work-stealing migration (a
+    /// migrated task's saved slot goes stale, but its id still
+    /// resolves it). `None` before `start()` or after `terminate()`.
+    task_sched: Option<(usize, u8, usize)>,
 }
 
 impl ThreadInner {
@@ -439,7 +442,7 @@ impl Thread {
             inner.time_slice_ns = priority_to_time_slice_ns(effective);
             (effective, inner.task_sched)
         };
-        if let Some((task_key, task_cpu)) = task_sched {
+        if let Some((task_key, task_cpu, _)) = task_sched {
             hal_impl::thread::change_task_priority(task_cpu, task_key, effective);
         }
     }
@@ -458,7 +461,7 @@ impl Thread {
             inner.deadline_params = Some(params);
             inner.task_sched
         };
-        if let Some((task_key, task_cpu)) = task_sched {
+        if let Some((task_key, task_cpu, _)) = task_sched {
             hal_impl::thread::change_task_priority(task_cpu, task_key, 31);
         }
     }
@@ -487,7 +490,7 @@ impl Thread {
             inner.time_slice_ns = priority_to_time_slice_ns(effective);
             (effective, inner.task_sched, inner.blocking_futex_addr)
         };
-        if let Some((task_key, task_cpu)) = task_sched {
+        if let Some((task_key, task_cpu, _)) = task_sched {
             hal_impl::thread::change_task_priority(task_cpu, task_key, new_effective);
         }
         // Transitive priority inheritance: if this thread is blocked
@@ -531,7 +534,7 @@ impl Thread {
                 inner.time_slice_ns = priority_to_time_slice_ns(eff);
                 (eff, inner.task_sched, inner.blocking_futex_addr)
             };
-            if let Some((task_key, task_cpu)) = task_sched {
+            if let Some((task_key, task_cpu, _)) = task_sched {
                 hal_impl::thread::change_task_priority(task_cpu, task_key, effective);
             }
             current_addr = next_addr;
@@ -634,10 +637,25 @@ impl Thread {
         inner.context_before.take()
     }
 
-    /// Get this thread's executor task identifiers `(task_key, cpu_id)`,
-    /// if it has been started. Used to re-fire wake-ups at process exit.
-    pub fn task_sched(&self) -> Option<(usize, u8)> {
+    /// Get this thread's executor task identifiers
+    /// `(task_key, cpu_id, task_id)`, if it has been started. Used to
+    /// re-fire wake-ups at process exit (the task id resolves the task
+    /// even after a work-stealing migration).
+    pub fn task_sched(&self) -> Option<(usize, u8, usize)> {
         self.inner.lock().task_sched
+    }
+
+    /// Whether this thread has (or is about to have) a live executor
+    /// task: the state leaves `New` before `Thread::start` spawns the
+    /// task, and `task_sched` is set once the spawn returns. Used by
+    /// `Process::exit` to decide which threads can never call
+    /// `remove_thread` themselves: a thread that is mid-`start` has a
+    /// (runnable) task even though `task_sched` is not yet published,
+    /// so it must stay registered for the kill (its task observes
+    /// `Dying` when polled) rather than being retained away.
+    pub fn has_live_task(&self) -> bool {
+        let inner = self.inner.lock();
+        inner.task_sched.is_some() || inner.state != ThreadState::New
     }
 
     /// Start execution on the thread.
@@ -651,7 +669,7 @@ impl Thread {
         let current = CurrentThread(self.clone());
         let future = thread_fn(current);
 
-        let (task_key, task_cpu) = hal_impl::thread::spawn_with_priority(
+        let (task_key, task_cpu, task_id) = hal_impl::thread::spawn_with_priority(
             ThreadSwitchFuture::new(self.clone(), future),
             priority,
         );
@@ -661,7 +679,7 @@ impl Thread {
         // old priority. Re-apply the effective priority under the lock.
         {
             let mut inner = self.inner.lock();
-            inner.task_sched = Some((task_key, task_cpu));
+            inner.task_sched = Some((task_key, task_cpu, task_id));
             let effective = inner.priority.max(inner.inherited_priority);
             if effective != priority {
                 hal_impl::thread::change_task_priority(task_cpu, task_key, effective);
@@ -906,7 +924,7 @@ impl Thread {
     /// Returns 0xFFFFFFFF if the thread hasn't been started yet.
     pub fn last_cpu(&self) -> u32 {
         let inner = self.inner.lock();
-        let Some((_, cpu)) = inner.task_sched else {
+        let Some((_, cpu, _)) = inner.task_sched else {
             return 0xFFFF_FFFFu32;
         };
         // Report the affinity-adjusted CPU: the executor task is not

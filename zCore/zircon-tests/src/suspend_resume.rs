@@ -341,6 +341,9 @@ async fn suspend_process() {
     as_kobject(&t2).wait_signal(Signal::THREAD_TERMINATED).await;
 }
 
+/// C++: TEST(ProcessTest, SuspendWithDyingThread) — recipe; this is a
+/// zCore-original stress regression test for issue #834.
+///
 /// Issue #834 regression: suspend/resume/exit must not deadlock
 /// against concurrently terminating threads.
 ///
