@@ -645,6 +645,19 @@ impl Thread {
         self.inner.lock().task_sched
     }
 
+    /// Whether this thread has (or is about to have) a live executor
+    /// task: the state leaves `New` before `Thread::start` spawns the
+    /// task, and `task_sched` is set once the spawn returns. Used by
+    /// `Process::exit` to decide which threads can never call
+    /// `remove_thread` themselves: a thread that is mid-`start` has a
+    /// (runnable) task even though `task_sched` is not yet published,
+    /// so it must stay registered for the kill (its task observes
+    /// `Dying` when polled) rather than being retained away.
+    pub fn has_live_task(&self) -> bool {
+        let inner = self.inner.lock();
+        inner.task_sched.is_some() || inner.state != ThreadState::New
+    }
+
     /// Start execution on the thread.
     pub fn start(self: &Arc<Self>, thread_fn: ThreadFn) -> ZxResult {
         let priority = {

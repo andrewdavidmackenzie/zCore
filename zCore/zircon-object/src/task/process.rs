@@ -382,20 +382,23 @@ impl Process {
             let kill_threads: Vec<Arc<super::Thread>> =
                 inner.threads.iter().filter_map(|t| t.upgrade()).collect();
             drop(inner);
-            // A thread without a live executor task (`task_sched` is
-            // `None`: never started, or `terminate()` already ran)
-            // can never call `remove_thread` itself, so it must be
-            // removed from the list here. Classify by that lifecycle
-            // rather than `state()`: a started thread suspended before
-            // its first poll reports `Suspended`, and a started thread
-            // still inside `Thread::start` reports `Running` — both
-            // have tasks and must stay registered for the sweep.
-            // Threads that finished terminating while we collected
-            // are also `None`; they already left the list, so the
-            // retain below is a no-op for them.
+            // A thread without a live executor task can never call
+            // `remove_thread` itself, so it must be removed from the
+            // list here. Classify by the task lifecycle (`has_live_task`:
+            // `task_sched` published, or the state already left `New`
+            // because `Thread::start` is mid-spawn) rather than the
+            // effective suspend state: a started thread suspended
+            // before its first poll reports `Suspended`, and a thread
+            // still inside `Thread::start` has a runnable task even
+            // though `task_sched` is not yet published — both must
+            // stay registered for the kill and sweep. Threads that
+            // finished terminating while we collected (state Dead,
+            // `task_sched` cleared) also report a live task here, but
+            // they already left the list, so the retain below is a
+            // no-op for them.
             let unstarted: Vec<KoID> = kill_threads
                 .iter()
-                .filter(|t| t.task_sched().is_none())
+                .filter(|t| !t.has_live_task())
                 .map(|t| t.id())
                 .collect();
             for t in &kill_threads {
