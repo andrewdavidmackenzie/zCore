@@ -3,7 +3,7 @@ use {
     alloc::collections::VecDeque,
     alloc::sync::{Arc, Weak},
     bitflags::bitflags,
-    lock::Mutex,
+    lock::KernelMutex,
 };
 
 /// Bidirectional streaming IPC transport.
@@ -18,7 +18,7 @@ pub struct Socket {
     /// Cached peer KOID, set at creation time. Survives peer closure.
     peer_koid: KoID,
     flags: SocketFlags, // constant value
-    inner: Mutex<SocketInner>,
+    inner: KernelMutex<SocketInner>,
 }
 
 #[derive(Default)]
@@ -116,6 +116,34 @@ impl Socket {
     /// insufficient space for *data*, it writes nothing and returns
     /// **ZxError::SHOULD_WAIT**. Attempting to write a packet larger than the datagram socket's
     /// capacity will fail with **ZxError::OUT_OF_RANGE**.
+    /// Lock both endpoints of a socket pair in a consistent order.
+    ///
+    /// Operations that inspect both endpoints (write/read threshold
+    /// updates, get_info) hold both `inner` locks at once, and
+    /// concurrent operations on opposite endpoints (e.g. one task
+    /// writing from X while another reads at X) would form an ABBA
+    /// cycle without a shared acquisition order. Lock the
+    /// lower-addressed endpoint first — the same sorted-order pattern
+    /// used by futex requeue and zcore-ramfs `lock_multiple`.
+    fn lock_endpoint_pair<'a>(
+        a: &'a Socket,
+        b: &'a Socket,
+    ) -> (
+        lock::KernelMutexGuard<'a, SocketInner>,
+        lock::KernelMutexGuard<'a, SocketInner>,
+    ) {
+        let a_first = (a as *const Socket as usize) < (b as *const Socket as usize);
+        if a_first {
+            let a_guard = a.inner.lock();
+            let b_guard = b.inner.lock();
+            (a_guard, b_guard)
+        } else {
+            let b_guard = b.inner.lock();
+            let a_guard = a.inner.lock();
+            (a_guard, b_guard)
+        }
+    }
+
     pub fn write(&self, data: &[u8]) -> ZxResult<usize> {
         if self.base.signal().contains(Signal::SOCKET_WRITE_DISABLED) {
             return Err(ZxError::BAD_STATE);
@@ -124,8 +152,7 @@ impl Socket {
         let actual_count = peer.write_data(data)?;
         if actual_count > 0 {
             let mut clear = Signal::empty();
-            let peer_inner = peer.inner.lock();
-            let inner = self.inner.lock();
+            let (peer_inner, inner) = Socket::lock_endpoint_pair(&peer, self);
             let peer_rest_size = SOCKET_SIZE - peer_inner.data.len();
             if peer_rest_size == 0 {
                 clear |= Signal::WRITABLE;
@@ -222,18 +249,20 @@ impl Socket {
             self.read_stream(data, peek)?
         };
         if !peek && actual_count > 0 {
-            let inner = self.inner.lock();
-            let mut clear = Signal::empty();
-            if inner.read_threshold > 0 && inner.data.len() < inner.read_threshold {
-                clear |= Signal::SOCKET_READ_THRESHOLD;
-            }
-            if inner.data.is_empty() {
-                clear |= Signal::READABLE;
-            }
-            self.base.signal_clear(clear);
-            if let Ok(peer) = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED) {
+            if let Some(peer) = self.peer.upgrade() {
+                // Hold both endpoint locks in a consistent order (see
+                // lock_endpoint_pair) — the peer's write-threshold
+                // update reads both sides.
+                let (inner, peer_inner) = Socket::lock_endpoint_pair(self, &peer);
+                let mut clear = Signal::empty();
+                if inner.read_threshold > 0 && inner.data.len() < inner.read_threshold {
+                    clear |= Signal::SOCKET_READ_THRESHOLD;
+                }
+                if inner.data.is_empty() {
+                    clear |= Signal::READABLE;
+                }
+                self.base.signal_clear(clear);
                 let mut set = Signal::empty();
-                let peer_inner = peer.inner.lock();
                 if peer_inner.write_threshold > 0
                     && SOCKET_SIZE - inner.data.len() >= peer_inner.write_threshold
                 {
@@ -243,6 +272,17 @@ impl Socket {
                     set |= Signal::WRITABLE;
                 }
                 peer.base.signal_set(set);
+            } else {
+                // Peer closed — no cross-endpoint updates needed.
+                let inner = self.inner.lock();
+                let mut clear = Signal::empty();
+                if inner.read_threshold > 0 && inner.data.len() < inner.read_threshold {
+                    clear |= Signal::SOCKET_READ_THRESHOLD;
+                }
+                if inner.data.is_empty() {
+                    clear |= Signal::READABLE;
+                }
+                self.base.signal_clear(clear);
             }
         }
         Ok(actual_count)
@@ -288,27 +328,43 @@ impl Socket {
 
     /// Get information of the socket.
     pub fn get_info(&self) -> SocketInfo {
-        let inner = self.inner.lock();
-        let self_size = inner.data.len();
-        let rx_buf_available = if self.flags.contains(SocketFlags::DATAGRAM) {
-            *inner.datagram_len.front().unwrap_or(&0)
-        } else {
-            self_size
-        };
-        let mut info = SocketInfo {
-            options: self.flags.bits() as _,
-            padding1: 0,
-            rx_buf_max: SOCKET_SIZE as _,
-            rx_buf_size: self_size as _,
-            rx_buf_available: rx_buf_available as _,
-            tx_buf_max: 0,
-            tx_buf_size: 0,
-        };
         if let Some(peer) = self.peer.upgrade() {
-            info.tx_buf_size = peer.inner.lock().data.len() as u64;
-            info.tx_buf_max = SOCKET_SIZE as u64;
-        };
-        info
+            // Hold both endpoint locks in a consistent order (see
+            // lock_endpoint_pair).
+            let (inner, peer_inner) = Socket::lock_endpoint_pair(self, &peer);
+            let self_size = inner.data.len();
+            let rx_buf_available = if self.flags.contains(SocketFlags::DATAGRAM) {
+                *inner.datagram_len.front().unwrap_or(&0)
+            } else {
+                self_size
+            };
+            SocketInfo {
+                options: self.flags.bits() as _,
+                padding1: 0,
+                rx_buf_max: SOCKET_SIZE as _,
+                rx_buf_size: self_size as _,
+                rx_buf_available: rx_buf_available as _,
+                tx_buf_max: SOCKET_SIZE as u64,
+                tx_buf_size: peer_inner.data.len() as u64,
+            }
+        } else {
+            let inner = self.inner.lock();
+            let self_size = inner.data.len();
+            let rx_buf_available = if self.flags.contains(SocketFlags::DATAGRAM) {
+                *inner.datagram_len.front().unwrap_or(&0)
+            } else {
+                self_size
+            };
+            SocketInfo {
+                options: self.flags.bits() as _,
+                padding1: 0,
+                rx_buf_max: SOCKET_SIZE as _,
+                rx_buf_size: self_size as _,
+                rx_buf_available: rx_buf_available as _,
+                tx_buf_max: 0,
+                tx_buf_size: 0,
+            }
+        }
     }
 
     /// Prevent reading or writing.

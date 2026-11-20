@@ -2,7 +2,7 @@ use {
     crate::object::*,
     alloc::collections::VecDeque,
     alloc::sync::{Arc, Weak},
-    lock::Mutex,
+    lock::KernelMutex,
 };
 
 /// First-In First-Out inter-process queue.
@@ -22,7 +22,7 @@ pub struct Fifo {
     peer_koid: KoID,
     elem_count: usize,
     elem_size: usize,
-    recv_queue: Mutex<VecDeque<u8>>,
+    recv_queue: KernelMutex<VecDeque<u8>>,
 }
 
 impl_kobject!(Fifo
@@ -45,7 +45,7 @@ impl Fifo {
             peer_koid: 0,
             elem_count,
             elem_size,
-            recv_queue: Mutex::new(VecDeque::with_capacity(elem_count * elem_size)),
+            recv_queue: KernelMutex::new(VecDeque::with_capacity(elem_count * elem_size)),
         });
         let end1 = Arc::new(Fifo {
             base: KObjectBase::with_signal(Signal::WRITABLE),
@@ -53,7 +53,7 @@ impl Fifo {
             peer_koid: end0.id(),
             elem_count,
             elem_size,
-            recv_queue: Mutex::new(VecDeque::with_capacity(elem_count * elem_size)),
+            recv_queue: KernelMutex::new(VecDeque::with_capacity(elem_count * elem_size)),
         });
         // SAFETY: end0 was just created with strong_count=1.
         // We need to set the peer and peer_koid before returning.
