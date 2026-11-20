@@ -131,8 +131,10 @@ impl FutureCollection {
 
     /// Insert a future into our scheduler returning an integer key representing this future. This
     /// key is used to index into the slab for accessing the future.
-    pub fn insert<F: Future<Output = ()> + 'static + Send>(&mut self, future: F) -> Key {
-        let key = self.slab.insert(Arc::new(Task::new(future, self.priority)));
+    pub fn insert<F: Future<Output = ()> + 'static + Send>(&mut self, future: F) -> (Key, usize) {
+        let task = Arc::new(Task::new(future, self.priority));
+        let task_id = task.id();
+        let key = self.slab.insert(task);
         // Add a new page to hold this future's status if the current page is filled.
         while key >= self.pages.len() * WAKER_PAGE_SIZE {
             self.pages.push(WakerPage::new_for_cpu(self.owner_cpu));
@@ -140,7 +142,7 @@ impl FutureCollection {
         let (page, subpage_idx) = self.page(key);
         page.initialize(subpage_idx);
         // self.vec.push_back(key);
-        key
+        (key, task_id)
     }
 
     /// Insert an existing `Arc<Task>` (e.g., one stolen from another CPU).
@@ -209,7 +211,7 @@ impl TaskCollection {
     }
 
     /// Insert a Future with DEFAULT_PRIORITY.
-    pub fn add_task<F: Future<Output = ()> + 'static + Send>(&self, future: F) -> usize {
+    pub fn add_task<F: Future<Output = ()> + 'static + Send>(&self, future: F) -> (usize, usize) {
         self.priority_add_task(DEFAULT_PRIORITY, future)
     }
 
@@ -228,7 +230,7 @@ impl TaskCollection {
         &self,
         priority: usize,
         future: F,
-    ) -> Key {
+    ) -> (Key, usize) {
         debug_assert!(
             priority < MAX_PRIORITY,
             "priority {} >= MAX {}",
@@ -238,12 +240,12 @@ impl TaskCollection {
         // Lock ordering: sched_state first, then future_collections
         // (same as scan_notifications to avoid deadlock).
         let mut sched = self.sched_state.lock();
-        let key = self.future_collections[priority].lock().insert(future);
+        let (key, task_id) = self.future_collections[priority].lock().insert(future);
         debug_assert!(key < TASK_NUM_PER_PRIORITY);
         let full_key = key | (priority << PRIORITY_SHIFT);
         crate::sched::on_task_added(&mut sched, full_key, priority);
         self.task_num.fetch_add(1, Ordering::Relaxed);
-        full_key
+        (full_key, task_id)
     }
 
     fn get_mut_inner(&self, priority: usize) -> MutexGuard<'_, FutureCollection> {
@@ -445,16 +447,19 @@ impl TaskCollection {
     }
 
     /// Force-set the notified bit for `key`'s waker slot and IPI this
-    /// collection's CPU. Safe to call from any CPU.
+    /// collection's CPU, after verifying the slot still holds
+    /// `task_id`. Returns `false` if the slot holds a different task
+    /// (stale key, e.g. after a work-stealing migration recycled it)
+    /// or the task is gone.
     ///
     /// Used at process exit to re-fire kill wake-ups that may have
     /// been lost, so shutdown never depends on perfect wake delivery.
     /// A spurious re-notify is harmless: the task is simply polled
     /// once more and re-parks if its wait is not satisfied.
-    pub fn force_notify(&self, key: Key) {
+    pub fn force_notify_verified(&self, key: Key, task_id: usize) -> bool {
         let priority = key >> PRIORITY_SHIFT;
         if priority >= MAX_PRIORITY {
-            return;
+            return false;
         }
         // Disable interrupts while holding the collection lock so a
         // timer preemption cannot context-switch away with the lock
@@ -466,11 +471,17 @@ impl TaskCollection {
         }
         let page = {
             let inner = self.future_collections[priority].lock();
-            let (_, page_idx, subpage_idx) = unpack_key(key);
-            if page_idx >= inner.pages.len() {
-                None
-            } else {
-                Some((inner.pages[page_idx].clone(), subpage_idx))
+            let slab_key = unmask_priority(key);
+            match inner.slab.get(slab_key) {
+                Some(task) if task.id() == task_id => {
+                    let (_, page_idx, subpage_idx) = unpack_key(slab_key);
+                    if page_idx >= inner.pages.len() {
+                        None
+                    } else {
+                        Some((inner.pages[page_idx].clone(), subpage_idx))
+                    }
+                }
+                _ => None,
             }
         };
         if enable {
@@ -479,7 +490,52 @@ impl TaskCollection {
         if let Some((page, subpage_idx)) = page {
             page.notify(subpage_idx);
             crate::ipi_wakeup(self.cpu_id);
+            true
+        } else {
+            false
         }
+    }
+
+    /// Find a task by id anywhere in this collection and force-notify
+    /// its waker slot. Returns `true` if the task was found.
+    ///
+    /// The fallback path of the process-exit sweep: work stealing can
+    /// migrate a task to another CPU, leaving the location saved by
+    /// `Thread::start` stale; this resolves the task's current home.
+    pub fn force_notify_by_id(&self, task_id: usize) -> bool {
+        for priority in 0..MAX_PRIORITY {
+            // Disable interrupts while holding the collection lock so a
+            // timer preemption cannot context-switch away with the lock
+            // held (the lock would stay held until the preempted context
+            // resumes).
+            let enable = crate::arch::intr_get();
+            if enable {
+                crate::arch::intr_off();
+            }
+            let page = {
+                let inner = self.future_collections[priority].lock();
+                let mut found = None;
+                for (slab_key, task) in inner.slab.iter() {
+                    if task.id() == task_id {
+                        let (_, page_idx, subpage_idx) = unpack_key(slab_key);
+                        if page_idx < inner.pages.len() {
+                            found = Some((inner.pages[page_idx].clone(), subpage_idx));
+                        }
+                        break;
+                    }
+                }
+                found
+            };
+            if enable {
+                crate::arch::intr_on();
+            }
+            if let Some((page, subpage_idx)) = page {
+                page.notify(subpage_idx);
+                crate::ipi_wakeup(self.cpu_id);
+                return true;
+            }
+        }
+        false
     }
 
     /// Select the next task to run using the scheduler.

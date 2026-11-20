@@ -11,7 +11,6 @@ use lock::Mutex;
 
 use super::exception::{ExceptionChannelType, Exceptionate};
 use super::job_policy::{JobPolicy, PolicyAction, PolicyCondition};
-use super::thread::ThreadState;
 use super::{Job, Task, Thread, ThreadFn};
 use crate::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
 use crate::object::{KObjectBase, KernelObject, KoID, Rights, Signal};
@@ -367,31 +366,38 @@ impl Process {
                 self.terminate();
                 return;
             }
-            // Identify unstarted threads BEFORE killing — kill()
-            // transitions New→Dying, making them indistinguishable
-            // from started-then-killed threads.  Unstarted threads
-            // will never self-terminate (never call remove_thread).
-            let unstarted: alloc::vec::Vec<KoID> = inner
-                .threads
-                .iter()
-                .filter_map(|t| t.upgrade())
-                .filter(|t| t.state() == ThreadState::New)
-                .map(|t| t.id())
-                .collect();
-            // Collect the thread list under the lock, then kill each
-            // thread OUTSIDE it. Killing under the process lock
-            // deadlocks against `Thread::terminate` (thread lock →
-            // `remove_thread` → process lock): both locks are
-            // interrupt-disabling spinlocks, so the mutual wait is a
-            // permanent two-CPU freeze — the hang behind issue #834.
+            // Collect the thread list under the lock, then act on each
+            // thread OUTSIDE it. Both the unstarted classification
+            // below (`task_sched()` takes the thread lock) and the
+            // kills must not run under the process lock:
+            // `Thread::terminate` holds the thread lock while calling
+            // `remove_thread` (process lock), and both locks are
+            // interrupt-disabling spinlocks — the mutual wait is a
+            // permanent two-CPU freeze (the hang behind issue #834).
             // A thread collected here that terminates concurrently is
-            // harmless: `kill()` on a Dying/Dead thread is a no-op
-            // (or re-fires the killer, which is idempotent), and no
-            // new threads can appear — `add_thread` rejects the
-            // Exited status set above.
+            // harmless: `kill()` on a Dying/Dead thread is a no-op (or
+            // re-fires the killer, which is idempotent), and no new
+            // threads can appear — `add_thread` rejects the Exited
+            // status set above.
             let kill_threads: Vec<Arc<super::Thread>> =
                 inner.threads.iter().filter_map(|t| t.upgrade()).collect();
             drop(inner);
+            // A thread without a live executor task (`task_sched` is
+            // `None`: never started, or `terminate()` already ran)
+            // can never call `remove_thread` itself, so it must be
+            // removed from the list here. Classify by that lifecycle
+            // rather than `state()`: a started thread suspended before
+            // its first poll reports `Suspended`, and a started thread
+            // still inside `Thread::start` reports `Running` — both
+            // have tasks and must stay registered for the sweep.
+            // Threads that finished terminating while we collected
+            // are also `None`; they already left the list, so the
+            // retain below is a no-op for them.
+            let unstarted: Vec<KoID> = kill_threads
+                .iter()
+                .filter(|t| t.task_sched().is_none())
+                .map(|t| t.id())
+                .collect();
             for t in &kill_threads {
                 t.kill();
             }
@@ -404,13 +410,15 @@ impl Process {
             // just polls the task once more.
             //
             // `task_sched()` returns `None` for threads that finished
-            // terminating while we were killing (their slots may since
-            // have been recycled by other tasks), so late terminators
-            // are naturally skipped.
+            // terminating while we were killing, so late terminators
+            // are naturally skipped. The task id makes the wake robust
+            // to work-stealing migration: a migrated task's saved slot
+            // is stale, and `force_wake_task` then finds the task by
+            // id on its current CPU.
             for t in &kill_threads {
                 if !unstarted.contains(&t.id()) {
-                    if let Some((task_key, task_cpu)) = t.task_sched() {
-                        hal_impl::thread::force_wake_task(task_cpu, task_key);
+                    if let Some((task_key, task_cpu, task_id)) = t.task_sched() {
+                        hal_impl::thread::force_wake_task(task_cpu, task_key, task_id);
                     }
                 }
             }

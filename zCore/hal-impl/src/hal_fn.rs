@@ -161,12 +161,13 @@ hal_fn_def! {
         ///
         /// Priority 0 is lowest, 31 is highest. If the platform does not
         /// support priority scheduling, this falls back to `spawn()`.
-        /// Returns `(task_key, cpu_id)` for runtime priority changes.
-        /// The default (libos) implementation returns `(0, 0)` since
-        /// libos doesn't support priority scheduling.
-        pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) -> (usize, u8) {
+        /// Returns `(task_key, cpu_id, task_id)` for runtime priority
+        /// changes and migration-robust force-wakes. The default (libos)
+        /// implementation returns `(0, 0, 0)` since libos doesn't support
+        /// priority scheduling.
+        pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) -> (usize, u8, usize) {
             spawn(future);
-            (0, 0)
+            (0, 0, 0)
         }
 
         /// Change the scheduling priority of an already-running task.
@@ -174,11 +175,13 @@ hal_fn_def! {
         /// `spawn_with_priority`. No-op in libos mode.
         pub fn change_task_priority(_cpu_id: u8, _task_key: usize, _new_priority: usize) {}
 
-        /// Force-notify a task's waker slot on its owning CPU,
-        /// re-firing a potentially lost wake-up. `cpu_id` and
-        /// `task_key` are the values returned by `spawn_with_priority`.
-        /// No-op in libos mode.
-        pub fn force_wake_task(_cpu_id: u8, _task_key: usize) {}
+        /// Force-notify a task's waker slot, re-firing a potentially
+        /// lost wake-up. `cpu_id`, `task_key` and `task_id` are the
+        /// values returned by `spawn_with_priority`; the task id makes
+        /// the wake robust to work-stealing migration (if the saved
+        /// slot is stale, the task is found by id). No-op in libos
+        /// mode.
+        pub fn force_wake_task(_cpu_id: u8, _task_key: usize, _task_id: usize) {}
 
         /// Set tid and pid of current task.
         pub fn set_current_thread(thread: Option<Arc<dyn Any + Send + Sync>>) {}
