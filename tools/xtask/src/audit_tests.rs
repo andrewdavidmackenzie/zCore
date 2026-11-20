@@ -272,7 +272,7 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
 
     // Load tests ported to petal (user-mode) — excluded from "missing" check
     let petal_ported: std::collections::HashSet<String> = {
-        let petal_file = std::path::Path::new("tests/petal-ported-tests.txt");
+        let petal_file = project_dir.join("tests/petal-ported-tests.txt");
         if petal_file.exists() {
             std::fs::read_to_string(petal_file)
                 .unwrap_or_default()
@@ -290,7 +290,7 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
     // from the "missing" check, but reported and cross-checked so the
     // list cannot silently mask a real port.
     let unported: Vec<String> = {
-        let unported_file = std::path::Path::new("tests/core-tests-unported.txt");
+        let unported_file = project_dir.join("tests/core-tests-unported.txt");
         if unported_file.exists() {
             std::fs::read_to_string(unported_file)
                 .unwrap_or_default()
