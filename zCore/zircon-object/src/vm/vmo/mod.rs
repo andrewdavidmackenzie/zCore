@@ -13,7 +13,7 @@ use {
     bitflags::bitflags,
     core::ops::Deref,
     hal_impl::CachePolicy,
-    lock::Mutex,
+    lock::KernelMutex,
 };
 
 pub mod dirty_tracker;
@@ -331,7 +331,7 @@ pub struct VmObject {
     /// returns NOT_FOUND to prevent re-mapping parent data).
     dead: core::sync::atomic::AtomicBool,
     trait_: Arc<dyn VMObjectTrait>,
-    inner: Mutex<VmObjectInner>,
+    inner: KernelMutex<VmObjectInner>,
 }
 
 impl_kobject!(VmObject
@@ -471,7 +471,7 @@ impl VmObject {
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new(pages),
-            inner: Mutex::new(VmObjectInner::default()),
+            inner: KernelMutex::new(VmObjectInner::default()),
             base,
         })
     }
@@ -489,7 +489,7 @@ impl VmObject {
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPhysical::new(paddr, pages),
-            inner: Mutex::new(VmObjectInner::default()),
+            inner: KernelMutex::new(VmObjectInner::default()),
         })
     }
 
@@ -506,7 +506,7 @@ impl VmObject {
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new_contiguous(pages, align_log2)?,
-            inner: Mutex::new(VmObjectInner::default()),
+            inner: KernelMutex::new(VmObjectInner::default()),
         });
         Ok(vmo)
     }
@@ -2016,7 +2016,7 @@ impl VmObject {
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_,
-            inner: Mutex::new(VmObjectInner {
+            inner: KernelMutex::new(VmObjectInner {
                 parent: Arc::downgrade(self),
                 pager_root,
                 ..VmObjectInner::default()
@@ -2078,7 +2078,7 @@ impl VmObject {
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_,
-            inner: Mutex::new(VmObjectInner {
+            inner: KernelMutex::new(VmObjectInner {
                 parent: Arc::downgrade(self),
                 pager_root,
                 ..VmObjectInner::default()
@@ -2162,7 +2162,7 @@ impl VmObject {
             } else {
                 VMObjectSlice::new(self.trait_.clone(), offset, size)
             },
-            inner: Mutex::new(VmObjectInner {
+            inner: KernelMutex::new(VmObjectInner {
                 parent: Arc::downgrade(self),
                 content_size: child_content_size,
                 ..VmObjectInner::default()
