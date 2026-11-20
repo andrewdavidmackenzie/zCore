@@ -378,10 +378,22 @@ impl Process {
                 .filter(|t| t.state() == ThreadState::New)
                 .map(|t| t.id())
                 .collect();
-            for thread in inner.threads.iter() {
-                if let Some(t) = thread.upgrade() {
-                    t.kill();
-                }
+            // Collect the thread list under the lock, then kill each
+            // thread OUTSIDE it. Killing under the process lock
+            // deadlocks against `Thread::terminate` (thread lock →
+            // `remove_thread` → process lock): both locks are
+            // interrupt-disabling spinlocks, so the mutual wait is a
+            // permanent two-CPU freeze — the hang behind issue #834.
+            // A thread collected here that terminates concurrently is
+            // harmless: `kill()` on a Dying/Dead thread is a no-op
+            // (or re-fires the killer, which is idempotent), and no
+            // new threads can appear — `add_thread` rejects the
+            // Exited status set above.
+            let kill_threads: Vec<Arc<super::Thread>> =
+                inner.threads.iter().filter_map(|t| t.upgrade()).collect();
+            drop(inner);
+            for t in &kill_threads {
+                t.kill();
             }
             // Exit sweep: re-fire the kill wake-ups for every remaining
             // started thread. Thread::kill() wakes each thread via its
@@ -391,22 +403,15 @@ impl Process {
             // depends on perfect wake delivery; a spurious re-notify
             // just polls the task once more.
             //
-            // Collect strong references under the process lock but
-            // read `task_sched()` after releasing it: `task_sched()`
-            // takes the thread's inner lock, and a thread calling
-            // `terminate()` → `remove_thread()` holds that lock while
-            // waiting for the process lock — taking both in opposite
-            // orders from two CPUs would deadlock.
-            let sweep_threads: alloc::vec::Vec<alloc::sync::Arc<super::Thread>> = inner
-                .threads
-                .iter()
-                .filter_map(|t| t.upgrade())
-                .filter(|t| !unstarted.contains(&t.id()))
-                .collect();
-            drop(inner);
-            for t in &sweep_threads {
-                if let Some((task_key, task_cpu)) = t.task_sched() {
-                    hal_impl::thread::force_wake_task(task_cpu, task_key);
+            // `task_sched()` returns `None` for threads that finished
+            // terminating while we were killing (their slots may since
+            // have been recycled by other tasks), so late terminators
+            // are naturally skipped.
+            for t in &kill_threads {
+                if !unstarted.contains(&t.id()) {
+                    if let Some((task_key, task_cpu)) = t.task_sched() {
+                        hal_impl::thread::force_wake_task(task_cpu, task_key);
+                    }
                 }
             }
             let mut inner = self.inner.lock();
@@ -982,6 +987,13 @@ impl Process {
         }
         // If the process is currently suspended, apply the suspension
         // count to the new thread so it starts suspended.
+        //
+        // Lock-order note: unlike Process::suspend/resume/exit, calling
+        // thread.suspend() here while holding the process lock is safe —
+        // the new thread is not yet published to the process list and
+        // has not been returned to the caller, so no other CPU can be
+        // inside Thread::terminate (or any other path) holding this
+        // thread's lock.
         for _ in 0..inner.suspend_count {
             thread.suspend();
         }
@@ -1168,23 +1180,44 @@ impl Task for Process {
     }
 
     fn suspend(&self) {
-        let mut inner = self.inner.lock();
-        inner.suspend_count += 1;
-        for thread in inner.threads.iter() {
-            if let Some(t) = thread.upgrade() {
-                t.suspend();
-            }
+        // Update the count and collect the thread list in ONE critical
+        // section, then suspend each thread outside the process lock.
+        //
+        // Taking a thread lock while holding the process lock deadlocks
+        // against `Thread::terminate`, which holds the thread lock while
+        // calling `Process::remove_thread` (process lock). Both locks are
+        // interrupt-disabling spinlocks on bare metal, so the deadlock is
+        // a permanent two-CPU freeze with interrupts off — the machine
+        // hang behind issue #834 (a dying thread racing a process
+        // suspend/resume/exit, as in ProcessTest.SuspendWithDyingThread).
+        //
+        // Collecting under the same lock section as the count update
+        // keeps `add_thread`'s compensation consistent: a thread added
+        // concurrently either sees the new count (and applies the
+        // suspension itself) or is included in our list (and we suspend
+        // it here).
+        let threads: Vec<Arc<Thread>> = {
+            let mut inner = self.inner.lock();
+            inner.suspend_count += 1;
+            inner.threads.iter().filter_map(|t| t.upgrade()).collect()
+        };
+        for t in &threads {
+            t.suspend();
         }
     }
 
     fn resume(&self) {
-        let mut inner = self.inner.lock();
-        assert_ne!(inner.suspend_count, 0, "resume without matching suspend");
-        inner.suspend_count -= 1;
-        for thread in inner.threads.iter() {
-            if let Some(t) = thread.upgrade() {
-                t.resume();
-            }
+        // Mirror of `suspend`: decrement the count and collect the
+        // thread list in one critical section, then resume each thread
+        // outside the process lock (see the lock-order comment there).
+        let threads: Vec<Arc<Thread>> = {
+            let mut inner = self.inner.lock();
+            assert_ne!(inner.suspend_count, 0, "resume without matching suspend");
+            inner.suspend_count -= 1;
+            inner.threads.iter().filter_map(|t| t.upgrade()).collect()
+        };
+        for t in &threads {
+            t.resume();
         }
     }
 

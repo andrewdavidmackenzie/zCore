@@ -196,6 +196,8 @@ pub struct AuditResult {
     pub stubs: Vec<(String, String, String)>, // (file, fn_name, cpp_ref) — unimplemented!() tests
     pub ignored_not_skipped: Vec<(String, String, String)>, // #[ignore] but NOT in skip list
     pub petal_ported: usize,                  // Tests ported to petal user-mode binary
+    pub unported: Vec<String>, // C++ tests intentionally not ported (see tests/core-tests-unported.txt)
+    pub unported_with_rust: Vec<String>, // unported-list entries that DO have a Rust counterpart (inconsistent)
 }
 
 /// Run the full audit. Returns `Ok(result)` or `Err(message)` if something
@@ -270,7 +272,7 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
 
     // Load tests ported to petal (user-mode) — excluded from "missing" check
     let petal_ported: std::collections::HashSet<String> = {
-        let petal_file = std::path::Path::new("tests/petal-ported-tests.txt");
+        let petal_file = project_dir.join("tests/petal-ported-tests.txt");
         if petal_file.exists() {
             std::fs::read_to_string(petal_file)
                 .unwrap_or_default()
@@ -283,10 +285,38 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
         }
     };
 
-    // Find missing (C++ tests with no Rust match, excluding petal-ported tests)
+    // Load intentionally-unported tests (host-threaded suites that
+    // cannot run in the no_std kernel test runner) — also excluded
+    // from the "missing" check, but reported and cross-checked so the
+    // list cannot silently mask a real port.
+    let unported: Vec<String> = {
+        let unported_file = project_dir.join("tests/core-tests-unported.txt");
+        if unported_file.exists() {
+            std::fs::read_to_string(unported_file)
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+                .map(|l| l.trim().to_string())
+                .collect()
+        } else {
+            Vec::new()
+        }
+    };
+    let unported_set: std::collections::HashSet<&String> = unported.iter().collect();
+    // Consistency: an unported entry that actually has a Rust
+    // counterpart means the list is stale — remove the entry instead.
+    let unported_with_rust: Vec<String> = unported
+        .iter()
+        .filter(|t| matched_cpp.contains(*t))
+        .cloned()
+        .collect();
+
+    // Find missing (C++ tests with no Rust match, excluding petal-ported
+    // and intentionally-unported tests)
     let missing_in_rust: Vec<String> = cpp_tests
         .difference(&matched_cpp)
         .filter(|t| !petal_ported.contains(*t))
+        .filter(|t| !unported_set.contains(*t))
         .cloned()
         .collect();
 
@@ -335,6 +365,8 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
         stubs,
         ignored_not_skipped,
         petal_ported: petal_ported.len(),
+        unported,
+        unported_with_rust,
     })
 }
 
@@ -351,21 +383,35 @@ pub fn print_and_check(result: &AuditResult) -> bool {
     println!("  C++ skip-list entries:   {}", result.cpp_skipped);
 
     let petal_count = result.petal_ported;
-    let total_rust = result.rust_count + petal_count;
+    let unported_count = result.unported.len();
+    let total_rust = result.rust_count + petal_count + unported_count;
     println!("  Petal-ported tests:      {}", petal_count);
+    println!("  Intentionally unported:  {}", unported_count);
     if total_rust != result.cpp_count {
         println!(
-            "  FAIL: Count mismatch — {} Rust tests ({} kernel + {} petal) vs {} C++ tests",
-            total_rust, result.rust_count, petal_count, result.cpp_count
+            "  FAIL: Count mismatch — {} accounted tests ({} kernel + {} petal + {} unported) vs {} C++ tests",
+            total_rust, result.rust_count, petal_count, unported_count, result.cpp_count
         );
         ok = false;
     }
 
-    if (result.matched + petal_count) != result.cpp_count {
+    if (result.matched + petal_count + result.unported.len()) != result.cpp_count {
         println!(
             "  FAIL: Only {}/{} C++ tests have a Rust match",
             result.matched, result.cpp_count
         );
+        ok = false;
+    }
+
+    if !result.unported_with_rust.is_empty() {
+        println!(
+            "  FAIL: {} unported-list entries have a Rust counterpart (stale list):",
+            result.unported_with_rust.len()
+        );
+        for t in &result.unported_with_rust {
+            println!("    {t}");
+        }
+        println!("    (remove them from tests/core-tests-unported.txt)");
         ok = false;
     }
 
