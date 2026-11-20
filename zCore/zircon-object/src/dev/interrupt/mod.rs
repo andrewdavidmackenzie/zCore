@@ -250,13 +250,10 @@ impl Future for WaitEventFuture<'_> {
         }
         if !self.registered {
             let waker = cx.waker().clone();
-            self.event.add_signal_callback(Box::new(move |s| {
-                if !s.contains(Signal::SIGNALED) {
-                    return false;
-                }
-                waker.wake_by_ref();
-                true
-            }));
+            self.event.add_signal_callback(SignalHandler::oneshot(
+                move |s: Signal| s.contains(Signal::SIGNALED),
+                move |_| waker.wake_by_ref(),
+            ));
             self.registered = true;
         }
         Poll::Pending

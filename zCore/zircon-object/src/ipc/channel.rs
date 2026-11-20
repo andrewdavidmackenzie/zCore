@@ -351,7 +351,6 @@ impl MessagePacket {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::boxed::Box;
     use core::sync::atomic::*;
     use core::time::Duration;
 
@@ -434,15 +433,18 @@ mod tests {
         //   set `readable` and `peer_closed`
         let readable = Arc::new(AtomicBool::new(false));
         let peer_closed = Arc::new(AtomicBool::new(false));
-        channel0.add_signal_callback(Box::new({
-            let readable = readable.clone();
-            let peer_closed = peer_closed.clone();
-            move |signal| {
-                readable.store(signal.contains(Signal::READABLE), Ordering::SeqCst);
-                peer_closed.store(signal.contains(Signal::PEER_CLOSED), Ordering::SeqCst);
-                false
-            }
-        }));
+        channel0.add_signal_callback(SignalHandler::permanent(
+            // Fire on every signal change.
+            |_| true,
+            {
+                let readable = readable.clone();
+                let peer_closed = peer_closed.clone();
+                move |signal: Signal| {
+                    readable.store(signal.contains(Signal::READABLE), Ordering::SeqCst);
+                    peer_closed.store(signal.contains(Signal::PEER_CLOSED), Ordering::SeqCst);
+                }
+            },
+        ));
 
         // writing to peer should trigger `Signal::READABLE`.
         channel1.write(MessagePacket::default()).unwrap();
