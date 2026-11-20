@@ -7,7 +7,7 @@ use core::any::Any;
 
 use futures::channel::oneshot::{self, Receiver, Sender};
 use hashbrown::HashMap;
-use lock::Mutex;
+use lock::KernelMutex;
 
 use super::exception::{ExceptionChannelType, Exceptionate};
 use super::job_policy::{JobPolicy, PolicyAction, PolicyCondition};
@@ -93,7 +93,7 @@ pub struct Process {
     ext: Box<dyn Any + Send + Sync>,
     exceptionate: Arc<Exceptionate>,
     debug_exceptionate: Arc<Exceptionate>,
-    inner: Mutex<ProcessInner>,
+    inner: KernelMutex<ProcessInner>,
 }
 
 impl_kobject!(Process
@@ -233,7 +233,7 @@ impl Process {
             ext: Box::new(ext),
             exceptionate: Exceptionate::new(ExceptionChannelType::Process),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::Debugger),
-            inner: Mutex::new(ProcessInner::default()),
+            inner: KernelMutex::new(ProcessInner::default()),
         });
         job.add_process(proc.clone())?;
         Ok(proc)
@@ -271,7 +271,7 @@ impl Process {
             ext: Box::new(()),
             exceptionate: Exceptionate::new(ExceptionChannelType::Process),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::Debugger),
-            inner: Mutex::new(ProcessInner::default()),
+            inner: KernelMutex::new(ProcessInner::default()),
         });
 
         // Copy initial properties from source and mark as shared.

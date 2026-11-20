@@ -7,7 +7,7 @@ use {
     crate::task::Task,
     alloc::sync::{Arc, Weak},
     alloc::vec::Vec,
-    lock::Mutex,
+    lock::KernelMutex,
 };
 
 /// Control a group of processes
@@ -38,7 +38,7 @@ pub struct Job {
     parent_policy: JobPolicy,
     exceptionate: Arc<Exceptionate>,
     debug_exceptionate: Arc<Exceptionate>,
-    inner: Mutex<JobInner>,
+    inner: KernelMutex<JobInner>,
 }
 
 impl_kobject!(Job
@@ -92,7 +92,7 @@ impl Job {
             parent_policy: JobPolicy::default(),
             exceptionate: Exceptionate::new(ExceptionChannelType::Job),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::JobDebugger),
-            inner: Mutex::new(JobInner::default()),
+            inner: KernelMutex::new(JobInner::default()),
         });
         job.inner.lock().self_ref = Arc::downgrade(&job);
         job
@@ -131,7 +131,7 @@ impl Job {
             parent_policy: inner.policy.merge(&self.parent_policy),
             exceptionate: Exceptionate::new(ExceptionChannelType::Job),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::JobDebugger),
-            inner: Mutex::new(JobInner::default()),
+            inner: KernelMutex::new(JobInner::default()),
         });
         let child_weak = Arc::downgrade(&child);
         child.inner.lock().self_ref = child_weak.clone();

@@ -4,14 +4,18 @@
 //!
 //! # Lock types
 //!
-//! - [`Mutex`] / [`MutexGuard`]: Interrupt-disabling spinlock. Use ONLY
-//!   for locks accessed from interrupt context (timer, console, heap
-//!   allocator). For kernel object state, use `KernelMutex` from the
-//!   `zircon-object` crate instead.
+//! - [`KernelMutex`] / [`KernelMutexGuard`]: Adaptive spin-then-yield
+//!   mutex for kernel object state accessed from task context only.
+//!   The holder may be preempted; waiters yield via the registered
+//!   yield function (see [`set_yield_fn`]). Interrupt handlers must
+//!   NOT acquire it.
 //!
-//! - [`lockdep`]: Runtime lock ordering checker (behind `lockdep` feature).
+//! - [`Mutex`] / [`MutexGuard`]: Interrupt-disabling spinlock (ticket
+//!   variant on bare-metal). Use ONLY for locks accessed from
+//!   interrupt context (timer, console, heap allocator) or that must
+//!   not be preempted while held. Everything else should use
+//!   `KernelMutex` — see the lock-ordering work in #829.
 
-pub mod lockdep;
 pub mod mutex;
 pub use mutex::{set_yield_fn, KernelMutex, KernelMutexGuard};
 
@@ -19,21 +23,20 @@ cfg_if::cfg_if! {
     if #[cfg(all(target_os = "none", feature = "ticket"))] {
         extern crate alloc;
         mod interrupt;
-        pub mod mcslock;
         pub mod rwlock;
-        pub use {rwlock::*, mcslock::*};
+        pub use rwlock::*;
         pub mod ticket;
         /// Interrupt-disabling spinlock. Disables interrupts on acquire,
         /// restores on drop. Use only for locks accessed from interrupt
-        /// handlers (timer, console, allocator). For kernel object state,
-        /// use `KernelMutex` from `zircon-object::mutex`.
+        /// handlers (timer, console, allocator) or that must not be
+        /// preempted while held. For kernel object state, use
+        /// [`KernelMutex`] instead.
         pub use ticket::{InterruptSpinLock as Mutex, InterruptSpinLockGuard as MutexGuard};
     } else if #[cfg(target_os = "none")] {
         extern crate alloc;
         mod interrupt;
-        pub mod mcslock;
         pub mod rwlock;
-        pub use {rwlock::*, mcslock::*};
+        pub use rwlock::*;
         pub mod spin;
         /// Interrupt-disabling spinlock. See ticket variant docs.
         pub use spin::{SpinMutex as Mutex, SpinMutexGuard as MutexGuard};

@@ -50,6 +50,10 @@ pub fn init_executor_runtimes(bsp_id: u8, ap_ids: &[u32]) {
         cpu_ids.push(id as u8);
     }
     executor::init_runtimes(&cpu_ids);
+    // Register the executor's context switch as the KernelMutex yield
+    // function so contending tasks yield to the lock holder instead of
+    // spinning (see #829). Must run after the runtimes exist.
+    lock::set_yield_fn(executor::sched_yield);
     // Register cross-CPU wakeup via IPI so that waking a task on a
     // halted CPU immediately breaks it out of HLT instead of waiting
     // for the next timer tick (up to 10ms at 100 Hz).

@@ -20,7 +20,6 @@ doc = false
 colorless-log = []
 thead-maee = ["hal-impl/thead-maee"]
 baremetal-test = ["dep:zircon-tests"]
-lockdep = ["zircon-object/lockdep"]
 sched-fair = ["executor/sched-fair"]
 
 
