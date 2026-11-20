@@ -10,12 +10,12 @@ use crate::signal::port::*;
 use crate::vm::VmObject;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use lock::Mutex;
+use lock::KernelMutex;
 
 /// A pager object that manages demand-paged VMOs.
 pub struct Pager {
     base: KObjectBase,
-    inner: Mutex<PagerInner>,
+    inner: KernelMutex<PagerInner>,
 }
 
 impl_kobject!(Pager);
@@ -41,7 +41,7 @@ impl Pager {
     pub fn new() -> Arc<Self> {
         Arc::new(Pager {
             base: KObjectBase::new(),
-            inner: Mutex::new(PagerInner::default()),
+            inner: KernelMutex::new(PagerInner::default()),
         })
     }
 

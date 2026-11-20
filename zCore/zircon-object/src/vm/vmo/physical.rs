@@ -1,12 +1,12 @@
-use {super::*, alloc::sync::Arc, lock::Mutex};
+use {super::*, alloc::sync::Arc, lock::KernelMutex};
 
 /// VMO representing a physical range of memory.
 pub struct VMObjectPhysical {
     paddr: PhysAddr,
     pages: usize,
     /// Lock this when access physical memory.
-    data_lock: Mutex<()>,
-    inner: Mutex<VMObjectPhysicalInner>,
+    data_lock: KernelMutex<()>,
+    inner: KernelMutex<VMObjectPhysicalInner>,
 }
 
 struct VMObjectPhysicalInner {
@@ -29,8 +29,8 @@ impl VMObjectPhysical {
         Arc::new(VMObjectPhysical {
             paddr,
             pages,
-            data_lock: Mutex::default(),
-            inner: Mutex::new(VMObjectPhysicalInner::new()),
+            data_lock: KernelMutex::default(),
+            inner: KernelMutex::new(VMObjectPhysicalInner::new()),
         })
     }
 }

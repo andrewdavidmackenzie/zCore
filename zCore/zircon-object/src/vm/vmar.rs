@@ -5,7 +5,7 @@ use {
     bitflags::bitflags,
     hal::vm::{GenericPageTable, IgnoreNotMappedErr, Page, PageSize, PagingError, PagingResult},
     hal_impl::vm::PageTable,
-    lock::Mutex,
+    lock::KernelMutex,
 };
 
 /// Operations for `vmar_op_range`.
@@ -85,9 +85,9 @@ pub struct VmAddressRegion {
     addr: VirtAddr,
     size: usize,
     parent: Option<Arc<VmAddressRegion>>,
-    page_table: Arc<Mutex<dyn GenericPageTable>>,
+    page_table: Arc<KernelMutex<dyn GenericPageTable>>,
     /// If inner is None, this region is destroyed, all operations are invalid.
-    inner: Mutex<Option<VmarInner>>,
+    inner: KernelMutex<Option<VmarInner>>,
     /// Memory priority for this VMAR. When HIGH, pager-backed pages
     /// in this region are not eligible for reclamation.
     /// Matches Fuchsia's `VmAddressRegionOrMapping::memory_priority_`.
@@ -151,10 +151,10 @@ struct VmarInner {
 mod aspace_id {
     use alloc::collections::BTreeSet;
     use core::sync::atomic::{AtomicUsize, Ordering};
-    use lock::Mutex;
+    use lock::KernelMutex;
 
     static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
-    static FREE_IDS: Mutex<BTreeSet<usize>> = Mutex::new(BTreeSet::new());
+    static FREE_IDS: KernelMutex<BTreeSet<usize>> = KernelMutex::new(BTreeSet::new());
 
     /// Allocate an address space ID, preferring recycled IDs.
     pub fn alloc() -> usize {
@@ -208,8 +208,8 @@ impl VmAddressRegion {
             addr,
             size,
             parent: None,
-            page_table: Arc::new(Mutex::new(PageTable::from_current().clone_kernel())), //hal PageTable
-            inner: Mutex::new(Some(VmarInner::default())),
+            page_table: Arc::new(KernelMutex::new(PageTable::from_current().clone_kernel())), //hal PageTable
+            inner: KernelMutex::new(Some(VmarInner::default())),
             memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
@@ -226,8 +226,8 @@ impl VmAddressRegion {
             addr,
             size,
             parent: None,
-            page_table: Arc::new(Mutex::new(PageTable::from_current().clone_kernel())),
-            inner: Mutex::new(Some(VmarInner::default())),
+            page_table: Arc::new(KernelMutex::new(PageTable::from_current().clone_kernel())),
+            inner: KernelMutex::new(Some(VmarInner::default())),
             memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
@@ -243,8 +243,8 @@ impl VmAddressRegion {
             addr: kernel_vmar_base,
             size: kernel_vmar_size,
             parent: None,
-            page_table: Arc::new(Mutex::new(PageTable::from_current().clone_kernel())),
-            inner: Mutex::new(Some(VmarInner::default())),
+            page_table: Arc::new(KernelMutex::new(PageTable::from_current().clone_kernel())),
+            inner: KernelMutex::new(Some(VmarInner::default())),
             memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
@@ -261,8 +261,8 @@ impl VmAddressRegion {
             addr: guest_vmar_base,
             size: guest_vmar_size,
             parent: None,
-            page_table: Arc::new(Mutex::new(crate::hypervisor::VmmPageTable::new())),
-            inner: Mutex::new(Some(VmarInner::default())),
+            page_table: Arc::new(KernelMutex::new(crate::hypervisor::VmmPageTable::new())),
+            inner: KernelMutex::new(Some(VmarInner::default())),
             memory_priority: core::sync::atomic::AtomicBool::new(false),
         })
     }
@@ -329,7 +329,7 @@ impl VmAddressRegion {
             size: len,
             parent: Some(self.clone()),
             page_table: self.page_table.clone(),
-            inner: Mutex::new(Some(VmarInner::default())),
+            inner: KernelMutex::new(Some(VmarInner::default())),
             memory_priority: core::sync::atomic::AtomicBool::new(false),
         });
         inner.children.push(child.clone());
@@ -1842,7 +1842,7 @@ impl VmarInner {
     fn fork_from(
         &mut self,
         src: &Arc<VmAddressRegion>,
-        page_table: &Arc<Mutex<dyn GenericPageTable>>,
+        page_table: &Arc<KernelMutex<dyn GenericPageTable>>,
     ) -> ZxResult {
         let src_guard = src.inner.lock();
         let Some(src_inner) = src_guard.as_ref() else {
@@ -1877,8 +1877,8 @@ pub struct VmMapping {
     permissions: MMUFlags,
     /// The VMO backing this mapping.
     pub vmo: Arc<VmObject>,
-    page_table: Arc<Mutex<dyn GenericPageTable>>,
-    inner: Mutex<VmMappingInner>,
+    page_table: Arc<KernelMutex<dyn GenericPageTable>>,
+    inner: KernelMutex<VmMappingInner>,
 }
 
 #[derive(Debug, Clone)]
@@ -1984,7 +1984,7 @@ impl VmMapping {
         vmo_offset: usize,
         permissions: MMUFlags,
         flags: MMUFlags,
-        page_table: Arc<Mutex<dyn GenericPageTable>>,
+        page_table: Arc<KernelMutex<dyn GenericPageTable>>,
         fault_beyond_stream_size: bool,
     ) -> Arc<Self> {
         // For large lazy mappings (e.g., Scudo's 11 GB arena), don't
@@ -1999,7 +1999,7 @@ impl VmMapping {
             vec![flags; page_count]
         };
         let mapping = Arc::new(VmMapping {
-            inner: Mutex::new(VmMappingInner {
+            inner: KernelMutex::new(VmMappingInner {
                 flags: per_page_flags,
                 default_flags: flags,
                 protection_overrides: BTreeMap::new(),
@@ -2197,7 +2197,7 @@ impl VmMapping {
                 permissions: self.permissions,
                 vmo: self.vmo.clone(),
                 page_table: self.page_table.clone(),
-                inner: Mutex::new(VmMappingInner {
+                inner: KernelMutex::new(VmMappingInner {
                     flags: inner.flags.drain(new_flags_range).collect(),
                     default_flags: inner.default_flags,
                     protection_overrides: BTreeMap::new(),
@@ -2642,10 +2642,10 @@ impl VmMapping {
     /// the mapping is writable and performs COW.  However the initial
     /// page-table entries are mapped WITHOUT WRITE (see `map_cow`),
     /// so that the first write triggers a fault and the COW copy.
-    fn clone_map(&self, page_table: Arc<Mutex<dyn GenericPageTable>>) -> ZxResult<Arc<Self>> {
+    fn clone_map(&self, page_table: Arc<KernelMutex<dyn GenericPageTable>>) -> ZxResult<Arc<Self>> {
         let new_vmo = self.vmo.create_child(false, 0, self.vmo.len())?;
         let mapping = Arc::new(VmMapping {
-            inner: Mutex::new(self.inner.lock().clone()),
+            inner: KernelMutex::new(self.inner.lock().clone()),
             permissions: self.permissions,
             page_table,
             vmo: new_vmo.clone(),
@@ -2800,8 +2800,8 @@ mod cow_host {
     use super::*;
 
     /// Global list of root VMARs for COW fault lookup.
-    static COW_VMARS: lock::Mutex<Vec<alloc::sync::Weak<VmAddressRegion>>> =
-        lock::Mutex::new(Vec::new());
+    static COW_VMARS: lock::KernelMutex<Vec<alloc::sync::Weak<VmAddressRegion>>> =
+        lock::KernelMutex::new(Vec::new());
 
     /// Register a root VMAR for COW fault handling.
     pub fn register_cow_vmar(vmar: &Arc<VmAddressRegion>) {

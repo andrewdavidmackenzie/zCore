@@ -1,4 +1,7 @@
-use {super::*, crate::object::*, alloc::sync::Arc, lock::Mutex, numeric_enum_macro::numeric_enum};
+use {
+    super::*, crate::object::*, alloc::sync::Arc, lock::KernelMutex,
+    numeric_enum_macro::numeric_enum,
+};
 
 /// A readable, writable, seekable interface to some underlying storage
 ///
@@ -13,7 +16,7 @@ pub struct Stream {
     base: KObjectBase,
     vmo: Arc<VmObject>,
     /// Mutable state: (options, seek_offset).
-    inner: Mutex<StreamInner>,
+    inner: KernelMutex<StreamInner>,
 }
 
 struct StreamInner {
@@ -47,7 +50,7 @@ impl Stream {
         Arc::new(Stream {
             base: KObjectBase::default(),
             vmo,
-            inner: Mutex::new(StreamInner { options, seek }),
+            inner: KernelMutex::new(StreamInner { options, seek }),
         })
     }
 
