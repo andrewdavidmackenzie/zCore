@@ -3,7 +3,7 @@ use {
     alloc::collections::VecDeque,
     alloc::sync::{Arc, Weak},
     bitflags::bitflags,
-    lock::Mutex,
+    lock::KernelMutex,
 };
 
 /// Bidirectional streaming IPC transport.
@@ -18,7 +18,7 @@ pub struct Socket {
     /// Cached peer KOID, set at creation time. Survives peer closure.
     peer_koid: KoID,
     flags: SocketFlags, // constant value
-    inner: Mutex<SocketInner>,
+    inner: KernelMutex<SocketInner>,
 }
 
 #[derive(Default)]

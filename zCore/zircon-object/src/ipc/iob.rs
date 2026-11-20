@@ -10,7 +10,7 @@ use {
     crate::vm::VmObject,
     alloc::sync::{Arc, Weak},
     alloc::vec::Vec,
-    lock::Mutex,
+    lock::KernelMutex,
 };
 
 /// Maximum number of regions per IOBuffer.
@@ -57,7 +57,7 @@ pub struct IoBufferRegion {
     discipline: u32,
     /// ID allocator state (only for ID_ALLOCATOR discipline).
     /// Shared between endpoints via Arc.
-    id_allocator: Option<Arc<Mutex<IdAllocator>>>,
+    id_allocator: Option<Arc<KernelMutex<IdAllocator>>>,
 }
 
 impl IoBufferRegion {
@@ -79,7 +79,7 @@ impl IoBufferRegion {
             size,
             access,
             discipline: IOB_DISCIPLINE_ID_ALLOCATOR,
-            id_allocator: Some(Arc::new(Mutex::new(IdAllocator::new()))),
+            id_allocator: Some(Arc::new(KernelMutex::new(IdAllocator::new()))),
         }
     }
 
@@ -110,11 +110,11 @@ pub struct IoBuffer {
     base: KObjectBase,
     _counter: CountHelper,
     /// Weak reference to the peer endpoint (interior mutable for init).
-    peer: Mutex<Weak<IoBuffer>>,
+    peer: KernelMutex<Weak<IoBuffer>>,
     /// Which endpoint this is (0 or 1).
     endpoint_index: u32,
     /// Shared state (regions are shared between endpoints).
-    inner: Mutex<IoBufferInner>,
+    inner: KernelMutex<IoBufferInner>,
 }
 
 impl_kobject!(IoBuffer
@@ -153,17 +153,17 @@ impl IoBuffer {
         let ep0 = Arc::new(IoBuffer {
             base: KObjectBase::with_signal(Signal::WRITABLE),
             _counter: CountHelper::new(),
-            peer: Mutex::new(Weak::default()),
+            peer: KernelMutex::new(Weak::default()),
             endpoint_index: 0,
-            inner: Mutex::new(IoBufferInner { regions }),
+            inner: KernelMutex::new(IoBufferInner { regions }),
         });
 
         let ep1 = Arc::new(IoBuffer {
             base: KObjectBase::with_signal(Signal::WRITABLE),
             _counter: CountHelper::new(),
-            peer: Mutex::new(Arc::downgrade(&ep0)),
+            peer: KernelMutex::new(Arc::downgrade(&ep0)),
             endpoint_index: 1,
-            inner: Mutex::new(IoBufferInner {
+            inner: KernelMutex::new(IoBufferInner {
                 regions: shared_regions,
             }),
         });

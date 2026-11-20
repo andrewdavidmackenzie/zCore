@@ -7,7 +7,7 @@ use {
     core::sync::atomic::{AtomicU32, Ordering},
     futures::channel::oneshot::{self, Sender},
     hashbrown::HashMap,
-    lock::Mutex,
+    lock::KernelMutex,
 };
 
 /// Bidirectional interprocess communication
@@ -34,8 +34,8 @@ pub struct Channel {
     /// this survives peer closure, matching Fuchsia's behavior where
     /// `related_koid` returns the original peer's KOID even after it's closed.
     peer_koid: KoID,
-    recv_queue: Mutex<VecDeque<T>>,
-    call_reply: Mutex<HashMap<TxID, Sender<ZxResult<T>>>>,
+    recv_queue: KernelMutex<VecDeque<T>>,
+    call_reply: KernelMutex<HashMap<TxID, Sender<ZxResult<T>>>>,
     next_txid: AtomicU32,
 }
 
