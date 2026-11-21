@@ -1506,6 +1506,7 @@ mod tests {
     use crate::task::*;
 
     #[test]
+    #[serial_test::parallel]
     fn create() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1516,6 +1517,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn handle() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1578,6 +1580,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn handle_duplicate() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1619,6 +1622,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn handle_replace() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1663,6 +1667,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn get_child() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1677,6 +1682,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn properties() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1690,6 +1696,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn exit() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1717,6 +1724,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn contains_thread() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1733,6 +1741,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn check_policy() {
         let root_job = Job::root();
         let policy1 = BasicPolicy {

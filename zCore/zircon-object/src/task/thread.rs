@@ -1732,6 +1732,7 @@ mod tests {
     use hal_impl::timer::timer_now;
 
     #[test]
+    #[serial_test::parallel]
     fn create() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1745,6 +1746,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     #[cfg(target_arch = "x86_64")]
     async fn start() {
         hal_impl::init();
@@ -1794,8 +1796,13 @@ mod tests {
             Err(ZxError::BAD_STATE)
         );
 
-        // wait 100ms for the new thread to exit
-        async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+        // Wait for the new thread to exit (bounded to avoid hanging).
+        for _ in 0..500 {
+            if thread.state() == ThreadState::Dead && Arc::strong_count(&thread) == 1 {
+                break;
+            }
+            async_std::task::sleep(core::time::Duration::from_millis(2)).await;
+        }
 
         // no other references to `Thread`
         assert_eq!(Arc::strong_count(&thread), 1);
@@ -1805,6 +1812,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn blocking_run() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1832,7 +1840,10 @@ mod tests {
 
         let cancel_token = proc.get_cancel_token(handle_value).unwrap();
         let future = object.wait_signal(Signal::READABLE);
-        let deadline = timer_now() + Duration::from_millis(20);
+        // Generous deadline: the cancellation (handle removal below)
+        // must win the race against the timeout even if the remover
+        // task is scheduled late on a loaded runner.
+        let deadline = timer_now() + Duration::from_millis(500);
         async_std::task::spawn({
             let proc = proc.clone();
             async move {
@@ -1853,6 +1864,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn info() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1868,6 +1880,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn read_write_state() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1905,6 +1918,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn ext() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1916,6 +1930,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wait_for_run() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1954,6 +1969,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn time() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1966,6 +1982,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn exit() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1989,6 +2006,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn priority_default() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -2001,6 +2019,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn priority_set_get() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");

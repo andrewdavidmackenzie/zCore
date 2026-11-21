@@ -178,6 +178,7 @@ impl Drop for Fifo {
 }
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod tests {
     use super::*;
     use alloc::vec::Vec;

@@ -645,6 +645,7 @@ mod tests {
     use core::time::Duration;
 
     #[test]
+    #[serial_test::parallel]
     fn create() {
         let root_job = Job::root();
         let job = Job::create_child(&root_job).expect("failed to create job");
@@ -663,6 +664,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn set_policy() {
         let root_job = Job::root();
 
@@ -745,6 +747,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn parent_child() {
         let root_job = Job::root();
         let job = Job::create_child(&root_job).expect("failed to create job");
@@ -768,6 +771,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn check() {
         let root_job = Job::root();
         assert!(root_job.is_empty());
@@ -784,6 +788,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn kill() {
         let root_job = Job::root();
         let job = Job::create_child(&root_job).expect("failed to create job");
@@ -816,8 +821,20 @@ mod tests {
         assert!(!proc.signal().contains(Signal::PROCESS_TERMINATED));
         assert!(!thread.signal().contains(Signal::THREAD_TERMINATED));
 
-        // wait for killing...
-        async_std::task::sleep(Duration::from_millis(1000)).await;
+        // wait for killing... (bounded to avoid hanging on a slow runner)
+        for _ in 0..500 {
+            let done = root_job.inner.lock().killed
+                && job.inner.lock().killed
+                && thread.state() == ThreadState::Dead
+                && root_job.signal().contains(Signal::JOB_TERMINATED)
+                && job.signal().contains(Signal::JOB_TERMINATED)
+                && proc.signal().contains(Signal::PROCESS_TERMINATED)
+                && thread.signal().contains(Signal::THREAD_TERMINATED);
+            if done {
+                break;
+            }
+            async_std::task::sleep(Duration::from_millis(10)).await;
+        }
         assert!(root_job.inner.lock().killed);
         assert!(job.inner.lock().killed);
         assert_eq!(proc.status(), Status::Exited(TASK_RETCODE_SYSCALL_KILL));
@@ -848,6 +865,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn critical_process() {
         let root_job = Job::root();
         let job = root_job.create_child().unwrap();

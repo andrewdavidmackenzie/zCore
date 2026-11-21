@@ -451,6 +451,7 @@ const ZX_PAGER_OP_WRITEBACK_BEGIN: u32 = 3;
 const ZX_PAGER_OP_WRITEBACK_END: u32 = 4;
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod tests {
     use super::*;
     use crate::signal::Port;
