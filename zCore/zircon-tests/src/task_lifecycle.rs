@@ -94,7 +94,10 @@ fn kill_empty_process() {
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "empty-proc").unwrap();
     Process::exit(&proc, -1);
-    // After kill, process should be dying or dead
+    // No threads: terminate() runs synchronously inside exit(), so
+    // PROCESS_TERMINATED must already be asserted (review: this
+    // catches a no-thread path that skips termination).
+    assert!(proc.signal().contains(Signal::PROCESS_TERMINATED));
 }
 
 ///
@@ -104,9 +107,13 @@ fn kill_job_with_process() {
     let _ctx = TestContext::new();
     let root = Job::root();
     let job = root.create_child().unwrap();
-    let _proc = zircon_object::task::Process::create(&job, "child-proc").unwrap();
+    let proc = zircon_object::task::Process::create(&job, "child-proc").unwrap();
     Job::kill_with_code(&job, -1024);
-    // After kill, job should be dying
+    // kill_with_code must run Process::exit on every child process;
+    // with no threads the child terminates synchronously (review:
+    // this catches a job kill that marks the job but skips its
+    // processes).
+    assert!(proc.signal().contains(Signal::PROCESS_TERMINATED));
 }
 
 ///

@@ -354,7 +354,6 @@ impl Process {
     /// and any attempt to acquire a thread lock while holding the
     /// process context must come after it in the graph.
     pub fn exit(arc_self: &Arc<Self>, retcode: i64) {
-        let this = arc_self.as_ref();
         let zero_handles_objects;
         let should_terminate;
         let ctx = super::task_ctx::TaskCtx::from_process(arc_self.clone());
@@ -449,7 +448,7 @@ impl Process {
                     }
                 }
             }
-            let mut inner = this.inner.lock();
+            let mut inner = locked.lock_and::<super::lock_order::ProcessInnerLock>().0;
             // Remove unstarted threads — they can never call
             // remove_thread().  Started threads (now Dying) will
             // call remove_thread() when their CurrentThread drops.
@@ -1111,38 +1110,44 @@ impl Process {
     /// Remove a thread from the process.
     ///
     /// If no more threads left, exit the process.
-    /// Remove a thread from the process.
-    ///
-    /// If no more threads left, exit the process.
     ///
     /// Takes the process's `Arc` so the lock acquisition goes through
     /// the lockgraph context (#829 Batch 5D-5).
     ///
-    /// Lock-order note (graph-surfaced fix): the job kill state is
-    /// read BEFORE taking the process lock. The previous code called
-    /// `Job::is_killed()`/`return_code()` (Job.inner) while holding
-    /// Process.inner — an inversion of the declared Job → Process
-    /// order, safe only because job-side callers (get_all_threads,
-    /// total_cpu_time, kill_with_code) collect-then-act by
-    /// convention. The graph cannot express both directions (that
-    /// would be a cycle), so the inversion is resolved structurally:
-    /// collect the job state first, then lock the process. Reading
-    /// early is safe: the kill state only transitions false → true,
-    /// and a late job kill overwrites the exit code via
-    /// `Process::exit` regardless.
+    /// Lock order (graph-checked, review-driven fix): the JOB lock is
+    /// taken first and HELD ACROSS the process lock — the declared
+    /// Job → Process edge, enforced by the graph when chaining
+    /// `JobInnerLock → ProcessInnerLock` through the context. The
+    /// kill state is read from the held job guard (via
+    /// `JobInner::kill_code`), not through the re-locking accessors.
+    ///
+    /// Two earlier designs were wrong:
+    /// 1. The original code read `Job::is_killed()`/`return_code()`
+    ///    (Job.inner) while holding Process.inner — an inversion of
+    ///    the declared order, safe only because job-side callers
+    ///    collect-then-act by convention.
+    /// 2. The first conversion read the job state BEFORE taking the
+    ///    process lock. That respects the order but widens a race:
+    ///    `Job::kill_with_code` sets killed/return_code under the
+    ///    job lock and then calls `Process::exit`; a kill landing
+    ///    between the read and the last-thread status write freezes
+    ///    the exit code at 0 (exit early-returns once `terminated`
+    ///    is set). Holding the job guard across the decision closes
+    ///    that window: a kill that has begun is visible here, and a
+    ///    kill that begins after this section follows an
+    ///    already-decided exit (the same razor-thin corner Fuchsia
+    ///    has between a natural death and a racing Kill()).
+    ///
+    /// Both guards are released before `terminate` (which re-enters
+    /// both locks).
     pub(super) fn remove_thread(arc_self: &Arc<Self>, tid: KoID) {
-        let this = arc_self.as_ref();
-        let job_killed = this.job.is_killed();
-        let job_return_code = if job_killed {
-            this.job.return_code()
-        } else {
-            0
-        };
         let ctx = super::task_ctx::TaskCtx::from_process(arc_self.clone());
         let mut locked = ctx.locked();
         let mut terminated = false;
         {
-            let mut inner = locked.lock_and::<super::lock_order::ProcessInnerLock>().0;
+            let (job_inner, mut job_ctx) = locked.lock_and::<super::lock_order::JobInnerLock>();
+            let job_return_code = job_inner.kill_code().unwrap_or(0);
+            let mut inner = job_ctx.lock_and::<super::lock_order::ProcessInnerLock>().0;
             // Bail if the thread was already removed (e.g., Process::exit
             // removed unstarted threads, then CurrentThread::drop calls
             // terminate → remove_thread again with the same ID).
@@ -1167,8 +1172,8 @@ impl Process {
             if inner.threads.iter().all(|t| t.strong_count() == 0) {
                 // If exit() hasn't been called yet, set the exit code
                 // before running terminate(). Propagate the kill code
-                // when the last thread dies due to a job kill racing
-                // with thread termination (state collected above).
+                // (read from the held job guard above) when the last
+                // thread dies during a job kill.
                 if !matches!(inner.status, Status::Exited(_)) {
                     inner.status = Status::Exited(job_return_code);
                 }

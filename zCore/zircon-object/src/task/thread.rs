@@ -1104,12 +1104,22 @@ impl Thread {
             }
         }
         // The thread lock guard is RELEASED (end of the scoped block
-        // above) BEFORE remove_thread: remove_thread takes the process
-        // lock, and Process::exit/suspend hold the process lock while
-        // calling Thread::kill()/state() (thread lock). Holding the
-        // thread guard across this call is the #838 ABBA — it hung
-        // PThreadBarrierTest when the guard drop was lost in a clippy
-        // fix. Do not remove the scoped block.
+        // above) BEFORE remove_thread. This is load-bearing and the
+        // compiler cannot catch a regression here:
+        //
+        // - remove_thread acquires ProcessInnerLock through a NEW
+        //   lockgraph context (Job → Process chaining); it starts
+        //   from Unlocked, so a thread guard still held by the CALLER
+        //   is invisible to the graph — the context proves nothing
+        //   about the caller's already-held guards.
+        // - Process::exit and suspend_checked snapshot the thread
+        //   list under the process lock and release it before calling
+        //   into threads (collect-then-act), so no path holds the
+        //   process lock while taking a thread lock — the #838 ABBA
+        //   exists only if THIS guard leaks across the call.
+        //
+        // It hung PThreadBarrierTest when the guard drop was lost in
+        // a clippy fix. Do not remove the scoped block.
         Process::remove_thread(&this.proc, this.base.id);
     }
 }

@@ -99,6 +99,15 @@ fn policy_deny_new_vmo() {
 ///
 /// Set policy to deny channel creation. Creating a channel should
 /// fail with ACCESS_DENIED.
+///
+/// Rust-native unit test — no 1:1 C++ counterpart to cite: the C++
+/// policy utests (zircon/system/utest/core/policy, now removed from
+/// Fuchsia main) drove the `zx_channel_create` syscall under a deny
+/// policy; the surviving kernel-side job_policy_tests.cpp tests the
+/// JobPolicy engine directly. This test asserts the kernel-side
+/// check that `zx_channel_create`'s syscall path consults
+/// (`Syscall::enforce_basic_policy` → `Process::check_policy`)
+/// returns ACCESS_DENIED for NewChannel under a deny policy.
 fn policy_deny_new_channel() {
     let _ctx = TestContext::new();
     let root = Job::root();

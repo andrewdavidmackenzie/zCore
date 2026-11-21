@@ -77,6 +77,20 @@ pub struct JobInner {
     exited_queue_time: u64,
 }
 
+impl JobInner {
+    /// The kill return code, if the job has been killed — read from a
+    /// HELD guard (see `Process::remove_thread`, which holds the job
+    /// lock across the process lock and must not re-enter it through
+    /// the locking accessors `Job::is_killed`/`return_code`).
+    pub(super) fn kill_code(&self) -> Option<i64> {
+        if self.killed {
+            Some(self.return_code)
+        } else {
+            None
+        }
+    }
+}
+
 impl Job {
     /// Initial signals for an empty job: no children, no processes.
     fn empty_signals() -> Signal {
