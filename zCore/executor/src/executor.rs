@@ -183,13 +183,19 @@ impl Executor {
                 } else if weak_executor != 0 {
                     crate::runtime::sched_yield();
                 } else {
-                    // Work stealing: infrastructure is in place and the
-                    // migration is atomic (see TaskCollection::steal_into),
-                    // but the steal call is DISABLED pending the wake-loss
-                    // race tracked in the follow-up issue — with it
-                    // enabled, parked thread tasks occasionally never
-                    // receive wake-ups, hanging the machine after
-                    // core-tests. See #783 Phase 6.
+                    // Work stealing: steal a task from another CPU's
+                    // collection. The migration is atomic with respect
+                    // to the waker system (see TaskCollection::steal_into).
+                    // Only default-priority tasks are migrated; all other
+                    // priorities stay on their source CPU.
+                    if let Some(tc) = crate::runtime::local_task_collection() {
+                        if crate::runtime::steal_task_from_other_cpu_into(tc).is_some() {
+                            crate::cpu_stats(crate::arch::cpu_id() as usize)
+                                .stolen_tasks
+                                .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                            continue;
+                        }
+                    }
                     crate::arch::wait_for_interrupt();
                 }
             }
