@@ -2834,10 +2834,7 @@ mod tests {
     /// content from a previously freed frame instead of the parent's
     /// page. Runs reliably on bare-metal and Linux CI.
     #[test]
-    // FIXME(#854): intermittently fails (~10% of runs) — COW page
-    // attribution race in multi-clone writes. Passes individually.
     #[cfg_attr(target_os = "macos", ignore)]
-    #[ignore]
     fn many_clones() {
         const N: usize = 4;
         let old: u8 = 0xa;

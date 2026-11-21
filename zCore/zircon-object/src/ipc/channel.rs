@@ -463,6 +463,8 @@ mod tests {
     // The `call` test deadlocks in libos/test mode because
     // async_std::task::spawn tasks are not reliably scheduled
     // alongside the main test task's Channel::call() future.
+    // FIXME(#856): hangs — the spawned task's Channel::call() future
+    // never completes in the test's async-std runtime.
     #[async_std::test]
     #[ignore]
     async fn call() {

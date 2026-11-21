@@ -148,7 +148,6 @@ mod tests {
     // and these tests deadlock. Ignored until we have a test-mode timer driver.
 
     #[async_std::test]
-    #[ignore]
     async fn one_shot() {
         let timer = Timer::one_shot(timer_now() + Duration::from_millis(15));
         async_std::task::sleep(Duration::from_millis(10)).await;
@@ -159,7 +158,6 @@ mod tests {
     }
 
     #[async_std::test]
-    #[ignore]
     async fn set() {
         let timer = Timer::new();
         timer.set(timer_now() + Duration::from_millis(10), Duration::default());
@@ -176,7 +174,6 @@ mod tests {
     }
 
     #[async_std::test]
-    #[ignore]
     async fn cancel() {
         let timer = Timer::new();
         timer.set(timer_now() + Duration::from_millis(10), Duration::default());
