@@ -745,10 +745,58 @@ async fn handler_user_trap(
                 }
             }
         }
-        TrapReason::UndefinedInstruction => Err(ExceptionInfo {
-            type_: ExceptionType::UndefinedInstruction,
-            synth_code: 0,
-        }),
+        TrapReason::UndefinedInstruction => {
+            // Diagnosability (#829): the intermittent core-tests
+            // root-process kills are unhandled #UD traps on pthread
+            // threads. Dump the faulting context: the opcode bytes at
+            // RIP distinguish a real unsupported instruction (a QEMU
+            // CPU-model gap) from a corrupted register context
+            // (a garbage RIP).
+            #[cfg(target_arch = "x86_64")]
+            {
+                let ctx = thread.context_cloned();
+                if let Ok(ctx) = ctx.as_ref() {
+                    let regs = ctx.general();
+                    error!(
+                        "UndefinedInstruction: tid={} rip={:#x} rsp={:#x} rbp={:#x}",
+                        thread.inner().id(),
+                        regs.rip,
+                        regs.rsp,
+                        regs.rbp
+                    );
+                    let mut code = [0u8; 16];
+                    if thread.proc().vmar().read_memory(regs.rip, &mut code).is_ok() {
+                        error!("  opcode@rip: {:02x?}", &code);
+                    } else {
+                        error!(
+                            "  rip {:#x} NOT READABLE — likely a corrupted instruction pointer",
+                            regs.rip
+                        );
+                    }
+                    let mut fp = regs.rbp;
+                    for depth in 0..6 {
+                        if fp == 0 || fp > 0x8000_0000_0000 {
+                            break;
+                        }
+                        let mut buf = [0u8; 16];
+                        if thread.proc().vmar().read_memory(fp, &mut buf).is_ok() {
+                            let next_fp =
+                                usize::from_le_bytes(buf[0..8].try_into().unwrap());
+                            let ret_addr =
+                                usize::from_le_bytes(buf[8..16].try_into().unwrap());
+                            error!("  frame[{}]: fp={:#x} ret={:#x}", depth, next_fp, ret_addr);
+                            fp = next_fp;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            Err(ExceptionInfo {
+                type_: ExceptionType::UndefinedInstruction,
+                synth_code: 0,
+            })
+        }
         TrapReason::SoftwareBreakpoint => Err(ExceptionInfo {
             type_: ExceptionType::SoftwareBreakpoint,
             synth_code: 0,
