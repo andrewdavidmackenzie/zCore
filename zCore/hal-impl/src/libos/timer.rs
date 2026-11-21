@@ -29,12 +29,23 @@ hal_fn_impl! {
             // references to async-std's internal structures, and the
             // process can exit while it sleeps without heap
             // corruption (the OS reclaims everything).
+            let set_at = timer_now();
             std::thread::spawn(move || {
-                let now = timer_now();
-                if deadline > now {
-                    std::thread::sleep(deadline - now);
+                let thread_start = timer_now();
+                if deadline > thread_start {
+                    std::thread::sleep(deadline - thread_start);
                 }
-                callback(timer_now());
+                let fired_at = timer_now();
+                if fired_at - set_at > deadline - set_at + Duration::from_millis(5) {
+                    eprintln!(
+                        "[timer] set_at={:?} start_at={:?} deadline={:?} fired_at={:?} (spawn_delay={:?}, total_delay={:?}, overshoot={:?})",
+                        set_at, thread_start, deadline, fired_at,
+                        thread_start - set_at,
+                        fired_at - set_at,
+                        fired_at.saturating_sub(deadline)
+                    );
+                }
+                callback(fired_at);
             });
         }
     }
