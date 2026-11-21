@@ -97,22 +97,6 @@ impl Futex {
                     break;
                 }
             }
-            // Diagnosability (#829 CI-stability hunt): a wake that
-            // found fewer waiters than requested is the lost-wake
-            // signature. The value check and queue push in
-            // FutexFuture::poll are atomic under this lock, so a miss
-            // here means the waiter had not pushed YET — and one-shot
-            // wakers (thread exit: musl writes tid=0 then wakes once)
-            // never re-wake, hanging their joiner.
-            if collected.len() < wake_count {
-                error!(
-                    "futex wake {:#x}: requested {}, woke {} ({} still queued)",
-                    self.user_addr,
-                    wake_count,
-                    collected.len(),
-                    inner.waiter_queue.len()
-                );
-            }
             collected
         };
         let count = waiters.len();

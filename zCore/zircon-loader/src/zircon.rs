@@ -765,21 +765,19 @@ async fn handler_user_trap(
                         regs.rbp
                     ));
                     let mut code = [0u8; 16];
-                    if thread
-                        .proc()
-                        .vmar()
-                        .read_memory(regs.rip, &mut code)
-                        .is_ok()
-                    {
-                        hal_impl::console::console_write_fmt(format_args!(
-                            "[ud]   opcode@rip: {:02x?}\n",
-                            code
-                        ));
-                    } else {
-                        hal_impl::console::console_write_fmt(format_args!(
+                    match thread.proc().vmar().read_memory(regs.rip, &mut code) {
+                        // Print only the bytes actually read — a short
+                        // read must not fabricate zero instruction bytes
+                        // (review: misleading crash diagnostics).
+                        Ok(n) => hal_impl::console::console_write_fmt(format_args!(
+                            "[ud]   opcode@rip ({} bytes): {:02x?}\n",
+                            n,
+                            &code[..n]
+                        )),
+                        Err(_) => hal_impl::console::console_write_fmt(format_args!(
                             "[ud]   rip {:#x} NOT READABLE — likely a corrupted instruction pointer\n",
                             regs.rip
-                        ));
+                        )),
                     }
                     let mut fp = regs.rbp;
                     for depth in 0..6 {
@@ -787,7 +785,9 @@ async fn handler_user_trap(
                             break;
                         }
                         let mut buf = [0u8; 16];
-                        if thread.proc().vmar().read_memory(fp, &mut buf).is_ok() {
+                        // A short read would fabricate a zero return
+                        // address — require the full 16 bytes (review).
+                        if thread.proc().vmar().read_memory(fp, &mut buf) == Ok(16) {
                             let next_fp = usize::from_le_bytes(buf[0..8].try_into().unwrap());
                             let ret_addr = usize::from_le_bytes(buf[8..16].try_into().unwrap());
                             hal_impl::console::console_write_fmt(format_args!(
