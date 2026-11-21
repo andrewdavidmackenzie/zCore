@@ -91,7 +91,7 @@ pub struct Thread {
     /// link (Process → Thread) is Weak to avoid a reference cycle.
     proc: Arc<Process>,
     ext: Box<dyn Any + Send + Sync>,
-    inner: KernelMutex<ThreadInner>,
+    pub(crate) inner: KernelMutex<ThreadInner>,
     exceptionate: Arc<Exceptionate>,
 }
 
@@ -103,7 +103,7 @@ impl_kobject!(Thread
 define_count_helper!(Thread);
 
 #[derive(Default)]
-struct ThreadInner {
+pub struct ThreadInner {
     /// Thread context
     ///
     /// It will be taken away when running this thread.
