@@ -16,6 +16,7 @@
 //!   not be preempted while held. Everything else should use
 //!   `KernelMutex` — see the lock-ordering work in #829.
 
+pub mod lockgraph;
 pub mod mutex;
 pub use mutex::{set_yield_fn, KernelMutex, KernelMutexGuard};
 
