@@ -560,17 +560,20 @@ impl Exception {
                 // Diagnosability (#829): an unhandled exception killing
                 // a process was previously silent — the core-tests
                 // root process dying with TASK_RETCODE_EXCEPTION_KILL
-                // left no trace of WHICH exception fired. Always log
-                // the type, thread, and delivery error at error level.
-                error!(
-                    "unhandled exception {:?} on thread {} ({}): delivery {:?} — killing process {} ({})",
+                // left no trace of WHICH exception fired. Use
+                // console_write_fmt (not error!) — the log-macro path
+                // lost this line in CI at native speed (it printed
+                // locally under slow TCG but never appeared in the CI
+                // log while the kill path demonstrably executed).
+                hal_impl::console::console_write_fmt(format_args!(
+                    "[excp] unhandled exception {:?} on thread {} ({}): delivery {:?} — killing process {} ({})\n",
                     self.type_,
                     self.thread.id(),
                     self.thread.name(),
                     result,
                     proc.id(),
                     proc.name()
-                );
+                ));
                 Process::exit(&proc, super::TASK_RETCODE_EXCEPTION_KILL);
             }
         }

@@ -757,21 +757,29 @@ async fn handler_user_trap(
                 let ctx = thread.context_cloned();
                 if let Ok(ctx) = ctx.as_ref() {
                     let regs = ctx.general();
-                    error!(
-                        "UndefinedInstruction: tid={} rip={:#x} rsp={:#x} rbp={:#x}",
+                    hal_impl::console::console_write_fmt(format_args!(
+                        "[ud] tid={} rip={:#x} rsp={:#x} rbp={:#x}\n",
                         thread.inner().id(),
                         regs.rip,
                         regs.rsp,
                         regs.rbp
-                    );
+                    ));
                     let mut code = [0u8; 16];
-                    if thread.proc().vmar().read_memory(regs.rip, &mut code).is_ok() {
-                        error!("  opcode@rip: {:02x?}", &code);
+                    if thread
+                        .proc()
+                        .vmar()
+                        .read_memory(regs.rip, &mut code)
+                        .is_ok()
+                    {
+                        hal_impl::console::console_write_fmt(format_args!(
+                            "[ud]   opcode@rip: {:02x?}\n",
+                            code
+                        ));
                     } else {
-                        error!(
-                            "  rip {:#x} NOT READABLE — likely a corrupted instruction pointer",
+                        hal_impl::console::console_write_fmt(format_args!(
+                            "[ud]   rip {:#x} NOT READABLE — likely a corrupted instruction pointer\n",
                             regs.rip
-                        );
+                        ));
                     }
                     let mut fp = regs.rbp;
                     for depth in 0..6 {
@@ -780,11 +788,12 @@ async fn handler_user_trap(
                         }
                         let mut buf = [0u8; 16];
                         if thread.proc().vmar().read_memory(fp, &mut buf).is_ok() {
-                            let next_fp =
-                                usize::from_le_bytes(buf[0..8].try_into().unwrap());
-                            let ret_addr =
-                                usize::from_le_bytes(buf[8..16].try_into().unwrap());
-                            error!("  frame[{}]: fp={:#x} ret={:#x}", depth, next_fp, ret_addr);
+                            let next_fp = usize::from_le_bytes(buf[0..8].try_into().unwrap());
+                            let ret_addr = usize::from_le_bytes(buf[8..16].try_into().unwrap());
+                            hal_impl::console::console_write_fmt(format_args!(
+                                "[ud]   frame[{}]: fp={:#x} ret={:#x}\n",
+                                depth, next_fp, ret_addr
+                            ));
                             fp = next_fp;
                         } else {
                             break;
