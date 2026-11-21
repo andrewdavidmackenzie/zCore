@@ -91,7 +91,7 @@ fn policy_deny_new_vmo() {
 
     let proc = Process::create(&job, "test-deny-vmo").unwrap();
     assert_eq!(
-        proc.check_policy(PolicyCondition::NewVMO),
+        Process::check_policy(&proc, PolicyCondition::NewVMO),
         Err(ZxError::ACCESS_DENIED)
     );
 }
@@ -113,7 +113,7 @@ fn policy_deny_new_channel() {
 
     let proc = Process::create(&job, "test-deny-channel").unwrap();
     assert_eq!(
-        proc.check_policy(PolicyCondition::NewChannel),
+        Process::check_policy(&proc, PolicyCondition::NewChannel),
         Err(ZxError::ACCESS_DENIED)
     );
 }
@@ -135,7 +135,7 @@ fn policy_deny_new_event() {
 
     let proc = Process::create(&job, "test-deny-event").unwrap();
     assert_eq!(
-        proc.check_policy(PolicyCondition::NewEvent),
+        Process::check_policy(&proc, PolicyCondition::NewEvent),
         Err(ZxError::ACCESS_DENIED)
     );
 }
@@ -157,7 +157,7 @@ fn policy_deny_new_socket() {
 
     let proc = Process::create(&job, "test-deny-socket").unwrap();
     assert_eq!(
-        proc.check_policy(PolicyCondition::NewSocket),
+        Process::check_policy(&proc, PolicyCondition::NewSocket),
         Err(ZxError::ACCESS_DENIED)
     );
 }
@@ -179,7 +179,7 @@ fn policy_deny_new_fifo() {
 
     let proc = Process::create(&job, "test-deny-fifo").unwrap();
     assert_eq!(
-        proc.check_policy(PolicyCondition::NewFIFO),
+        Process::check_policy(&proc, PolicyCondition::NewFIFO),
         Err(ZxError::ACCESS_DENIED)
     );
 }
@@ -201,7 +201,7 @@ fn policy_deny_new_timer() {
 
     let proc = Process::create(&job, "test-deny-timer").unwrap();
     assert_eq!(
-        proc.check_policy(PolicyCondition::NewTimer),
+        Process::check_policy(&proc, PolicyCondition::NewTimer),
         Err(ZxError::ACCESS_DENIED)
     );
 }
@@ -223,7 +223,7 @@ fn policy_deny_new_port() {
 
     let proc = Process::create(&job, "test-deny-port").unwrap();
     assert_eq!(
-        proc.check_policy(PolicyCondition::NewPort),
+        Process::check_policy(&proc, PolicyCondition::NewPort),
         Err(ZxError::ACCESS_DENIED)
     );
 }
@@ -335,7 +335,7 @@ fn policy_ambient_mark_vmo_exec() {
     // A process under this job should pass the policy check.
     let proc = Process::create(&job, "test-ambient-exec").unwrap();
     assert_eq!(
-        proc.check_policy(PolicyCondition::AmbientMarkVMOExec),
+        Process::check_policy(&proc, PolicyCondition::AmbientMarkVMOExec),
         Ok(())
     );
 }

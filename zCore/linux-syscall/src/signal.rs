@@ -182,10 +182,16 @@ impl Syscall<'_> {
                 match signal {
                     Signal::SIGKILL => {
                         if parent.id() == (target_pid as u64) {
-                            parent.exit((128 + Signal::SIGKILL as i32) as i64);
+                            zircon_object::task::Process::exit(
+                                &parent,
+                                (128 + Signal::SIGKILL as i32) as i64,
+                            );
                         } else {
                             let process: Arc<Process> = obj.downcast_arc().unwrap();
-                            process.exit((128 + Signal::SIGKILL as i32) as i64);
+                            zircon_object::task::Process::exit(
+                                &process,
+                                (128 + Signal::SIGKILL as i32) as i64,
+                            );
                         }
                     }
                     sig => {
@@ -356,7 +362,10 @@ impl Syscall<'_> {
                 let process: Arc<Process> = obj.downcast_arc().unwrap();
                 // SIGKILL always terminates the target
                 if signal == Signal::SIGKILL {
-                    process.exit((128 + Signal::SIGKILL as i32) as i64);
+                    zircon_object::task::Process::exit(
+                        &process,
+                        (128 + Signal::SIGKILL as i32) as i64,
+                    );
                     return Ok(0);
                 }
                 let tids = process.thread_ids();

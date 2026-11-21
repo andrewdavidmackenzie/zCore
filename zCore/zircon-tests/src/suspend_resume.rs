@@ -406,7 +406,7 @@ async fn suspend_resume_race_with_dying_threads() {
         // Exit races any terminate() still in flight: the kill loop
         // must not spin on a thread lock held by a terminator waiting
         // for this process's lock.
-        proc.exit(0);
+        Process::exit(&proc, 0);
         // Every thread must terminate and the process must reach
         // PROCESS_TERMINATED — a lost wake or deadlock makes this
         // wait hang.

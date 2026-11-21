@@ -4802,7 +4802,7 @@ fn vmar_maps_get_info_info_vmar_maps_process_destroyed_fails() {
     let target = Process::create(&job, "vmar-dead").unwrap();
     let vmar = target.vmar();
     // Kill the process
-    target.exit(0);
+    Process::exit(&target, 0);
     let vmar_h = ctx.proc.add_handle(Handle::new(vmar, Rights::DEFAULT_VMAR));
     let mut buf = vec![0u8; 16 * VMAR_MAPS_ENTRY_SIZE];
     // May return BAD_STATE, NOT_FOUND, or succeed with 0 entries.

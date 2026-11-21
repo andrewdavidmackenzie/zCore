@@ -511,7 +511,7 @@ impl Job {
             }
         }
         for proc in processes {
-            proc.exit(return_code);
+            Process::exit(&proc, return_code);
         }
     }
 }
@@ -706,7 +706,7 @@ mod tests {
 
         let _proc = Process::create(&job, "proc").expect("failed to create process");
         assert!(!job.is_empty());
-        _proc.exit(0);
+        Process::exit(&_proc, 0);
     }
 
     #[async_std::test]
@@ -791,7 +791,7 @@ mod tests {
             Some(ZxError::ALREADY_BOUND)
         );
 
-        proc.exit(666);
+        Process::exit(&proc, 666);
         assert!(root_job.inner.lock().killed);
         assert!(root_job.signal().contains(Signal::JOB_TERMINATED));
     }

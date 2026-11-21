@@ -129,7 +129,7 @@ fn process_get_info_exited() {
     let proc = Process::create(&job, "exit-test").unwrap();
 
     // Exit with a specific code
-    proc.exit(42);
+    Process::exit(&proc, 42);
     let info = proc.get_info();
     assert_eq!(info.return_code, 42);
     // EXITED flag should be set (bit 1 = ZX_INFO_PROCESS_FLAG_EXITED)
@@ -145,7 +145,7 @@ fn process_exit_code() {
     // Before exit, exit_code returns None
     assert_eq!(proc.exit_code(), None);
 
-    proc.exit(99);
+    Process::exit(&proc, 99);
 
     // After exit, exit_code returns the code
     assert_eq!(proc.exit_code(), Some(99));
@@ -231,7 +231,7 @@ fn process_status() {
     assert_eq!(info.flags & 1, 0, "STARTED flag should not be set");
 
     // Exit the process
-    proc.exit(0);
+    Process::exit(&proc, 0);
     assert_eq!(proc.status(), Status::Exited(0));
 
     // EXITED flag should be set
