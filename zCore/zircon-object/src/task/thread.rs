@@ -1060,13 +1060,26 @@ impl Thread {
     }
 
     /// Terminate the current running thread.
-    fn terminate(&self) {
-        let mut inner = self.inner.lock();
-        self.exceptionate.shutdown();
+    ///
+    /// Takes the thread's `Arc` so the lockgraph context (`TaskCtx`)
+    /// can be constructed — the Arc provides the upward chain
+    /// (process, job) without unsafe code.
+    ///
+    /// The thread lock acquisition goes through the lockgraph,
+    /// enforcing the declared lock order at compile time: the thread
+    /// lock is the most-specific level, so acquiring the process lock
+    /// while holding it is a compile error — the #838 deadlock cannot
+    /// be reintroduced.
+    fn terminate(arc_self: &Arc<Self>) {
+        let ctx = super::task_ctx::TaskCtx::from_thread(arc_self.clone());
+        let mut locked = ctx.locked();
+        let (mut inner, _thread_ctx) = locked.lock_and::<super::lock_order::ThreadInnerLock>();
+        let this = arc_self.as_ref();
+        this.exceptionate.shutdown();
         // Clear task identifiers so a stale set_priority() cannot
         // address a reused executor slab slot.
         inner.task_sched = None;
-        inner.change_state(ThreadState::Dead, &self.base);
+        inner.change_state(ThreadState::Dead, &this.base);
         // Wake the wait_for_run waker so the run_user future can
         // observe the Dead state and exit. Without this, threads
         // killed while suspended (e.g., unhandled exceptions) leak
@@ -1085,15 +1098,16 @@ impl Thread {
         if let Some(killer) = inner.killer.take() {
             let _ = killer.send(());
         }
-        // Release the thread lock BEFORE taking the process lock in
-        // remove_thread: Process::exit/suspend/resume take the process
-        // lock and then call Thread::kill()/state() (thread lock), so
-        // holding both in this order is an ABBA cycle (the same edge
-        // #838 fixes from the process side; dropping the guard here
-        // removes it from the thread side too). Nothing after this
-        // point uses `inner`.
+        // Release the thread lock context BEFORE taking the process
+        // lock in remove_thread: the graph has no thread → process
+        // edge (the #838 fix), so holding the thread context across
+        // the process acquisition would be a compile error. Dropping
+        // the context returns to Unlocked, from which the process
+        // lock is legally acquirable.
         drop(inner);
-        self.proc.remove_thread(self.base.id);
+        drop(_thread_ctx);
+        drop(locked);
+        this.proc.remove_thread(this.base.id);
     }
 }
 
@@ -1549,7 +1563,7 @@ impl core::ops::Deref for CurrentThread {
 
 impl Drop for CurrentThread {
     fn drop(&mut self) {
-        self.terminate();
+        Thread::terminate(&self.0);
     }
 }
 
