@@ -172,13 +172,13 @@ impl Futex {
                     // inner.waker (mutable) can't coexist.
                     let futex_ref = inner.futex.clone();
                     let waker = cx.waker().clone();
-                    // Store the waker FIRST so wake() always finds it.
+                    // Store the waker FIRST so a wake that pops us from
+                    // the queue after registration can call it.
                     inner.waker.replace(waker);
                     drop(inner);
 
                     // Now lock the futex and do the value check +
-                    // waiter registration. The waker is already stored
-                    // so wake() can use it if it races here.
+                    // waiter registration.
                     let mut futex = futex_ref.inner.lock();
                     let value = futex_ref.load_user_value();
                     if value != self.current_value {
@@ -207,6 +207,24 @@ impl Futex {
                         thread.set_blocking_futex(futex_ref.user_addr);
                     }
                     drop(futex);
+
+                    // Re-check `woken` after registering in the queue.
+                    // A wake that ran between storing the waker (above)
+                    // and pushing into the queue found an empty queue
+                    // and was lost — `woken` is still false because
+                    // `Waiter::wake()` was never called on us. But a
+                    // wake that ran AFTER the push but BEFORE we
+                    // re-acquire the waiter lock here would have popped
+                    // us and set `woken=true` (and called our waker,
+                    // which schedules a re-poll). The re-check catches
+                    // that case and returns Ready immediately instead
+                    // of parking on a notification that already
+                    // happened.
+                    let inner2 = self.waiter.inner.lock();
+                    if inner2.woken {
+                        return Poll::Ready(Ok(()));
+                    }
+                    drop(inner2);
                 }
                 Poll::Pending
             }
