@@ -1098,15 +1098,12 @@ impl Thread {
         if let Some(killer) = inner.killer.take() {
             let _ = killer.send(());
         }
-        // Release the thread lock context BEFORE taking the process
-        // lock in remove_thread: the graph has no thread → process
-        // edge (the #838 fix), so holding the thread context across
-        // the process acquisition would be a compile error. Dropping
-        // the context returns to Unlocked, from which the process
-        // lock is legally acquirable.
-        drop(inner);
-        drop(_thread_ctx);
-        drop(locked);
+        // The thread lock is released when `inner` (the guard) drops
+        // at the end of this scope. The context types (`_thread_ctx`,
+        // `locked`) are zero-sized markers — no explicit drop needed.
+        // The graph has no thread → process edge (the #838 fix), so
+        // the process lock in remove_thread below is acquired from
+        // Unlocked (legal from any level).
         this.proc.remove_thread(this.base.id);
     }
 }
