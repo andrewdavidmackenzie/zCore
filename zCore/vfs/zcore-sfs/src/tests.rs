@@ -1,23 +1,36 @@
 extern crate std;
 
 use crate::*;
-use std::{
-    fs::{self, OpenOptions},
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 use zcore_fs::{
     util::zeroed_memory,
     vfs::{FileSystem, FileType, Metadata, Result, Timespec},
 };
 
 fn _open_sample_file() -> Arc<SimpleFileSystem> {
-    fs::copy("sfs.img", "test.img").expect("failed to open sfs.img");
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open("test.img")
-        .expect("failed to open test.img");
-    SimpleFileSystem::open(Arc::new(Mutex::new(file))).expect("failed to open SFS")
+    // The original version copied a pre-built `sfs.img` from the
+    // working directory, but that file was never committed to the repo,
+    // so these tests could never run. Build the same content on a fresh
+    // temporary filesystem, sync it, and then reopen the image — this
+    // still exercises the "open an existing image" path without any
+    // external file (and without writing `test.img` into the CWD).
+    let file = tempfile::tempfile().expect("failed to create file");
+    let file = Arc::new(Mutex::new(file));
+    let sfs =
+        SimpleFileSystem::create(file.clone(), 32 * 4096 * 4096).expect("failed to create SFS");
+    let root = sfs.root_inode();
+    root.create("hello", FileType::File, 0o777)
+        .expect("failed to create hello");
+    root.create("divzero", FileType::File, 0o777)
+        .expect("failed to create divzero");
+    sfs.sync().expect("failed to sync SFS");
+    drop(sfs);
+    // Reopen the image through a fresh handle.
+    let reopened = {
+        let guard = file.lock().unwrap();
+        guard.try_clone().expect("failed to clone file handle")
+    };
+    SimpleFileSystem::open(Arc::new(Mutex::new(reopened))).expect("failed to open SFS")
 }
 
 fn _create_new_sfs() -> Arc<SimpleFileSystem> {
@@ -27,7 +40,6 @@ fn _create_new_sfs() -> Arc<SimpleFileSystem> {
 }
 
 #[test]
-#[ignore]
 fn open_sample_file() {
     _open_sample_file();
 }
@@ -341,7 +353,6 @@ fn arc_layout() {
 }
 
 #[test]
-#[ignore]
 fn kernel_image_file_create() -> Result<()> {
     let sfs = _open_sample_file();
     let root = sfs.root_inode();
@@ -356,7 +367,6 @@ fn kernel_image_file_create() -> Result<()> {
 }
 
 #[test]
-#[ignore]
 fn kernel_image_file_unlink() -> Result<()> {
     let sfs = _open_sample_file();
     let root = sfs.root_inode();
@@ -371,7 +381,6 @@ fn kernel_image_file_unlink() -> Result<()> {
 }
 
 #[test]
-#[ignore]
 fn kernel_image_file_rename() -> Result<()> {
     let sfs = _open_sample_file();
     let root = sfs.root_inode();
@@ -387,7 +396,6 @@ fn kernel_image_file_rename() -> Result<()> {
 }
 
 #[test]
-#[ignore]
 fn kernel_image_file_move() -> Result<()> {
     let sfs = _open_sample_file();
     let root = sfs.root_inode();
