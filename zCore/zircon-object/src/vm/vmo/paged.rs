@@ -2836,6 +2836,7 @@ mod tests {
     #[test]
     // FIXME(#854): intermittently fails (~10% of runs) — COW page
     // attribution race in multi-clone writes. Passes individually.
+    #[cfg_attr(target_os = "macos", ignore)]
     #[ignore]
     fn many_clones() {
         const N: usize = 4;
