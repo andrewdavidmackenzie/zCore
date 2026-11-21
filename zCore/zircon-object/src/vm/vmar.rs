@@ -85,9 +85,9 @@ pub struct VmAddressRegion {
     addr: VirtAddr,
     size: usize,
     parent: Option<Arc<VmAddressRegion>>,
-    page_table: Arc<KernelMutex<dyn GenericPageTable>>,
+    pub(super) page_table: Arc<KernelMutex<dyn GenericPageTable>>,
     /// If inner is None, this region is destroyed, all operations are invalid.
-    inner: KernelMutex<Option<VmarInner>>,
+    pub(super) inner: KernelMutex<Option<VmarInner>>,
     /// Memory priority for this VMAR. When HIGH, pager-backed pages
     /// in this region are not eligible for reclamation.
     /// Matches Fuchsia's `VmAddressRegionOrMapping::memory_priority_`.
@@ -137,7 +137,7 @@ impl VmAddressRegion {
 
 /// The mutable part of `VmAddressRegion`.
 #[derive(Default)]
-struct VmarInner {
+pub struct VmarInner {
     children: Vec<Arc<VmAddressRegion>>,
     mappings: Vec<Arc<VmMapping>>,
 }
@@ -1877,12 +1877,12 @@ pub struct VmMapping {
     permissions: MMUFlags,
     /// The VMO backing this mapping.
     pub vmo: Arc<VmObject>,
-    page_table: Arc<KernelMutex<dyn GenericPageTable>>,
-    inner: KernelMutex<VmMappingInner>,
+    pub(super) page_table: Arc<KernelMutex<dyn GenericPageTable>>,
+    pub(super) inner: KernelMutex<VmMappingInner>,
 }
 
 #[derive(Debug, Clone)]
-struct VmMappingInner {
+pub struct VmMappingInner {
     /// The actual flags used in the mapping of each page.
     /// Empty for large lazy mappings (>256 MB) — use `default_flags` instead.
     flags: Vec<MMUFlags>,

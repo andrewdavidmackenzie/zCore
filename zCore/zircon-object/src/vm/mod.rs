@@ -1,5 +1,6 @@
 //! Objects for Virtual Memory Management.
 
+pub mod lock_order;
 mod stream;
 pub mod vmar;
 mod vmo;

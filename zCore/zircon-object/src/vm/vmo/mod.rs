@@ -331,7 +331,7 @@ pub struct VmObject {
     /// returns NOT_FOUND to prevent re-mapping parent data).
     dead: core::sync::atomic::AtomicBool,
     trait_: Arc<dyn VMObjectTrait>,
-    inner: KernelMutex<VmObjectInner>,
+    pub(super) inner: KernelMutex<VmObjectInner>,
 }
 
 impl_kobject!(VmObject
@@ -345,7 +345,7 @@ impl_kobject!(VmObject
 define_count_helper!(VmObject);
 
 #[derive(Default)]
-struct VmObjectInner {
+pub struct VmObjectInner {
     parent: Weak<VmObject>,
     children: Vec<Weak<VmObject>>,
     mapping_count: usize,
