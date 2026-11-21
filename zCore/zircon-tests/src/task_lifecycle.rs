@@ -105,7 +105,7 @@ fn kill_job_with_process() {
     let root = Job::root();
     let job = root.create_child().unwrap();
     let _proc = zircon_object::task::Process::create(&job, "child-proc").unwrap();
-    job.kill_with_code(-1024);
+    Job::kill_with_code(&job, -1024);
     // After kill, job should be dying
 }
 
@@ -128,7 +128,7 @@ fn create_process_in_dead_job() {
     let _ctx = TestContext::new();
     let root = Job::root();
     let job = root.create_child().unwrap();
-    job.kill_with_code(-1024);
+    Job::kill_with_code(&job, -1024);
     let result = zircon_object::task::Process::create(&job, "dead-proc");
     assert!(result.is_err());
 }
@@ -139,7 +139,7 @@ fn create_child_job_in_dead_job() {
     let _ctx = TestContext::new();
     let root = Job::root();
     let job = root.create_child().unwrap();
-    job.kill_with_code(-1024);
+    Job::kill_with_code(&job, -1024);
     let result = job.create_child();
     assert!(result.is_err());
 }

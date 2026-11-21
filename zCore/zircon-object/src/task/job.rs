@@ -143,15 +143,23 @@ impl Job {
         Ok(child)
     }
 
-    fn remove_child(&self, to_remove: &Weak<Job>) {
-        let mut inner = self.inner.lock();
-        inner.children.retain(|child| !to_remove.ptr_eq(child));
-        let no_children = inner.children.is_empty();
-        // Prune dead weak refs while we have the lock.
-        inner.processes.retain(|p| p.strong_count() > 0);
-        let no_processes = inner.processes.is_empty();
-        let killed = inner.killed;
-        drop(inner);
+    /// Remove a child job. Called by the child's `terminate` — the
+    /// child's lock must NOT be held (see terminate's lock-order note).
+    ///
+    /// Takes the job's `Arc` so the lock acquisition goes through the
+    /// lockgraph context (#829 Batch 5D-4).
+    fn remove_child(arc_self: &Arc<Self>, to_remove: &Weak<Job>) {
+        let this = arc_self.as_ref();
+        let ctx = super::task_ctx::TaskCtx::from_job(arc_self.clone());
+        let mut locked = ctx.locked();
+        let (no_children, no_processes, killed) = {
+            let mut inner = locked.lock_and::<super::lock_order::JobInnerLock>().0;
+            inner.children.retain(|child| !to_remove.ptr_eq(child));
+            let no_children = inner.children.is_empty();
+            // Prune dead weak refs while we have the lock.
+            inner.processes.retain(|p| p.strong_count() > 0);
+            (no_children, inner.processes.is_empty(), inner.killed)
+        };
         if no_children {
             // Always re-assert JOB_NO_JOBS when the last child is gone.
             let mut set = Signal::JOB_NO_JOBS;
@@ -159,10 +167,10 @@ impl Job {
                 // Both children and processes are gone — re-assert all three.
                 set |= Signal::JOB_NO_CHILDREN | Signal::JOB_NO_PROCESSES;
             }
-            self.base.signal_set(set);
+            this.base.signal_set(set);
         }
         if killed && no_processes && no_children {
-            self.terminate()
+            this.terminate()
         }
     }
 
@@ -266,35 +274,50 @@ impl Job {
     }
 
     /// Add a process to the job.
-    pub(super) fn add_process(&self, process: Arc<Process>) -> ZxResult {
-        let mut inner = self.inner.lock();
+    ///
+    /// Takes the job's `Arc` so the lock acquisition goes through the
+    /// lockgraph context (#829 Batch 5D-4).
+    pub(super) fn add_process(arc_self: &Arc<Self>, process: Arc<Process>) -> ZxResult {
+        let this = arc_self.as_ref();
+        let ctx = super::task_ctx::TaskCtx::from_job(arc_self.clone());
+        let mut locked = ctx.locked();
+        let mut inner = locked.lock_and::<super::lock_order::JobInnerLock>().0;
         if inner.killed {
             return Err(ZxError::BAD_STATE);
         }
         inner.processes.push(Arc::downgrade(&process));
         drop(inner);
         // Parent now has a process — clear JOB_NO_PROCESSES and JOB_NO_CHILDREN.
-        self.base
+        this.base
             .signal_clear(Signal::JOB_NO_PROCESSES | Signal::JOB_NO_CHILDREN);
         Ok(())
     }
 
     /// Remove a process from the job.
-    pub(super) fn remove_process(&self, id: KoID, cpu_time: u64) {
-        let mut inner = self.inner.lock();
-        // Accumulate the exited process's CPU time so
-        // total_cpu_time()/total_queue_time() report it after
-        // the process is gone.
-        inner.exited_cpu_time += cpu_time;
-        // Use at least 1ns queue time for any started process.
-        inner.exited_queue_time += cpu_time.min(1);
-        inner
-            .processes
-            .retain(|proc| proc.upgrade().is_some_and(|p| p.id() != id));
-        let no_children = inner.children.is_empty();
-        let no_processes = inner.processes.is_empty();
-        let killed = inner.killed;
-        drop(inner);
+    ///
+    /// Takes the job's `Arc` so the lock acquisition goes through the
+    /// lockgraph context (#829 Batch 5D-4).
+    pub(super) fn remove_process(arc_self: &Arc<Self>, id: KoID, cpu_time: u64) {
+        let this = arc_self.as_ref();
+        let ctx = super::task_ctx::TaskCtx::from_job(arc_self.clone());
+        let mut locked = ctx.locked();
+        let (no_children, no_processes, killed) = {
+            let mut inner = locked.lock_and::<super::lock_order::JobInnerLock>().0;
+            // Accumulate the exited process's CPU time so
+            // total_cpu_time()/total_queue_time() report it after
+            // the process is gone.
+            inner.exited_cpu_time += cpu_time;
+            // Use at least 1ns queue time for any started process.
+            inner.exited_queue_time += cpu_time.min(1);
+            inner
+                .processes
+                .retain(|proc| proc.upgrade().is_some_and(|p| p.id() != id));
+            (
+                inner.children.is_empty(),
+                inner.processes.is_empty(),
+                inner.killed,
+            )
+        };
         if no_processes {
             // Always re-assert JOB_NO_PROCESSES when the last process is gone.
             let mut set = Signal::JOB_NO_PROCESSES;
@@ -302,10 +325,10 @@ impl Job {
                 // Both processes and children are gone — re-assert all three.
                 set |= Signal::JOB_NO_CHILDREN | Signal::JOB_NO_JOBS;
             }
-            self.base.signal_set(set);
+            this.base.signal_set(set);
         }
         if killed && no_processes && no_children {
-            self.terminate()
+            this.terminate()
         }
     }
 
@@ -465,12 +488,26 @@ impl Job {
     }
 
     /// The job finally terminates.
+    ///
+    /// Lock-order note (#829 Batch 5D-4): the child job's self_ref is
+    /// read under the child's lock and RELEASED before calling into
+    /// the parent (remove_child takes the parent's job lock). Holding
+    /// the child lock across that call — as the previous code did via
+    /// a temporary guard in the call expression — is a job→job
+    /// lock-under-lock the graph cannot order (there is no job→job
+    /// edge; parent and child jobs are the same lock level).
+    ///
+    /// Stays `&self` (no Arc): `Drop for Job` calls it, and an Arc is
+    /// unobtainable there (the strong count is already 0, so
+    /// self_ref.upgrade() would fail). The raw self_ref read is a
+    /// leaf acquisition.
     fn terminate(&self) {
         self.exceptionate.shutdown();
         self.debug_exceptionate.shutdown();
         self.base.signal_set(Signal::JOB_TERMINATED);
         if let Some(parent) = self.parent.as_ref() {
-            parent.remove_child(&self.inner.lock().self_ref)
+            let self_ref = self.inner.lock().self_ref.clone();
+            Self::remove_child(parent, &self_ref)
         }
     }
 }
@@ -484,9 +521,18 @@ impl Job {
     /// Kill the job with a specific return code. The job does not terminate
     /// immediately when killed — it will terminate after all its children
     /// and processes are terminated.
-    pub fn kill_with_code(&self, return_code: i64) {
+    ///
+    /// Takes the job's `Arc` so the collection section's lock
+    /// acquisition goes through the lockgraph context (#829 Batch
+    /// 5D-4). The cross-object calls (child kill recursion,
+    /// Process::exit) all happen after the job lock is released —
+    /// collect-then-act.
+    pub fn kill_with_code(arc_self: &Arc<Self>, return_code: i64) {
+        let this = arc_self.as_ref();
+        let ctx = super::task_ctx::TaskCtx::from_job(arc_self.clone());
+        let mut locked = ctx.locked();
         let (children, processes) = {
-            let mut inner = self.inner.lock();
+            let mut inner = locked.lock_and::<super::lock_order::JobInnerLock>().0;
             if inner.killed {
                 return;
             }
@@ -502,12 +548,12 @@ impl Job {
             )
         };
         if children.is_empty() && processes.is_empty() {
-            self.terminate();
+            this.terminate();
             return;
         }
         for child in children {
             if let Some(child) = child.upgrade() {
-                child.kill_with_code(return_code);
+                Self::kill_with_code(&child, return_code);
             }
         }
         for proc in processes {
@@ -520,7 +566,21 @@ impl Task for Job {
     /// Kill the job. The job do not terminate immediately when killed.
     /// It will terminate after all its children and processes are terminated.
     fn kill(&self) {
-        self.kill_with_code(super::TASK_RETCODE_SYSCALL_KILL);
+        // Delegate to the graph-checked `kill_with_code` via the
+        // self_ref weak (the Task trait only provides `&self`; the
+        // lockgraph context needs the `Arc<Job>`).
+        //
+        // CAUTION: the self_ref read must be its own statement. An
+        // `if let Some(arc) = self.inner.lock().self_ref.upgrade()`
+        // would keep the lock guard alive through the entire body
+        // (if-let scrutinee temporaries live through the then-block),
+        // and kill_with_code would self-deadlock on the very job
+        // lock this thread holds — the KernelMutex is not
+        // reentrant. That exact bug hung three unit-test threads.
+        let self_ref = self.inner.lock().self_ref.clone();
+        if let Some(arc) = self_ref.upgrade() {
+            Self::kill_with_code(&arc, super::TASK_RETCODE_SYSCALL_KILL);
+        }
     }
 
     fn suspend(&self) {

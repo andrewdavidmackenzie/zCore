@@ -30,7 +30,7 @@ fn job_kill() {
     let child = Job::create_child(&root).unwrap();
     let _proc = Process::create(&child, "test").unwrap();
 
-    child.kill_with_code(-1);
+    Job::kill_with_code(&child, -1);
     assert!(child.signal().contains(Signal::JOB_TERMINATED));
 }
 
@@ -79,7 +79,7 @@ fn job_kill_terminates_children() {
     let child = Job::create_child(&root).unwrap();
     let _grandchild = Job::create_child(&child).unwrap();
 
-    child.kill_with_code(-1);
+    Job::kill_with_code(&child, -1);
     assert!(child.signal().contains(Signal::JOB_TERMINATED));
 }
 
@@ -88,7 +88,7 @@ fn job_cannot_create_child_on_dead_job() {
     let root = Job::root();
     let child = Job::create_child(&root).unwrap();
 
-    child.kill_with_code(-1);
+    Job::kill_with_code(&child, -1);
 
     // Creating a child on a killed job should fail
     let result = Job::create_child(&child);
@@ -114,7 +114,7 @@ fn job_create_invalid() {
     let root = Job::root();
     let job = Job::create_child(&root).unwrap();
 
-    job.kill_with_code(-1);
+    Job::kill_with_code(&job, -1);
 
     // Attempting to create a child on the dead job should fail
     assert_eq!(Job::create_child(&job).unwrap_err(), ZxError::BAD_STATE);
@@ -134,7 +134,7 @@ fn job_kill_terminates_child_processes() {
     let child_job = Job::create_child(&job).unwrap();
     let _proc2 = Process::create(&child_job, "grandchild-proc").unwrap();
 
-    job.kill_with_code(-1);
+    Job::kill_with_code(&job, -1);
 
     // Both the job and the nested child job should be terminated
     assert!(job.signal().contains(Signal::JOB_TERMINATED));
@@ -150,7 +150,7 @@ fn job_kill_removes_from_tree() {
 
     assert!(!root.children_ids().is_empty());
 
-    child.kill_with_code(-1);
+    Job::kill_with_code(&child, -1);
 
     // After kill (with no processes/children), the child terminates
     // and removes itself from the parent
@@ -168,7 +168,7 @@ fn job_return_code() {
     let proc = Process::create(&job, "retcode-test").unwrap();
 
     // Kill the job with a specific code — this propagates to child processes
-    job.kill_with_code(42);
+    Job::kill_with_code(&job, 42);
 
     // The process should have exited with the same return code
     let info = proc.get_info();
@@ -354,7 +354,7 @@ fn job_return_code_after_kill() {
     let proc2 = Process::create(&job, "proc2").unwrap();
 
     // Kill the job with code -1024 (TASK_RETCODE_SYSCALL_KILL).
-    job.kill_with_code(-1024);
+    Job::kill_with_code(&job, -1024);
 
     // Both processes should have the same return code.
     let info1 = proc1.get_info();
@@ -388,7 +388,7 @@ fn job_no_children() {
 
     // Kill child job — JOB_NO_JOBS reasserts, but JOB_NO_CHILDREN stays clear
     // because we still have a process
-    child.kill_with_code(-1);
+    Job::kill_with_code(&child, -1);
     assert!(root.signal().contains(Signal::JOB_NO_JOBS));
     assert!(!root.signal().contains(Signal::JOB_NO_CHILDREN));
     assert!(!root.signal().contains(Signal::JOB_NO_PROCESSES));
