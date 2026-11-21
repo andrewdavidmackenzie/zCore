@@ -557,6 +557,20 @@ impl Exception {
             );
             if !is_lifecycle {
                 let proc = self.thread.proc();
+                // Diagnosability (#829): an unhandled exception killing
+                // a process was previously silent — the core-tests
+                // root process dying with TASK_RETCODE_EXCEPTION_KILL
+                // left no trace of WHICH exception fired. Always log
+                // the type, thread, and delivery error at error level.
+                error!(
+                    "unhandled exception {:?} on thread {} ({}): delivery {:?} — killing process {} ({})",
+                    self.type_,
+                    self.thread.id(),
+                    self.thread.name(),
+                    result,
+                    proc.id(),
+                    proc.name()
+                );
                 Process::exit(&proc, super::TASK_RETCODE_EXCEPTION_KILL);
             }
         }
