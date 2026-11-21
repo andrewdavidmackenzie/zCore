@@ -13,6 +13,7 @@ mod profile;
 #[cfg(feature = "elf")]
 pub mod spawn;
 mod suspend_token;
+pub mod task_ctx;
 mod thread;
 
 pub use {
