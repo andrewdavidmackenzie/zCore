@@ -38,7 +38,7 @@ pub struct Job {
     parent_policy: JobPolicy,
     exceptionate: Arc<Exceptionate>,
     debug_exceptionate: Arc<Exceptionate>,
-    inner: KernelMutex<JobInner>,
+    pub(crate) inner: KernelMutex<JobInner>,
 }
 
 impl_kobject!(Job
@@ -59,7 +59,7 @@ impl_kobject!(Job
 define_count_helper!(Job);
 
 #[derive(Default)]
-struct JobInner {
+pub struct JobInner {
     policy: JobPolicy,
     children: Vec<Weak<Job>>,
     processes: Vec<Weak<Process>>,

@@ -92,7 +92,7 @@ pub struct Process {
     ext: Box<dyn Any + Send + Sync>,
     exceptionate: Arc<Exceptionate>,
     debug_exceptionate: Arc<Exceptionate>,
-    inner: KernelMutex<ProcessInner>,
+    pub(crate) inner: KernelMutex<ProcessInner>,
 }
 
 impl_kobject!(Process
@@ -141,7 +141,7 @@ impl Drop for Process {
 }
 
 #[derive(Default)]
-struct ProcessInner {
+pub struct ProcessInner {
     status: Status,
     max_handle_id: u32,
     handles: HashMap<HandleValue, (Handle, Vec<Sender<()>>)>,

@@ -6,6 +6,7 @@ use alloc::sync::Arc;
 mod exception;
 mod job;
 mod job_policy;
+pub mod lock_order;
 mod process;
 mod profile;
 /// Process spawning from ELF binaries.
