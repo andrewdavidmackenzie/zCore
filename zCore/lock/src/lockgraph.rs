@@ -179,8 +179,10 @@ macro_rules! impl_lock_after {
 /// The root of every lock-order graph: "no locks held".
 ///
 /// The top level of each tree must implement `LockAfter<Unlocked>`
-/// (either directly or as the target of `impl_lock_after!` from
-/// `Unlocked`).
+/// directly (`impl LockAfter<Unlocked> for MyRoot {}`). Do NOT use
+/// `impl_lock_after!` for the root edge: the macro's direct and
+/// blanket impls could overlap for the `Unlocked` root in downstream
+/// crates.
 pub enum Unlocked {}
 
 /// Declares that `Self` has a lockable field for lock level `M`,
