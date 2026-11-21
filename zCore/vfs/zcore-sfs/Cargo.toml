@@ -13,3 +13,8 @@ bitvec = { version = "0.22", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 tempfile = "3.2"
+# Tests use `Arc<Mutex<File>>` as a block device, whose `Device` impl
+# lives behind zcore-fs's `std` feature. Without this the test target
+# only compiles inside a workspace-wide build where feature unification
+# (via xtask's `zcore-fs/std`) happens to enable it.
+zcore-fs = { path = "../zcore-fs", features = ["std"] }

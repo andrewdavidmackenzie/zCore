@@ -317,6 +317,12 @@ impl DirtyTracker {
             match entry {
                 Entry::Pages(states) => {
                     let entry_end = key + states.len();
+                    // The range(..max_page) query includes entries that
+                    // lie entirely before the writeback window; skip
+                    // them or the slice below is out of range.
+                    if entry_end <= start_page {
+                        continue;
+                    }
                     let overlap_start = start_page.max(key) - key;
                     let overlap_end = max_page.min(entry_end) - key;
                     for (idx, state) in states[overlap_start..overlap_end].iter_mut().enumerate() {
@@ -531,7 +537,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: writeback_end mutates entries during iteration; fix before integration
     fn overlapping_writeback_generation() {
         // Test the key scenario from ResizeWritebackRepeatedNoTrapDirty.
         let mut t = DirtyTracker::new_with_state(1, PAGE_CLEAN);

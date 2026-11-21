@@ -2608,8 +2608,12 @@ mod tests {
         assert_eq!(child_vmo.test_read(0), 2);
     }
 
+    /// Asserts on the global `vmo_page_bytes()` counter, which other
+    /// concurrently-running VMO tests also move (allocate/free), so it
+    /// must run exclusively: `#[serial_test::serial]` blocks all
+    /// `#[serial_test::parallel]` tests for its duration.
     #[test]
-    #[ignore] // FIXME
+    #[serial_test::serial]
     fn zero_page_write() {
         let vmo0 = VmObject::new_paged(1);
         let vmo1 = vmo0.create_child(false, 0, PAGE_SIZE).unwrap();
@@ -2724,7 +2728,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "COW populated_bytes fractional attribution not implemented (issue #668 section 17)"]
     fn resize_child_data_isolation() {
         // Mimics VmoCloneResizeTests::ResizeChild
         let vmo = VmObject::new_paged_with_resizable(true, 4);

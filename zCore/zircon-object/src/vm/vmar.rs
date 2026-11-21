@@ -3192,7 +3192,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Requires working page table (fails in libos test mode on macOS)
     fn op_range_commit_decommit() {
         let vmar = VmAddressRegion::new_root();
         let vmo = VmObject::new_paged(4);

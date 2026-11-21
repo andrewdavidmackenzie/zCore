@@ -464,14 +464,14 @@ mod tests {
         assert!(peer_closed.load(Ordering::SeqCst));
     }
 
-    // The `call` test deadlocks in libos/test mode because
-    // async_std::task::spawn tasks are not reliably scheduled
-    // alongside the main test task's Channel::call() future.
-    // FIXME(#856): hangs — the spawned task's Channel::call() future
-    // never completes in the test's async-std runtime.
+    // The `call` test was historically ignored for "hanging". The hang
+    // was a test bug, not a kernel bug: `let _ = channel1;` does not
+    // drop the channel (the `_` pattern doesn't move), and async-std
+    // retains the completed spawned task's captured state, so the peer
+    // never closed and the pending call never resolved. Dropping the
+    // peer explicitly makes the PEER_CLOSED path work as intended.
     #[async_std::test]
     #[serial_test::parallel]
-    #[ignore]
     async fn call() {
         let (channel0, channel1) = Channel::create();
         async_std::task::spawn({
@@ -523,7 +523,11 @@ mod tests {
         async_std::task::spawn({
             async move {
                 async_std::task::sleep(Duration::from_millis(10)).await;
-                let _ = channel1;
+                // Drop the peer explicitly: `let _ = channel1;` would
+                // not drop it (the `_` pattern doesn't move), and the
+                // retained peer would leave the call below pending
+                // forever.
+                drop(channel1);
             }
         });
         assert_eq!(
