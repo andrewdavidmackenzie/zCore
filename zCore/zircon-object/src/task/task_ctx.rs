@@ -35,7 +35,8 @@ use super::lock_order::{JobInnerLock, ProcessInnerLock, ThreadInnerLock};
 
 /// Combined lock context over the task-tree hierarchy.
 ///
-/// Construct from any task object via [`TaskCtx::new`] (which builds
+/// Construct from any task object via [`TaskCtx::from_job`],
+/// [`TaskCtx::from_process`], or [`TaskCtx::from_thread`] (which build
 /// the upward chain automatically), then use `Locked::new(&ctx)` to
 /// enter the lockgraph at the root and acquire locks in the declared
 /// order.
