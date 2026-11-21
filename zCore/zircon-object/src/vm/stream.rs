@@ -295,6 +295,7 @@ pub struct StreamInfo {
 }
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod tests {
     use super::*;
     use crate::vm::VmObject;

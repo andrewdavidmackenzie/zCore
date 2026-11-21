@@ -803,6 +803,7 @@ mod tests {
     use core::time::Duration;
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn bind() {
         let interrupt = Interrupt::new_virtual();
         let port = Port::new(1).unwrap();
@@ -835,6 +836,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wait_unbound() {
         // Virtual interrupt without a port: trigger then wait
         let interrupt = Interrupt::new_virtual();
@@ -852,6 +854,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wait_returns_bad_state_when_port_bound() {
         // Wait should fail with BAD_STATE when a port is bound
         let interrupt = Interrupt::new_virtual();
@@ -862,6 +865,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wait_returns_canceled_when_destroyed() {
         // Wait should fail with CANCELED when the interrupt is destroyed
         let interrupt = Interrupt::new_virtual();
@@ -871,6 +875,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn ack_port_bound() {
         // Ack should transition from NeedAck to Idle when port is bound
         let interrupt = Interrupt::new_virtual();
@@ -901,6 +906,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn ack_without_port_returns_bad_state() {
         // Ack without a port bound should return BAD_STATE
         let interrupt = Interrupt::new_virtual();
@@ -908,6 +914,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn ack_after_destroy_returns_canceled() {
         let interrupt = Interrupt::new_virtual();
         let port = Port::new(1).unwrap();

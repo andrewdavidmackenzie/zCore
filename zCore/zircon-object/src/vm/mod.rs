@@ -65,6 +65,7 @@ pub fn kernel_allocate_physical(
 }
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod test {
     use super::*;
     #[test]

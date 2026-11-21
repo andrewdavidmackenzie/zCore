@@ -519,6 +519,7 @@ mod tests {
     use core::time::Duration;
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wait() {
         static VALUE: AtomicI32 = AtomicI32::new(1);
         let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
@@ -546,6 +547,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn requeue() {
         static VALUE: AtomicI32 = AtomicI32::new(1);
         let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
@@ -569,7 +571,15 @@ mod tests {
         {
             let futex = futex.clone();
             async_std::task::spawn(async move {
-                async_std::task::sleep(Duration::from_millis(10)).await;
+                // Wait for both waiters to enter the queue (bounded to
+                // avoid hanging) before changing the value: `wait(1)`
+                // fails with BAD_STATE if the value has already changed.
+                for _ in 0..200 {
+                    if futex.inner.lock().waiter_queue.len() == 2 {
+                        break;
+                    }
+                    async_std::task::sleep(Duration::from_millis(1)).await;
+                }
                 VALUE.store(2, Ordering::SeqCst);
 
                 let waiters = futex.inner.lock().waiter_queue.clone();
@@ -592,12 +602,18 @@ mod tests {
                 assert_eq!(requeue_futex.wake(1), 1);
             });
         }
-        // wait for wake.
-        futex.wait(1).await.unwrap();
+        // wait for wake (bounded: if the worker task failed its
+        // registration assertion before waking us, fail instead of
+        // hanging forever).
+        async_std::future::timeout(Duration::from_secs(5), futex.wait(1))
+            .await
+            .expect("requeue wake did not arrive")
+            .unwrap();
         assert_eq!(VALUE.load(Ordering::SeqCst), 2);
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn owner() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -618,14 +634,24 @@ mod tests {
                     .unwrap();
             });
         }
-        async_std::task::sleep(Duration::from_millis(10)).await;
-        assert_eq!(
-            futex
-                .wait_with_owner(1, Some(thread.clone()), Some(thread.clone()))
-                .await
-                .unwrap_err(),
-            ZxError::INVALID_ARGS
-        );
+        // Wait for the spawned waiter to enter the queue (bounded to
+        // avoid hanging) before asserting on the invalid-args path.
+        for _ in 0..200 {
+            if futex.inner.lock().waiter_queue.len() == 1 {
+                break;
+            }
+            async_std::task::sleep(Duration::from_millis(1)).await;
+        }
+        // Bounded: if the spawned waiter never registers, this call
+        // could block instead of returning INVALID_ARGS — fail instead
+        // of hanging forever.
+        let result = async_std::future::timeout(
+            Duration::from_secs(5),
+            futex.wait_with_owner(1, Some(thread.clone()), Some(thread.clone())),
+        )
+        .await
+        .expect("owner validation did not complete");
+        assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 
         futex.inner.lock().set_owner(None);
         futex.wake_single_owner();
@@ -635,6 +661,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn requeue_single_owner() {
         // Test requeue with ownership transfer: wake exactly 1 waiter and
         // move others to the requeue target, setting the new owner.
@@ -706,6 +733,7 @@ mod tests {
     /// push are not atomic (under the same lock), a wake can drain the
     /// queue between the check and push, orphaning the waiter forever.
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wake_during_registration_race() {
         for _ in 0..100 {
             static VALUE: AtomicI32 = AtomicI32::new(0);

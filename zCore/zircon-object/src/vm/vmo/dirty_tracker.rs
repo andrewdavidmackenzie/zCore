@@ -488,6 +488,7 @@ impl Default for DirtyTracker {
 }
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod tests {
     use super::*;
 

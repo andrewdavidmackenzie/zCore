@@ -2582,6 +2582,7 @@ fn new_owner_id() -> u64 {
 const VM_PAGE_OBJECT_MAX_PIN_COUNT: u8 = 31;
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod tests {
     use super::*;
 
