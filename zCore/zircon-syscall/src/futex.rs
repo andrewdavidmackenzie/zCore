@@ -25,6 +25,16 @@ impl Syscall<'_> {
             "futex.wait: value_ptr={:#x?}, current_value={:#x}, new_futex_owner={:#x}, deadline={:?}",
             value_ptr, current_value, new_futex_owner, deadline
         );
+        // DEBUG843: log futex waits from the main thread. NOT FOR
+        // COMMIT.
+        use zircon_object::object::KernelObject;
+        if self.thread.inner().id() == 1029 {
+            warn!(
+                "FUTEX-1029 addr={:#x} value={}",
+                value_ptr.as_addr(),
+                current_value
+            );
+        }
         if value_ptr.is_null() || !value_ptr.as_addr().is_multiple_of(4) {
             return Err(ZxError::INVALID_ARGS);
         }
