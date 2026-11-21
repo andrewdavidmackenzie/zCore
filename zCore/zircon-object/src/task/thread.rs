@@ -1066,44 +1066,50 @@ impl Thread {
     /// (process, job) without unsafe code.
     ///
     /// The thread lock acquisition goes through the lockgraph,
-    /// enforcing the declared lock order at compile time: the thread
-    /// lock is the most-specific level, so acquiring the process lock
-    /// while holding it is a compile error — the #838 deadlock cannot
-    /// be reintroduced.
+    /// enforcing the declared lock order at compile time for the
+    /// acquisitions that go through contexts. NOTE: the process lock
+    /// taken inside `remove_thread` below is still a raw acquisition
+    /// (an escape hatch until 5D-5 converts it), so the guard's
+    /// lifetime — not the graph — is what prevents the #838 ABBA
+    /// here. The guard is dropped before `remove_thread` by the
+    /// scoped block.
     fn terminate(arc_self: &Arc<Self>) {
-        let ctx = super::task_ctx::TaskCtx::from_thread(arc_self.clone());
-        let mut locked = ctx.locked();
-        let (mut inner, _thread_ctx) = locked.lock_and::<super::lock_order::ThreadInnerLock>();
         let this = arc_self.as_ref();
-        this.exceptionate.shutdown();
-        // Clear task identifiers so a stale set_priority() cannot
-        // address a reused executor slab slot.
-        inner.task_sched = None;
-        inner.change_state(ThreadState::Dead, &this.base);
-        // Wake the wait_for_run waker so the run_user future can
-        // observe the Dead state and exit. Without this, threads
-        // killed while suspended (e.g., unhandled exceptions) leak
-        // their executor task — the run_user future stays Pending
-        // forever, accumulating over time and slowing down the
-        // executor's scan_notifications.
-        if let Some(waker) = inner.waker.take() {
-            waker.wake();
+        {
+            let ctx = super::task_ctx::TaskCtx::from_thread(arc_self.clone());
+            let mut locked = ctx.locked();
+            let (mut inner, _thread_ctx) = locked.lock_and::<super::lock_order::ThreadInnerLock>();
+            this.exceptionate.shutdown();
+            // Clear task identifiers so a stale set_priority() cannot
+            // address a reused executor slab slot.
+            inner.task_sched = None;
+            inner.change_state(ThreadState::Dead, &this.base);
+            // Wake the wait_for_run waker so the run_user future can
+            // observe the Dead state and exit. Without this, threads
+            // killed while suspended (e.g., unhandled exceptions) leak
+            // their executor task — the run_user future stays Pending
+            // forever, accumulating over time and slowing down the
+            // executor's scan_notifications.
+            if let Some(waker) = inner.waker.take() {
+                waker.wake();
+            }
+            // Also fire the suspend interrupt and killer to unblock any
+            // blocking_run_suspendable or blocking_run that may be
+            // holding the run_user future.
+            if let Some(sender) = inner.suspend_interrupt.take() {
+                let _ = sender.send(());
+            }
+            if let Some(killer) = inner.killer.take() {
+                let _ = killer.send(());
+            }
         }
-        // Also fire the suspend interrupt and killer to unblock any
-        // blocking_run_suspendable or blocking_run that may be
-        // holding the run_user future.
-        if let Some(sender) = inner.suspend_interrupt.take() {
-            let _ = sender.send(());
-        }
-        if let Some(killer) = inner.killer.take() {
-            let _ = killer.send(());
-        }
-        // The thread lock is released when `inner` (the guard) drops
-        // at the end of this scope. The context types (`_thread_ctx`,
-        // `locked`) are zero-sized markers — no explicit drop needed.
-        // The graph has no thread → process edge (the #838 fix), so
-        // the process lock in remove_thread below is acquired from
-        // Unlocked (legal from any level).
+        // The thread lock guard is RELEASED (end of the scoped block
+        // above) BEFORE remove_thread: remove_thread takes the process
+        // lock, and Process::exit/suspend hold the process lock while
+        // calling Thread::kill()/state() (thread lock). Holding the
+        // thread guard across this call is the #838 ABBA — it hung
+        // PThreadBarrierTest when the guard drop was lost in a clippy
+        // fix. Do not remove the scoped block.
         this.proc.remove_thread(this.base.id);
     }
 }
@@ -1714,7 +1720,7 @@ mod tests {
         assert_eq!(thread.related_koid(), proc.id());
         let child = proc.get_child(thread.id()).unwrap().downcast_arc().unwrap();
         assert!(Arc::ptr_eq(&child, &thread));
-        proc.exit(0);
+        &proc.exit(0);
     }
 
     #[async_std::test]
@@ -1774,7 +1780,7 @@ mod tests {
         assert_eq!(Arc::strong_count(&thread), 1);
         assert_eq!(thread.state(), ThreadState::Dead);
         // Clean up self-referential handle added by proc.start().
-        proc.exit(0);
+        &proc.exit(0);
     }
 
     #[async_std::test]
@@ -1822,7 +1828,7 @@ mod tests {
             )
             .await;
         assert_eq!(result.err(), Some(ZxError::CANCELED));
-        proc.exit(0);
+        &proc.exit(0);
     }
 
     #[test]
@@ -1837,7 +1843,7 @@ mod tests {
             thread.get_thread_exception_info().err(),
             Some(ZxError::BAD_STATE)
         );
-        proc.exit(0);
+        &proc.exit(0);
     }
 
     #[test]
@@ -1874,7 +1880,7 @@ mod tests {
             .is_ok());
         assert!(thread.write_state(ThreadStateKind::General, &buf).is_ok());
         // TODO
-        proc.exit(0);
+        &proc.exit(0);
     }
 
     #[test]
@@ -1885,7 +1891,7 @@ mod tests {
 
         let _ext = thread.ext();
         // TODO
-        proc.exit(0);
+        &proc.exit(0);
     }
 
     #[async_std::test]
@@ -1923,7 +1929,7 @@ mod tests {
         }
         let thread: Arc<dyn KernelObject> = thread;
         thread.wait_signal(Signal::THREAD_TERMINATED).await;
-        proc.exit(0);
+        &proc.exit(0);
     }
 
     #[test]
@@ -1935,7 +1941,7 @@ mod tests {
         assert_eq!(thread.get_time(), 0);
         thread.time_add(10);
         assert_eq!(thread.get_time(), 10);
-        proc.exit(0);
+        &proc.exit(0);
     }
 
     #[test]
@@ -1958,7 +1964,7 @@ mod tests {
         // Calling exit again should be idempotent (not panic).
         current.exit();
         assert_eq!(thread.state(), ThreadState::Dying);
-        proc.exit(0);
+        &proc.exit(0);
     }
 
     #[test]
@@ -1970,7 +1976,7 @@ mod tests {
         // New threads should have the Zircon default priority (16).
         assert_eq!(thread.priority(), ZIRCON_DEFAULT_PRIORITY);
         assert_eq!(thread.priority(), 16);
-        proc.exit(0);
+        &proc.exit(0);
     }
 
     #[test]
@@ -1988,6 +1994,6 @@ mod tests {
         // Values above 31 are clamped.
         thread.set_priority(100);
         assert_eq!(thread.priority(), 31);
-        proc.exit(0);
+        &proc.exit(0);
     }
 }
