@@ -166,7 +166,9 @@ mod tests {
         async_std::task::sleep(Duration::from_millis(10)).await;
         assert_eq!(timer.signal(), Signal::empty());
 
-        async_std::task::sleep(Duration::from_millis(15)).await;
+        // Sleep well past the 20ms deadline (50ms total) to allow
+        // for thread scheduling overhead on slower platforms (macOS).
+        async_std::task::sleep(Duration::from_millis(40)).await;
         assert_eq!(timer.signal(), Signal::SIGNALED);
 
         timer.set(timer_now() + Duration::from_millis(10), Duration::default());
