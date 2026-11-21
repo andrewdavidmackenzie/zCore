@@ -16,10 +16,10 @@ pub struct Stream {
     base: KObjectBase,
     vmo: Arc<VmObject>,
     /// Mutable state: (options, seek_offset).
-    inner: KernelMutex<StreamInner>,
+    pub(super) inner: KernelMutex<StreamInner>,
 }
 
-struct StreamInner {
+pub struct StreamInner {
     options: u32,
     seek: usize,
 }
