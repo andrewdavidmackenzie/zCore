@@ -571,7 +571,15 @@ mod tests {
         {
             let futex = futex.clone();
             async_std::task::spawn(async move {
-                async_std::task::sleep(Duration::from_millis(10)).await;
+                // Wait for both waiters to enter the queue (bounded to
+                // avoid hanging) before changing the value: `wait(1)`
+                // fails with BAD_STATE if the value has already changed.
+                for _ in 0..200 {
+                    if futex.inner.lock().waiter_queue.len() == 2 {
+                        break;
+                    }
+                    async_std::task::sleep(Duration::from_millis(1)).await;
+                }
                 VALUE.store(2, Ordering::SeqCst);
 
                 let waiters = futex.inner.lock().waiter_queue.clone();
@@ -621,7 +629,14 @@ mod tests {
                     .unwrap();
             });
         }
-        async_std::task::sleep(Duration::from_millis(10)).await;
+        // Wait for the spawned waiter to enter the queue (bounded to
+        // avoid hanging) before asserting on the invalid-args path.
+        for _ in 0..200 {
+            if futex.inner.lock().waiter_queue.len() == 1 {
+                break;
+            }
+            async_std::task::sleep(Duration::from_millis(1)).await;
+        }
         assert_eq!(
             futex
                 .wait_with_owner(1, Some(thread.clone()), Some(thread.clone()))

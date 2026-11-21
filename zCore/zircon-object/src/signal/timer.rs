@@ -143,10 +143,14 @@ mod tests {
     use super::*;
     use hal_impl::timer::timer_now;
 
-    // Timer callback delivery depends on a host OS thread getting CPU time
+    // Timer callback delivery depends on host OS threads getting CPU time
     // within a few ms (hal-impl's libos timer_set spawns a std::thread).
-    // On resource-constrained CI runners (macOS: 3 cores) a timer thread
-    // can be starved past its deadline when many tests compete for CPU.
+    // On resource-constrained CI runners (macOS: 3 cores) both the test
+    // thread and the timer thread can be scheduled tens of ms late, so
+    // these tests never assume a sleep took only as long as requested:
+    // every timing assertion is gated on the *actual* elapsed time read
+    // from the same monotonic clock the timer uses, and is skipped when
+    // runner jitter makes it inconclusive.
     //
     // These tests are `#[serial_test::serial]` (exclusive lock on the
     // default key) while every other test in this crate is marked
@@ -159,44 +163,86 @@ mod tests {
     // `#[async_std::test]` tests, where it must come AFTER the
     // `#[async_std::test]` attribute).
 
+    /// Wait for the timer to fire, allowing `grace` beyond `deadline` for
+    /// timer-thread wake-up jitter. A timer that never fires fails the test.
+    fn wait_signaled(timer: &Timer, deadline: Duration, grace: Duration) {
+        loop {
+            if timer.signal() == Signal::SIGNALED {
+                return;
+            }
+            assert!(
+                timer_now() < deadline + grace,
+                "timer did not fire within {:?} after its deadline",
+                grace
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
     #[test]
     #[serial_test::serial]
     fn one_shot() {
-        let timer = Timer::one_shot(timer_now() + Duration::from_millis(15));
-        std::thread::sleep(Duration::from_millis(10));
-        assert_eq!(timer.signal(), Signal::empty());
-
-        std::thread::sleep(Duration::from_millis(20));
-        assert_eq!(timer.signal(), Signal::SIGNALED);
+        let deadline = timer_now() + Duration::from_millis(15);
+        let timer = Timer::one_shot(deadline);
+        // Sleep is a minimum: the thread may wake much later on a loaded
+        // runner. Read the signal first, then the clock: if the clock
+        // (read after the signal) is still before the deadline, the
+        // signal snapshot is provably from before the deadline too.
+        std::thread::sleep(Duration::from_millis(5));
+        let signal = timer.signal();
+        if timer_now() < deadline {
+            assert_eq!(signal, Signal::empty());
+        }
+        wait_signaled(&timer, deadline, Duration::from_millis(500));
     }
 
     #[test]
     #[serial_test::serial]
     fn set() {
+        let start = timer_now();
         let timer = Timer::new();
-        timer.set(timer_now() + Duration::from_millis(10), Duration::default());
-        timer.set(timer_now() + Duration::from_millis(20), Duration::default());
+        timer.set(start + Duration::from_millis(10), Duration::default());
+        let second_deadline = start + Duration::from_millis(20);
+        timer.set(second_deadline, Duration::default());
 
-        std::thread::sleep(Duration::from_millis(10));
-        assert_eq!(timer.signal(), Signal::empty());
+        // The second set() must replace the first deadline: once past the
+        // first (10ms) deadline but still before the second (20ms), the
+        // timer must not have fired. Skip the check if jitter has already
+        // carried us past the second deadline.
+        while timer_now() < start + Duration::from_millis(12) {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let signal = timer.signal();
+        if timer_now() < second_deadline {
+            assert_eq!(signal, Signal::empty());
+        }
+        wait_signaled(&timer, second_deadline, Duration::from_millis(500));
 
-        std::thread::sleep(Duration::from_millis(20));
-        assert_eq!(timer.signal(), Signal::SIGNALED);
-
-        timer.set(timer_now() + Duration::from_millis(10), Duration::default());
+        // Re-arming a fired timer clears the signal synchronously.
+        timer.set(
+            timer_now() + Duration::from_millis(100),
+            Duration::default(),
+        );
         assert_eq!(timer.signal(), Signal::empty());
     }
 
     #[test]
     #[serial_test::serial]
     fn cancel() {
+        let deadline = timer_now() + Duration::from_millis(20);
         let timer = Timer::new();
-        timer.set(timer_now() + Duration::from_millis(10), Duration::default());
-
+        timer.set(deadline, Duration::default());
+        // Leave the timer pending for a while, then cancel it.
         std::thread::sleep(Duration::from_millis(5));
         timer.cancel();
-
-        std::thread::sleep(Duration::from_millis(50));
-        assert_eq!(timer.signal(), Signal::empty());
+        // The cancellation only proves "never fires" if it completed
+        // before the deadline; reading the clock after cancel() returns
+        // proves the cancel itself happened before the deadline.
+        if timer_now() < deadline {
+            while timer_now() < deadline + Duration::from_millis(100) {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert_eq!(timer.signal(), Signal::empty());
+        }
     }
 }

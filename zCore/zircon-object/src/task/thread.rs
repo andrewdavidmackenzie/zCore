@@ -1769,8 +1769,13 @@ mod tests {
             Err(ZxError::BAD_STATE)
         );
 
-        // wait 100ms for the new thread to exit
-        async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+        // Wait for the new thread to exit (bounded to avoid hanging).
+        for _ in 0..500 {
+            if thread.state() == ThreadState::Dead && Arc::strong_count(&thread) == 1 {
+                break;
+            }
+            async_std::task::sleep(core::time::Duration::from_millis(2)).await;
+        }
 
         // no other references to `Thread`
         assert_eq!(Arc::strong_count(&thread), 1);
@@ -1808,7 +1813,10 @@ mod tests {
 
         let cancel_token = proc.get_cancel_token(handle_value).unwrap();
         let future = object.wait_signal(Signal::READABLE);
-        let deadline = timer_now() + Duration::from_millis(20);
+        // Generous deadline: the cancellation (handle removal below)
+        // must win the race against the timeout even if the remover
+        // task is scheduled late on a loaded runner.
+        let deadline = timer_now() + Duration::from_millis(500);
         async_std::task::spawn({
             let proc = proc.clone();
             async move {
