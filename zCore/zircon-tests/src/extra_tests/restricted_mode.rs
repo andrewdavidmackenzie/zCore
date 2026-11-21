@@ -386,7 +386,7 @@ fn bad_instruction_abort() {
     let bad_addr: u64 = 0x0FFFFFFFFFFFFFFE;
     assert!(bad_addr < (1u64 << 63), "address is in user space");
     assert_ne!(thread.id(), 0);
-    proc.exit(0);
+    Process::exit(&proc, 0);
 }
 
 // ── ARM64-specific tests ──────────────────────────────────────────

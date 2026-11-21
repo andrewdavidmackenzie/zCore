@@ -453,7 +453,7 @@ impl<'a> Syscall<'a> {
     fn unknown_syscall(&mut self, sys_type: Sys) -> SysResult {
         error!("unknown syscall: {:?}. exit...", sys_type);
         let proc = self.zircon_process();
-        proc.exit(-1);
+        zircon_object::task::Process::exit(proc, -1);
         Err(LxError::ENOSYS)
     }
 

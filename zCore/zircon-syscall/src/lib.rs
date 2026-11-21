@@ -19,7 +19,7 @@ use hal::MMUFlags;
 use hal_impl::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
 use zircon_object::object::{wait_signal_many, KernelObject, KoID, Rights, Signal};
 use zircon_object::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
-use zircon_object::task::{CurrentThread, PolicyCondition, Thread, ThreadFn};
+use zircon_object::task::{CurrentThread, PolicyCondition, Process, Thread, ThreadFn};
 use zircon_object::{ZxError, ZxResult};
 
 use self::consts::SyscallType as Sys;
@@ -130,7 +130,8 @@ impl Syscall<'_> {
     /// This must be called from the syscall layer (not from
     /// `Process`) because it needs access to the current thread.
     fn enforce_basic_policy(&self, condition: PolicyCondition) -> ZxResult {
-        let (result, synth_code) = self.thread.proc().check_policy_with_exception(condition);
+        let proc = self.thread.proc();
+        let (result, synth_code) = Process::check_policy_with_exception(&proc, condition);
         if let Some(code) = synth_code {
             self.thread.signal_policy_exception(code, 0);
         }

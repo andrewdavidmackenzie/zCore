@@ -93,6 +93,11 @@ pub struct Process {
     exceptionate: Arc<Exceptionate>,
     debug_exceptionate: Arc<Exceptionate>,
     pub(crate) inner: KernelMutex<ProcessInner>,
+    /// Weak self-reference, set at construction. Lets `Task::kill`
+    /// (which only receives `&self`) obtain the `Arc<Process>` needed
+    /// to delegate to the graph-checked `Process::exit`
+    /// (#829 Batch 5D).
+    self_weak: Weak<Self>,
 }
 
 impl_kobject!(Process
@@ -223,7 +228,7 @@ impl Process {
         // On bare-metal, page faults go through the hardware trap handler.
         #[cfg(not(target_os = "none"))]
         crate::vm::vmar::register_cow_vmar(&vmar);
-        let proc = Arc::new(Process {
+        let proc = Arc::new_cyclic(|weak| Process {
             base: KObjectBase::with_name(name),
             _counter: CountHelper::new(),
             job: job.clone(),
@@ -233,6 +238,12 @@ impl Process {
             exceptionate: Exceptionate::new(ExceptionChannelType::Process),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::Debugger),
             inner: KernelMutex::new(ProcessInner::default()),
+            // The weak self-reference is established during
+            // construction (Arc::new_cyclic); note that
+            // `Arc::get_mut` cannot be used for this — a real Weak
+            // existing anywhere blocks get_mut, and the RHS of an
+            // assignment evaluates before the LHS place anyway.
+            self_weak: weak.clone(),
         });
         job.add_process(proc.clone())?;
         Ok(proc)
@@ -261,7 +272,7 @@ impl Process {
             PAGE_SIZE,
         )?;
 
-        let proc = Arc::new(Process {
+        let proc = Arc::new_cyclic(|weak| Process {
             base: KObjectBase::with_name(name),
             _counter: CountHelper::new(),
             job: job.clone(),
@@ -271,6 +282,8 @@ impl Process {
             exceptionate: Exceptionate::new(ExceptionChannelType::Process),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::Debugger),
             inner: KernelMutex::new(ProcessInner::default()),
+            // See create_with_vmar: established via new_cyclic.
+            self_weak: weak.clone(),
         });
 
         // Copy initial properties from source and mark as shared.
@@ -332,11 +345,22 @@ impl Process {
     /// Exit current process with `retcode`.
     /// The process do not terminate immediately when exited.
     /// It will terminate after all its child threads are terminated.
-    pub fn exit(&self, retcode: i64) {
+    /// Exit current process with `retcode`.
+    ///
+    /// Takes the process's `Arc` so the lockgraph context (`TaskCtx`)
+    /// can be constructed for compile-time lock-order enforcement:
+    /// the process lock acquisition goes through the declared graph
+    /// (Unlocked → JobInnerLock → ProcessInnerLock → ThreadInnerLock),
+    /// and any attempt to acquire a thread lock while holding the
+    /// process context must come after it in the graph.
+    pub fn exit(arc_self: &Arc<Self>, retcode: i64) {
+        let this = arc_self.as_ref();
         let zero_handles_objects;
         let should_terminate;
+        let ctx = super::task_ctx::TaskCtx::from_process(arc_self.clone());
+        let mut locked = ctx.locked();
         {
-            let mut inner = self.inner.lock();
+            let (mut inner, _proc_ctx) = locked.lock_and::<super::lock_order::ProcessInnerLock>();
             match inner.status {
                 Status::Exited(existing) if existing == retcode => return,
                 Status::Exited(_) => {
@@ -363,7 +387,7 @@ impl Process {
                 for obj in &zero_handles_objects {
                     obj.on_zero_handles();
                 }
-                self.terminate();
+                this.terminate();
                 return;
             }
             // Collect the thread list under the lock, then act on each
@@ -425,7 +449,7 @@ impl Process {
                     }
                 }
             }
-            let mut inner = self.inner.lock();
+            let mut inner = this.inner.lock();
             // Remove unstarted threads — they can never call
             // remove_thread().  Started threads (now Dying) will
             // call remove_thread() when their CurrentThread drops.
@@ -439,7 +463,7 @@ impl Process {
             obj.on_zero_handles();
         }
         if should_terminate {
-            self.terminate();
+            this.terminate();
         }
     }
 
@@ -515,13 +539,13 @@ impl Process {
     /// Use [`Syscall::enforce_policy`] in the async syscall layer for
     /// full Fuchsia-compatible behaviour including exception delivery
     /// on `AllowException`/`DenyException`.
-    pub fn check_policy(&self, condition: PolicyCondition) -> ZxResult {
-        let (result, _synth_code) = self.check_policy_with_exception(condition);
+    pub fn check_policy(arc_self: &Arc<Self>, condition: PolicyCondition) -> ZxResult {
+        let (result, _synth_code) = Self::check_policy_with_exception(arc_self, condition);
         // When an exception should be delivered but we can't (sync
         // context), DenyException must still kill — an unhandled policy
         // exception kills the process in Fuchsia too.
         if _synth_code.is_some() && result.is_err() {
-            self.exit(super::TASK_RETCODE_POLICY_KILL);
+            Self::exit(arc_self, super::TASK_RETCODE_POLICY_KILL);
         }
         result
     }
@@ -537,11 +561,12 @@ impl Process {
     /// The `synth_code` maps 1:1 to the `PolicyCondition` discriminant,
     /// matching Fuchsia's `kPolicyIdToPolicyException` table.
     pub fn check_policy_with_exception(
-        &self,
+        arc_self: &Arc<Self>,
         condition: PolicyCondition,
     ) -> (ZxResult, Option<u32>) {
+        let this = arc_self.as_ref();
         let synth_code = condition as u32;
-        match self
+        match this
             .policy
             .get_action(condition)
             .unwrap_or(PolicyAction::Allow)
@@ -561,7 +586,7 @@ impl Process {
             }
             PolicyAction::Kill => {
                 // Kill the process outright — no exception, just die.
-                self.exit(super::TASK_RETCODE_POLICY_KILL);
+                Self::exit(arc_self, super::TASK_RETCODE_POLICY_KILL);
                 (Err(ZxError::ACCESS_DENIED), None)
             }
         }
@@ -1187,7 +1212,14 @@ impl Process {
 
 impl Task for Process {
     fn kill(&self) {
-        self.exit(super::TASK_RETCODE_SYSCALL_KILL);
+        // Delegate to the graph-checked `Process::exit` via the weak
+        // self-reference: the Task trait only provides `&self`, but
+        // the lockgraph context (`TaskCtx`) needs the `Arc<Process>`
+        // to build the upward chain. If the upgrade fails the process
+        // is already being destroyed and exiting is moot.
+        if let Some(arc) = self.self_weak.upgrade() {
+            Self::exit(&arc, super::TASK_RETCODE_SYSCALL_KILL);
+        }
     }
 
     fn suspend(&self) {
@@ -1383,7 +1415,7 @@ mod tests {
 
         assert_eq!(proc.related_koid(), root_job.id());
         assert!(Arc::ptr_eq(&root_job, &proc.job()));
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1445,7 +1477,7 @@ mod tests {
                 .err(),
             Some(ZxError::BAD_HANDLE)
         );
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1486,7 +1518,7 @@ mod tests {
             Err(ZxError::ACCESS_DENIED)
         );
         // Clean up self-referential handles to avoid aspace ID leak.
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1530,7 +1562,7 @@ mod tests {
             .expect("wrong object type");
         assert!(Arc::ptr_eq(&object, &proc));
         // Clean up self-referential handles to avoid aspace ID leak.
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1544,7 +1576,7 @@ mod tests {
 
         let thread1 = Thread::create(&proc, "thread1").expect("failed to create thread");
         assert_eq!(proc.thread_ids(), vec![thread.id(), thread1.id()]);
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1557,7 +1589,7 @@ mod tests {
 
         proc.set_dyn_break_on_load(2);
         assert_eq!(proc.get_dyn_break_on_load(), 2);
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1570,7 +1602,7 @@ mod tests {
         assert_eq!(info.flags, 0);
         assert_eq!(info.return_code, 0);
 
-        proc.exit(666);
+        Process::exit(&proc, 666);
         let info = proc.get_info();
         assert_eq!(
             info.flags,
@@ -1599,8 +1631,8 @@ mod tests {
         let inner = proc.inner.lock();
         assert!(inner.contains_thread(&thread) && !inner.contains_thread(&thread1));
         drop(inner);
-        proc.exit(0);
-        proc1.exit(0);
+        Process::exit(&proc, 0);
+        Process::exit(&proc1, 0);
     }
 
     #[test]
@@ -1620,10 +1652,10 @@ mod tests {
             .is_ok());
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
 
-        assert!(proc.check_policy(PolicyCondition::BadHandle).is_ok());
-        assert!(proc.check_policy(PolicyCondition::NewProcess).is_ok());
+        assert!(Process::check_policy(&proc, PolicyCondition::BadHandle).is_ok());
+        assert!(Process::check_policy(&proc, PolicyCondition::NewProcess).is_ok());
         assert_eq!(
-            proc.check_policy(PolicyCondition::NewChannel).err(),
+            Process::check_policy(&proc, PolicyCondition::NewChannel).err(),
             Some(ZxError::ACCESS_DENIED)
         );
 
@@ -1634,6 +1666,6 @@ mod tests {
                 .err(),
             Some(ZxError::BAD_STATE)
         );
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 }

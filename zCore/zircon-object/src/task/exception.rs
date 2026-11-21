@@ -6,7 +6,7 @@ use hal::TrapReason;
 use hal_impl::context::UserContext;
 use lock::Mutex;
 
-use super::{Job, Task, Thread, ThreadState};
+use super::{Job, Process, Task, Thread, ThreadState};
 use crate::ipc::{Channel, MessagePacket};
 use crate::object::{Handle, KObjectBase, KernelObject, KoID, Rights, Signal};
 use crate::{impl_kobject, ZxError, ZxResult};
@@ -556,7 +556,8 @@ impl Exception {
                     | ExceptionType::ProcessStarting
             );
             if !is_lifecycle {
-                self.thread.proc().exit(super::TASK_RETCODE_EXCEPTION_KILL);
+                let proc = self.thread.proc();
+                Process::exit(&proc, super::TASK_RETCODE_EXCEPTION_KILL);
             }
         }
     }
@@ -733,7 +734,7 @@ mod tests {
         for (actual, expected) in actual.iter().zip(expected.iter()) {
             assert!(Arc::ptr_eq(actual, expected));
         }
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -760,7 +761,7 @@ mod tests {
         for (actual, expected) in actual.iter().zip(expected.iter()) {
             assert!(Arc::ptr_eq(actual, expected));
         }
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -852,6 +853,6 @@ mod tests {
 
         // test for the order: proc debug -> thread -> job
         assert_eq!(handled_order.lock().clone(), vec![0, 1, 3]);
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 }

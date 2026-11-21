@@ -292,7 +292,7 @@ fn job_signals() {
     // C++: zx_handle_close(child_process) — close process handle
     // In zCore, processes must exit() to be removed from job
     let proc_obj = ctx.proc.get_object::<Process>(child_proc_h).unwrap();
-    proc_obj.exit(0);
+    Process::exit(&proc_obj, 0);
     assert!(job.signal().contains(Signal::JOB_NO_PROCESSES));
 
     // Kill the child job via sys_task_kill
@@ -477,7 +477,7 @@ fn one_critical_process_kills_one_job() {
 
     // Kill the process
     let proc_obj = ctx.proc.get_object::<Process>(proc_h).unwrap();
-    proc_obj.exit(1);
+    Process::exit(&proc_obj, 1);
 
     let info = get_job_info(&ctx, job_h);
     assert!(info.exited);
@@ -499,7 +499,7 @@ fn many_critical_processes_kill_one_job() {
 
     // Kill proc1 — job should terminate
     let proc1 = ctx.proc.get_object::<Process>(proc1_h).unwrap();
-    proc1.exit(1);
+    Process::exit(&proc1, 1);
 
     let info = get_job_info(&ctx, job_h);
     assert!(info.exited);
@@ -529,7 +529,7 @@ fn one_critical_process_kills_job_tree() {
 
     // Kill proc2 — should terminate job1 and job2
     let proc2 = ctx.proc.get_object::<Process>(proc2_h).unwrap();
-    proc2.exit(1);
+    Process::exit(&proc2, 1);
 
     let info1 = get_job_info(&ctx, job1_h);
     assert!(info1.exited);
@@ -573,7 +573,7 @@ fn critical_process_already_set() {
 
     // Kill process — job should terminate
     let proc_obj = ctx.proc.get_object::<Process>(proc_h).unwrap();
-    proc_obj.exit(1);
+    Process::exit(&proc_obj, 1);
     let job_obj = ctx.proc.get_object::<Job>(job_h).unwrap();
     assert!(job_obj.signal().contains(Signal::JOB_TERMINATED));
 }
@@ -707,7 +707,7 @@ fn get_info_runtime() {
 
     // Kill the process, then job
     let proc_obj = ctx.proc.get_object::<Process>(proc_h).unwrap();
-    proc_obj.exit(0);
+    Process::exit(&proc_obj, 0);
     ctx.syscall().sys_task_kill(job_h).unwrap();
 
     // Job should now be terminated
@@ -812,7 +812,7 @@ fn one_critical_process_kills_one_job_if_retcode_nonzero() {
     // C++: zx_job_set_critical(job1, 1, proc1)  — options=1 means retcode_nonzero
     sc.sys_job_set_critical(job1_h, 1, proc1_h).unwrap();
     let proc1 = ctx.proc.get_object::<Process>(proc1_h).unwrap();
-    proc1.exit(0);
+    Process::exit(&proc1, 0);
     let info1 = get_job_info(&ctx, job1_h);
     assert!(
         !info1.exited,
@@ -824,7 +824,7 @@ fn one_critical_process_kills_one_job_if_retcode_nonzero() {
     let (proc2_h, _) = create_process(&ctx, job2_h, b"crit-nonzero");
     sc.sys_job_set_critical(job2_h, 1, proc2_h).unwrap();
     let proc2 = ctx.proc.get_object::<Process>(proc2_h).unwrap();
-    proc2.exit(1);
+    Process::exit(&proc2, 1);
     let info2 = get_job_info(&ctx, job2_h);
     assert!(
         info2.exited,

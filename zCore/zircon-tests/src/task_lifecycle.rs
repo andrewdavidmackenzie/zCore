@@ -5,7 +5,7 @@
 
 use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
-use zircon_object::task::Job;
+use zircon_object::task::{Job, Process};
 
 extern crate alloc;
 
@@ -93,7 +93,7 @@ fn kill_empty_process() {
     let root = Job::root();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "empty-proc").unwrap();
-    proc.exit(-1);
+    Process::exit(&proc, -1);
     // After kill, process should be dying or dead
 }
 
@@ -170,7 +170,7 @@ fn process_return_code_tracking() {
     assert_eq!(proc.exit_code(), None);
 
     // Exit with specific code
-    proc.exit(42);
+    Process::exit(&proc, 42);
 
     // Return code should be tracked
     assert_eq!(proc.exit_code(), Some(42));
@@ -195,7 +195,7 @@ fn job_no_processes_signal() {
     assert!(!job.signal().contains(Signal::JOB_NO_PROCESSES));
 
     // Drop/exit the process
-    proc.exit(0);
+    Process::exit(&proc, 0);
     // JOB_NO_PROCESSES should be set again
     assert!(job.signal().contains(Signal::JOB_NO_PROCESSES));
 }

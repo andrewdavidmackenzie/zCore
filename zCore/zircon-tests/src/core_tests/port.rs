@@ -982,7 +982,7 @@ async fn queue_packet_limit_exceeded_generates_policy_exception() {
     test_thread.wait_for_termination().await;
     assert_eq!(test_thread.thread.state(), ThreadState::Dead);
 
-    proc.exit(0);
+    Process::exit(&proc, 0);
 }
 
 /// C++: TEST(PortTest, TooManyObservers)
