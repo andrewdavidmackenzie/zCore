@@ -1,40 +1,54 @@
 //! Lock-order graph for the VM subsystem (#829 Batch 5E-1).
 //!
 //! The levels and edges below were derived from the *actual blocking
-//! paths* in the code (each edge cites its site), not from the old
-//! lockdep's documented hierarchy — which contradicted the real
-//! acquisition order (it placed VmObjectInner before VmMappingInner;
-//! the page-fault handler blocks in the opposite direction).
+//! paths* in the code (each edge cites its site). Note that two
+//! historical documents disagreed with the code and were corrected
+//! here: the old lockdep's hierarchy placed VmObjectInner before
+//! VmMappingInner with the reverse justification, and the #711
+//! comment claimed the page-fault handler holds the mapping inner
+//! across VMO calls — it does not (it is collect-then-act); the real
+//! VMO→mapping nesting is the eager-map path.
 //!
 //! ```text
-//! Unlocked → VmarInnerLock → VmMappingInnerLock → VmObjectInnerLock → PageTableLock
-//! Unlocked → StreamInnerLock ↗
+//! Unlocked → VmarInnerLock  ──→ VmMappingInnerLock ──→ PageTableLock
+//! Unlocked → StreamInnerLock ↘   ↗
+//! Unlocked → VmObjectInnerLock ──┘ (→ PageTableLock)
 //! ```
 //!
 //! ## Edges (each verified against a blocking acquisition site)
 //!
 //! - `VmarInnerLock → VmMappingInnerLock`: destroy/split holds the
-//!   VMAR inner across `map.cut()` (vmar.rs, the destroy path that
-//!   iterates `inner.mappings`).
-//! - `VmMappingInnerLock → VmObjectInnerLock`: `handle_page_fault`
-//!   holds the mapping inner across `vmo.*` calls.
-//! - `StreamInnerLock → VmObjectInnerLock`: `Stream::read`/`write`
-//!   hold the stream inner across `read_at`/`write_at`.
+//!   VMAR inner across `map.cut()` (which takes the mapping inner).
+//! - `VmarInnerLock → VmObjectInnerLock`: destroy/split calls
+//!   `new.vmo.append_mapping(..)` under the VMAR inner.
 //! - `VmarInnerLock → PageTableLock`: allocation clears stale PTEs
 //!   with `page_table.lock().unmap_cont(..)` under the VMAR inner.
-//! - `VmMappingInnerLock → PageTableLock`: the fault handler maps
-//!   PTEs under the mapping inner.
+//! - `VmObjectInnerLock → VmMappingInnerLock`: the eager-map path —
+//!   `VmMapping::map` runs its callback under
+//!   `vmo.commit_pages_with(..)`, which holds the VMO lock while the
+//!   callback takes the mapping inner (then the page table).
 //! - `VmObjectInnerLock → PageTableLock`: `range_change` takes
 //!   `page_table.lock()` while its caller (resize/decommit) holds
 //!   the VMO lock.
+//! - `VmMappingInnerLock → PageTableLock`: `VmMapping::map`'s
+//!   callback, `unmap`, and `unmap_all_pages` take the page table
+//!   under the mapping inner.
+//! - `StreamInnerLock → VmObjectInnerLock`: `Stream::read`/`write`
+//!   hold the stream inner across `read_at`/`write_at`.
 //!
 //! ## Deliberately absent edge
 //!
-//! `VmObjectInnerLock → VmMappingInnerLock` does **not** exist: that
-//! direction is the #711 exception (`range_change` uses `try_lock`
-//! on the mapping under the VMO lock, with a documented
-//! PTE-invalidation-skip caveat). Any *blocking* VMO→mapping
-//! acquisition is a compile error against this graph.
+//! `VmMappingInnerLock → VmObjectInnerLock` does **not** exist:
+//! nothing blocks on a VMO lock while holding a mapping lock (the
+//! fault handler and `fill_in_task_status` are collect-then-act).
+//! Since the eager-map path blocks VMO → mapping, a blocking
+//! mapping → VMO acquisition would be an ABBA against it — a
+//! compile error against this graph. The #711 `try_lock` in
+//! `range_change` predates the fault handler's restructure to
+//! collect-then-act; its original rationale ("the fault handler
+//! holds mapping then VMO") no longer describes the code, but the
+//! try_lock is retained as defense-in-depth for the PTE-skip
+//! caveat documented there.
 //!
 //! ## Same-type disciplines (documented; not graph-expressible)
 //!
@@ -48,7 +62,7 @@
 
 use hal::vm::GenericPageTable;
 use lock::lockgraph::{LockAfter, LockFor, Unlocked};
-use lock::{impl_lock_after, KernelMutexGuard};
+use lock::KernelMutexGuard;
 
 use super::stream::Stream;
 use super::vmar::{VmAddressRegion, VmMapping};
@@ -74,40 +88,42 @@ pub enum StreamInnerLock {}
 // ── The graph ───────────────────────────────────────────────────────
 //
 // Single-parent levels use `impl_lock_after!` (its transitivity
-// blanket is unambiguous). Multi-parent levels — VmObjectInnerLock
-// (reachable after Mapping OR Stream) and PageTableLock (after Vmar,
-// Mapping, VMO, or Stream) — must use DIRECT impls enumerating their
-// predecessors: the macro's blankets would overlap on the shared
-// predecessors (e.g. both would claim `LockAfter<Unlocked>` for the
-// same level) and fail to compile. Cycle-safety of the direct impls
-// is verified by inspection: the graph
-// Vmar→{Mapping,PT}, Mapping→{VMO,PT}, Stream→{VMO}, VMO→{PT} is
-// acyclic.
+// blanket is unambiguous). Multi-parent levels — VmMappingInnerLock
+// (after VMAR or VMO), VmObjectInnerLock (after VMAR or Stream), and
+// PageTableLock (after every level) — must use DIRECT impls
+// enumerating their predecessors: the macro's blankets would overlap
+// on the shared predecessors (e.g. both would claim
+// `LockAfter<Unlocked>` for the same level) and fail to compile.
+// Cycle-safety of the direct impls is verified by inspection: the
+// graph VMAR→{Mapping,VMO,PT}, VMO→{Mapping,PT}, Mapping→PT,
+// Stream→VMO is acyclic.
 
 // Roots (direct impls — see lockgraph docs).
 impl LockAfter<Unlocked> for VmarInnerLock {}
 impl LockAfter<Unlocked> for StreamInnerLock {}
 
-// VMAR before Mapping: destroy/split holds the VMAR inner across
-// mapping operations. Single parent — the macro is safe here.
-impl_lock_after!(VmarInnerLock => VmMappingInnerLock);
-
 // VMO: reachable from Unlocked (every plain vmo.read/write), after
-// the VMAR (destroy/split), after a mapping (the page-fault
-// handler), or after a stream (stream read/write). The REVERSE
-// (VMO → Mapping) is the #711 try_lock exception — deliberately
-// absent.
+// the VMAR (destroy/split's append_mapping), or after a stream.
+// Note: the mapping is DOWNSTREAM of the VMO (the eager-map path),
+// not upstream.
 impl LockAfter<Unlocked> for VmObjectInnerLock {}
 impl LockAfter<VmarInnerLock> for VmObjectInnerLock {}
-impl LockAfter<VmMappingInnerLock> for VmObjectInnerLock {}
 impl LockAfter<StreamInnerLock> for VmObjectInnerLock {}
+
+// Mapping: after the VMAR (destroy/split) or after the VMO (the
+// eager-map callback runs under commit_pages_with's VMO lock).
+// The REVERSE (Mapping → VMO) is deliberately absent — see the
+// module docs.
+impl LockAfter<Unlocked> for VmMappingInnerLock {}
+impl LockAfter<VmarInnerLock> for VmMappingInnerLock {}
+impl LockAfter<VmObjectInnerLock> for VmMappingInnerLock {}
 
 // Page table: the terminal lock in every chain — reachable from
 // Unlocked and after every other VM level.
 impl LockAfter<Unlocked> for PageTableLock {}
 impl LockAfter<VmarInnerLock> for PageTableLock {}
-impl LockAfter<VmMappingInnerLock> for PageTableLock {}
 impl LockAfter<VmObjectInnerLock> for PageTableLock {}
+impl LockAfter<VmMappingInnerLock> for PageTableLock {}
 impl LockAfter<StreamInnerLock> for PageTableLock {}
 
 // ── LockFor: connecting levels to the real fields ──────────────────
@@ -176,10 +192,12 @@ impl LockFor<StreamInnerLock> for Stream {
 // The compile-fail doc tests below reproduce the two forbidden
 // acquisition shapes; the unit tests exercise the legal chains.
 
-/// The #711 pattern: holding the VMO lock and then *blocking* on a
-/// mapping lock. `range_change` is the one legitimate user of this
-/// direction and stays on `try_lock` with its documented caveat; any
-/// new blocking acquisition must not compile.
+/// The ABBA guard: holding a mapping lock and then blocking on a VMO
+/// lock. The eager-map path blocks VMO → mapping (under
+/// `commit_pages_with`), so a blocking mapping → VMO acquisition
+/// would deadlock against it. Nothing in the code does this today
+/// (the fault handler and `fill_in_task_status` are
+/// collect-then-act) — and it must stay that way.
 ///
 /// ```compile_fail
 /// use lock::lockgraph::{LockFor, Locked};
@@ -189,9 +207,10 @@ impl LockFor<StreamInnerLock> for Stream {
 ///
 /// let v = Vm::new();
 /// let mut locked = Locked::new(&v);
-/// let (_vmo_guard, vmo_ctx) = locked.lock_and::<VmObjectInnerLock>();
-/// // VMO → Mapping is the #711 direction — no edge exists.
-/// let _map_guard = vmo_ctx.lock::<VmMappingInnerLock>();
+/// let (_map_guard, map_ctx) = locked.lock_and::<VmMappingInnerLock>();
+/// // Mapping → VMO has no edge — the eager-map path holds the
+/// // reverse order.
+/// let _vmo_guard = map_ctx.lock::<VmObjectInnerLock>();
 /// ```
 ///
 /// The reverse-VMAR pattern: holding a mapping lock and then
@@ -284,12 +303,23 @@ mod tests {
     use lock::KernelMutex;
 
     #[test]
-    fn legal_vmar_mapping_vmo_page_table_chain() {
+    fn legal_vmar_mapping_page_table_chain() {
         let v = VmFixture::new();
         let mut locked = Locked::new(&v);
         let (_v, mut ctx) = locked.lock_and::<VmarInnerLock>();
         let (_m, mut ctx) = ctx.lock_and::<VmMappingInnerLock>();
-        let (_o, mut ctx) = ctx.lock_and::<VmObjectInnerLock>();
+        let _pt = ctx.lock::<PageTableLock>();
+    }
+
+    #[test]
+    fn legal_eager_map_order_vmo_mapping_page_table() {
+        // The eager-map path's real order: the commit_pages_with
+        // callback runs under the VMO lock and takes the mapping
+        // inner, then the page table.
+        let v = VmFixture::new();
+        let mut locked = Locked::new(&v);
+        let (_o, mut ctx) = locked.lock_and::<VmObjectInnerLock>();
+        let (_m, mut ctx) = ctx.lock_and::<VmMappingInnerLock>();
         let _pt = ctx.lock::<PageTableLock>();
     }
 
