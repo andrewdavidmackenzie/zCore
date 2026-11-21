@@ -602,8 +602,13 @@ mod tests {
                 assert_eq!(requeue_futex.wake(1), 1);
             });
         }
-        // wait for wake.
-        futex.wait(1).await.unwrap();
+        // wait for wake (bounded: if the worker task failed its
+        // registration assertion before waking us, fail instead of
+        // hanging forever).
+        async_std::future::timeout(Duration::from_secs(5), futex.wait(1))
+            .await
+            .expect("requeue wake did not arrive")
+            .unwrap();
         assert_eq!(VALUE.load(Ordering::SeqCst), 2);
     }
 
@@ -637,13 +642,16 @@ mod tests {
             }
             async_std::task::sleep(Duration::from_millis(1)).await;
         }
-        assert_eq!(
-            futex
-                .wait_with_owner(1, Some(thread.clone()), Some(thread.clone()))
-                .await
-                .unwrap_err(),
-            ZxError::INVALID_ARGS
-        );
+        // Bounded: if the spawned waiter never registers, this call
+        // could block instead of returning INVALID_ARGS — fail instead
+        // of hanging forever.
+        let result = async_std::future::timeout(
+            Duration::from_secs(5),
+            futex.wait_with_owner(1, Some(thread.clone()), Some(thread.clone())),
+        )
+        .await
+        .expect("owner validation did not complete");
+        assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 
         futex.inner.lock().set_owner(None);
         futex.wake_single_owner();

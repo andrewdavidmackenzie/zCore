@@ -837,14 +837,14 @@ mod tests {
         };
 
         // proc debug should get the exception first
-        create_handler(&proc.debug_exceptionate(), true, false, 0);
+        let handler_proc_debug = create_handler(&proc.debug_exceptionate(), true, false, 0);
         // thread should get the exception next
-        create_handler(&thread.exceptionate(), true, false, 1);
+        let handler_thread = create_handler(&thread.exceptionate(), true, false, 1);
         // here we omit proc to test that we can handle the case that there is none handler
         // job should get the exception and handle it next
-        create_handler(&job.exceptionate(), true, true, 3);
+        let handler_job = create_handler(&job.exceptionate(), true, true, 3);
         // since exception is handled we should not get it from parent job
-        create_handler(&parent_job.exceptionate(), false, false, 4);
+        let handler_parent_job = create_handler(&parent_job.exceptionate(), false, false, 4);
 
         exception.handle().await;
 
@@ -853,6 +853,17 @@ mod tests {
         proc.debug_exceptionate().shutdown();
         job.exceptionate().shutdown();
         parent_job.exceptionate().shutdown();
+
+        // Await the handlers so their assertions are observed by the
+        // test and no detached handler tasks outlive it.
+        for handle in [
+            handler_proc_debug,
+            handler_thread,
+            handler_job,
+            handler_parent_job,
+        ] {
+            handle.await;
+        }
 
         // test for the order: proc debug -> thread -> job
         assert_eq!(handled_order.lock().clone(), vec![0, 1, 3]);
