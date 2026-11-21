@@ -337,7 +337,12 @@ impl Process {
         thread.set_first_thread();
         let res = thread.start_with_entry(entry, stack, handle_value as usize, arg2, thread_fn);
         if res.is_err() && handle_value != INVALID_HANDLE {
-            self.inner.lock().remove_handle(handle_value).ok();
+            // Roll back the handle we added. Drop the removed Handle
+            // AFTER the lock statement (a last reference to a child
+            // Job takes the job lock in Drop — must not run under the
+            // process lock; see remove_handles).
+            let removed = self.inner.lock().remove_handle(handle_value);
+            drop(removed);
         }
         res
     }
@@ -836,7 +841,16 @@ impl Process {
     /// If one or more error happens, return one of them.
     /// All handles are discarded on success or failure.
     pub fn remove_handles(&self, handle_values: &[HandleValue]) -> ZxResult<Vec<Handle>> {
-        let handles_result = {
+        // Collect under the lock; drop the removed Handles AFTER
+        // releasing it (review finding on #849): a Handle can be the
+        // last reference to a child Job, whose Drop → terminate →
+        // remove_child takes the parent job lock. Dropping it under
+        // the process lock is the P → J direction, against
+        // `remove_thread`'s declared J → P nesting — an ABBA. The
+        // error path previously dropped the collected Handles inside
+        // the locked block (the Err arm dropped the Vec before the
+        // guard released).
+        let (handles, first_err) = {
             let mut inner = self.inner.lock();
             let mut handles = Vec::with_capacity(handle_values.len());
             let mut first_err = None;
@@ -850,21 +864,23 @@ impl Process {
                     }
                 }
             }
-            if let Some(e) = first_err {
-                Err(e)
-            } else {
+            (handles, first_err)
+        };
+        // Run zero-handle hooks after releasing the lock (success
+        // path only, matching the previous behavior — the error path
+        // discards handles without hooks).
+        match first_err {
+            // The collected Handles drop here — OUTSIDE the lock.
+            Some(e) => Err(e),
+            None => {
+                for h in &handles {
+                    if h.object.handle_count() == 0 {
+                        h.object.on_zero_handles();
+                    }
+                }
                 Ok(handles)
             }
-        };
-        // Run zero-handle hooks after releasing the lock.
-        if let Ok(ref handles) = handles_result {
-            for h in handles {
-                if h.object.handle_count() == 0 {
-                    h.object.on_zero_handles();
-                }
-            }
         }
-        handles_result
     }
 
     /// Remove handles for transfer (e.g. channel_write).
@@ -879,27 +895,33 @@ impl Process {
         &self,
         handle_values: &[HandleValue],
     ) -> ZxResult<(Vec<Handle>, Vec<Sender<()>>)> {
-        let mut inner = self.inner.lock();
-        let mut handles = Vec::with_capacity(handle_values.len());
-        let mut senders = Vec::new();
-        let mut first_err = None;
-        for &hv in handle_values {
-            match inner.remove_handle_for_transfer(hv) {
-                Ok((h, mut queue)) => {
-                    handles.push(h);
-                    senders.append(&mut queue);
-                }
-                Err(e) => {
-                    if first_err.is_none() {
-                        first_err = Some(e);
+        // Collect under the lock; drop after releasing it (same
+        // P → J-via-Job-Drop hazard as `remove_handles` — see the
+        // comment there).
+        let (handles, senders, first_err) = {
+            let mut inner = self.inner.lock();
+            let mut handles = Vec::with_capacity(handle_values.len());
+            let mut senders = Vec::new();
+            let mut first_err = None;
+            for &hv in handle_values {
+                match inner.remove_handle_for_transfer(hv) {
+                    Ok((h, mut queue)) => {
+                        handles.push(h);
+                        senders.append(&mut queue);
+                    }
+                    Err(e) => {
+                        if first_err.is_none() {
+                            first_err = Some(e);
+                        }
                     }
                 }
             }
-        }
-        if let Some(e) = first_err {
-            Err(e)
-        } else {
-            Ok((handles, senders))
+            (handles, senders, first_err)
+        };
+        match first_err {
+            // The collected Handles drop here — OUTSIDE the lock.
+            Some(e) => Err(e),
+            None => Ok((handles, senders)),
         }
     }
 
