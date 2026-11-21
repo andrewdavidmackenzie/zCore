@@ -391,7 +391,7 @@ impl Thread {
                 ..Default::default()
             }),
         });
-        proc.add_thread(thread.clone())?;
+        Process::add_thread(proc, thread.clone())?;
         Ok(thread)
     }
 
@@ -1110,7 +1110,7 @@ impl Thread {
         // thread guard across this call is the #838 ABBA — it hung
         // PThreadBarrierTest when the guard drop was lost in a clippy
         // fix. Do not remove the scoped block.
-        this.proc.remove_thread(this.base.id);
+        Process::remove_thread(&this.proc, this.base.id);
     }
 }
 
