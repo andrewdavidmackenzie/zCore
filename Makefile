@@ -883,22 +883,24 @@ other-test:
 # Fast pre-push: clippy + fmt + builds (no QEMU tests).
 # Catches ~90% of CI failures in ~3 minutes.
 pre-push-quick:
-	@echo "==> [1/8] Clippy (all selections + personalities)..."
+	@echo "==> [1/9] Clippy (all selections + personalities)..."
 	cargo check-style
-	@echo "==> [2/8] Workspace build..."
+	@echo "==> [2/9] Workspace build..."
 	cargo build
-	@echo "==> [3/8] Unit tests..."
+	@echo "==> [3/9] Unit tests..."
 	cargo test --no-fail-fast
-	@echo "==> [4/8] Zircon syscall tests (libos)..."
+	@echo "==> [4/9] zircon-object host tests (libos + aspace-separate)..."
+	cargo test -p zircon-object --features libos,aspace-separate --no-fail-fast
+	@echo "==> [5/9] Zircon syscall tests (libos)..."
 	cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
-	@echo "==> [5/8] Bare-metal aarch64..."
+	@echo "==> [6/9] Bare-metal aarch64..."
 	$(MAKE) build CONFIG=busybox.qemu-aarch64 ARCH=aarch64
-	@echo "==> [6/8] Bare-metal x86_64..."
+	@echo "==> [7/9] Bare-metal x86_64..."
 	$(MAKE) build CONFIG=busybox.qemu-x86_64 ARCH=x86_64
-	@echo "==> [7/8] Hardware targets..."
+	@echo "==> [8/9] Hardware targets..."
 	cargo bin -m petal.raspi400
 	cargo bin -m petal.x86-laptop
-	@echo "==> [8/8] Done."
+	@echo "==> [9/9] Done."
 	@echo "==> Quick pre-push checks passed."
 
 # Full pre-push: everything CI checks (slow — includes QEMU boot tests).

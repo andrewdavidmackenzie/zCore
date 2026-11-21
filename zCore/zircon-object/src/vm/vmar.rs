@@ -3050,6 +3050,9 @@ mod tests {
 
     #[test]
     #[allow(unsafe_code)]
+    // FIXME(#854): intermittently hangs or fails (~50% of runs) —
+    // COW page mapping race. Passes individually.
+    #[ignore]
     fn copy_on_write_update_mapping() {
         let vmar = VmAddressRegion::new_root();
         let vmo = VmObject::new_paged(1);

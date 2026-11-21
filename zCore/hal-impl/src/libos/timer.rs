@@ -1,6 +1,5 @@
 //! Time and clock functions.
 
-use async_std::task;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -22,9 +21,19 @@ hal_fn_impl! {
         }
 
         fn timer_set(deadline: Duration, callback: Box<dyn FnOnce(Duration) + Send + Sync>) {
-            task::spawn(async move {
-                let dur = deadline - timer_now();
-                task::sleep(dur).await;
+            // Use a plain OS thread instead of async-std's task
+            // system. Async-std's executor threads outlive the test
+            // binary's static teardown (~4-6% of runs crash in
+            // ConcurrentQueue<TimerOp>::pop after the test summary).
+            // A detached OS thread avoids that entirely: it holds no
+            // references to async-std's internal structures, and the
+            // process can exit while it sleeps without heap
+            // corruption (the OS reclaims everything).
+            std::thread::spawn(move || {
+                let now = timer_now();
+                if deadline > now {
+                    std::thread::sleep(deadline - now);
+                }
                 callback(timer_now());
             });
         }
