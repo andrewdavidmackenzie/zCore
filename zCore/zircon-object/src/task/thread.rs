@@ -391,7 +391,7 @@ impl Thread {
                 ..Default::default()
             }),
         });
-        proc.add_thread(thread.clone())?;
+        Process::add_thread(proc, thread.clone())?;
         Ok(thread)
     }
 
@@ -1060,40 +1060,67 @@ impl Thread {
     }
 
     /// Terminate the current running thread.
-    fn terminate(&self) {
-        let mut inner = self.inner.lock();
-        self.exceptionate.shutdown();
-        // Clear task identifiers so a stale set_priority() cannot
-        // address a reused executor slab slot.
-        inner.task_sched = None;
-        inner.change_state(ThreadState::Dead, &self.base);
-        // Wake the wait_for_run waker so the run_user future can
-        // observe the Dead state and exit. Without this, threads
-        // killed while suspended (e.g., unhandled exceptions) leak
-        // their executor task — the run_user future stays Pending
-        // forever, accumulating over time and slowing down the
-        // executor's scan_notifications.
-        if let Some(waker) = inner.waker.take() {
-            waker.wake();
+    ///
+    /// Takes the thread's `Arc` so the lockgraph context (`TaskCtx`)
+    /// can be constructed — the Arc provides the upward chain
+    /// (process, job) without unsafe code.
+    ///
+    /// The thread lock acquisition goes through the lockgraph,
+    /// enforcing the declared lock order at compile time for the
+    /// acquisitions that go through contexts. NOTE: the process lock
+    /// taken inside `remove_thread` below is still a raw acquisition
+    /// (an escape hatch until 5D-5 converts it), so the guard's
+    /// lifetime — not the graph — is what prevents the #838 ABBA
+    /// here. The guard is dropped before `remove_thread` by the
+    /// scoped block.
+    fn terminate(arc_self: &Arc<Self>) {
+        let this = arc_self.as_ref();
+        {
+            let ctx = super::task_ctx::TaskCtx::from_thread(arc_self.clone());
+            let mut locked = ctx.locked();
+            let (mut inner, _thread_ctx) = locked.lock_and::<super::lock_order::ThreadInnerLock>();
+            this.exceptionate.shutdown();
+            // Clear task identifiers so a stale set_priority() cannot
+            // address a reused executor slab slot.
+            inner.task_sched = None;
+            inner.change_state(ThreadState::Dead, &this.base);
+            // Wake the wait_for_run waker so the run_user future can
+            // observe the Dead state and exit. Without this, threads
+            // killed while suspended (e.g., unhandled exceptions) leak
+            // their executor task — the run_user future stays Pending
+            // forever, accumulating over time and slowing down the
+            // executor's scan_notifications.
+            if let Some(waker) = inner.waker.take() {
+                waker.wake();
+            }
+            // Also fire the suspend interrupt and killer to unblock any
+            // blocking_run_suspendable or blocking_run that may be
+            // holding the run_user future.
+            if let Some(sender) = inner.suspend_interrupt.take() {
+                let _ = sender.send(());
+            }
+            if let Some(killer) = inner.killer.take() {
+                let _ = killer.send(());
+            }
         }
-        // Also fire the suspend interrupt and killer to unblock any
-        // blocking_run_suspendable or blocking_run that may be
-        // holding the run_user future.
-        if let Some(sender) = inner.suspend_interrupt.take() {
-            let _ = sender.send(());
-        }
-        if let Some(killer) = inner.killer.take() {
-            let _ = killer.send(());
-        }
-        // Release the thread lock BEFORE taking the process lock in
-        // remove_thread: Process::exit/suspend/resume take the process
-        // lock and then call Thread::kill()/state() (thread lock), so
-        // holding both in this order is an ABBA cycle (the same edge
-        // #838 fixes from the process side; dropping the guard here
-        // removes it from the thread side too). Nothing after this
-        // point uses `inner`.
-        drop(inner);
-        self.proc.remove_thread(self.base.id);
+        // The thread lock guard is RELEASED (end of the scoped block
+        // above) BEFORE remove_thread. This is load-bearing and the
+        // compiler cannot catch a regression here:
+        //
+        // - remove_thread acquires ProcessInnerLock through a NEW
+        //   lockgraph context (Job → Process chaining); it starts
+        //   from Unlocked, so a thread guard still held by the CALLER
+        //   is invisible to the graph — the context proves nothing
+        //   about the caller's already-held guards.
+        // - Process::exit and suspend_checked snapshot the thread
+        //   list under the process lock and release it before calling
+        //   into threads (collect-then-act), so no path holds the
+        //   process lock while taking a thread lock — the #838 ABBA
+        //   exists only if THIS guard leaks across the call.
+        //
+        // It hung PThreadBarrierTest when the guard drop was lost in
+        // a clippy fix. Do not remove the scoped block.
+        Process::remove_thread(&this.proc, this.base.id);
     }
 }
 
@@ -1560,7 +1587,7 @@ impl core::ops::Deref for CurrentThread {
 
 impl Drop for CurrentThread {
     fn drop(&mut self) {
-        self.terminate();
+        Thread::terminate(&self.0);
     }
 }
 
@@ -1714,7 +1741,7 @@ mod tests {
         assert_eq!(thread.related_koid(), proc.id());
         let child = proc.get_child(thread.id()).unwrap().downcast_arc().unwrap();
         assert!(Arc::ptr_eq(&child, &thread));
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[async_std::test]
@@ -1774,7 +1801,7 @@ mod tests {
         assert_eq!(Arc::strong_count(&thread), 1);
         assert_eq!(thread.state(), ThreadState::Dead);
         // Clean up self-referential handle added by proc.start().
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[async_std::test]
@@ -1822,7 +1849,7 @@ mod tests {
             )
             .await;
         assert_eq!(result.err(), Some(ZxError::CANCELED));
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1837,7 +1864,7 @@ mod tests {
             thread.get_thread_exception_info().err(),
             Some(ZxError::BAD_STATE)
         );
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1874,7 +1901,7 @@ mod tests {
             .is_ok());
         assert!(thread.write_state(ThreadStateKind::General, &buf).is_ok());
         // TODO
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1885,7 +1912,7 @@ mod tests {
 
         let _ext = thread.ext();
         // TODO
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[async_std::test]
@@ -1923,7 +1950,7 @@ mod tests {
         }
         let thread: Arc<dyn KernelObject> = thread;
         thread.wait_signal(Signal::THREAD_TERMINATED).await;
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1935,7 +1962,7 @@ mod tests {
         assert_eq!(thread.get_time(), 0);
         thread.time_add(10);
         assert_eq!(thread.get_time(), 10);
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1958,7 +1985,7 @@ mod tests {
         // Calling exit again should be idempotent (not panic).
         current.exit();
         assert_eq!(thread.state(), ThreadState::Dying);
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1970,7 +1997,7 @@ mod tests {
         // New threads should have the Zircon default priority (16).
         assert_eq!(thread.priority(), ZIRCON_DEFAULT_PRIORITY);
         assert_eq!(thread.priority(), 16);
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1988,6 +2015,6 @@ mod tests {
         // Values above 31 are clamped.
         thread.set_priority(100);
         assert_eq!(thread.priority(), 31);
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 }

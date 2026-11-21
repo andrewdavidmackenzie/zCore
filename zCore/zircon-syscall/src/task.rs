@@ -54,7 +54,7 @@ impl Syscall<'_> {
     pub fn sys_process_exit(&mut self, code: i64) -> ZxResult {
         info!("proc.exit: code={:?}", code);
         let proc = self.thread.proc();
-        proc.exit(code);
+        zircon_object::task::Process::exit(&proc, code);
         Ok(())
     }
 

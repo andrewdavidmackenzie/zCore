@@ -93,6 +93,11 @@ pub struct Process {
     exceptionate: Arc<Exceptionate>,
     debug_exceptionate: Arc<Exceptionate>,
     pub(crate) inner: KernelMutex<ProcessInner>,
+    /// Weak self-reference, set at construction. Lets `Task::kill`
+    /// (which only receives `&self`) obtain the `Arc<Process>` needed
+    /// to delegate to the graph-checked `Process::exit`
+    /// (#829 Batch 5D).
+    self_weak: Weak<Self>,
 }
 
 impl_kobject!(Process
@@ -118,7 +123,7 @@ impl_kobject!(Process
         }
         if status == Status::Init && !has_threads {
             // Never started, no threads — remove from job and destroy VMAR.
-            self.job.remove_process(self.base.id, 0);
+            Job::remove_process(&self.job, self.base.id, 0);
             let _ = self.vmar.destroy();
         } else if matches!(status, Status::Exited(_)) {
             let _ = self.vmar.destroy();
@@ -223,7 +228,7 @@ impl Process {
         // On bare-metal, page faults go through the hardware trap handler.
         #[cfg(not(target_os = "none"))]
         crate::vm::vmar::register_cow_vmar(&vmar);
-        let proc = Arc::new(Process {
+        let proc = Arc::new_cyclic(|weak| Process {
             base: KObjectBase::with_name(name),
             _counter: CountHelper::new(),
             job: job.clone(),
@@ -233,8 +238,14 @@ impl Process {
             exceptionate: Exceptionate::new(ExceptionChannelType::Process),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::Debugger),
             inner: KernelMutex::new(ProcessInner::default()),
+            // The weak self-reference is established during
+            // construction (Arc::new_cyclic); note that
+            // `Arc::get_mut` cannot be used for this — a real Weak
+            // existing anywhere blocks get_mut, and the RHS of an
+            // assignment evaluates before the LHS place anyway.
+            self_weak: weak.clone(),
         });
-        job.add_process(proc.clone())?;
+        Job::add_process(job, proc.clone())?;
         Ok(proc)
     }
 
@@ -261,7 +272,7 @@ impl Process {
             PAGE_SIZE,
         )?;
 
-        let proc = Arc::new(Process {
+        let proc = Arc::new_cyclic(|weak| Process {
             base: KObjectBase::with_name(name),
             _counter: CountHelper::new(),
             job: job.clone(),
@@ -271,6 +282,8 @@ impl Process {
             exceptionate: Exceptionate::new(ExceptionChannelType::Process),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::Debugger),
             inner: KernelMutex::new(ProcessInner::default()),
+            // See create_with_vmar: established via new_cyclic.
+            self_weak: weak.clone(),
         });
 
         // Copy initial properties from source and mark as shared.
@@ -282,7 +295,7 @@ impl Process {
             new_inner.is_shared = true;
         }
 
-        if let Err(e) = job.add_process(proc.clone()) {
+        if let Err(e) = Job::add_process(&job, proc.clone()) {
             // Release the restricted VMAR from the source's children
             // to avoid leaking it.
             restricted_vmar.destroy()?;
@@ -324,7 +337,12 @@ impl Process {
         thread.set_first_thread();
         let res = thread.start_with_entry(entry, stack, handle_value as usize, arg2, thread_fn);
         if res.is_err() && handle_value != INVALID_HANDLE {
-            self.inner.lock().remove_handle(handle_value).ok();
+            // Roll back the handle we added. Drop the removed Handle
+            // AFTER the lock statement (a last reference to a child
+            // Job takes the job lock in Drop — must not run under the
+            // process lock; see remove_handles).
+            let removed = self.inner.lock().remove_handle(handle_value);
+            drop(removed);
         }
         res
     }
@@ -332,11 +350,21 @@ impl Process {
     /// Exit current process with `retcode`.
     /// The process do not terminate immediately when exited.
     /// It will terminate after all its child threads are terminated.
-    pub fn exit(&self, retcode: i64) {
+    /// Exit current process with `retcode`.
+    ///
+    /// Takes the process's `Arc` so the lockgraph context (`TaskCtx`)
+    /// can be constructed for compile-time lock-order enforcement:
+    /// the process lock acquisition goes through the declared graph
+    /// (Unlocked → JobInnerLock → ProcessInnerLock → ThreadInnerLock),
+    /// and any attempt to acquire a thread lock while holding the
+    /// process context must come after it in the graph.
+    pub fn exit(arc_self: &Arc<Self>, retcode: i64) {
         let zero_handles_objects;
         let should_terminate;
+        let ctx = super::task_ctx::TaskCtx::from_process(arc_self.clone());
+        let mut locked = ctx.locked();
         {
-            let mut inner = self.inner.lock();
+            let (mut inner, _proc_ctx) = locked.lock_and::<super::lock_order::ProcessInnerLock>();
             match inner.status {
                 Status::Exited(existing) if existing == retcode => return,
                 Status::Exited(_) => {
@@ -363,7 +391,7 @@ impl Process {
                 for obj in &zero_handles_objects {
                     obj.on_zero_handles();
                 }
-                self.terminate();
+                Self::terminate(arc_self);
                 return;
             }
             // Collect the thread list under the lock, then act on each
@@ -425,7 +453,7 @@ impl Process {
                     }
                 }
             }
-            let mut inner = self.inner.lock();
+            let mut inner = locked.lock_and::<super::lock_order::ProcessInnerLock>().0;
             // Remove unstarted threads — they can never call
             // remove_thread().  Started threads (now Dying) will
             // call remove_thread() when their CurrentThread drops.
@@ -439,7 +467,7 @@ impl Process {
             obj.on_zero_handles();
         }
         if should_terminate {
-            self.terminate();
+            Self::terminate(arc_self);
         }
     }
 
@@ -450,58 +478,121 @@ impl Process {
     /// the handle table to break the `Process → Thread → Process`
     /// strong reference cycle (a process may hold handles to its
     /// own threads while `Thread.proc` holds the process).
-    fn terminate(&self) {
-        let mut inner = self.inner.lock();
-        // Finalize only once: exit() and the last remove_thread() can
-        // race to call terminate(), and running it twice would
-        // double-count the process's CPU/queue time in the parent job.
-        if inner.terminated {
-            return;
-        }
-        let retcode = match inner.status {
-            Status::Exited(retcode) => retcode,
-            _ => {
-                // Should not happen — exit() or remove_thread() should
-                // always set the status before calling terminate().
-                // Fall back to 0 if it does.
-                inner.status = Status::Exited(0);
-                0
+    /// The process finally terminates.
+    ///
+    /// Takes the process's `Arc` so the lock acquisition goes through
+    /// the lockgraph context (#829 Batch 5D-5). The cross-object calls
+    /// (job remove_process, critical-job kill) all happen after the
+    /// process lock is released — collect-then-act throughout.
+    fn terminate(arc_self: &Arc<Self>) {
+        let this = arc_self.as_ref();
+        let ctx = super::task_ctx::TaskCtx::from_process(arc_self.clone());
+        let mut locked = ctx.locked();
+        let retcode;
+        let zero_handles_objects;
+        let proc_cpu_time;
+        let critical;
+        {
+            let mut inner = locked.lock_and::<super::lock_order::ProcessInnerLock>().0;
+            // Finalize only once: exit() and the last remove_thread() can
+            // race to call terminate(), and running it twice would
+            // double-count the process's CPU/queue time in the parent job.
+            if inner.terminated {
+                return;
             }
-        };
-        // Freeze the return code — no subsequent kill() may overwrite it.
-        // Matches Fuchsia's DYING → DEAD transition.
-        inner.terminated = true;
-        // Clear the handle table to break reference cycles.
-        // exit() may have already cleared handles; clear_handles on
-        // an empty table is a harmless no-op.
-        let zero_handles_objects = inner.clear_handles();
+            retcode = match inner.status {
+                Status::Exited(retcode) => retcode,
+                _ => {
+                    // Should not happen — exit() or remove_thread() should
+                    // always set the status before calling terminate().
+                    // Fall back to 0 if it does.
+                    inner.status = Status::Exited(0);
+                    0
+                }
+            };
+            // Freeze the return code — no subsequent kill() may overwrite it.
+            // Matches Fuchsia's DYING → DEAD transition.
+            inner.terminated = true;
+            // Clear the handle table to break reference cycles.
+            // exit() may have already cleared handles; clear_handles on
+            // an empty table is a harmless no-op.
+            zero_handles_objects = inner.clear_handles();
 
-        // Propagate accumulated CPU/queue time to the parent job so
-        // job.total_cpu_time()/total_queue_time() include exited
-        // processes.  Use at least 1ns for started processes.
-        let proc_cpu_time = inner.exited_cpu_time.max(1);
-        let critical = inner.critical_to_job.clone();
-        drop(inner);
+            // Propagate accumulated CPU/queue time to the parent job so
+            // job.total_cpu_time()/total_queue_time() include exited
+            // processes.  Use at least 1ns for started processes.
+            proc_cpu_time = inner.exited_cpu_time.max(1);
+            critical = inner.critical_to_job.clone();
+        }
 
         // Fire zero-handle callbacks outside the lock to avoid deadlock.
         for obj in &zero_handles_objects {
             obj.on_zero_handles();
         }
 
-        self.base.signal_set(Signal::PROCESS_TERMINATED);
-        self.exceptionate.shutdown();
-        self.debug_exceptionate.shutdown();
+        this.base.signal_set(Signal::PROCESS_TERMINATED);
+        this.exceptionate.shutdown();
+        this.debug_exceptionate.shutdown();
         // Destroy the process's address space. After this, any
         // handle to the root VMAR will see it as destroyed
         // (get_info returns BAD_STATE), matching Fuchsia behavior.
-        let _ = self.vmar.destroy();
+        let _ = this.vmar.destroy();
 
-        self.job.remove_process(self.base.id, proc_cpu_time);
+        Job::remove_process(&this.job, this.base.id, proc_cpu_time);
         // If we are critical to a job, we need to take action.
         if let Some((job, retcode_nonzero)) = &critical {
             if !retcode_nonzero || retcode != 0 {
-                job.kill_with_code(super::TASK_RETCODE_CRITICAL_PROCESS_KILL);
+                Job::kill_with_code(job, super::TASK_RETCODE_CRITICAL_PROCESS_KILL);
             }
+        }
+    }
+
+    /// Suspend the process (graph-checked variant, #829 Batch 5D-3).
+    ///
+    /// Update the count and collect the thread list in ONE critical
+    /// section, then suspend each thread outside the process lock.
+    ///
+    /// Taking a thread lock while holding the process lock deadlocks
+    /// against `Thread::terminate`, which takes the process lock in
+    /// `remove_thread` after releasing its thread lock — a dying
+    /// thread racing a process suspend/resume/exit was the machine
+    /// hang behind issue #834 (ProcessTest.SuspendWithDyingThread).
+    ///
+    /// Collecting under the same lock section as the count update
+    /// keeps `add_thread`'s compensation consistent: a thread added
+    /// concurrently either sees the new count (and applies the
+    /// suspension itself) or is included in our list (and we suspend
+    /// it here).
+    fn suspend_checked(arc_self: &Arc<Self>) {
+        let ctx = super::task_ctx::TaskCtx::from_process(arc_self.clone());
+        let mut locked = ctx.locked();
+        let threads: Vec<Arc<Thread>> = {
+            let mut inner = locked.lock_and::<super::lock_order::ProcessInnerLock>().0;
+            inner.suspend_count += 1;
+            inner.threads.iter().filter_map(|t| t.upgrade()).collect()
+        };
+        for t in &threads {
+            t.suspend();
+        }
+    }
+
+    /// Resume the process (graph-checked variant, #829 Batch 5D-3).
+    ///
+    /// Mirror of [`Process::suspend_checked`]: decrement the count and
+    /// collect the thread list in one critical section, then resume
+    /// each thread outside the process lock (see the lock-order
+    /// comment there).
+    fn resume_checked(arc_self: &Arc<Self>) {
+        let ctx = super::task_ctx::TaskCtx::from_process(arc_self.clone());
+        let mut locked = ctx.locked();
+        let threads: Vec<Arc<Thread>> = {
+            let mut inner = locked.lock_and::<super::lock_order::ProcessInnerLock>().0;
+            assert_ne!(inner.suspend_count, 0, "resume without matching suspend");
+            inner.suspend_count -= 1;
+            inner.threads.iter().filter_map(|t| t.upgrade()).collect()
+        };
+        for t in &threads {
+            t.resume();
         }
     }
 
@@ -515,13 +606,13 @@ impl Process {
     /// Use [`Syscall::enforce_policy`] in the async syscall layer for
     /// full Fuchsia-compatible behaviour including exception delivery
     /// on `AllowException`/`DenyException`.
-    pub fn check_policy(&self, condition: PolicyCondition) -> ZxResult {
-        let (result, _synth_code) = self.check_policy_with_exception(condition);
+    pub fn check_policy(arc_self: &Arc<Self>, condition: PolicyCondition) -> ZxResult {
+        let (result, _synth_code) = Self::check_policy_with_exception(arc_self, condition);
         // When an exception should be delivered but we can't (sync
         // context), DenyException must still kill — an unhandled policy
         // exception kills the process in Fuchsia too.
         if _synth_code.is_some() && result.is_err() {
-            self.exit(super::TASK_RETCODE_POLICY_KILL);
+            Self::exit(arc_self, super::TASK_RETCODE_POLICY_KILL);
         }
         result
     }
@@ -537,11 +628,12 @@ impl Process {
     /// The `synth_code` maps 1:1 to the `PolicyCondition` discriminant,
     /// matching Fuchsia's `kPolicyIdToPolicyException` table.
     pub fn check_policy_with_exception(
-        &self,
+        arc_self: &Arc<Self>,
         condition: PolicyCondition,
     ) -> (ZxResult, Option<u32>) {
+        let this = arc_self.as_ref();
         let synth_code = condition as u32;
-        match self
+        match this
             .policy
             .get_action(condition)
             .unwrap_or(PolicyAction::Allow)
@@ -561,7 +653,7 @@ impl Process {
             }
             PolicyAction::Kill => {
                 // Kill the process outright — no exception, just die.
-                self.exit(super::TASK_RETCODE_POLICY_KILL);
+                Self::exit(arc_self, super::TASK_RETCODE_POLICY_KILL);
                 (Err(ZxError::ACCESS_DENIED), None)
             }
         }
@@ -749,7 +841,16 @@ impl Process {
     /// If one or more error happens, return one of them.
     /// All handles are discarded on success or failure.
     pub fn remove_handles(&self, handle_values: &[HandleValue]) -> ZxResult<Vec<Handle>> {
-        let handles_result = {
+        // Collect under the lock; drop the removed Handles AFTER
+        // releasing it (review finding on #849): a Handle can be the
+        // last reference to a child Job, whose Drop → terminate →
+        // remove_child takes the parent job lock. Dropping it under
+        // the process lock is the P → J direction, against
+        // `remove_thread`'s declared J → P nesting — an ABBA. The
+        // error path previously dropped the collected Handles inside
+        // the locked block (the Err arm dropped the Vec before the
+        // guard released).
+        let (handles, first_err) = {
             let mut inner = self.inner.lock();
             let mut handles = Vec::with_capacity(handle_values.len());
             let mut first_err = None;
@@ -763,21 +864,23 @@ impl Process {
                     }
                 }
             }
-            if let Some(e) = first_err {
-                Err(e)
-            } else {
+            (handles, first_err)
+        };
+        // Run zero-handle hooks after releasing the lock (success
+        // path only, matching the previous behavior — the error path
+        // discards handles without hooks).
+        match first_err {
+            // The collected Handles drop here — OUTSIDE the lock.
+            Some(e) => Err(e),
+            None => {
+                for h in &handles {
+                    if h.object.handle_count() == 0 {
+                        h.object.on_zero_handles();
+                    }
+                }
                 Ok(handles)
             }
-        };
-        // Run zero-handle hooks after releasing the lock.
-        if let Ok(ref handles) = handles_result {
-            for h in handles {
-                if h.object.handle_count() == 0 {
-                    h.object.on_zero_handles();
-                }
-            }
         }
-        handles_result
     }
 
     /// Remove handles for transfer (e.g. channel_write).
@@ -792,27 +895,33 @@ impl Process {
         &self,
         handle_values: &[HandleValue],
     ) -> ZxResult<(Vec<Handle>, Vec<Sender<()>>)> {
-        let mut inner = self.inner.lock();
-        let mut handles = Vec::with_capacity(handle_values.len());
-        let mut senders = Vec::new();
-        let mut first_err = None;
-        for &hv in handle_values {
-            match inner.remove_handle_for_transfer(hv) {
-                Ok((h, mut queue)) => {
-                    handles.push(h);
-                    senders.append(&mut queue);
-                }
-                Err(e) => {
-                    if first_err.is_none() {
-                        first_err = Some(e);
+        // Collect under the lock; drop after releasing it (same
+        // P → J-via-Job-Drop hazard as `remove_handles` — see the
+        // comment there).
+        let (handles, senders, first_err) = {
+            let mut inner = self.inner.lock();
+            let mut handles = Vec::with_capacity(handle_values.len());
+            let mut senders = Vec::new();
+            let mut first_err = None;
+            for &hv in handle_values {
+                match inner.remove_handle_for_transfer(hv) {
+                    Ok((h, mut queue)) => {
+                        handles.push(h);
+                        senders.append(&mut queue);
+                    }
+                    Err(e) => {
+                        if first_err.is_none() {
+                            first_err = Some(e);
+                        }
                     }
                 }
             }
-        }
-        if let Some(e) = first_err {
-            Err(e)
-        } else {
-            Ok((handles, senders))
+            (handles, senders, first_err)
+        };
+        match first_err {
+            // The collected Handles drop here — OUTSIDE the lock.
+            Some(e) => Err(e),
+            None => Ok((handles, senders)),
         }
     }
 
@@ -991,8 +1100,14 @@ impl Process {
     }
 
     /// Add a thread to the process.
-    pub(super) fn add_thread(&self, thread: Arc<Thread>) -> ZxResult {
-        let mut inner = self.inner.lock();
+    /// Add a thread to the process.
+    ///
+    /// Takes the process's `Arc` so the lock acquisition goes through
+    /// the lockgraph context (#829 Batch 5D-5).
+    pub(super) fn add_thread(arc_self: &Arc<Self>, thread: Arc<Thread>) -> ZxResult {
+        let ctx = super::task_ctx::TaskCtx::from_process(arc_self.clone());
+        let mut locked = ctx.locked();
+        let mut inner = locked.lock_and::<super::lock_order::ProcessInnerLock>().0;
         if let Status::Exited(_) = inner.status {
             return Err(ZxError::BAD_STATE);
         }
@@ -1004,7 +1119,9 @@ impl Process {
         // the new thread is not yet published to the process list and
         // has not been returned to the caller, so no other CPU can be
         // inside Thread::terminate (or any other path) holding this
-        // thread's lock.
+        // thread's lock. The direction (process → thread) matches the
+        // declared graph order; thread.suspend()'s acquisition is still
+        // raw (leaf function) pending the lockdown phase.
         for _ in 0..inner.suspend_count {
             thread.suspend();
         }
@@ -1015,43 +1132,78 @@ impl Process {
     /// Remove a thread from the process.
     ///
     /// If no more threads left, exit the process.
-    pub(super) fn remove_thread(&self, tid: KoID) {
-        let mut inner = self.inner.lock();
-        // Bail if the thread was already removed (e.g., Process::exit
-        // removed unstarted threads, then CurrentThread::drop calls
-        // terminate → remove_thread again with the same ID).
-        if !inner
-            .threads
-            .iter()
-            .any(|t| t.upgrade().is_some_and(|t| t.id() == tid))
+    ///
+    /// Takes the process's `Arc` so the lock acquisition goes through
+    /// the lockgraph context (#829 Batch 5D-5).
+    ///
+    /// Lock order (graph-checked, review-driven fix): the JOB lock is
+    /// taken first and HELD ACROSS the process lock — the declared
+    /// Job → Process edge, enforced by the graph when chaining
+    /// `JobInnerLock → ProcessInnerLock` through the context. The
+    /// kill state is read from the held job guard (via
+    /// `JobInner::kill_code`), not through the re-locking accessors.
+    ///
+    /// Two earlier designs were wrong:
+    /// 1. The original code read `Job::is_killed()`/`return_code()`
+    ///    (Job.inner) while holding Process.inner — an inversion of
+    ///    the declared order, safe only because job-side callers
+    ///    collect-then-act by convention.
+    /// 2. The first conversion read the job state BEFORE taking the
+    ///    process lock. That respects the order but widens a race:
+    ///    `Job::kill_with_code` sets killed/return_code under the
+    ///    job lock and then calls `Process::exit`; a kill landing
+    ///    between the read and the last-thread status write freezes
+    ///    the exit code at 0 (exit early-returns once `terminated`
+    ///    is set). Holding the job guard across the decision closes
+    ///    that window: a kill that has begun is visible here, and a
+    ///    kill that begins after this section follows an
+    ///    already-decided exit (the same razor-thin corner Fuchsia
+    ///    has between a natural death and a racing Kill()).
+    ///
+    /// Both guards are released before `terminate` (which re-enters
+    /// both locks).
+    pub(super) fn remove_thread(arc_self: &Arc<Self>, tid: KoID) {
+        let ctx = super::task_ctx::TaskCtx::from_process(arc_self.clone());
+        let mut locked = ctx.locked();
+        let mut terminated = false;
         {
-            return;
-        }
-        // Note: we cannot call thread.get_time() here because
-        // terminate() already holds the thread's inner lock (deadlock).
-        // Instead, mark that threads have exited so total_cpu_time()
-        // returns at least 1 for started processes.
-        if inner.exited_cpu_time == 0 {
-            inner.exited_cpu_time = 1;
-        }
-        inner
-            .threads
-            .retain(|t| t.upgrade().is_some_and(|t| t.id() != tid));
-        if inner.threads.iter().all(|t| t.strong_count() == 0) {
-            // If exit() hasn't been called yet, set the exit code
-            // before running terminate(). Check the parent job's kill
-            // state to propagate the kill code when the last thread
-            // dies due to a job kill racing with thread termination.
-            if !matches!(inner.status, Status::Exited(_)) {
-                let code = if self.job.is_killed() {
-                    self.job.return_code()
-                } else {
-                    0
-                };
-                inner.status = Status::Exited(code);
+            let (job_inner, mut job_ctx) = locked.lock_and::<super::lock_order::JobInnerLock>();
+            let job_return_code = job_inner.kill_code().unwrap_or(0);
+            let mut inner = job_ctx.lock_and::<super::lock_order::ProcessInnerLock>().0;
+            // Bail if the thread was already removed (e.g., Process::exit
+            // removed unstarted threads, then CurrentThread::drop calls
+            // terminate → remove_thread again with the same ID).
+            if !inner
+                .threads
+                .iter()
+                .any(|t| t.upgrade().is_some_and(|t| t.id() == tid))
+            {
+                return;
             }
-            drop(inner);
-            self.terminate();
+            // Note: we cannot call thread.get_time() here because
+            // callers may hold the thread's inner lock (see
+            // Thread::terminate). Instead, mark that threads have
+            // exited so total_cpu_time() returns at least 1 for
+            // started processes.
+            if inner.exited_cpu_time == 0 {
+                inner.exited_cpu_time = 1;
+            }
+            inner
+                .threads
+                .retain(|t| t.upgrade().is_some_and(|t| t.id() != tid));
+            if inner.threads.iter().all(|t| t.strong_count() == 0) {
+                // If exit() hasn't been called yet, set the exit code
+                // before running terminate(). Propagate the kill code
+                // (read from the held job guard above) when the last
+                // thread dies during a job kill.
+                if !matches!(inner.status, Status::Exited(_)) {
+                    inner.status = Status::Exited(job_return_code);
+                }
+                terminated = true;
+            }
+        }
+        if terminated {
+            Self::terminate(arc_self);
         }
     }
 
@@ -1187,48 +1339,25 @@ impl Process {
 
 impl Task for Process {
     fn kill(&self) {
-        self.exit(super::TASK_RETCODE_SYSCALL_KILL);
+        // Delegate to the graph-checked `Process::exit` via the weak
+        // self-reference: the Task trait only provides `&self`, but
+        // the lockgraph context (`TaskCtx`) needs the `Arc<Process>`
+        // to build the upward chain. If the upgrade fails the process
+        // is already being destroyed and exiting is moot.
+        if let Some(arc) = self.self_weak.upgrade() {
+            Self::exit(&arc, super::TASK_RETCODE_SYSCALL_KILL);
+        }
     }
 
     fn suspend(&self) {
-        // Update the count and collect the thread list in ONE critical
-        // section, then suspend each thread outside the process lock.
-        //
-        // Taking a thread lock while holding the process lock deadlocks
-        // against `Thread::terminate`, which holds the thread lock while
-        // calling `Process::remove_thread` (process lock). Both locks are
-        // interrupt-disabling spinlocks on bare metal, so the deadlock is
-        // a permanent two-CPU freeze with interrupts off — the machine
-        // hang behind issue #834 (a dying thread racing a process
-        // suspend/resume/exit, as in ProcessTest.SuspendWithDyingThread).
-        //
-        // Collecting under the same lock section as the count update
-        // keeps `add_thread`'s compensation consistent: a thread added
-        // concurrently either sees the new count (and applies the
-        // suspension itself) or is included in our list (and we suspend
-        // it here).
-        let threads: Vec<Arc<Thread>> = {
-            let mut inner = self.inner.lock();
-            inner.suspend_count += 1;
-            inner.threads.iter().filter_map(|t| t.upgrade()).collect()
-        };
-        for t in &threads {
-            t.suspend();
+        if let Some(arc) = self.self_weak.upgrade() {
+            Self::suspend_checked(&arc);
         }
     }
 
     fn resume(&self) {
-        // Mirror of `suspend`: decrement the count and collect the
-        // thread list in one critical section, then resume each thread
-        // outside the process lock (see the lock-order comment there).
-        let threads: Vec<Arc<Thread>> = {
-            let mut inner = self.inner.lock();
-            assert_ne!(inner.suspend_count, 0, "resume without matching suspend");
-            inner.suspend_count -= 1;
-            inner.threads.iter().filter_map(|t| t.upgrade()).collect()
-        };
-        for t in &threads {
-            t.resume();
+        if let Some(arc) = self.self_weak.upgrade() {
+            Self::resume_checked(&arc);
         }
     }
 
@@ -1383,7 +1512,7 @@ mod tests {
 
         assert_eq!(proc.related_koid(), root_job.id());
         assert!(Arc::ptr_eq(&root_job, &proc.job()));
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1445,7 +1574,7 @@ mod tests {
                 .err(),
             Some(ZxError::BAD_HANDLE)
         );
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1486,7 +1615,7 @@ mod tests {
             Err(ZxError::ACCESS_DENIED)
         );
         // Clean up self-referential handles to avoid aspace ID leak.
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1530,7 +1659,7 @@ mod tests {
             .expect("wrong object type");
         assert!(Arc::ptr_eq(&object, &proc));
         // Clean up self-referential handles to avoid aspace ID leak.
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1544,7 +1673,7 @@ mod tests {
 
         let thread1 = Thread::create(&proc, "thread1").expect("failed to create thread");
         assert_eq!(proc.thread_ids(), vec![thread.id(), thread1.id()]);
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1557,7 +1686,7 @@ mod tests {
 
         proc.set_dyn_break_on_load(2);
         assert_eq!(proc.get_dyn_break_on_load(), 2);
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 
     #[test]
@@ -1570,7 +1699,7 @@ mod tests {
         assert_eq!(info.flags, 0);
         assert_eq!(info.return_code, 0);
 
-        proc.exit(666);
+        Process::exit(&proc, 666);
         let info = proc.get_info();
         assert_eq!(
             info.flags,
@@ -1599,8 +1728,8 @@ mod tests {
         let inner = proc.inner.lock();
         assert!(inner.contains_thread(&thread) && !inner.contains_thread(&thread1));
         drop(inner);
-        proc.exit(0);
-        proc1.exit(0);
+        Process::exit(&proc, 0);
+        Process::exit(&proc1, 0);
     }
 
     #[test]
@@ -1620,10 +1749,10 @@ mod tests {
             .is_ok());
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
 
-        assert!(proc.check_policy(PolicyCondition::BadHandle).is_ok());
-        assert!(proc.check_policy(PolicyCondition::NewProcess).is_ok());
+        assert!(Process::check_policy(&proc, PolicyCondition::BadHandle).is_ok());
+        assert!(Process::check_policy(&proc, PolicyCondition::NewProcess).is_ok());
         assert_eq!(
-            proc.check_policy(PolicyCondition::NewChannel).err(),
+            Process::check_policy(&proc, PolicyCondition::NewChannel).err(),
             Some(ZxError::ACCESS_DENIED)
         );
 
@@ -1634,6 +1763,6 @@ mod tests {
                 .err(),
             Some(ZxError::BAD_STATE)
         );
-        proc.exit(0);
+        Process::exit(&proc, 0);
     }
 }

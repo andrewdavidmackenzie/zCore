@@ -27,7 +27,7 @@ fn create_and_destroy() {
     assert_ne!(cmd_ch.id(), 0);
 
     // Destroy by killing the process.
-    proc.exit(zircon_object::task::TASK_RETCODE_SYSCALL_KILL);
+    Process::exit(&proc, zircon_object::task::TASK_RETCODE_SYSCALL_KILL);
 }
 
 /// Send a command to a mini-process via its command channel.
@@ -175,7 +175,7 @@ fn kill_process() {
     let proc = Process::create(&job, "mini-proc").unwrap();
     let _thread = Thread::create(&proc, "thread").unwrap();
 
-    proc.exit(zircon_object::task::TASK_RETCODE_SYSCALL_KILL);
+    Process::exit(&proc, zircon_object::task::TASK_RETCODE_SYSCALL_KILL);
     // After kill, process signals should include PROCESS_TERMINATED.
     // Note: in test mode without real execution, the terminated signal
     // may not be asserted until thread drop.
@@ -189,7 +189,7 @@ fn process_return_code() {
     let _thread = Thread::create(&proc, "thread").unwrap();
 
     // Set return code via kill (Fuchsia uses TASK_RETCODE_EXCEPTION_KILL).
-    proc.exit(zircon_object::task::TASK_RETCODE_SYSCALL_KILL);
+    Process::exit(&proc, zircon_object::task::TASK_RETCODE_SYSCALL_KILL);
     // The return code is set when the process terminates.
     // In test mode, we verify the process can be killed without panic.
 }

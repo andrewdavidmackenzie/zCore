@@ -452,7 +452,7 @@ impl Syscall<'_> {
     pub fn sys_exit_group(&mut self, exit_code: i32) -> SysResult {
         debug!("exit_group: code={}", exit_code);
         let proc = self.zircon_process();
-        proc.exit(exit_code as i64);
+        zircon_object::task::Process::exit(proc, exit_code as i64);
         Err(LxError::ENOSYS)
     }
 

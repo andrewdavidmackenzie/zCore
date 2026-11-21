@@ -108,7 +108,7 @@ async fn bad_syscall_caller() {
     test_thread.wait_for_termination().await;
     assert_eq!(test_thread.thread.state(), ThreadState::Dead);
 
-    proc.exit(0);
+    Process::exit(&proc, 0);
 }
 
 /// C++: TEST(Threads, BadSyscallNumber)
@@ -161,7 +161,7 @@ async fn bad_syscall_number() {
     test_thread.wait_for_termination().await;
     assert_eq!(test_thread.thread.state(), ThreadState::Dead);
 
-    proc.exit(0);
+    Process::exit(&proc, 0);
 }
 
 /// C++: TEST(Threads, Basics)
@@ -435,7 +435,7 @@ async fn exit_via_exception() {
     test_thread.wait_for_termination().await;
     assert_eq!(test_thread.thread.state(), ThreadState::Dead);
 
-    proc.exit(0);
+    Process::exit(&proc, 0);
 }
 
 /// C++: TEST(Threads, GetAffinity)
@@ -1371,7 +1371,7 @@ async fn suspend_channel_call() {
             .load(core::sync::atomic::Ordering::Acquire),
         0
     );
-    proc.exit(0);
+    Process::exit(&proc, 0);
 }
 
 /// C++: TEST(Threads, SuspendInvalidTargets)
@@ -1521,7 +1521,7 @@ async fn suspend_port_call() {
     let repr2 = PortPacketRepr::from(&remaining);
     assert_eq!(repr2.key, 300);
 
-    proc.exit(0);
+    Process::exit(&proc, 0);
 }
 
 /// C++: TEST(Threads, SuspendSingleWaitAsyncSignalDelivery)
@@ -1625,7 +1625,7 @@ async fn suspend_single_wait_async_signal_delivery() {
         "timed out waiting for thread termination"
     );
 
-    proc.exit(0);
+    Process::exit(&proc, 0);
 }
 
 /// C++: TEST(Threads, SuspendSleeping)
@@ -1651,7 +1651,7 @@ async fn suspend_sleeping() {
         // Thread may have already died or be dying (race).
         if state == ThreadState::Dying || state == ThreadState::Dead {
             // Early bail — matches C++ test behavior for overloaded machines.
-            proc.exit(0);
+            Process::exit(&proc, 0);
             return;
         }
         hal_impl::thread::yield_now().await;
@@ -1686,7 +1686,7 @@ async fn suspend_sleeping() {
         .await;
     assert_eq!(st.thread.state(), ThreadState::Dead);
 
-    proc.exit(0);
+    Process::exit(&proc, 0);
 }
 
 /// C++: TEST(Threads, SuspendStopsThread)

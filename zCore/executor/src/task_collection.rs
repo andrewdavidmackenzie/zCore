@@ -263,7 +263,13 @@ impl TaskCollection {
         static SCAN_COUNT: AtomicU64 = AtomicU64::new(0);
         static FOUND_COUNT: AtomicU64 = AtomicU64::new(0);
         let scan_num = SCAN_COUNT.fetch_add(1, AtOrd::Relaxed);
-        if scan_num > 0 && scan_num % 500_000 == 0 {
+        // Diagnostic cadence (#829 CI-stability hunt): every 10k scans
+        // so hang-time state (remaining tasks + notified_bits) is
+        // captured within a short hang. notified_bits != 0 while a
+        // task never runs = the scheduler dropped a marked wake;
+        // notified_bits == 0 with a parked task = the wake never
+        // reached the waker page.
+        if scan_num > 0 && scan_num % 10_000 == 0 {
             let found = FOUND_COUNT.load(AtOrd::Relaxed);
             let task_num = self.task_num.load(Ordering::Relaxed);
             if task_num > 0 {
