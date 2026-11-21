@@ -571,6 +571,7 @@ mod tests {
     use core::time::Duration;
 
     #[test]
+    #[serial_test::parallel]
     fn create() {
         let root_job = Job::root();
         let job = Job::create_child(&root_job).expect("failed to create job");
@@ -589,6 +590,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn set_policy() {
         let root_job = Job::root();
 
@@ -671,6 +673,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn parent_child() {
         let root_job = Job::root();
         let job = Job::create_child(&root_job).expect("failed to create job");
@@ -694,6 +697,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn check() {
         let root_job = Job::root();
         assert!(root_job.is_empty());
@@ -710,6 +714,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn kill() {
         let root_job = Job::root();
         let job = Job::create_child(&root_job).expect("failed to create job");
@@ -774,6 +779,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn critical_process() {
         let root_job = Job::root();
         let job = root_job.create_child().unwrap();

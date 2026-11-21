@@ -1705,6 +1705,7 @@ mod tests {
     use hal_impl::timer::timer_now;
 
     #[test]
+    #[serial_test::parallel]
     fn create() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1718,6 +1719,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     #[cfg(target_arch = "x86_64")]
     async fn start() {
         hal_impl::init();
@@ -1778,6 +1780,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn blocking_run() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1826,6 +1829,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn info() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1841,6 +1845,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn read_write_state() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1878,6 +1883,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn ext() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1889,6 +1895,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wait_for_run() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1927,6 +1934,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn time() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1939,6 +1947,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn exit() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1962,6 +1971,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn priority_default() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1974,6 +1984,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn priority_set_get() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");

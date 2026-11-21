@@ -199,6 +199,7 @@ impl TryFrom<u32> for Rights {
 }
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod tests {
     use super::*;
 

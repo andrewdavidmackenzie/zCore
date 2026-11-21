@@ -355,6 +355,7 @@ mod tests {
     use core::time::Duration;
 
     #[test]
+    #[serial_test::parallel]
     fn test_basics() {
         let (end0, end1) = Channel::create();
         assert!(Arc::ptr_eq(
@@ -371,6 +372,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn read_write() {
         let (channel0, channel1) = Channel::create();
         // write a message to each other
@@ -404,6 +406,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn peer_closed() {
         let (channel0, channel1) = Channel::create();
         // write a message from peer, then drop it
@@ -421,6 +424,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn signal() {
         let (channel0, channel1) = Channel::create();
 
@@ -466,6 +470,7 @@ mod tests {
     // FIXME(#856): hangs — the spawned task's Channel::call() future
     // never completes in the test's async-std runtime.
     #[async_std::test]
+    #[serial_test::parallel]
     #[ignore]
     async fn call() {
         let (channel0, channel1) = Channel::create();
@@ -535,6 +540,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn write_to_closed_peer() {
         let (channel0, channel1) = Channel::create();
         drop(channel1);
@@ -545,6 +551,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn multiple_messages_ordered() {
         // Messages should be received in FIFO order
         let (tx, rx) = Channel::create();
@@ -564,6 +571,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn check_and_read() {
         let (tx, rx) = Channel::create();
         tx.write(MessagePacket {

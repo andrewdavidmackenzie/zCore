@@ -416,6 +416,7 @@ mod tests {
     use core::time::Duration;
 
     #[test]
+    #[serial_test::parallel]
     fn new() {
         assert!(Port::new(0).is_ok());
         assert!(Port::new(1).is_ok());
@@ -423,6 +424,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wait() {
         let port = Port::new(0).unwrap();
         let object = DummyObject::new() as Arc<dyn KernelObject>;
@@ -484,6 +486,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn cancel_async() {
         let port = Port::new(0).unwrap();
         let source = DummyObject::new();
@@ -512,6 +515,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn cancel_async_multiple_flags() {
         let port = Port::new(0).unwrap();
         let source = DummyObject::new();

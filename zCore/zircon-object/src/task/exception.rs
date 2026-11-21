@@ -712,6 +712,7 @@ mod tests {
     use crate::task::*;
 
     #[test]
+    #[serial_test::parallel]
     fn exceptionate_iterator() {
         let parent_job = Job::root();
         let job = parent_job.create_child().unwrap();
@@ -737,6 +738,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn exceptionate_iterator_second_chance() {
         let parent_job = Job::root();
         let job = parent_job.create_child().unwrap();
@@ -764,6 +766,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn job_debugger_iterator() {
         let parent_job = Job::root();
         let job = parent_job.create_child().unwrap();
@@ -783,6 +786,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn exception_handling() {
         let parent_job = Job::root();
         let job = parent_job.create_child().unwrap();

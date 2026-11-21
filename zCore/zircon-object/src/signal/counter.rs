@@ -76,6 +76,7 @@ impl Counter {
 }
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod tests {
     use super::*;
 

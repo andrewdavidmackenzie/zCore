@@ -2833,6 +2833,7 @@ mod cow_host {
 pub use cow_host::{cow_fault_callback, register_cow_vmar};
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod tests {
     use super::*;
 

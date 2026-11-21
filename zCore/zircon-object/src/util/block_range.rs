@@ -53,6 +53,7 @@ impl Iterator for BlockIter {
 }
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod test {
     use super::*;
     use crate::vm::{PAGE_SIZE, PAGE_SIZE_LOG2};

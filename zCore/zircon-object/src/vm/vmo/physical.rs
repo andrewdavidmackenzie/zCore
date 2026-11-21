@@ -126,6 +126,7 @@ impl VMObjectTrait for VMObjectPhysical {
 }
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod tests {
     use super::*;
     use hal::CachePolicy;

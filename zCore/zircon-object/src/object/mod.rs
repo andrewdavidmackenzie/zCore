@@ -959,6 +959,7 @@ mod tests {
     use core::time::Duration;
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wait() {
         let object = DummyObject::new();
         let barrier = Arc::new(Barrier::new(2));
@@ -988,6 +989,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wait_many() {
         let objs = [DummyObject::new(), DummyObject::new()];
         let barrier = Arc::new(Barrier::new(2));
@@ -1023,6 +1025,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn test_trait_with_dummy() {
         let dummy = DummyObject::new();
         assert_eq!(dummy.name(), String::from(""));

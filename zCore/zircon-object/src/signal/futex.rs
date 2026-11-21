@@ -519,6 +519,7 @@ mod tests {
     use core::time::Duration;
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wait() {
         static VALUE: AtomicI32 = AtomicI32::new(1);
         let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
@@ -546,6 +547,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn requeue() {
         static VALUE: AtomicI32 = AtomicI32::new(1);
         let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
@@ -598,6 +600,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn owner() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -635,6 +638,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[serial_test::parallel]
     async fn requeue_single_owner() {
         // Test requeue with ownership transfer: wake exactly 1 waiter and
         // move others to the requeue target, setting the new owner.
@@ -706,6 +710,7 @@ mod tests {
     /// push are not atomic (under the same lock), a wake can drain the
     /// queue between the check and push, orphaning the waiter forever.
     #[async_std::test]
+    #[serial_test::parallel]
     async fn wake_during_registration_race() {
         for _ in 0..100 {
             static VALUE: AtomicI32 = AtomicI32::new(0);

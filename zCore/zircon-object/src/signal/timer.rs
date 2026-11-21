@@ -143,47 +143,60 @@ mod tests {
     use super::*;
     use hal_impl::timer::timer_now;
 
-    // Timer tests require the kernel timer subsystem to fire callbacks.
-    // In libos/test mode, no timer tick runs, so Timer signals never fire
-    // and these tests deadlock. Ignored until we have a test-mode timer driver.
+    // Timer callback delivery depends on a host OS thread getting CPU time
+    // within a few ms (hal-impl's libos timer_set spawns a std::thread).
+    // On resource-constrained CI runners (macOS: 3 cores) a timer thread
+    // can be starved past its deadline when many tests compete for CPU.
+    //
+    // These tests are `#[serial_test::serial]` (exclusive lock on the
+    // default key) while every other test in this crate is marked
+    // `#[serial_test::parallel]` (shared lock on the same key). That
+    // combination means: all other tests still run in parallel with each
+    // other, but while a timer test runs, they are all blocked — the
+    // timer thread only competes with the one test thread that spawned it.
+    // New tests in this crate must also be marked `#[serial_test::parallel]`
+    // (mod-level for sync-only modules, fn-level in modules with
+    // `#[async_std::test]` tests, where it must come AFTER the
+    // `#[async_std::test]` attribute).
 
-    #[async_std::test]
-    async fn one_shot() {
+    #[test]
+    #[serial_test::serial]
+    fn one_shot() {
         let timer = Timer::one_shot(timer_now() + Duration::from_millis(15));
-        async_std::task::sleep(Duration::from_millis(10)).await;
+        std::thread::sleep(Duration::from_millis(10));
         assert_eq!(timer.signal(), Signal::empty());
 
-        async_std::task::sleep(Duration::from_millis(20)).await;
+        std::thread::sleep(Duration::from_millis(20));
         assert_eq!(timer.signal(), Signal::SIGNALED);
     }
 
-    #[async_std::test]
-    async fn set() {
+    #[test]
+    #[serial_test::serial]
+    fn set() {
         let timer = Timer::new();
         timer.set(timer_now() + Duration::from_millis(10), Duration::default());
         timer.set(timer_now() + Duration::from_millis(20), Duration::default());
 
-        async_std::task::sleep(Duration::from_millis(10)).await;
+        std::thread::sleep(Duration::from_millis(10));
         assert_eq!(timer.signal(), Signal::empty());
 
-        // Sleep well past the 20ms deadline (50ms total) to allow
-        // for thread scheduling overhead on slower platforms (macOS).
-        async_std::task::sleep(Duration::from_millis(40)).await;
+        std::thread::sleep(Duration::from_millis(20));
         assert_eq!(timer.signal(), Signal::SIGNALED);
 
         timer.set(timer_now() + Duration::from_millis(10), Duration::default());
         assert_eq!(timer.signal(), Signal::empty());
     }
 
-    #[async_std::test]
-    async fn cancel() {
+    #[test]
+    #[serial_test::serial]
+    fn cancel() {
         let timer = Timer::new();
         timer.set(timer_now() + Duration::from_millis(10), Duration::default());
 
-        async_std::task::sleep(Duration::from_millis(5)).await;
+        std::thread::sleep(Duration::from_millis(5));
         timer.cancel();
 
-        async_std::task::sleep(Duration::from_millis(50)).await;
+        std::thread::sleep(Duration::from_millis(50));
         assert_eq!(timer.signal(), Signal::empty());
     }
 }
