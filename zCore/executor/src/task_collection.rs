@@ -323,7 +323,7 @@ impl TaskCollection {
         // task never runs = the scheduler dropped a marked wake;
         // notified_bits == 0 with a parked task = the wake never
         // reached the waker page.
-        if scan_num > 0 && scan_num % 10_000 == 0 {
+        if scan_num > 0 && scan_num.is_multiple_of(10_000) {
             let found = FOUND_COUNT.load(AtOrd::Relaxed);
             let task_num = self.task_num.load(Ordering::Relaxed);
             if task_num > 0 {
