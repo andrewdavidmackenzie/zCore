@@ -19,13 +19,13 @@ pub struct Futex {
     base: KObjectBase,
     /// User-space address of the futex word.
     user_addr: usize,
-    inner: Mutex<FutexInner>,
+    pub(crate) inner: Mutex<FutexInner>,
 }
 
 impl_kobject!(Futex);
 
 #[derive(Default)]
-struct FutexInner {
+pub struct FutexInner {
     waiter_queue: VecDeque<Arc<Waiter>>,
     /// NOTE: use `set_owner`
     owner: Option<Arc<Thread>>,
@@ -463,13 +463,13 @@ impl FutexInner {
     }
 }
 
-struct Waiter {
+pub struct Waiter {
     /// The thread waiting on the futex.
     thread: Option<Arc<Thread>>,
-    inner: Mutex<WaiterInner>,
+    pub(crate) inner: Mutex<WaiterInner>,
 }
 
-struct WaiterInner {
+pub struct WaiterInner {
     /// The waker of waiting future. `None` indicates first poll.
     waker: Option<Waker>,
     woken: bool,
