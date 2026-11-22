@@ -181,7 +181,6 @@ impl LockFor<ThreadInnerLock> for TaskTreeFixture {
     }
 }
 #[cfg(test)]
-#[serial_test::parallel]
 mod tests {
     use super::*;
     use lock::lockgraph::{LockFor, Locked};

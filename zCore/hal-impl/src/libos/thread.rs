@@ -1,17 +1,29 @@
 //! Thread spawning.
+//!
+//! Uses plain OS threads instead of async-std's task system. The
+//! async-std executor's thread pool outlives the test binary's
+//! static teardown (~1/3 of runs crash in ConcurrentQueue<TimerOp>::pop
+//! or similar after the test summary — issue #873, same class as
+//! #852's zircon-object variant). A plain OS thread avoids that
+//! entirely: the OS reclaims everything at process exit.
 
 use alloc::sync::Arc;
-use async_std::task_local;
 use core::{any::Any, cell::RefCell, future::Future};
 
-task_local! {
-    static CURRENT_THREAD: RefCell<Option<Arc<dyn Any + Send + Sync>>> = RefCell::new(None);
+thread_local! {
+    static CURRENT_THREAD: RefCell<Option<Arc<dyn Any + Send + Sync>>> =
+        RefCell::new(None);
 }
 
 hal_fn_impl! {
     impl mod crate::hal_fn::thread {
         fn spawn(future: impl Future<Output = ()> + Send + 'static) {
-            async_std::task::spawn(future);
+            // Spawn on an OS thread; the future is driven to
+            // completion by the minimal block_on below. This avoids
+            // async-std's thread pool entirely (#873).
+            std::thread::spawn(move || {
+                super::run_executor::block_on(future);
+            });
         }
 
         fn set_current_thread(thread: Option<Arc<dyn Any + Send + Sync>>) {
@@ -19,9 +31,7 @@ hal_fn_impl! {
         }
 
         fn get_current_thread() -> Option<Arc<dyn Any + Send + Sync>> {
-            CURRENT_THREAD.try_with(|t| {
-                t.borrow().as_ref().cloned()
-            }).unwrap_or(None)
+            CURRENT_THREAD.with(|t| t.borrow().clone())
         }
     }
 }

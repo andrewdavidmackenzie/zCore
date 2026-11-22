@@ -26,7 +26,6 @@ bitflags! {
         const SOCKET_READ_THRESHOLD         = 1 << 10;
         const SOCKET_WRITE_THRESHOLD        = 1 << 11;
 
-
         const TASK_TERMINATED               = Self::SIGNALED.bits;
 
         const JOB_TERMINATED                = Self::SIGNALED.bits;
@@ -74,7 +73,6 @@ impl Signal {
 }
 
 #[cfg(test)]
-#[serial_test::parallel]
 mod tests {
     use super::*;
 

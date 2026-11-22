@@ -70,7 +70,6 @@ impl Drop for EventPair {
 }
 
 #[cfg(test)]
-#[serial_test::parallel]
 mod tests {
     use super::*;
 

@@ -155,7 +155,6 @@ impl LockFor<ThreadInnerLock> for TaskCtx {
 }
 
 #[cfg(test)]
-#[serial_test::parallel]
 mod tests {
     use super::*;
     use crate::task::{Job, Process, Thread};

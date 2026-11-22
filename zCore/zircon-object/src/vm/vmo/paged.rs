@@ -85,6 +85,21 @@ pub struct VMObjectPaged {
     inner: core::cell::UnsafeCell<VMObjectPagedInner>,
 }
 
+/// #872: the paged VMO's internal lock is at the same level as
+/// `VmObjectInnerLock` — both are VMO-level locks that precede
+/// Mapping in the declared order. `YieldingMutex` is a type alias
+/// for `KernelMutex`, so the primitive is already correct; the
+/// `Arc<Mutex<()>> + UnsafeCell` pattern exists for COW-tree lock
+/// sharing (cloned VMOs share the parent's lock). This LockFor impl
+/// connects the paged VMO's lock to the graph.
+impl lock::lockgraph::LockFor<crate::vm::lock_order::VmObjectInnerLock> for VMObjectPaged {
+    type Data = ();
+    type Guard<'l> = lock::KernelMutexGuard<'l, ()>;
+    fn lock(&self) -> Self::Guard<'_> {
+        self.lock.lock()
+    }
+}
+
 /// Safety: all access to `inner` is protected by the shared `lock` Mutex.
 #[allow(unsafe_code)]
 unsafe impl Sync for VMObjectPaged {}
@@ -2659,6 +2674,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn disjoint_clones_attribution() {
         // Mimics ResizeDisjointChild: 3-page parent, 3 disjoint 1-page clones.
         let vmo = VmObject::new_paged(3);

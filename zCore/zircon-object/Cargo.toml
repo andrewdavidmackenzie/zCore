@@ -51,5 +51,4 @@ lock = { path = "../lock" }
 zircon-abi = { path = "../zircon-abi", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
-async-std = { version = "1.10", features = ["attributes", "unstable"] }
 serial_test = "4"
