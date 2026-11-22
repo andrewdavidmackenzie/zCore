@@ -4,12 +4,13 @@ use nix::fcntl::{self, OFlag};
 use nix::sys::mman::{self, MapFlags, ProtFlags};
 use nix::{sys::stat::Mode, unistd};
 
-use super::mem::PMEM_MAP_VADDR;
 use crate::{MMUFlags, PhysAddr, VirtAddr, PAGE_SIZE};
 
 pub struct MockMemory {
     size: usize,
     fd: RawFd,
+    /// Host address of the PMEM backing-store mapping (kernel-chosen).
+    map_vaddr: VirtAddr,
     /// On hosts with page size > 4K (e.g., 16K on aarch64 macOS), tracks
     /// how each host page is mapped. Maps host-page-aligned vaddr to
     /// the state of that host page.
@@ -66,75 +67,42 @@ impl MockMemory {
         .expect("failed to open");
         unistd::ftruncate(fd, size as _).expect("failed to set size of shared memory!");
 
-        // #862 diagnostic: MAP_FIXED below silently replaces any existing
-        // mapping in the PMEM window. Probe the window first and report
-        // what is already mapped there — anything found gets clobbered
-        // and its owner will later write through stale pointers.
-        if cfg!(test) || std::env::var_os("ZCORE_PMEM_PROBE").is_some() {
-            // Optional pre-init pause so an external `vmmap` can capture
-            // the process state before the fixed mmap.
-            if std::env::var_os("ZCORE_PMEM_SLEEP").is_some() {
-                eprintln!("[pmem-probe] sleeping 10s for external vmmap (pid {})", std::process::id());
-                std::thread::sleep(std::time::Duration::from_secs(10));
-            }
-            let probe_step = 0x1000_0000usize; // 256MB coarse
-            let mut mapped: Vec<(usize, usize)> = Vec::new();
-            let mut addr = PMEM_MAP_VADDR;
-            while addr < PMEM_MAP_VADDR + size {
-                // msync returns ENOMEM for unmapped ranges: cheap "is it
-                // mapped" probe without touching the pages.
-                let rc =
-                    unsafe { nix::libc::msync(addr as *mut _, probe_step, nix::libc::MS_ASYNC) };
-                if rc == 0 {
-                    mapped.push((addr, probe_step));
-                }
-                addr += probe_step;
-            }
-            if !mapped.is_empty() {
-                let total: usize = mapped.iter().map(|m| m.1).sum();
-                eprintln!(
-                    "[pmem-probe] PMEM window {:#x}..{:#x} ALREADY has ~{:#x} bytes mapped in {} ranges: {:?}",
-                    PMEM_MAP_VADDR,
-                    PMEM_MAP_VADDR + size,
-                    total,
-                    mapped.len(),
-                    mapped
-                );
-            } else {
-                eprintln!(
-                    "[pmem-probe] PMEM window {:#x}..{:#x} is fully unmapped",
-                    PMEM_MAP_VADDR,
-                    PMEM_MAP_VADDR + size
-                );
-            }
-        }
+        // Map the PMEM backing store at a KERNEL-CHOSEN address.
+        //
+        // A fixed address with MAP_FIXED would silently destroy any
+        // host mapping already occupying the window: under memory
+        // pressure macOS malloc grows vm_allocate'd regions into the
+        // mid address space, and clobbering one leaves malloc's free
+        // lists pointing into the (zero-filled) PMEM file — every
+        // later malloc that walks them aborts with "memory corruption
+        // of free block" (the intermittent macOS SIGTRAPs, #862).
+        // mmap without MAP_FIXED picks a region disjoint from all
+        // existing mappings by construction.
+        let base: VirtAddr = unsafe {
+            mman::mmap(
+                core::ptr::null_mut(),
+                size,
+                ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                MapFlags::MAP_SHARED,
+                fd,
+                0,
+            )
+            .expect("failed to map PMEM backing store") as usize
+        };
 
-        let mem = Self {
+        Self {
             size,
             fd,
+            map_vaddr: base,
             host_pages: std::sync::Mutex::new(std::collections::HashMap::new()),
             anon_paddr_to_vaddr: std::sync::Mutex::new(std::collections::HashMap::new()),
-        };
-        // Map the entire physical memory backing store at PMEM_MAP_VADDR.
-        mem.mmap_file(PMEM_MAP_VADDR, size, 0, MMUFlags::READ | MMUFlags::WRITE);
-        mem
+        }
     }
 
-    /// Low-level file-backed mmap. Used for the PMEM backing store
-    /// (where vaddr, len, and offset are always host-page-aligned).
-    fn mmap_file(&self, vaddr: VirtAddr, len: usize, offset: usize, prot: MMUFlags) {
-        let prot_flags = mmu_flags_to_prot(prot) - ProtFlags::PROT_EXEC;
-        let flags = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
-        unsafe {
-            mman::mmap(vaddr as _, len, prot_flags, flags, self.fd, offset as _).unwrap_or_else(
-                |err| {
-                    panic!(
-                        "mmap_file failed: fd={}, offset={:#x}, len={:#x}, vaddr={:#x}: {:?}",
-                        self.fd, offset, len, vaddr, err
-                    )
-                },
-            );
-        }
+    /// The host address at which the PMEM backing store is mapped
+    /// (chosen by the kernel at initialization; see `new`).
+    pub fn map_vaddr(&self) -> VirtAddr {
+        self.map_vaddr
     }
 
     /// Remove all anonymous reverse-mapping entries pointing into
@@ -196,6 +164,23 @@ impl MockMemory {
                 );
                 return false;
             }
+        }
+
+        // Refuse to map guest pages over the PMEM backing store. The
+        // PMEM base is kernel-chosen (see `new`), so it could in
+        // principle land where a guest VMAR wants a fixed mapping — a
+        // guest MAP_FIXED here would destroy the kernel's own physical
+        // memory. Return false so the caller propagates a mapping
+        // failure instead of corrupting PMEM.
+        if vaddr < self.map_vaddr + self.size && vaddr + len > self.map_vaddr {
+            warn!(
+                "mmap: guest range {:#x}..{:#x} overlaps PMEM window {:#x}..{:#x}, refusing",
+                vaddr,
+                vaddr + len,
+                self.map_vaddr,
+                self.map_vaddr + self.size
+            );
+            return false;
         }
 
         let hps = host_page_size();
@@ -384,7 +369,7 @@ impl MockMemory {
                     );
                 }
             }
-            let src = (PMEM_MAP_VADDR + paddr) as *const u8;
+            let src = (self.map_vaddr + paddr) as *const u8;
             let dst = vaddr as *mut u8;
             unsafe { core::ptr::copy_nonoverlapping(src, dst, len) };
 
@@ -468,7 +453,7 @@ impl MockMemory {
                 let copy_end = (page + page_size).min(end);
                 let copy_len = copy_end - copy_start;
                 if copy_len > 0 {
-                    let src = (PMEM_MAP_VADDR + copy_start) as *const u8;
+                    let src = (self.map_vaddr + copy_start) as *const u8;
                     for &vaddr in vaddrs {
                         // Probe the target address for writeability before
                         // copying. Stale entries can persist when frames are
@@ -514,7 +499,7 @@ impl MockMemory {
                     let copy_len = copy_end - copy_start;
                     if copy_len > 0 {
                         let src = (vaddr + offset_in_page) as *const u8;
-                        let dst = (PMEM_MAP_VADDR + copy_start) as *mut u8;
+                        let dst = (self.map_vaddr + copy_start) as *mut u8;
                         unsafe { core::ptr::copy_nonoverlapping(src, dst, copy_len) };
                     }
                 }
@@ -600,7 +585,7 @@ impl MockMemory {
 
     pub fn phys_to_virt(&self, paddr: PhysAddr) -> VirtAddr {
         assert!(paddr < self.size);
-        PMEM_MAP_VADDR + paddr
+        self.map_vaddr + paddr
     }
 
     pub fn as_ptr<T>(&self, paddr: PhysAddr) -> *const T {

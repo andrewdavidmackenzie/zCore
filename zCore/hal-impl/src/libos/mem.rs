@@ -11,8 +11,6 @@ use crate::{PhysAddr, VirtAddr, PAGE_SIZE};
 
 type FrameAlloc = bitmap_allocator::BitAlloc1M;
 
-/// Map physical memory from here.
-pub(super) const PMEM_MAP_VADDR: VirtAddr = 0x8_0000_0000;
 /// Physical memory size = 1GiB
 pub(super) const PMEM_SIZE: usize = 0x4000_0000;
 
