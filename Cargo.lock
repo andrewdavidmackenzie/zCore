@@ -842,6 +842,7 @@ dependencies = [
  "cfg-if",
  "cortex-a",
  "hashbrown 0.14.5",
+ "lock",
  "log",
  "raw-cpuid 10.6.0",
  "riscv 0.8.0",

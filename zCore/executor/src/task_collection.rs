@@ -239,7 +239,10 @@ impl TaskCollection {
         );
         // Lock ordering: sched_state first, then future_collections
         // (same as scan_notifications to avoid deadlock).
-        let mut sched = self.sched_state.lock();
+        // 5G-2: graph-checked sched_state acquisition — the entry
+        // point for the sched→fc order.
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut sched = locked.lock_and::<crate::lock_order::SchedStateLock>().0;
         let (key, task_id) = self.future_collections[priority].lock().insert(future);
         debug_assert!(key < TASK_NUM_PER_PRIORITY);
         let full_key = key | (priority << PRIORITY_SHIFT);
@@ -291,7 +294,11 @@ impl TaskCollection {
                 );
             }
         }
-        let mut sched = self.sched_state.lock();
+        // 5G-2: graph-checked sched_state acquisition. The fc loop
+        // below takes future_collections[priority] under sched — the
+        // documented sched→fc order.
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut sched = locked.lock_and::<crate::lock_order::SchedStateLock>().0;
         for priority in 0..MAX_PRIORITY {
             let mut inner = self.get_mut_inner(priority);
             for page_idx in 0..inner.pages.len() {
@@ -350,7 +357,11 @@ impl TaskCollection {
     /// this function a leaf holder that always makes progress.
     pub fn steal_into(&self, dest: &TaskCollection) -> Option<usize> {
         // Lock ordering: sched_state first, then future_collections.
-        let mut sched = self.sched_state.lock();
+        // 5G-2: graph-checked source sched_state acquisition. The
+        // destination's locks below use try_lock (the cross-CPU
+        // same-type protocol — never blocking).
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut sched = locked.lock_and::<crate::lock_order::SchedStateLock>().0;
         // Pick the lowest-priority runnable task from the scheduler.
         // Stealing the least-important task minimizes disruption to
         // the source CPU.
