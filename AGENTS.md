@@ -1,5 +1,70 @@
 # zCore Updated
 
+## Lock ordering and the type-level lockgraph (#829)
+
+**The kernel enforces lock ordering at compile time.** Multi-lock
+paths acquire through `lock::lockgraph` contexts (`Locked::new(..)`
+→ `lock_and::<Level>()`); reverse-order acquisitions are compile
+errors. The lock fields are `pub(super)` — raw `.lock()` from
+outside the defining module's subtree is also a compile error.
+
+### Lock primitives
+
+| Primitive | Use | Never use for |
+|---|---|---|
+| `lock::IrqLock` | Interrupt-context access (timer IRQ, console, allocator, drivers, UART) | Kernel object state |
+| `lock::KernelMutex` | Task-context kernel object state (spin ~150µs then yield; preemptible while held) | Interrupt context |
+| `lock::RwLock` | Read-heavy interrupt-safe access | — |
+
+### The graph (declared in each family's `lock_order.rs`)
+
+```text
+Task family (task/lock_order.rs):
+  Unlocked → JobInnerLock → ProcessInnerLock → ThreadInnerLock
+
+VM family (vm/lock_order.rs):
+  Unlocked → VmarInnerLock  ──→ VmMappingInnerLock ──→ PageTableLock
+  Unlocked → StreamInnerLock ↘   ↗
+  Unlocked → VmObjectInnerLock ──┘ (→ PageTableLock)
+
+Futex family (signal/lock_order.rs):
+  Unlocked → FutexInnerLock → WaiterInnerLock
+
+Executor (executor/lock_order.rs):
+  Unlocked → SchedStateLock → FutureCollectionLock
+```
+
+Each edge cites the blocking acquisition site that requires it.
+Each family has compile-fail acceptance tests reproducing the
+historical deadlock patterns (now compile errors).
+
+### Rules for new code
+
+1. **Acquire through contexts**: `Locked::new(&obj).lock_and::<Level>()`
+2. **Never hold a guard across a cross-lock call** unless the graph
+   declares that edge (collect-then-act is the default pattern)
+3. **Same-type disciplines** (documented, not graph-expressible):
+   - COW tree: never hold one VMO's lock across another VMO's lock
+   - VMAR tree: parent before child
+   - Socket endpoint pairs / futex requeue: sorted-by-address
+   - Executor cross-CPU steal: destination via try_lock only
+4. **New lock levels**: declare in the family's `lock_order.rs` with
+   a cited blocking site; add a compile-fail test for the reverse
+
+### Historical deadlocks (all now compile errors)
+
+| Deadlock | Fixed in |
+|---|---|
+| Job↔Process (get_all_threads vs remove_thread) | #837 |
+| Thread↔Process (terminate vs exit/suspend) | #838/#837 |
+| Socket endpoint A↔B | #840 |
+| Exit sweep: process lock across task_sched() | #835/#838 |
+| KObjectBase↔Port | #844 |
+| remove_thread P→J via is_killed | #849 |
+| Job::terminate child-lock-across-parent | #849 |
+| Handle drops under P → Job::drop → J | #849 |
+| Futex WaiterInner→FutexInner (#102 ABBA) | #865/#868 |
+
 ## Scheduler architecture
 
 **zCore has preemptive scheduling.** Do NOT describe it as
