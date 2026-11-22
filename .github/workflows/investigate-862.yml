@@ -1,8 +1,8 @@
 name: investigate-862
 
 # Diagnostic workflow for issue #862: macOS-aarch64 test binaries
-# SIGTRAP intermittently. Measures the flake rate and captures macOS
-# crash reports (with backtraces) for trapped runs.
+# SIGTRAP intermittently (~8%?). Measures the flake rate under
+# contention and captures macOS crash reports (with backtraces).
 on:
   push:
     branches: [core_tests_flaky_862]
@@ -11,7 +11,7 @@ on:
 jobs:
   macos-sigtrap-investigation:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,21 +34,24 @@ jobs:
             python3 -c "import sys,json; [print(json.loads(l).get('executable') or '') for l in sys.stdin if '\"executable\"' in l]" | grep -v '^$' >> /tmp/testbins.txt
           cat /tmp/testbins.txt
 
-      - name: Loop test binaries (capture traps + crash reports)
+      - name: Loop binaries under CPU contention (capture traps)
         run: |
           mkdir -p /tmp/crashes
+          # 6 background CPU burners to simulate a loaded/contended runner
+          for i in 1 2 3 4 5 6; do
+            (while :; do :; done) &
+            echo $! >> /tmp/burners.pid
+          done
           total=0; trapped=0
-          for round in $(seq 1 10); do
+          for round in $(seq 1 20); do
             while read -r bin; do
               total=$((total+1))
-              name=$(basename "$bin" | cut -c1-20)
+              name=$(basename "$bin" | cut -d- -f1)
               out=$("$bin" 2>&1); rc=$?
               if [ $rc -ne 0 ]; then
                 trapped=$((trapped+1))
                 echo "=== TRAP round=$round bin=$name rc=$rc ==="
-                echo "$out" | tail -5
-                # macOS writes .ips crash reports here — grab the newest
-                # matching this binary after a short delay
+                echo "$out" | tail -8
                 sleep 2
                 report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
                 if [ -n "$report" ]; then
@@ -57,7 +60,48 @@ jobs:
               fi
             done < /tmp/testbins.txt
           done
-          echo "=== RESULT: $trapped trapped of $total runs ==="
+          echo "=== CONTENDED RESULT: $trapped trapped of $total runs ==="
+
+      - name: Single-threaded isolation (identify culprit test)
+        run: |
+          total=0; trapped=0
+          for round in $(seq 1 10); do
+            while read -r bin; do
+              total=$((total+1))
+              name=$(basename "$bin" | cut -d- -f1)
+              out=$("$bin" --test-threads=1 2>&1); rc=$?
+              if [ $rc -ne 0 ]; then
+                trapped=$((trapped+1))
+                echo "=== SINGLE-THREAD TRAP round=$round bin=$name rc=$rc ==="
+                echo "$out" | tail -8
+                sleep 2
+                report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
+                if [ -n "$report" ]; then
+                  cp "$report" "/tmp/crashes/${name}-st-round${round}.ips" || true
+                fi
+              fi
+            done < /tmp/testbins.txt
+          done
+          echo "=== SINGLE-THREAD RESULT: $trapped trapped of $total runs ==="
+
+      - name: Cargo-test invocation (matches CI exactly)
+        working-directory: zCore
+        run: |
+          for round in $(seq 1 10); do
+            if ! cargo test -p hal-impl --features libos --no-fail-fast > /tmp/cargo-out.txt 2>&1; then
+              echo "=== CARGO-TEST TRAP round=$round ==="
+              tail -8 /tmp/cargo-out.txt
+              sleep 2
+              report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
+              [ -n "$report" ] && cp "$report" "/tmp/crashes/cargo-round${round}.ips" || true
+            fi
+          done
+          echo "=== CARGO-TEST LOOP DONE ==="
+
+      - name: Cleanup burners
+        if: always()
+        run: |
+          [ -f /tmp/burners.pid ] && kill $(cat /tmp/burners.pid) 2>/dev/null || true
           ls -la /tmp/crashes/ || true
 
       - name: Upload crash reports
