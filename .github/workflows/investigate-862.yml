@@ -2,8 +2,7 @@ name: investigate-862
 
 # Diagnostic workflow for issue #862: macOS-aarch64 test binaries
 # SIGTRAP intermittently. Heap corruption (malloc freelist, brk 1).
-# Phase 4: full suite single-threaded under contention (original crash
-# conditions) + guard-malloc to catch the corrupting WRITE in the act.
+# Phase 5: large guard-malloc campaign to catch the corrupting write.
 on:
   push:
     branches: [core_tests_flaky_862]
@@ -12,7 +11,7 @@ on:
 jobs:
   macos-sigtrap-investigation:
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,44 +32,39 @@ jobs:
             python3 -c "import sys,json; [print(json.loads(l).get('executable') or '') for l in sys.stdin if '\"executable\"' in l]" | grep -v '^$' > /tmp/testbins.txt
           cat /tmp/testbins.txt
 
-      - name: A) Full suite, single-threaded, contention (original conditions)
+      - name: Guard-malloc campaign (parallel + single-thread, contention)
         run: |
           mkdir -p /tmp/crashes
           BIN=$(head -1 /tmp/testbins.txt)
           for i in 1 2 3 4 5 6; do (while :; do :; done) & echo $! >> /tmp/burners.pid; done
           total=0; trapped=0
-          for round in $(seq 1 30); do
-            total=$((total+1))
-            rc=0; "$BIN" --test-threads=1 > /tmp/st-out.txt 2>&1 || rc=$?
-            if [ $rc -ne 0 ]; then
-              trapped=$((trapped+1))
-              echo "=== ST TRAP round=$round rc=$rc ==="
-              grep -E "test .* \.\.\. " /tmp/st-out.txt | tail -3
-              sleep 2
-              report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
-              [ -n "$report" ] && cp "$report" "/tmp/crashes/st-round${round}.ips" || true
-            fi
-          done
-          echo "=== ST RESULT: $trapped trapped of $total ==="
-
-      - name: B) Guard-malloc — catch the corrupting write
-        run: |
-          BIN=$(head -1 /tmp/testbins.txt)
-          total=0; trapped=0
-          for round in $(seq 1 12); do
+          for round in $(seq 1 100); do
             total=$((total+1))
             rc=0; DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib "$BIN" > /tmp/gm-out.txt 2>&1 || rc=$?
             if [ $rc -ne 0 ]; then
               trapped=$((trapped+1))
-              echo "=== GUARD-MALLOC CAUGHT round=$round rc=$rc ==="
+              echo "=== GM-PARALLEL CAUGHT round=$round rc=$rc ==="
               tail -12 /tmp/gm-out.txt
               sleep 2
               report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
-              [ -n "$report" ] && cp "$report" "/tmp/crashes/gmalloc-round${round}.ips" || true
-              break
+              [ -n "$report" ] && cp "$report" "/tmp/crashes/gm-parallel-round${round}.ips" || true
             fi
           done
-          echo "=== GUARD-MALLOC RESULT: $trapped trapped of $total ==="
+          echo "=== GM-PARALLEL RESULT: $trapped trapped of $total ==="
+          total=0; trapped=0
+          for round in $(seq 1 50); do
+            total=$((total+1))
+            rc=0; DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib "$BIN" --test-threads=1 > /tmp/gm-out.txt 2>&1 || rc=$?
+            if [ $rc -ne 0 ]; then
+              trapped=$((trapped+1))
+              echo "=== GM-ST CAUGHT round=$round rc=$rc ==="
+              tail -12 /tmp/gm-out.txt
+              sleep 2
+              report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
+              [ -n "$report" ] && cp "$report" "/tmp/crashes/gm-st-round${round}.ips" || true
+            fi
+          done
+          echo "=== GM-ST RESULT: $trapped trapped of $total ==="
 
       - name: Cleanup burners
         if: always()
