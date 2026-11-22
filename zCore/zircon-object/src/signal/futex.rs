@@ -5,7 +5,7 @@ use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::*;
 use core::task::{Context, Poll, Waker};
-use lock::Mutex;
+use lock::IrqLock;
 
 /// A primitive for creating userspace synchronization tools.
 ///
@@ -19,7 +19,7 @@ pub struct Futex {
     base: KObjectBase,
     /// User-space address of the futex word.
     user_addr: usize,
-    pub(crate) inner: Mutex<FutexInner>,
+    pub(super) inner: IrqLock<FutexInner>,
 }
 
 impl_kobject!(Futex);
@@ -41,7 +41,7 @@ impl Futex {
         Arc::new(Futex {
             base: KObjectBase::default(),
             user_addr,
-            inner: Mutex::new(FutexInner::default()),
+            inner: IrqLock::new(FutexInner::default()),
         })
     }
 
@@ -310,7 +310,7 @@ impl Futex {
         FutexFuture {
             waiter: Arc::new(Waiter {
                 thread,
-                inner: Mutex::new(WaiterInner {
+                inner: IrqLock::new(WaiterInner {
                     waker: None,
                     woken: false,
                     futex: self.clone(),
@@ -517,7 +517,7 @@ impl FutexInner {
 pub struct Waiter {
     /// The thread waiting on the futex.
     thread: Option<Arc<Thread>>,
-    pub(crate) inner: Mutex<WaiterInner>,
+    pub(super) inner: IrqLock<WaiterInner>,
 }
 
 pub struct WaiterInner {

@@ -7,7 +7,7 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use lock::{Mutex, RwLock};
+use lock::{IrqLock, RwLock};
 
 use super::IpcPerm;
 
@@ -52,7 +52,7 @@ pub struct MsqidDsInner {
 
 /// A System V message queue.
 pub struct MsgQueue {
-    inner: Mutex<MsqidDsInner>,
+    inner: IrqLock<MsqidDsInner>,
 }
 
 /// Global map from IPC key to message queue.
@@ -63,7 +63,7 @@ impl MsgQueue {
     /// Create a new message queue with the given key and permissions.
     fn new(key: u32, mode: u32, uid: u32, gid: u32) -> Self {
         MsgQueue {
-            inner: Mutex::new(MsqidDsInner {
+            inner: IrqLock::new(MsqidDsInner {
                 perm: IpcPerm {
                     key,
                     uid,

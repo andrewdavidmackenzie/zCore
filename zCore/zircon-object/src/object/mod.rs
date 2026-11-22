@@ -55,11 +55,11 @@
 //! ```
 //! use zircon_object::object::*;
 //! use std::sync::Arc;
-//! use lock::Mutex;
+//! use lock::IrqLock;
 //!
 //! pub struct SampleObject {
 //!     base: KObjectBase,
-//!     inner: Mutex<SampleObjectInner>,
+//!     inner: IrqLock<SampleObjectInner>,
 //! }
 //! struct SampleObjectInner {
 //!     x: usize,
@@ -109,7 +109,7 @@ use {
     // because signal_set/signal_change are called from timer interrupt
     // callbacks. Using KernelMutex here would deadlock if the
     // interrupted thread holds the same lock.
-    lock::Mutex,
+    lock::IrqLock,
 };
 
 pub use {super::*, handle::*, rights::*, signal::*};
@@ -225,7 +225,7 @@ pub struct KObjectBase {
     pub id: KoID,
     /// Number of userspace handles referring to this object.
     handle_count: AtomicU32,
-    inner: Mutex<KObjectBaseInner>,
+    inner: IrqLock<KObjectBaseInner>,
 }
 
 /// The mutable part of `KObjectBase`.
@@ -267,7 +267,7 @@ impl KObjectBase {
         KObjectBase {
             id: Self::new_koid(),
             handle_count: AtomicU32::new(0),
-            inner: Mutex::new(KObjectBaseInner {
+            inner: IrqLock::new(KObjectBaseInner {
                 name: String::from(name),
                 signal,
                 ..Default::default()

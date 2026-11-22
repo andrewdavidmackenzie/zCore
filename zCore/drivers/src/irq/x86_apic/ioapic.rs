@@ -3,7 +3,7 @@ use core::{fmt, ptr::NonNull};
 
 use acpi::platform::interrupt::InterruptModel;
 use acpi::{AcpiHandler, AcpiTables, PhysicalMapping};
-use lock::Mutex;
+use lock::IrqLock;
 use x2apic::ioapic::{IoApic as IoApicInner, IrqFlags, IrqMode};
 
 use super::{IrqPolarity, IrqTriggerMode, Phys2VirtFn};
@@ -50,7 +50,7 @@ pub struct IoApic {
     /// Max entry num of the interrupt redirection table.
     max_entry: u8,
     /// Use `x2apic` crate to help us manipulate IOAPIC.
-    inner: Mutex<IoApicInner>,
+    inner: IrqLock<IoApicInner>,
 }
 
 /// A list of I/O-APICs for systems have multiple I/O subsystems.
@@ -88,7 +88,7 @@ impl IoApic {
             id,
             gsi_start,
             max_entry,
-            inner: Mutex::new(inner),
+            inner: IrqLock::new(inner),
         }
     }
 

@@ -2,7 +2,7 @@ use core::convert::TryInto;
 use core::ops::{BitAnd, BitOr, Not};
 
 use bitflags::bitflags;
-use lock::Mutex;
+use lock::IrqLock;
 
 use crate::io::{Io, Mmio, ReadOnly};
 use crate::scheme::{impl_event_scheme, Scheme, UartScheme};
@@ -111,7 +111,7 @@ pub struct Uart16550Mmio<V: 'static>
 where
     V: Copy + BitAnd<Output = V> + BitOr<Output = V> + Not<Output = V>,
 {
-    inner: Mutex<&'static mut Uart16550Inner<Mmio<V>>>,
+    inner: IrqLock<&'static mut Uart16550Inner<Mmio<V>>>,
     listener: EventListener,
 }
 
@@ -176,7 +176,7 @@ where
         let uart: &mut Uart16550Inner<Mmio<V>> = Mmio::<V>::from_base_as(base);
         uart.init();
         Self {
-            inner: Mutex::new(uart),
+            inner: IrqLock::new(uart),
             listener: EventListener::new(),
         }
     }
@@ -207,7 +207,7 @@ mod pmio {
 
     /// Pmio driver for UART 16550
     pub struct Uart16550Pmio {
-        inner: Mutex<Uart16550Inner<Pmio<u8>>>,
+        inner: IrqLock<Uart16550Inner<Pmio<u8>>>,
         listener: EventListener,
     }
 
@@ -251,7 +251,7 @@ mod pmio {
             };
             uart.init();
             Self {
-                inner: Mutex::new(uart),
+                inner: IrqLock::new(uart),
                 listener: EventListener::new(),
             }
         }

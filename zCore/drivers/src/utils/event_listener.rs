@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use lock::Mutex;
+use lock::IrqLock;
 
 // Re-export the canonical EventHandler type from the hal crate.
 pub use hal::scheme::event::EventHandler;
@@ -9,14 +9,14 @@ pub use hal::scheme::event::EventHandler;
 ///
 /// It keeps a series of [`EventHandler`]s that handle events of one single type.
 pub struct EventListener<T = ()> {
-    events: Mutex<Vec<(EventHandler<T>, bool)>>,
+    events: IrqLock<Vec<(EventHandler<T>, bool)>>,
 }
 
 impl<T> EventListener<T> {
     /// Construct a new, empty `EventListener`.
     pub fn new() -> Self {
         Self {
-            events: Mutex::new(Vec::new()),
+            events: IrqLock::new(Vec::new()),
         }
     }
 

@@ -1,12 +1,12 @@
 use super::*;
 use hal_impl::PAGE_SIZE;
-use lock::Mutex;
+use lock::IrqLock;
 use zircon_object::dev::*;
 use zircon_object::task::Job;
 use zircon_object::vm::{pages, VmObject};
 
 /// Global sampler session state. Only one session at a time.
-static SAMPLER_SESSION: Mutex<Option<SamplerSession>> = Mutex::new(None);
+static SAMPLER_SESSION: IrqLock<Option<SamplerSession>> = IrqLock::new(None);
 
 /// Tracks a sampler session's VMO buffer and state.
 struct SamplerSession {

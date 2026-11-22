@@ -5,7 +5,7 @@ use crate::sync::Semaphore;
 use crate::time::*;
 use alloc::{collections::BTreeMap, sync::Arc, sync::Weak, vec::Vec};
 use core::ops::Index;
-use lock::{Mutex, RwLock};
+use lock::{IrqLock, RwLock};
 
 /// semid data structure
 ///
@@ -28,7 +28,7 @@ pub struct SemidDs {
 /// A System V semaphore set
 pub struct SemArray {
     /// semid data structure
-    pub semid_ds: Mutex<SemidDs>,
+    pub semid_ds: IrqLock<SemidDs>,
     sems: Vec<Semaphore>,
 }
 
@@ -103,7 +103,7 @@ impl SemArray {
 
         // insert to global map
         let array = Arc::new(SemArray {
-            semid_ds: Mutex::new(SemidDs {
+            semid_ds: IrqLock::new(SemidDs {
                 perm: IpcPerm {
                     key,
                     uid: 0,

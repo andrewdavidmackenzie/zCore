@@ -32,7 +32,7 @@ cfg_if::cfg_if! {
         /// handlers (timer, console, allocator) or that must not be
         /// preempted while held. For kernel object state, use
         /// [`KernelMutex`] instead.
-        pub use ticket::{InterruptSpinLock as Mutex, InterruptSpinLockGuard as MutexGuard};
+        pub use ticket::{InterruptSpinLock as IrqLock, InterruptSpinLockGuard as IrqLockGuard};
     } else if #[cfg(target_os = "none")] {
         extern crate alloc;
         mod interrupt;
@@ -40,8 +40,12 @@ cfg_if::cfg_if! {
         pub use rwlock::*;
         pub mod spin;
         /// Interrupt-disabling spinlock. See ticket variant docs.
-        pub use spin::{SpinMutex as Mutex, SpinMutexGuard as MutexGuard};
+        pub use spin::{SpinMutex as IrqLock, SpinMutexGuard as IrqLockGuard};
     } else {
         pub use spin::*;
+        /// Host-mode alias: on host, the spin crate's Mutex is used
+        /// (no irq-disable needed). The name is consistent with the
+        /// bare-metal IrqLock for callers.
+        pub use spin::{Mutex as IrqLock, MutexGuard as IrqLockGuard};
     }
 }

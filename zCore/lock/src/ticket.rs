@@ -16,7 +16,7 @@ use crate::interrupt::{pop_off, push_off};
 /// kernel object state accessed only from task context, use
 /// `KernelMutex` instead (see #829).
 ///
-/// Re-exported as `lock::Mutex` for backward compatibility.
+/// Re-exported as `lock::IrqLock` for backward compatibility.
 pub struct InterruptSpinLock<T: ?Sized> {
     next_ticket: AtomicUsize,
     next_serving: AtomicUsize,

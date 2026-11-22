@@ -1,4 +1,4 @@
-use lock::Mutex;
+use lock::IrqLock;
 use riscv::register::sie;
 
 use crate::prelude::IrqHandler;
@@ -23,18 +23,18 @@ pub enum ScauseIntCode {
 
 pub struct Intc {
     name: String,
-    soft_handler: Mutex<Option<IrqHandler>>,
-    timer_handler: Mutex<Option<IrqHandler>>,
-    ext_handler: Mutex<Option<IrqHandler>>,
+    soft_handler: IrqLock<Option<IrqHandler>>,
+    timer_handler: IrqLock<Option<IrqHandler>>,
+    ext_handler: IrqLock<Option<IrqHandler>>,
 }
 
 impl Intc {
     pub fn new() -> Self {
         Self {
             name: format!("riscv-intc-cpu{}", INTC_NUM.fetch_add(1, Ordering::Relaxed)),
-            soft_handler: Mutex::new(None),
-            timer_handler: Mutex::new(None),
-            ext_handler: Mutex::new(None),
+            soft_handler: IrqLock::new(None),
+            timer_handler: IrqLock::new(None),
+            ext_handler: IrqLock::new(None),
         }
     }
 

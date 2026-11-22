@@ -9,7 +9,7 @@ use crate::prelude::{IrqHandler, IrqPolarity, IrqTriggerMode};
 use crate::scheme::{IrqScheme, Scheme};
 use crate::{utils::IrqManager, DeviceError, DeviceResult, PhysAddr, VirtAddr};
 use core::ops::Range;
-use lock::Mutex;
+use lock::IrqLock;
 
 const IOAPIC_IRQ_RANGE: Range<usize> = X86_INT_BASE..X86_INT_LOCAL_APIC_BASE;
 const LAPIC_IRQ_RANGE: Range<usize> = 0..16;
@@ -19,8 +19,8 @@ type Phys2VirtFn = fn(paddr: PhysAddr) -> VirtAddr;
 /// Advanced Programmable Interrupt Controller
 pub struct Apic {
     ioapic_list: IoApicList,
-    manager_ioapic: Mutex<IrqManager<256>>,
-    manager_lapic: Mutex<IrqManager<16>>,
+    manager_ioapic: IrqLock<IrqManager<256>>,
+    manager_lapic: IrqLock<IrqManager<16>>,
 }
 
 impl Apic {
@@ -28,8 +28,8 @@ impl Apic {
     pub fn new(acpi_rsdp: usize, phys_to_virt: Phys2VirtFn) -> Self {
         Self {
             ioapic_list: IoApicList::new(acpi_rsdp, phys_to_virt),
-            manager_ioapic: Mutex::new(IrqManager::new(IOAPIC_IRQ_RANGE)),
-            manager_lapic: Mutex::new(IrqManager::new(LAPIC_IRQ_RANGE)),
+            manager_ioapic: IrqLock::new(IrqManager::new(IOAPIC_IRQ_RANGE)),
+            manager_lapic: IrqLock::new(IrqManager::new(LAPIC_IRQ_RANGE)),
         }
     }
 

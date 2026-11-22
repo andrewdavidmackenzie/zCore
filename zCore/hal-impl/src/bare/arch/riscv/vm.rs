@@ -4,15 +4,15 @@ use cfg_if::cfg_if;
 use core::fmt::{Debug, Formatter, Result};
 use core::slice;
 
-use lock::Mutex;
+use lock::IrqLock;
 use riscv::{asm, register::satp};
 
 use crate::addr::{align_down, align_up};
 use crate::utils::page_table::{GenericPTE, PageTableImpl, PageTableLevel3};
 use crate::{mem::phys_to_virt, MMUFlags, PhysAddr, VirtAddr, KCONFIG};
 
-static KERNEL_PT: spin::Lazy<Mutex<PageTable>> =
-    spin::Lazy::new(|| Mutex::new(init_kernel_page_table().unwrap()));
+static KERNEL_PT: spin::Lazy<IrqLock<PageTable>> =
+    spin::Lazy::new(|| IrqLock::new(init_kernel_page_table().unwrap()));
 
 /// remap kernel ELF segments with 4K page
 fn init_kernel_page_table() -> PagingResult<PageTable> {
@@ -107,7 +107,7 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
     Ok(pt)
 }
 
-pub(super) fn kernel_page_table() -> &'static Mutex<PageTable> {
+pub(super) fn kernel_page_table() -> &'static IrqLock<PageTable> {
     &KERNEL_PT
 }
 

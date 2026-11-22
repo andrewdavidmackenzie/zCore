@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use core::ops::Range;
 
 use bitmap_allocator::BitAlloc;
-use lock::Mutex;
+use lock::IrqLock;
 
 use super::mock_mem::MockMemory;
 use crate::{PhysAddr, VirtAddr, PAGE_SIZE};
@@ -69,10 +69,10 @@ pub fn frame_stats() -> (usize, usize) {
     )
 }
 
-pub(super) static FRAME_ALLOCATOR: spin::Lazy<Mutex<FrameAlloc>> = spin::Lazy::new(|| {
+pub(super) static FRAME_ALLOCATOR: spin::Lazy<IrqLock<FrameAlloc>> = spin::Lazy::new(|| {
     let mut allocator = FrameAlloc::DEFAULT;
     allocator.insert(1..PMEM_SIZE / PAGE_SIZE);
-    Mutex::new(allocator)
+    IrqLock::new(allocator)
 });
 pub(crate) static MOCK_PHYS_MEM: spin::Lazy<MockMemory> =
     spin::Lazy::new(|| MockMemory::new(PMEM_SIZE));

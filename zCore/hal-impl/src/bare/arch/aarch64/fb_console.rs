@@ -7,7 +7,7 @@
 //! Framebuffer: 720x1600 ARGB8888 at physical 0x9e000000.
 //! The identity mapping (TTBR0) keeps this accessible from EL1.
 
-use lock::Mutex;
+use lock::IrqLock;
 
 const CHAR_W: u32 = 8;
 const CHAR_H: u32 = 16;
@@ -30,7 +30,7 @@ struct FbConsole {
 
 unsafe impl Send for FbConsole {}
 
-static FB_CONSOLE: Mutex<Option<FbConsole>> = Mutex::new(None);
+static FB_CONSOLE: IrqLock<Option<FbConsole>> = IrqLock::new(None);
 
 /// Initialize the framebuffer console.
 /// Can be called very early (before KCONFIG is set). Uses the

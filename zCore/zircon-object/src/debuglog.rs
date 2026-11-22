@@ -4,14 +4,14 @@ use {
     crate::object::*,
     alloc::{sync::Arc, vec::Vec},
     core::sync::atomic::{AtomicU64, Ordering},
-    lock::Mutex,
+    lock::IrqLock,
 };
 
 /// Global sequence counter for debuglog records.
 static DLOG_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-static DLOG: spin::Lazy<Mutex<DlogBuffer>> = spin::Lazy::new(|| {
-    Mutex::new(DlogBuffer {
+static DLOG: spin::Lazy<IrqLock<DlogBuffer>> = spin::Lazy::new(|| {
+    IrqLock::new(DlogBuffer {
         buf: Vec::with_capacity(0x1000),
     })
 });
@@ -24,7 +24,7 @@ static DLOG: spin::Lazy<Mutex<DlogBuffer>> = spin::Lazy::new(|| {
 pub struct DebugLog {
     base: KObjectBase,
     flags: u32,
-    read_offset: Mutex<usize>,
+    read_offset: IrqLock<usize>,
 }
 
 struct DlogBuffer {

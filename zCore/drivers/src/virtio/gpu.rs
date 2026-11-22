@@ -1,4 +1,4 @@
-use lock::Mutex;
+use lock::IrqLock;
 use virtio_drivers::device::gpu::VirtIOGpu as InnerDriver;
 use virtio_drivers::transport::mmio::MmioTransport;
 
@@ -10,7 +10,7 @@ use crate::DeviceResult;
 
 pub struct VirtIoGpu {
     info: DisplayInfo,
-    inner: Mutex<InnerDriver<HalImpl, MmioTransport>>,
+    inner: IrqLock<InnerDriver<HalImpl, MmioTransport>>,
 }
 
 const CURSOR_HOT_X: u32 = 13;
@@ -41,7 +41,7 @@ impl VirtIoGpu {
         .virt()?;
         Ok(Self {
             info,
-            inner: Mutex::new(gpu),
+            inner: IrqLock::new(gpu),
         })
     }
 }

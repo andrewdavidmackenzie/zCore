@@ -1,4 +1,4 @@
-use lock::Mutex;
+use lock::IrqLock;
 use virtio_drivers::device::input::{InputConfigSelect, VirtIOInput as InnerDriver};
 use virtio_drivers::transport::mmio::MmioTransport;
 
@@ -10,13 +10,13 @@ use crate::utils::EventListener;
 use crate::DeviceResult;
 
 pub struct VirtIoInput {
-    inner: Mutex<InnerDriver<HalImpl, MmioTransport>>,
+    inner: IrqLock<InnerDriver<HalImpl, MmioTransport>>,
     listener: EventListener<InputEvent>,
 }
 
 impl VirtIoInput {
     pub fn new(transport: MmioTransport) -> DeviceResult<Self> {
-        let inner = Mutex::new(InnerDriver::new(transport).virt()?);
+        let inner = IrqLock::new(InnerDriver::new(transport).virt()?);
         Ok(Self {
             inner,
             listener: EventListener::new(),

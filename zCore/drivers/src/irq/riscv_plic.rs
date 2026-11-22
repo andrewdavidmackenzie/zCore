@@ -6,7 +6,7 @@ use crate::prelude::IrqHandler;
 use crate::scheme::{IrqScheme, Scheme};
 use crate::{utils::IrqManager, DeviceError, DeviceResult};
 use cfg_if::cfg_if;
-use lock::Mutex;
+use lock::IrqLock;
 
 const IRQ_RANGE: Range<usize> = 1..1024;
 
@@ -35,7 +35,7 @@ struct PlicUnlocked {
 }
 
 pub struct Plic {
-    inner: Mutex<PlicUnlocked>,
+    inner: IrqLock<PlicUnlocked>,
 }
 
 impl PlicUnlocked {
@@ -107,7 +107,7 @@ impl Plic {
         };
         inner.init_hart();
         Self {
-            inner: Mutex::new(inner),
+            inner: IrqLock::new(inner),
         }
     }
 }

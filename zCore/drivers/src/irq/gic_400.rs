@@ -2,7 +2,7 @@ use crate::prelude::IrqHandler;
 use crate::scheme::{IrqScheme, Scheme};
 use crate::utils::IrqManager;
 use crate::DeviceResult;
-use lock::Mutex;
+use lock::IrqLock;
 
 pub static GICC_SIZE: usize = 0x1000;
 pub static GICD_SIZE: usize = 0x1000;
@@ -22,7 +22,7 @@ static GICC_PMR: u32 = 0x0004;
 pub struct IntController {
     gicc: GicCpuIf,
     gicd: GicDistIf,
-    manager: Mutex<IrqManager<256>>,
+    manager: IrqLock<IrqManager<256>>,
 }
 
 struct GicDistIf {
@@ -44,7 +44,7 @@ impl IntController {
                 ncpus: 0,
                 nirqs: 0,
             },
-            manager: Mutex::new(IrqManager::new(0..256)),
+            manager: IrqLock::new(IrqManager::new(0..256)),
         }
     }
 

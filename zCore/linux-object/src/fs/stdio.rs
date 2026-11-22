@@ -10,7 +10,7 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use hal_impl::console::{self, ConsoleWinSize};
-use lock::Mutex;
+use lock::IrqLock;
 use zcore_fs::vfs::*;
 
 /// STDIN global reference.
@@ -25,8 +25,8 @@ pub static STDOUT: spin::Lazy<Arc<Stdout>> = spin::Lazy::new(Default::default);
 /// Stdin struct, for Stdin buffer
 #[derive(Default)]
 pub struct Stdin {
-    buf: Mutex<VecDeque<char>>,
-    eventbus: Mutex<EventBus>,
+    buf: IrqLock<VecDeque<char>>,
+    eventbus: IrqLock<EventBus>,
 }
 
 impl Stdin {

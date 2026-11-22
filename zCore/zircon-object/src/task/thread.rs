@@ -11,7 +11,7 @@ use bitflags::bitflags;
 use cfg_if::cfg_if;
 use futures::{channel::oneshot::*, future::FutureExt, pin_mut, select_biased};
 use hal_impl::context::UserContext;
-use lock::{KernelMutex, Mutex};
+use lock::{IrqLock, KernelMutex};
 
 use self::thread_state::ContextAccessState;
 use super::{exception::*, Process, Task};
@@ -91,7 +91,7 @@ pub struct Thread {
     /// link (Process → Thread) is Weak to avoid a reference cycle.
     proc: Arc<Process>,
     ext: Box<dyn Any + Send + Sync>,
-    pub(crate) inner: KernelMutex<ThreadInner>,
+    pub(super) inner: KernelMutex<ThreadInner>,
     exceptionate: Arc<Exceptionate>,
 }
 
@@ -1678,13 +1678,13 @@ pub struct ThreadInfo {
 
 struct ThreadSwitchFuture {
     thread: Arc<Thread>,
-    future: Mutex<ThreadFuturePinned>,
+    future: IrqLock<ThreadFuturePinned>,
 }
 
 impl ThreadSwitchFuture {
     pub fn new(thread: Arc<Thread>, future: ThreadFuturePinned) -> Self {
         Self {
-            future: Mutex::new(future),
+            future: IrqLock::new(future),
             thread,
         }
     }

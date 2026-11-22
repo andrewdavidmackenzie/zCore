@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use async_std::{io, io::prelude::*, task};
-use lock::Mutex;
+use lock::IrqLock;
 
 use crate::scheme::{impl_event_scheme, Scheme, UartScheme};
 use crate::utils::EventListener;
@@ -9,8 +9,8 @@ use crate::DeviceResult;
 
 const UART_BUF_LEN: usize = 256;
 
-static UART_BUF: spin::Lazy<Mutex<VecDeque<u8>>> =
-    spin::Lazy::new(|| Mutex::new(VecDeque::with_capacity(UART_BUF_LEN)));
+static UART_BUF: spin::Lazy<IrqLock<VecDeque<u8>>> =
+    spin::Lazy::new(|| IrqLock::new(VecDeque::with_capacity(UART_BUF_LEN)));
 
 pub struct MockUart {
     listener: EventListener,

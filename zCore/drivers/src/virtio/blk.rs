@@ -1,4 +1,4 @@
-use lock::Mutex;
+use lock::IrqLock;
 use virtio_drivers::device::blk::VirtIOBlk as InnerDriver;
 use virtio_drivers::transport::mmio::MmioTransport;
 
@@ -8,13 +8,13 @@ use crate::scheme::{BlockScheme, Scheme};
 use crate::DeviceResult;
 
 pub struct VirtIoBlk {
-    inner: Mutex<InnerDriver<HalImpl, MmioTransport>>,
+    inner: IrqLock<InnerDriver<HalImpl, MmioTransport>>,
 }
 
 impl VirtIoBlk {
     pub fn new(transport: MmioTransport) -> DeviceResult<Self> {
         Ok(Self {
-            inner: Mutex::new(InnerDriver::new(transport).virt()?),
+            inner: IrqLock::new(InnerDriver::new(transport).virt()?),
         })
     }
 }

@@ -1,11 +1,11 @@
 use {
-    crate::object::*, alloc::sync::Arc, alloc::vec::Vec, bitflags::bitflags, lock::Mutex,
+    crate::object::*, alloc::sync::Arc, alloc::vec::Vec, bitflags::bitflags, lock::IrqLock,
     numeric_enum_macro::numeric_enum,
 };
 
 /// Global registry of allocated resource ranges.
 /// Tracks (kind, addr, len, exclusive) for overlap checking.
-static RESOURCE_REGIONS: Mutex<Vec<ResourceRegion>> = Mutex::new(Vec::new());
+static RESOURCE_REGIONS: IrqLock<Vec<ResourceRegion>> = IrqLock::new(Vec::new());
 
 #[derive(Clone)]
 struct ResourceRegion {

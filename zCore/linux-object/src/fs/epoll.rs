@@ -8,7 +8,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use async_trait::async_trait;
-use lock::Mutex;
+use lock::IrqLock;
 use zircon_object::object::*;
 
 use crate::error::{LxError, LxResult};
@@ -55,7 +55,7 @@ struct EpollInner {
 /// Implements [`FileLike`] so it can be stored in the process fd table.
 pub struct EpollFile {
     base: KObjectBase,
-    inner: Mutex<EpollInner>,
+    inner: IrqLock<EpollInner>,
 }
 
 impl_kobject!(EpollFile);
@@ -65,7 +65,7 @@ impl EpollFile {
     pub fn new(flags: OpenFlags) -> Arc<Self> {
         Arc::new(EpollFile {
             base: KObjectBase::new(),
-            inner: Mutex::new(EpollInner {
+            inner: IrqLock::new(EpollInner {
                 flags,
                 interest: BTreeMap::new(),
             }),
@@ -261,7 +261,7 @@ impl FileLike for EpollFile {
         let inner = self.inner.lock();
         let new = Arc::new(EpollFile {
             base: KObjectBase::new(),
-            inner: Mutex::new(EpollInner {
+            inner: IrqLock::new(EpollInner {
                 flags: inner.flags,
                 interest: BTreeMap::new(),
             }),

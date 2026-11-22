@@ -4,10 +4,10 @@
     DeviceResult, VirtAddr,
 };
 use d1_pac::uart;
-use lock::Mutex;
+use lock::IrqLock;
 
 pub struct UartAllwinner {
-    inner: Mutex<Inner>,
+    inner: IrqLock<Inner>,
     listener: EventListener,
 }
 
@@ -18,7 +18,7 @@ impl UartAllwinner {
         let inner = Inner(base);
         inner.init();
         Self {
-            inner: Mutex::new(inner),
+            inner: IrqLock::new(inner),
             listener: EventListener::new(),
         }
     }

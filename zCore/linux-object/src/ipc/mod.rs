@@ -10,7 +10,7 @@ pub use self::shared_mem::*;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use bitflags::*;
-use lock::Mutex;
+use lock::IrqLock;
 
 /// Semaphore table in a process
 #[derive(Default)]
@@ -140,7 +140,7 @@ impl Drop for SemProc {
 
 impl ShmProc {
     /// Insert the `SharedGuard` and return its ID
-    pub fn add(&mut self, shared_guard: Arc<Mutex<ShmGuard>>) -> ShmId {
+    pub fn add(&mut self, shared_guard: Arc<IrqLock<ShmGuard>>) -> ShmId {
         let id = self.get_free_id();
         let shm_identifier = ShmIdentifier {
             addr: 0,

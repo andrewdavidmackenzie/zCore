@@ -2,7 +2,7 @@ use alloc::{boxed::Box, collections::VecDeque, sync::Arc, vec::Vec};
 use core::task::{Context, Poll};
 use core::{any::Any, future::Future, pin::Pin};
 
-use lock::Mutex;
+use lock::IrqLock;
 
 use hal_impl::device_registry::prelude::input::{Mouse, MouseFlags, MouseState};
 use hal::{EventScheme, InputScheme};
@@ -26,7 +26,7 @@ pub struct MiceDev {
     id: usize,
     inode_id: usize,
     mice: Vec<Arc<Mouse>>,
-    inner: Arc<Mutex<MiceDevInner>>,
+    inner: Arc<IrqLock<MiceDevInner>>,
 }
 
 impl MiceDevInner {
@@ -93,7 +93,7 @@ impl MiceDev {
 
     /// Create a "mice" INode from multiple mice.
     pub fn new_many(mice: Vec<Arc<Mouse>>, id: usize) -> Self {
-        let inner = Arc::new(Mutex::new(MiceDevInner {
+        let inner = Arc::new(IrqLock::new(MiceDevInner {
             packet_offset: 0,
             last_buttons: MouseFlags::empty(),
             buf: VecDeque::with_capacity(BUF_CAPACITY),

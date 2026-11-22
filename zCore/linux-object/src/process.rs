@@ -18,7 +18,7 @@ use alloc::{
 use core::time::Duration;
 use hal::VirtAddr;
 use hashbrown::HashMap;
-use lock::{Mutex, MutexGuard};
+use lock::{IrqLock, IrqLockGuard};
 use spin::Mutex as SpinMutex;
 use zcore_fs::vfs::{FileSystem, INode};
 
@@ -67,7 +67,7 @@ impl ProcessExt for Process {
         let new_linux_proc = LinuxProcess {
             root_inode: linux_parent.root_inode.clone(),
             parent: Arc::downgrade(parent),
-            inner: Mutex::new(LinuxProcessInner {
+            inner: IrqLock::new(LinuxProcessInner {
                 execute_path: linux_parent_inner.execute_path.clone(),
                 current_working_directory: linux_parent_inner.current_working_directory.clone(),
                 files: linux_parent_inner.files.clone(),
@@ -256,7 +256,7 @@ pub struct LinuxProcess {
     /// Parent process
     parent: Weak<Process>,
     /// Inner
-    inner: Mutex<LinuxProcessInner>,
+    inner: IrqLock<LinuxProcessInner>,
 }
 
 /// Linux process mut inner data
@@ -416,7 +416,7 @@ impl LinuxProcess {
         LinuxProcess {
             root_inode: crate::fs::create_root_fs(rootfs), // Arc::clone(&ROOT_INODE) — disk access might be faster?
             parent: Weak::default(),
-            inner: Mutex::new(LinuxProcessInner {
+            inner: IrqLock::new(LinuxProcessInner {
                 files,
                 umask: 0o022,
                 ..Default::default()
@@ -773,7 +773,7 @@ impl LinuxProcess {
     /// insert a file and fd into the file descriptor table
     fn insert_file(
         &self,
-        mut inner: MutexGuard<LinuxProcessInner>,
+        mut inner: IrqLockGuard<LinuxProcessInner>,
         fd: FileDesc,
         file: Arc<dyn FileLike>,
     ) -> LxResult<FileDesc> {
@@ -1021,7 +1021,7 @@ impl LinuxProcess {
     }
 
     /// Insert the `SharedGuard` and return its ID
-    pub fn shm_add(&self, shared_guard: Arc<Mutex<ShmGuard>>) -> usize {
+    pub fn shm_add(&self, shared_guard: Arc<IrqLock<ShmGuard>>) -> usize {
         self.inner.lock().shm_identifiers.add(shared_guard)
     }
 

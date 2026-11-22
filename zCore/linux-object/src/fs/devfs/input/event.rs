@@ -2,7 +2,7 @@ use alloc::{boxed::Box, collections::VecDeque, sync::Arc};
 use core::task::{Context, Poll};
 use core::{any::Any, future::Future, mem::size_of, pin::Pin};
 
-use lock::Mutex;
+use lock::IrqLock;
 
 use hal::scheme::input::{InputEvent, InputEventType};
 use hal::InputScheme;
@@ -33,7 +33,7 @@ pub struct EventDev {
     id: usize,
     inode_id: usize,
     input: Arc<dyn InputScheme>,
-    inner: Arc<Mutex<EventDevInner>>,
+    inner: Arc<IrqLock<EventDevInner>>,
 }
 
 impl TimedInputEvent {
@@ -84,7 +84,7 @@ impl EventDevInner {
 impl EventDev {
     /// Create a input event INode
     pub fn new(input: Arc<dyn InputScheme>, id: usize) -> Self {
-        let inner = Arc::new(Mutex::new(EventDevInner {
+        let inner = Arc::new(IrqLock::new(EventDevInner {
             buf: VecDeque::with_capacity(BUF_CAPACITY),
         }));
         let cloned = inner.clone();

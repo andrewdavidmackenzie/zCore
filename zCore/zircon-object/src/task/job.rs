@@ -38,7 +38,7 @@ pub struct Job {
     parent_policy: JobPolicy,
     exceptionate: Arc<Exceptionate>,
     debug_exceptionate: Arc<Exceptionate>,
-    pub(crate) inner: KernelMutex<JobInner>,
+    pub(super) inner: KernelMutex<JobInner>,
 }
 
 impl_kobject!(Job

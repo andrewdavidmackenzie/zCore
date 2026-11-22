@@ -9,7 +9,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use lock::Mutex;
+use lock::IrqLock;
 use zcore_fs::vfs::*;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -35,7 +35,7 @@ pub struct PipeData {
 /// pipe struct
 #[derive(Clone)]
 pub struct Pipe {
-    data: Arc<Mutex<PipeData>>,
+    data: Arc<IrqLock<PipeData>>,
     direction: PipeEnd,
 }
 
@@ -57,7 +57,7 @@ impl Pipe {
             eventbus: EventBus::default(),
             end_cnt: 2, // one read, one write
         };
-        let data = Arc::new(Mutex::new(inner));
+        let data = Arc::new(IrqLock::new(inner));
         (
             Pipe {
                 data: data.clone(),
