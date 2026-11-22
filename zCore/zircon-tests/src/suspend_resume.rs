@@ -133,8 +133,7 @@ async fn suspend_token_drop() {
     hal_impl::thread::yield_now().await;
 
     // Create a SuspendToken -- this calls thread.suspend().
-    let task: Arc<dyn Task> = thread.clone();
-    let token = SuspendToken::create(&task);
+    let token = SuspendToken::create_for_thread(&thread);
     as_kobject(&thread)
         .wait_signal(Signal::THREAD_SUSPENDED)
         .await;
@@ -170,9 +169,8 @@ async fn multiple_suspend_tokens() {
     hal_impl::thread::yield_now().await;
     hal_impl::thread::yield_now().await;
 
-    let task: Arc<dyn Task> = thread.clone();
-    let token1 = SuspendToken::create(&task);
-    let token2 = SuspendToken::create(&task);
+    let token1 = SuspendToken::create_for_thread(&thread);
+    let token2 = SuspendToken::create_for_thread(&thread);
     as_kobject(&thread)
         .wait_signal(Signal::THREAD_SUSPENDED)
         .await;
@@ -389,10 +387,7 @@ async fn suspend_resume_race_with_dying_threads() {
         for t in &workers[..2] {
             t.kill();
         }
-        let token = {
-            let task: Arc<dyn Task> = proc.clone();
-            SuspendToken::create(&task)
-        };
+        let token = SuspendToken::create_for_process(&proc);
         // Wait for the survivors to actually park suspended, then
         // resume (the suspend-token drop path) while the killed
         // workers are still terminating.

@@ -1125,11 +1125,11 @@ impl Thread {
 }
 
 impl Task for Thread {
-    fn kill(&self) {
+    fn kill(self: &Arc<Self>) {
         self.stop(true)
     }
 
-    fn suspend(&self) {
+    fn suspend(self: &Arc<Self>) {
         let mut inner = self.inner.lock();
         inner.suspend_count += 1;
         let state = inner.state;
@@ -1156,7 +1156,7 @@ impl Task for Thread {
         }
     }
 
-    fn resume(&self) {
+    fn resume(self: &Arc<Self>) {
         let mut inner = self.inner.lock();
         assert_ne!(inner.suspend_count, 0);
         inner.suspend_count -= 1;

@@ -66,7 +66,6 @@ pub struct JobInner {
     // if the job is killed, no more child creation should works
     killed: bool,
     timer_policy: TimerSlack,
-    self_ref: Weak<Job>,
     /// Whether this job should be killed when the system is out of memory.
     kill_on_oom: bool,
     /// Return code set when the job is killed or a critical process exits.
@@ -75,6 +74,11 @@ pub struct JobInner {
     exited_cpu_time: u64,
     /// Accumulated queue time from processes/jobs that have exited and been removed.
     exited_queue_time: u64,
+    /// Weak self-reference for the Drop path (remove_child needs a
+    /// Weak to identify this job in the parent's children list; no
+    /// Arc is obtainable in Drop). NOT used by Task::kill — that
+    /// path gets the Arc directly via \`self: &Arc<Self>\` (#871).
+    pub(crate) self_ref: Weak<Job>,
 }
 
 impl JobInner {
@@ -579,29 +583,17 @@ impl Job {
 impl Task for Job {
     /// Kill the job. The job do not terminate immediately when killed.
     /// It will terminate after all its children and processes are terminated.
-    fn kill(&self) {
-        // Delegate to the graph-checked `kill_with_code` via the
-        // self_ref weak (the Task trait only provides `&self`; the
-        // lockgraph context needs the `Arc<Job>`).
-        //
-        // CAUTION: the self_ref read must be its own statement. An
-        // `if let Some(arc) = self.inner.lock().self_ref.upgrade()`
-        // would keep the lock guard alive through the entire body
-        // (if-let scrutinee temporaries live through the then-block),
-        // and kill_with_code would self-deadlock on the very job
-        // lock this thread holds — the KernelMutex is not
-        // reentrant. That exact bug hung three unit-test threads.
-        let self_ref = self.inner.lock().self_ref.clone();
-        if let Some(arc) = self_ref.upgrade() {
-            Self::kill_with_code(&arc, super::TASK_RETCODE_SYSCALL_KILL);
-        }
+    fn kill(self: &Arc<Self>) {
+        // #871: self: &Arc<Self> — the lockgraph context gets the Arc
+        // directly, no self_ref weak reference needed.
+        Self::kill_with_code(self, super::TASK_RETCODE_SYSCALL_KILL);
     }
 
-    fn suspend(&self) {
+    fn suspend(self: &Arc<Self>) {
         panic!("job do not support suspend");
     }
 
-    fn resume(&self) {
+    fn resume(self: &Arc<Self>) {
         panic!("job do not support resume");
     }
 
