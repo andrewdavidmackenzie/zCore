@@ -1,1 +1,23 @@
-# No tests currently skipped.
+# Known-flaky tests — re-added per #862 investigation.
+# These were removed in #814 but the intermittent failures they
+# caused persist (~40% CI failure rate on some heads). The root
+# cause is under investigation (abort cascades after exception-heavy
+# tests; see #862 for the diagnostic data). Re-adding these as a
+# mitigation until the root cause is fixed.
+
+# ── Intermittent hang (exception-kill of the root process) ──
+# These tests exercise heavy multi-threaded stress patterns that
+# trigger the thread-state corruption. They pass individually but
+# fail when preceded by exception-heavy tests (BadSegsel,
+# TestIntCrashes, ZxAssert).
+PortStressTest.CancelKeyDestructorReentersPortLock
+ChannelCallMutexTest.MutexHeldAcrossCallChain
+ThreadSampler.HighFrequency
+
+# ── Previously skipped (removed in #814, still relevant) ──
+# Pager wakeup races — one instance fixed in #850, but the class
+# may have more instances.
+# PagerWriteback.NoDirtyRequestsForClones
+# VmoTestCase.ParallelWriteAndDecommit
+# Pager.FailEarlyWake
+# Pager.ResizeCommitTest
