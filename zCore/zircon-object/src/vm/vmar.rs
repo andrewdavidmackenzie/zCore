@@ -453,7 +453,12 @@ impl VmAddressRegion {
         } else {
             map_range
         };
-        let mut guard = self.inner.lock();
+        // 5E-2: graph-checked VMAR acquisition. Everything below —
+        // determine_offset (reads inner state), test_map (reads
+        // mappings), page_table.lock().unmap_cont (PT), VmMapping
+        // creation and push — is at or downstream of the VMAR level.
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut guard = locked.lock_and::<super::lock_order::VmarInnerLock>().0;
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
         let offset = if overwrite {
             // SPECIFIC_OVERWRITE: skip test_map, overlaps will be unmapped below
@@ -563,8 +568,13 @@ impl VmAddressRegion {
         if !page_aligned(addr) || !page_aligned(len) || len == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let mut guard = self.inner.lock();
-        let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
+        // 5E-2: graph-checked VMAR acquisition. unmap_inner's nested
+        // acquisitions (map.cut → mapping, append_mapping → VMO,
+        // destroy_internal → child VMAR/PT) are all downstream of the
+        // VMAR level — the declared edges.
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut inner = locked.lock_and::<super::lock_order::VmarInnerLock>().0;
+        let inner = inner.as_mut().ok_or(ZxError::BAD_STATE)?;
         self.unmap_inner(addr, len, inner)
     }
 
@@ -631,7 +641,11 @@ impl VmAddressRegion {
         if !page_aligned(addr) || !page_aligned(len) {
             return Err(ZxError::INVALID_ARGS);
         }
-        let mut guard = self.inner.lock();
+        // 5E-2: graph-checked VMAR acquisition. The mapping operations
+        // below (protect on each overlapping mapping — mapping inner
+        // then page table) are downstream of the VMAR level.
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut guard = locked.lock_and::<super::lock_order::VmarInnerLock>().0;
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
         let end_addr = addr + len;
 
@@ -952,7 +966,13 @@ impl VmAddressRegion {
 
     /// Destroy but do not remove self from parent.
     fn destroy_internal(&self) -> ZxResult {
-        let mut guard = self.inner.lock();
+        // 5E-2: graph-checked acquisition (enters from Unlocked at the
+        // top level; from a parent VMAR context when called from
+        // unmap_inner's recursion — same-type VMAR-tree nesting, the
+        // documented parent-before-child discipline, not
+        // graph-expressible).
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut guard = locked.lock_and::<super::lock_order::VmarInnerLock>().0;
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
         for vmar in inner.children.drain(..) {
             vmar.destroy_internal()?;
@@ -970,7 +990,9 @@ impl VmAddressRegion {
 
     /// Unmap all mappings and destroy all sub-regions of VMAR.
     pub fn clear(&self) -> ZxResult {
-        let mut guard = self.inner.lock();
+        // 5E-2: graph-checked VMAR acquisition.
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut guard = locked.lock_and::<super::lock_order::VmarInnerLock>().0;
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
         for vmar in inner.children.drain(..) {
             vmar.destroy_internal()?;
@@ -2026,7 +2048,8 @@ impl VmMapping {
         // (committed_pages_in_range acquires the VMO's internal lock,
         // which would deadlock inside commit_pages_with).
         let (page_num, vmo_offset) = {
-            let inner = self.inner.lock();
+            let mut locked = lock::lockgraph::Locked::new(self.as_ref());
+            let inner = locked.lock_and::<super::lock_order::VmMappingInnerLock>().0;
             (inner.size / PAGE_SIZE, inner.vmo_offset / PAGE_SIZE)
         };
         // On bare-metal, COW VMOs skip uncommitted pages during map —
@@ -2056,7 +2079,16 @@ impl VmMapping {
         }
         let is_cow = self.vmo.has_cow_parent();
         self.vmo.commit_pages_with(&mut |commit| {
-            let inner = self.inner.lock();
+            // 5E-2: the callback runs under the VMO lock (held by
+            // commit_pages_with — 5E-3 converts that side). The
+            // mapping and page-table acquisitions here go through the
+            // graph from a fresh context: Mapping → PageTable is a
+            // declared edge. The VMO → Mapping order (callback under
+            // the VMO lock) is the declared eager-map edge — it will
+            // be graph-checked end-to-end when commit_pages_with
+            // threads its context (5E-3).
+            let mut locked = lock::lockgraph::Locked::new(self.as_ref());
+            let inner = locked.lock_and::<super::lock_order::VmMappingInnerLock>().0;
             let mut page_table = self.page_table.lock();
             for i in 0..page_num {
                 if vmo_offset + i >= vmo_pages {
@@ -2089,7 +2121,11 @@ impl VmMapping {
     }
 
     fn unmap(&self) {
-        let inner = self.inner.lock();
+        // 5E-2: graph-checked acquisition. VmMapping implements LockFor
+        // for its levels (5E-1); the page table is taken downstream of
+        // the mapping lock (Mapping → PageTable — the declared edge).
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let inner = locked.lock_and::<super::lock_order::VmMappingInnerLock>().0;
         // TODO inner.vmo_offset unused?
         self.page_table
             .lock()
@@ -2101,7 +2137,9 @@ impl VmMapping {
     /// Called when a REFERENCE child VMO is destroyed, to ensure
     /// mapped pages become inaccessible.
     pub fn unmap_all_pages(&self) {
-        let inner = self.inner.lock();
+        // 5E-2: same order as unmap — Mapping → PageTable.
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let inner = locked.lock_and::<super::lock_order::VmMappingInnerLock>().0;
         let page_count = inner.size / PAGE_SIZE;
         let mut pg_table = self.page_table.lock();
         for i in 0..page_count {
