@@ -259,6 +259,56 @@ impl TaskCollection {
         self.task_num.load(Ordering::Relaxed)
     }
 
+    /// #862/#829 diagnostics: dump every task slot in this collection
+    /// and the scheduler queues. Triggered when notified bits persist
+    /// across many scans (a marked wake the scheduler never dispatched).
+    /// Rate-limited to a few dumps per process.
+    fn dump_stuck_state(&self) {
+        use core::sync::atomic::Ordering;
+        static DUMPS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+        if DUMPS.fetch_add(1, Ordering::Relaxed) >= 4 {
+            return;
+        }
+        error!(
+            "[stuck] cpu={} task_num={} sched: {}",
+            self.cpu_id,
+            self.task_num.load(Ordering::Relaxed),
+            crate::sched::debug_summary(&self.sched_state.lock())
+        );
+        for priority in 0..MAX_PRIORITY {
+            let inner = self.get_mut_inner(priority);
+            for (slab_key, task) in inner.slab.iter() {
+                let full_key = slab_key | (priority << PRIORITY_SHIFT);
+                let page_idx = slab_key >> PAGE_INDEX_SHIFT;
+                let subpage = slab_key & 63;
+                let (n, d, owner, wc) = match inner.pages.get(page_idx) {
+                    Some(p) => (
+                        (p.peek_notified() >> subpage) & 1,
+                        (p.peek_dropped() >> subpage) & 1,
+                        p.owner_cpu(),
+                        p.wake_count(subpage),
+                    ),
+                    None => (0, 0, 0xff, 0),
+                };
+                let ti = task.inner.lock();
+                let wt = task.waker_target.lock();
+                let target = wt.as_ref().map(|t| t.debug_target());
+                error!(
+                    "[stuck] key={:#x} id={} state={:?} prio={} notified={} dropped={} wake_count={} finish={} waker_target={:?}",
+                    full_key,
+                    task.id,
+                    ti.state,
+                    ti.priority,
+                    n,
+                    d,
+                    wc,
+                    task.finish.load(Ordering::Relaxed),
+                    target
+                );
+            }
+        }
+    }
+
     /// Scan waker pages for notifications and dropped tasks.
     /// Feeds notified tasks into the scheduler and removes dropped ones.
     fn scan_notifications(&self) {
@@ -292,6 +342,12 @@ impl TaskCollection {
                     "scan: cpu={} scan#{} found={} tasks={} pages={} notified_bits={:#x}",
                     self.cpu_id, scan_num, found, task_num, total_pages, notified_bits
                 );
+                // #862: notified bits persisting across many scans = a
+                // marked wake the scheduler never dispatched. Dump the
+                // full collection + scheduler state (rate-limited).
+                if notified_bits != 0 && scan_num >= 50_000 {
+                    self.dump_stuck_state();
+                }
             }
         }
         // 5G-2: graph-checked sched_state acquisition. The fc loop

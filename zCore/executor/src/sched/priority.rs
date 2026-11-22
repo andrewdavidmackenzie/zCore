@@ -156,3 +156,19 @@ pub fn set_deadline(_state: &mut SchedState, _key: Key, _relative_deadline_ns: u
 
 /// Stub: set a task as fair (no-op in priority scheduler).
 pub fn set_fair(_state: &mut SchedState, _key: Key) {}
+
+/// #862/#829 diagnostics: human-readable scheduler state for the
+/// stuck-task dumper.
+pub fn debug_summary(state: &SchedState) -> alloc::string::String {
+    use alloc::format;
+    let mut s = format!("ready_bitmap={:#x}", state.ready_bitmap);
+    for p in 0..32 {
+        if !state.queues[p].is_empty() {
+            s += &format!(" q[{}]={:?}", p, state.queues[p]);
+        }
+    }
+    let mut keys: alloc::vec::Vec<Key> = state.task_priorities.keys().copied().collect();
+    keys.sort_unstable();
+    s += &format!(" known_keys={:?}", keys);
+    s
+}

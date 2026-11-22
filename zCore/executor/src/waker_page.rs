@@ -68,6 +68,10 @@ pub struct WakerPage {
     /// by a wake and are ready to be polled again. The ith bit represents the ith future in the
     /// corresponding memory slab.
     notified: AtomicU64SC,
+    /// #862 diagnostics: total wake count per slot (saturating). Lets
+    /// the stuck-task dumper distinguish a storm of wakes from a
+    /// single lost wake.
+    wake_counts: [AtomicU64SC; 64],
     // completed: AtomicU64SC,
     dropped: AtomicU64SC,
     borrowed: AtomicU64SC,
@@ -79,6 +83,7 @@ impl WakerPage {
     pub fn new_inner() -> Self {
         WakerPage {
             notified: AtomicU64SC::new(0),
+            wake_counts: core::array::from_fn(|_| AtomicU64SC::new(0)),
             // completed: AtomicU64SC::new(0),
             dropped: AtomicU64SC::new(0),
             borrowed: AtomicU64SC::new(0),
@@ -123,8 +128,14 @@ impl WakerPage {
     //     self.completed.fetch_or(1 << idx);
     // }
 
+    /// #862 diagnostics: total wakes this slot has received.
+    pub fn wake_count(&self, idx: usize) -> u64 {
+        self.wake_counts[idx].load()
+    }
+
     pub fn notify(&self, offset: usize) {
         debug_assert!(offset < 64);
+        self.wake_counts[offset].fetch_add(1);
         self.notified.fetch_or(1 << offset);
     }
 
@@ -165,6 +176,11 @@ impl WakerPage {
     /// Peek at notified bits without clearing them.
     pub fn peek_notified(&self) -> u64 {
         self.notified.load()
+    }
+
+    /// #862 diagnostics: peek dropped bits without consuming.
+    pub fn peek_dropped(&self) -> u64 {
+        self.dropped.load()
     }
 
     pub fn take_dropped(&self) -> u64 {
@@ -223,6 +239,12 @@ impl WakerTarget {
         Arc::new(Self {
             inner: spin::Mutex::new(WakerTargetInner { page, idx }),
         })
+    }
+
+    /// #862 diagnostics: (owner_cpu, slot_idx) this target points at.
+    pub fn debug_target(&self) -> (u8, usize) {
+        let inner = self.inner.lock();
+        (inner.page.owner_cpu(), inner.idx)
     }
 
     /// Atomically redirect this waker target to a new page and slot.
