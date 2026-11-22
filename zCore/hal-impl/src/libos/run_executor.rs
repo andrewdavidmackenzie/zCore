@@ -14,8 +14,14 @@ struct ThreadWaker {
 
 /// Build a Waker that unparks the given thread.
 fn thread_waker(thread: Thread) -> Waker {
+    // The clone function must preserve the original Arc reference.
+    // `Arc::from_raw` takes ownership; without `ManuallyDrop`, the
+    // original would be dropped on return, decrementing the refcount
+    // and potentially freeing the waker while it's still in use
+    // (review finding).
     fn clone(ptr: *const ()) -> RawWaker {
-        let waker = unsafe { Arc::from_raw(ptr as *const ThreadWaker) };
+        let waker =
+            unsafe { core::mem::ManuallyDrop::new(Arc::from_raw(ptr as *const ThreadWaker)) };
         let cloned = Arc::new(ThreadWaker {
             thread: waker.thread.clone(),
         });
@@ -28,14 +34,12 @@ fn thread_waker(thread: Thread) -> Waker {
     }
 
     fn wake_by_ref(ptr: *const ()) {
-        let waker = unsafe { Arc::from_raw(ptr as *const ThreadWaker) };
+        let waker =
+            unsafe { core::mem::ManuallyDrop::new(Arc::from_raw(ptr as *const ThreadWaker)) };
         waker.thread.unpark();
-        std::mem::forget(waker); // don't drop — we only borrowed it
     }
 
     fn drop_fn(ptr: *const ()) {
-        // Note: must use std::mem::drop explicitly — the fn name
-        // `drop_fn` avoids shadowing, but be explicit for clarity.
         let _ = unsafe { Arc::from_raw(ptr as *const ThreadWaker) };
     }
 

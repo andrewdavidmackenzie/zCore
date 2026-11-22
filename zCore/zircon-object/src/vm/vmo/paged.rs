@@ -90,8 +90,17 @@ pub struct VMObjectPaged {
 /// Mapping in the declared order. `YieldingMutex` is a type alias
 /// for `KernelMutex`, so the primitive is already correct; the
 /// `Arc<Mutex<()>> + UnsafeCell` pattern exists for COW-tree lock
-/// sharing (cloned VMOs share the parent's lock). This LockFor impl
-/// connects the paged VMO's lock to the graph.
+/// sharing (cloned VMOs share the parent's lock).
+///
+/// NOTE: this impl declares the lock's graph level but does NOT
+/// route the paged VMO's internal access paths (`get_inner`,
+/// `get_inner_mut`, `read`, `write`) through graph contexts —
+/// those still use raw `self.lock.lock()` calls. The internal
+/// paths are correctly ordered by the COW-tree collect-then-act
+/// discipline and the outer `VmObjectInnerLock` graph edge, but
+/// they are not compiler-checked end-to-end. Full graph routing
+/// of the internal paths is future work (would require threading
+/// contexts through the COW tree's shared lock).
 impl lock::lockgraph::LockFor<crate::vm::lock_order::VmObjectInnerLock> for VMObjectPaged {
     type Data = ();
     type Guard<'l> = lock::KernelMutexGuard<'l, ()>;
@@ -2744,6 +2753,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn resize_child_data_isolation() {
         // Mimics VmoCloneResizeTests::ResizeChild
         let vmo = VmObject::new_paged_with_resizable(true, 4);
