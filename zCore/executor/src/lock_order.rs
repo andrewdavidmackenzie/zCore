@@ -79,18 +79,57 @@ impl LockFor<SchedStateLock> for TaskCollection {
 /// blocking on the sched_state lock. No path does this (the
 /// documented order is sched → fc), and the graph rejects it.
 ///
-/// ```compile_fail
-/// use lock::lockgraph::{LockFor, Locked};
-/// use executor::lock_order::{
-///     ExecFixture as Ex, FutureCollectionLock, SchedStateLock,
-/// };
-///
-/// let e = Ex::new();
-/// let mut locked = Locked::new(&e);
-/// let (_fc_guard, fc_ctx) = locked.lock_and::<FutureCollectionLock>();
-/// // FC → Sched is the reverse of the documented order.
-/// let _sched_guard = fc_ctx.lock::<SchedStateLock>();
-/// ```
+/// Note: the fixture is defined inline because doctests run with
+/// `cfg(doctest)` (not `cfg(test)`), so a `#[cfg(test)]` fixture
+/// would be invisible to the doctest collector. Only public types
+/// are used so the imports resolve.
+#[cfg(doctest)]
+pub struct _ReverseOrderCompileFail {
+    _setup: (),
+}
+
+#[cfg(doctest)]
+mod _reverse_order_docs {
+    /// The reverse order: holding a future-collection lock and then
+    /// blocking on the sched_state lock — the graph rejects it.
+    ///
+    /// ```compile_fail
+    /// use lock::lockgraph::{LockFor, Locked};
+    /// use executor::lock_order::{FutureCollectionLock, SchedStateLock};
+    ///
+    /// // Inline fixture (doctests can't see #[cfg(test)] items).
+    /// struct Ex {
+    ///     sched: spin::Mutex<u32>,
+    ///     fc: spin::Mutex<u64>,
+    /// }
+    ///
+    /// impl LockFor<SchedStateLock> for Ex {
+    ///     type Data = u32;
+    ///     type Guard<'l> = spin::MutexGuard<'l, u32>;
+    ///     fn lock(&self) -> Self::Guard<'_> {
+    ///         self.sched.lock()
+    ///     }
+    /// }
+    ///
+    /// impl LockFor<FutureCollectionLock> for Ex {
+    ///     type Data = u64;
+    ///     type Guard<'l> = spin::MutexGuard<'l, u64>;
+    ///     fn lock(&self) -> Self::Guard<'_> {
+    ///         self.fc.lock()
+    ///     }
+    /// }
+    ///
+    /// let e = Ex {
+    ///     sched: spin::Mutex::new(1),
+    ///     fc: spin::Mutex::new(2),
+    /// };
+    /// let mut locked = Locked::new(&e);
+    /// let (_fc_guard, mut fc_ctx) = locked.lock_and::<FutureCollectionLock>();
+    /// // FC → Sched is the reverse of the documented order — no edge.
+    /// let _sched_guard = fc_ctx.lock::<SchedStateLock>();
+    /// ```
+    pub struct _Doc;
+}
 #[cfg(test)]
 #[allow(dead_code)] // constructed by the compile-fail doc test above
 pub(crate) struct ExecFixture {
