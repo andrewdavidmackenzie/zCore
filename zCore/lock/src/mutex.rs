@@ -120,6 +120,23 @@ impl<T: ?Sized> KernelMutex<T> {
     ///
     /// Does NOT disable interrupts.
     pub fn lock(&self) -> KernelMutexGuard<'_, T> {
+        // #862/#829: acquiring a KernelMutex while holding an
+        // interrupt-disabling spinlock is a lock-ordering violation.
+        // The adaptive yield below cannot run with interrupts
+        // disabled, and if the mutex holder is parked on this CPU the
+        // waiter spins forever with no way to make progress (no
+        // preemption, no yield). The #829 lock design forbids this
+        // nesting; fail loudly instead of deadlocking silently. This
+        // fires at the violation site with a full stack trace rather
+        // than hanging the system later.
+        #[cfg(target_os = "none")]
+        assert!(
+            crate::interrupt::intr_get(),
+            "KernelMutex::lock called with interrupts disabled \
+             (InterruptSpinLock held?) — spinlock→KernelMutex nesting is \
+             a lock-order violation (#829); move the acquisition outside \
+             the critical section"
+        );
         loop {
             // Fast path: try to acquire immediately.
             if self

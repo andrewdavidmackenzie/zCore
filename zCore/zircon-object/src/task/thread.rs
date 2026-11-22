@@ -728,15 +728,15 @@ impl Thread {
         if inner.state == ThreadState::Dying {
             if killed {
                 if let Some(killer) = inner.killer.take() {
-                    // It's ok to ignore the error since the other end could be closed
+                    // A send failure here means the receiver was
+                    // dropped — the thread left its blocking_run
+                    // before this kill arrived. That is the benign
+                    // completion race (the thread is already
+                    // proceeding and will observe Dying at its next
+                    // state check), not a lost kill.
                     if killer.send(()).is_err() {
-                        // #862 diagnostics: the kill message was lost —
-                        // the receiver was dropped (the thread left its
-                        // blocking_run between registration and this
-                        // send). The thread will re-park in a wait only
-                        // this message can end.
-                        error!(
-                            "[kill-lost] thread {} (Dying re-kill): receiver dropped",
+                        debug!(
+                            "[kill-race] thread {} (Dying re-kill): receiver gone — thread already left blocking_run",
                             self.base.id
                         );
                     }
@@ -750,11 +750,11 @@ impl Thread {
         }
         // For blocking thread, use the killer
         if let Some(killer) = inner.killer.take() {
-            // It's ok to ignore the error since the other end could be closed
+            // See the Dying branch above: a send failure is the benign
+            // completion race, not a lost kill.
             if killer.send(()).is_err() {
-                // #862 diagnostics: see above.
-                error!(
-                    "[kill-lost] thread {} (first kill): receiver dropped",
+                debug!(
+                    "[kill-race] thread {} (first kill): receiver gone — thread already left blocking_run",
                     self.base.id
                 );
             }

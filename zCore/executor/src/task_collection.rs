@@ -343,10 +343,16 @@ impl TaskCollection {
                     "scan: cpu={} scan#{} found={} tasks={} pages={} notified_bits={:#x}",
                     self.cpu_id, scan_num, found, task_num, total_pages, notified_bits
                 );
-                // #862: notified bits persisting across many scans = a
-                // marked wake the scheduler never dispatched. Dump the
-                // full collection + scheduler state (rate-limited).
-                if notified_bits != 0 && scan_num >= 50_000 {
+                // #862: notified bits persisting across consecutive
+                // diagnostic snapshots = a marked wake the scheduler
+                // never dispatched. A single nonzero snapshot can be
+                // normal wake traffic caught mid-scan, so require the
+                // previous snapshot to have seen bits too (rate-limited).
+                static PREV_NOTIFIED: core::sync::atomic::AtomicU64 =
+                    core::sync::atomic::AtomicU64::new(0);
+                let prev = PREV_NOTIFIED.swap(notified_bits, AtOrd::Relaxed);
+                let persisted = notified_bits != 0 && prev != 0;
+                if persisted && scan_num >= 50_000 {
                     self.dump_stuck_state();
                 }
                 // #862 variant B: long idle WHILE tasks are parked in
