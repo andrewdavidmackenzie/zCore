@@ -1,6 +1,6 @@
 //! Virtual memory operations.
 
-use super::mem::{MOCK_PHYS_MEM, PMEM_MAP_VADDR, PMEM_SIZE};
+use super::mem::{MOCK_PHYS_MEM, PMEM_SIZE};
 use crate::{addr::is_aligned, MMUFlags, PhysAddr, VirtAddr, PAGE_SIZE};
 
 hal_fn_impl! {
@@ -113,9 +113,10 @@ impl GenericPageTable for PageTable {
             return Ok((entry.paddr, entry.flags, PageSize::default_page()));
         }
         // Fall back to PMEM range check.
-        if (PMEM_MAP_VADDR..PMEM_MAP_VADDR + PMEM_SIZE).contains(&vaddr) {
+        let pmem_base = MOCK_PHYS_MEM.map_vaddr();
+        if (pmem_base..pmem_base + PMEM_SIZE).contains(&vaddr) {
             Ok((
-                vaddr - PMEM_MAP_VADDR,
+                vaddr - pmem_base,
                 MMUFlags::READ | MMUFlags::WRITE,
                 PageSize::default_page(),
             ))

@@ -4,12 +4,13 @@ use nix::fcntl::{self, OFlag};
 use nix::sys::mman::{self, MapFlags, ProtFlags};
 use nix::{sys::stat::Mode, unistd};
 
-use super::mem::PMEM_MAP_VADDR;
 use crate::{MMUFlags, PhysAddr, VirtAddr, PAGE_SIZE};
 
 pub struct MockMemory {
     size: usize,
     fd: RawFd,
+    /// Host address of the PMEM backing-store mapping (kernel-chosen).
+    map_vaddr: VirtAddr,
     /// On hosts with page size > 4K (e.g., 16K on aarch64 macOS), tracks
     /// how each host page is mapped. Maps host-page-aligned vaddr to
     /// the state of that host page.
@@ -66,32 +67,69 @@ impl MockMemory {
         .expect("failed to open");
         unistd::ftruncate(fd, size as _).expect("failed to set size of shared memory!");
 
-        let mem = Self {
+        // Map the PMEM backing store at a KERNEL-CHOSEN address.
+        //
+        // A fixed address with MAP_FIXED would silently destroy any
+        // host mapping already occupying the window: under memory
+        // pressure macOS malloc grows vm_allocate'd regions into the
+        // mid address space, and clobbering one leaves malloc's free
+        // lists pointing into the (zero-filled) PMEM file — every
+        // later malloc that walks them aborts with "memory corruption
+        // of free block" (the intermittent macOS SIGTRAPs, #862).
+        // mmap without MAP_FIXED picks a region disjoint from all
+        // existing mappings by construction.
+        let base: VirtAddr = unsafe {
+            mman::mmap(
+                core::ptr::null_mut(),
+                size,
+                ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                MapFlags::MAP_SHARED,
+                fd,
+                0,
+            )
+            .expect("failed to map PMEM backing store") as usize
+        };
+
+        Self {
             size,
             fd,
+            map_vaddr: base,
             host_pages: std::sync::Mutex::new(std::collections::HashMap::new()),
             anon_paddr_to_vaddr: std::sync::Mutex::new(std::collections::HashMap::new()),
-        };
-        // Map the entire physical memory backing store at PMEM_MAP_VADDR.
-        mem.mmap_file(PMEM_MAP_VADDR, size, 0, MMUFlags::READ | MMUFlags::WRITE);
-        mem
+        }
     }
 
-    /// Low-level file-backed mmap. Used for the PMEM backing store
-    /// (where vaddr, len, and offset are always host-page-aligned).
-    fn mmap_file(&self, vaddr: VirtAddr, len: usize, offset: usize, prot: MMUFlags) {
-        let prot_flags = mmu_flags_to_prot(prot) - ProtFlags::PROT_EXEC;
-        let flags = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
-        unsafe {
-            mman::mmap(vaddr as _, len, prot_flags, flags, self.fd, offset as _).unwrap_or_else(
-                |err| {
-                    panic!(
-                        "mmap_file failed: fd={}, offset={:#x}, len={:#x}, vaddr={:#x}: {:?}",
-                        self.fd, offset, len, vaddr, err
-                    )
-                },
-            );
+    /// The host address at which the PMEM backing store is mapped
+    /// (chosen by the kernel at initialization; see `new`).
+    pub fn map_vaddr(&self) -> VirtAddr {
+        self.map_vaddr
+    }
+
+    /// Remove reverse-mapping entries whose vaddr falls inside
+    /// [start, end) at `granularity` alignment.
+    ///
+    /// Two granularities are used (#862):
+    /// - `PAGE_SIZE`: same-address replacement — the guest pages being
+    ///   (re)mapped lose their previous entries, while sibling guest
+    ///   pages sharing a larger host page keep theirs (the host
+    ///   allocation may survive with only the data source changed).
+    /// - host page size: the whole host page is being destroyed
+    ///   (`map_anon`'s raw munmap) — every entry pointing into it must
+    ///   go, or later syncs write through vaddrs the host may reuse.
+    fn remove_entries_in(
+        map: &mut std::collections::HashMap<usize, Vec<usize>>,
+        start: usize,
+        end: usize,
+        granularity: usize,
+    ) {
+        for vaddrs in map.values_mut() {
+            vaddrs.retain(|&va| {
+                let base = va & !(granularity - 1);
+                let vend = base + granularity;
+                vend <= start || base >= end // keep if disjoint
+            });
         }
+        map.retain(|_, vaddrs| !vaddrs.is_empty());
     }
 
     /// Map `paddr` to `vaddr` in the guest address space.
@@ -121,6 +159,23 @@ impl MockMemory {
                 );
                 return false;
             }
+        }
+
+        // Refuse to map guest pages over the PMEM backing store. The
+        // PMEM base is kernel-chosen (see `new`), so it could in
+        // principle land where a guest VMAR wants a fixed mapping — a
+        // guest MAP_FIXED here would destroy the kernel's own physical
+        // memory. Return false so the caller propagates a mapping
+        // failure instead of corrupting PMEM.
+        if vaddr < self.map_vaddr + self.size && vaddr + len > self.map_vaddr {
+            warn!(
+                "mmap: guest range {:#x}..{:#x} overlaps PMEM window {:#x}..{:#x}, refusing",
+                vaddr,
+                vaddr + len,
+                self.map_vaddr,
+                self.map_vaddr + self.size
+            );
+            return false;
         }
 
         let hps = host_page_size();
@@ -176,6 +231,22 @@ impl MockMemory {
         let aligned_vaddr = vaddr & !(hps - 1);
         let aligned_paddr = paddr & !(hps - 1);
 
+        // Hold the reverse-mapping lock across the strategy. The lock
+        // order (anon map -> host pages) matches `munmap`, and holding
+        // it lets `map_anon` drop entries for the host page it is
+        // about to destroy before the raw munmap.
+        let mut anon_map = self.anon_paddr_to_vaddr.lock().unwrap();
+        // Same-address replacement: the guest pages being (re)mapped
+        // lose their previous entries. Sibling guest pages sharing the
+        // host page keep theirs — the host allocation may survive with
+        // only the mapped page's data source changing.
+        Self::remove_entries_in(
+            &mut anon_map,
+            vaddr & !(PAGE_SIZE - 1),
+            vaddr + len,
+            PAGE_SIZE,
+        );
+
         let needs_memcpy = {
             let mut pages = self.host_pages.lock().unwrap();
             let state = pages.get(&aligned_vaddr).copied();
@@ -190,7 +261,11 @@ impl MockMemory {
 
             // Helper: create anonymous mapping for this host page.
             // Returns false if the mapping failed (e.g., low address on macOS).
-            let map_anon = || -> bool {
+            // Takes the reverse map: the raw munmap below destroys every
+            // guest mapping in this host page, so all entries pointing
+            // into it must be dropped first (#862).
+            let map_anon = |anon_map: &mut std::collections::HashMap<usize, Vec<usize>>| -> bool {
+                Self::remove_entries_in(anon_map, aligned_vaddr, aligned_vaddr + hps, hps);
                 // On macOS, MAP_FIXED | MAP_ANON can return EACCES if the
                 // address previously had a MAP_SHARED file mapping. Clear
                 // any stale association first.
@@ -240,7 +315,7 @@ impl MockMemory {
                             false // data is in the file
                         }
                         Err(_) => {
-                            if !map_anon() {
+                            if !map_anon(&mut anon_map) {
                                 return false;
                             }
                             pages.insert(aligned_vaddr, HostPageState::Anonymous);
@@ -250,7 +325,7 @@ impl MockMemory {
                 }
                 None => {
                     // Offset mismatch: must use MAP_ANON.
-                    if !map_anon() {
+                    if !map_anon(&mut anon_map) {
                         return false;
                     }
                     pages.insert(aligned_vaddr, HostPageState::Anonymous);
@@ -278,7 +353,7 @@ impl MockMemory {
                             );
                         }
                     }
-                    if !map_anon() {
+                    if !map_anon(&mut anon_map) {
                         return false;
                     }
                     if page_mapped {
@@ -309,7 +384,7 @@ impl MockMemory {
                     );
                 }
             }
-            let src = (PMEM_MAP_VADDR + paddr) as *const u8;
+            let src = (self.map_vaddr + paddr) as *const u8;
             let dst = vaddr as *mut u8;
             unsafe { core::ptr::copy_nonoverlapping(src, dst, len) };
 
@@ -317,13 +392,9 @@ impl MockMemory {
             // Multiple vaddrs can map the same paddr (shared-frame aliasing).
             let aligned_paddr = paddr & !(PAGE_SIZE - 1);
             let aligned_va = vaddr & !(PAGE_SIZE - 1);
-            self.anon_paddr_to_vaddr
-                .lock()
-                .unwrap()
-                .entry(aligned_paddr)
-                .or_default()
-                .push(aligned_va);
+            anon_map.entry(aligned_paddr).or_default().push(aligned_va);
         }
+        drop(anon_map);
 
         // Set the requested protection on the host page(s).
         let aligned_len = ((vaddr + len + hps - 1) & !(hps - 1)) - aligned_vaddr;
@@ -393,7 +464,7 @@ impl MockMemory {
                 let copy_end = (page + page_size).min(end);
                 let copy_len = copy_end - copy_start;
                 if copy_len > 0 {
-                    let src = (PMEM_MAP_VADDR + copy_start) as *const u8;
+                    let src = (self.map_vaddr + copy_start) as *const u8;
                     for &vaddr in vaddrs {
                         // Probe the target address for writeability before
                         // copying. Stale entries can persist when frames are
@@ -439,7 +510,7 @@ impl MockMemory {
                     let copy_len = copy_end - copy_start;
                     if copy_len > 0 {
                         let src = (vaddr + offset_in_page) as *const u8;
-                        let dst = (PMEM_MAP_VADDR + copy_start) as *mut u8;
+                        let dst = (self.map_vaddr + copy_start) as *mut u8;
                         unsafe { core::ptr::copy_nonoverlapping(src, dst, copy_len) };
                     }
                 }
@@ -525,7 +596,7 @@ impl MockMemory {
 
     pub fn phys_to_virt(&self, paddr: PhysAddr) -> VirtAddr {
         assert!(paddr < self.size);
-        PMEM_MAP_VADDR + paddr
+        self.map_vaddr + paddr
     }
 
     pub fn as_ptr<T>(&self, paddr: PhysAddr) -> *const T {
@@ -556,4 +627,110 @@ fn mmu_flags_to_prot(f: MMUFlags) -> ProtFlags {
         flags |= ProtFlags::PROT_EXEC;
     }
     flags
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::imp::mem::MOCK_PHYS_MEM;
+
+    /// #862 regression: replacing a mapping at a vaddr (`MAP_FIXED`
+    /// clobbers silently) must invalidate the previous paddr's
+    /// reverse-mapping entry. A stale entry later directs
+    /// `sync_pmem_to_user` to write through a vaddr the host may have
+    /// reused for its own allocations — macOS heap corruption
+    /// ("memory corruption of free block").
+    #[test]
+    fn remap_invalidates_stale_entries() {
+        // Reverse-mapping entries only exist on hosts whose page size
+        // exceeds the guest 4K (the anonymous-mapping strategy);
+        // on 4K hosts mappings are direct file-backed.
+        if host_page_size() <= PAGE_SIZE {
+            return;
+        }
+        let mem = &*MOCK_PHYS_MEM;
+        // Above the macOS aarch64 mmap minimum (8 GiB), the PMEM
+        // window (32–33 GiB) and the aspace region (48 GiB), and
+        // unique to this test.
+        let vaddr: VirtAddr = 0x10_0000_0000;
+        let paddr_a: PhysAddr = 0x1000;
+        let paddr_b: PhysAddr = 0x3000;
+        let aligned = |p: usize| p & !(PAGE_SIZE - 1);
+
+        // vaddr is 16K-aligned, paddr is not → offset mismatch forces
+        // the anonymous path, which records the reverse mapping.
+        assert!(mem.mmap(vaddr, PAGE_SIZE, paddr_a, MMUFlags::READ | MMUFlags::WRITE));
+        {
+            let map = mem.anon_paddr_to_vaddr.lock().unwrap();
+            let entry = map.get(&aligned(paddr_a)).expect("entry for paddr_a");
+            assert!(
+                entry.contains(&aligned(vaddr)),
+                "paddr_a should track vaddr after anon map"
+            );
+        }
+
+        // Replace the mapping at the same vaddr with a different paddr.
+        assert!(mem.mmap(vaddr, PAGE_SIZE, paddr_b, MMUFlags::READ | MMUFlags::WRITE));
+        {
+            let map = mem.anon_paddr_to_vaddr.lock().unwrap();
+            let stale = map
+                .get(&aligned(paddr_a))
+                .is_some_and(|v| v.contains(&aligned(vaddr)));
+            assert!(
+                !stale,
+                "stale reverse-mapping entry survived remap — later syncs would write through the reused vaddr (#862)"
+            );
+        }
+
+        mem.munmap(vaddr, PAGE_SIZE);
+    }
+
+    /// #862 regression (CodeRabbit review): sibling guest pages sharing
+    /// a host page must keep independent, live reverse mappings — the
+    /// same-address invalidation is guest-page-granular, so mapping a
+    /// second guest page in the same host page must not drop the first
+    /// page's entry. Verifies synchronization in both directions.
+    #[test]
+    fn sibling_pages_sync_independently() {
+        if host_page_size() <= PAGE_SIZE {
+            return;
+        }
+        let mem = &*MOCK_PHYS_MEM;
+        // 16K-aligned base, distinct from other tests' ranges.
+        let base: VirtAddr = 0x11_0000_0000;
+        let pa: PhysAddr = 0x11000; // offset 0x1000 in its host page → anon path
+        let pb: PhysAddr = 0x13000; // different paddr for the sibling page
+        let flags = MMUFlags::READ | MMUFlags::WRITE;
+
+        assert!(mem.mmap(base, PAGE_SIZE, pa, flags));
+        assert!(mem.mmap(base + PAGE_SIZE, PAGE_SIZE, pb, flags));
+
+        // PMEM → user: writes through pmem_write must reach BOTH user
+        // pages (each entry must have survived the sibling mapping).
+        crate::hal_fn::mem::pmem_write(pa, &[0xAA]);
+        crate::hal_fn::mem::pmem_write(pb, &[0xBB]);
+        assert_eq!(
+            unsafe { core::ptr::read_volatile(base as *const u8) },
+            0xAA,
+            "first sibling page must sync from its paddr"
+        );
+        assert_eq!(
+            unsafe { core::ptr::read_volatile((base + PAGE_SIZE) as *const u8) },
+            0xBB,
+            "second sibling page must sync from its paddr"
+        );
+
+        // User → PMEM: a write through each user page must be visible
+        // via pmem_read of its paddr.
+        unsafe { core::ptr::write_volatile((base + PAGE_SIZE) as *mut u8, 0xCC) };
+        let mut buf = [0u8; 1];
+        crate::hal_fn::mem::pmem_read(pb, &mut buf);
+        assert_eq!(buf[0], 0xCC, "user write must sync back to its paddr");
+
+        unsafe { core::ptr::write_volatile(base as *mut u8, 0xDD) };
+        crate::hal_fn::mem::pmem_read(pa, &mut buf);
+        assert_eq!(buf[0], 0xDD, "first sibling's user write must sync back");
+
+        mem.munmap(base, 2 * PAGE_SIZE);
+    }
 }
