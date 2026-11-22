@@ -66,6 +66,44 @@ impl MockMemory {
         .expect("failed to open");
         unistd::ftruncate(fd, size as _).expect("failed to set size of shared memory!");
 
+        // #862 diagnostic: MAP_FIXED below silently replaces any existing
+        // mapping in the PMEM window. Probe the window first and report
+        // what is already mapped there — anything found gets clobbered
+        // and its owner will later write through stale pointers.
+        if cfg!(test) || std::env::var_os("ZCORE_PMEM_PROBE").is_some() {
+            let probe_step = 0x1000_0000usize; // 256MB coarse
+            let mut mapped: Vec<(usize, usize)> = Vec::new();
+            let mut addr = PMEM_MAP_VADDR;
+            while addr < PMEM_MAP_VADDR + size {
+                // msync returns ENOMEM for unmapped ranges: cheap "is it
+                // mapped" probe without touching the pages.
+                let rc = unsafe {
+                    nix::libc::msync(addr as *mut _, probe_step, nix::libc::MS_ASYNC)
+                };
+                if rc == 0 {
+                    mapped.push((addr, probe_step));
+                }
+                addr += probe_step;
+            }
+            if !mapped.is_empty() {
+                let total: usize = mapped.iter().map(|m| m.1).sum();
+                eprintln!(
+                    "[pmem-probe] PMEM window {:#x}..{:#x} ALREADY has ~{:#x} bytes mapped in {} ranges: {:?}",
+                    PMEM_MAP_VADDR,
+                    PMEM_MAP_VADDR + size,
+                    total,
+                    mapped.len(),
+                    mapped
+                );
+            } else {
+                eprintln!(
+                    "[pmem-probe] PMEM window {:#x}..{:#x} is fully unmapped",
+                    PMEM_MAP_VADDR,
+                    PMEM_MAP_VADDR + size
+                );
+            }
+        }
+
         let mem = Self {
             size,
             fd,

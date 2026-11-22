@@ -2,8 +2,8 @@ name: investigate-862
 
 # Diagnostic workflow for issue #862: macOS-aarch64 test binaries
 # SIGTRAP intermittently. Heap corruption (malloc freelist, brk 1).
-# Phase 6: AddressSanitizer build — catch the corrupting write with a
-# report (guard-malloc changed timing: 0/150, ASAN preserves it).
+# Phase 7: probe the PMEM MAP_FIXED window for pre-existing mappings
+# (the clobber hypothesis) + keep a small ASAN campaign running.
 on:
   push:
     branches: [core_tests_flaky_862]
@@ -12,7 +12,7 @@ on:
 jobs:
   macos-sigtrap-investigation:
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,37 +26,45 @@ jobs:
         with:
           key: investigate-862
 
-      - name: Build test binary with AddressSanitizer
+      - name: Build test binaries
         working-directory: zCore
-        env:
-          RUSTFLAGS: "-Zsanitizer=address"
-          CARGO_TARGET_DIR: /tmp/asan-target
         run: |
-          cargo test -p zircon-object --features libos,aspace-separate --lib --no-run --target aarch64-apple-darwin --message-format=json 2>/tmp/build-err.txt | \
+          cargo test -p zircon-object --features libos,aspace-separate --lib --no-run --message-format=json 2>/dev/null | \
             python3 -c "import sys,json; [print(json.loads(l).get('executable') or '') for l in sys.stdin if '\"executable\"' in l]" | grep -v '^$' > /tmp/testbins.txt
-          cat /tmp/testbins.txt || { echo "BUILD FAILED:"; tail -30 /tmp/build-err.txt; exit 1; }
-          [ -s /tmp/testbins.txt ] || { echo "BUILD FAILED (no binary):"; tail -30 /tmp/build-err.txt; exit 1; }
+          cat /tmp/testbins.txt
 
-      - name: ASAN contended campaign
+      - name: PMEM window probe (what does MAP_FIXED clobber?)
         run: |
-          mkdir -p /tmp/crashes
+          BIN=$(head -1 /tmp/testbins.txt)
+          for round in $(seq 1 8); do
+            echo "=== probe round $round ==="
+            rc=0; ZCORE_PMEM_PROBE=1 "$BIN" --test-threads=1 --nocapture > /tmp/probe-out.txt 2>&1 || rc=$?
+            grep "pmem-probe" /tmp/probe-out.txt | head -3
+          done
+
+      - name: Contended runs with probe (clobber under load)
+        run: |
           BIN=$(head -1 /tmp/testbins.txt)
           for i in 1 2 3 4 5 6; do (while :; do :; done) & echo $! >> /tmp/burners.pid; done
-          total=0; caught=0
-          for round in $(seq 1 60); do
+          mkdir -p /tmp/crashes
+          total=0; trapped=0; clobbered=0
+          for round in $(seq 1 30); do
             total=$((total+1))
-            rc=0; ASAN_OPTIONS=detect_leaks=0:abort_on_error=1 "$BIN" > /tmp/asan-out.txt 2>&1 || rc=$?
+            rc=0; ZCORE_PMEM_PROBE=1 "$BIN" --test-threads=1 > /tmp/probe-out.txt 2>&1 || rc=$?
+            if grep -q "ALREADY has" /tmp/probe-out.txt; then
+              clobbered=$((clobbered+1))
+              echo "=== CLOBBER round=$round ==="
+              grep "pmem-probe" /tmp/probe-out.txt | head -2
+            fi
             if [ $rc -ne 0 ]; then
-              caught=$((caught+1))
-              echo "=== ASAN CAUGHT round=$round rc=$rc ==="
-              head -60 /tmp/asan-out.txt
+              trapped=$((trapped+1))
+              echo "=== TRAP round=$round rc=$rc (clobber in this run: $(grep -c 'ALREADY has' /tmp/probe-out.txt)) ==="
               sleep 2
               report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
-              [ -n "$report" ] && cp "$report" "/tmp/crashes/asan-round${round}.ips" || true
-              cp /tmp/asan-out.txt "/tmp/crashes/asan-round${round}.txt" || true
+              [ -n "$report" ] && cp "$report" "/tmp/crashes/probe-trap-round${round}.ips" || true
             fi
           done
-          echo "=== ASAN RESULT: $caught caught of $total ==="
+          echo "=== PROBE RESULT: $trapped trapped, $clobbered clobbered, of $total ==="
 
       - name: Cleanup burners
         if: always()
