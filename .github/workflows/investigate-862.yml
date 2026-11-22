@@ -32,9 +32,10 @@ jobs:
           RUSTFLAGS: "-Zsanitizer=address"
           CARGO_TARGET_DIR: /tmp/asan-target
         run: |
-          cargo test -p zircon-object --features libos,aspace-separate --lib --no-run --message-format=json 2>/dev/null | \
+          cargo test -p zircon-object --features libos,aspace-separate --lib --no-run --target aarch64-apple-darwin --message-format=json 2>/tmp/build-err.txt | \
             python3 -c "import sys,json; [print(json.loads(l).get('executable') or '') for l in sys.stdin if '\"executable\"' in l]" | grep -v '^$' > /tmp/testbins.txt
-          cat /tmp/testbins.txt
+          cat /tmp/testbins.txt || { echo "BUILD FAILED:"; tail -30 /tmp/build-err.txt; exit 1; }
+          [ -s /tmp/testbins.txt ] || { echo "BUILD FAILED (no binary):"; tail -30 /tmp/build-err.txt; exit 1; }
 
       - name: ASAN contended campaign
         run: |
