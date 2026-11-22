@@ -3,7 +3,7 @@
 //! Uses an 8x16 bitmap font to render text directly to the bootloader-provided
 //! framebuffer. Kernel-only -- not exposed to userspace.
 
-use lock::Mutex;
+use lock::IrqLock;
 
 /// Character cell size in pixels.
 const CHAR_W: u32 = 8;
@@ -33,7 +33,7 @@ struct FbConsole {
 
 unsafe impl Send for FbConsole {}
 
-static FB_CONSOLE: Mutex<Option<FbConsole>> = Mutex::new(None);
+static FB_CONSOLE: IrqLock<Option<FbConsole>> = IrqLock::new(None);
 
 /// Initialize the framebuffer console from the kernel config.
 /// Must be called after the framebuffer virtual mapping is available.

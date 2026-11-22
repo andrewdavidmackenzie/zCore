@@ -6,7 +6,7 @@
 
 use core::ops::Range;
 use hal::PhysAddr;
-use lock::Mutex;
+use lock::IrqLock;
 
 const PAGE_BITS: usize = 12;
 
@@ -25,10 +25,10 @@ mod buddy {
     use customizable_buddy::{BuddyAllocator, LinkedListBuddy, UsizeBuddy};
 
     /// Heap allocator (27 + 6 + 3 = 36 -> 64 GiB).
-    struct LockedHeap(Mutex<BuddyAllocator<27, UsizeBuddy, LinkedListBuddy>>);
+    struct LockedHeap(IrqLock<BuddyAllocator<27, UsizeBuddy, LinkedListBuddy>>);
 
     #[global_allocator]
-    static HEAP: LockedHeap = LockedHeap(Mutex::new(BuddyAllocator::new()));
+    static HEAP: LockedHeap = LockedHeap(IrqLock::new(BuddyAllocator::new()));
 
     /// Initial memory reserved for boot (4 MiB).
     /// Page-aligned to satisfy the buddy allocator's minimum order
@@ -123,7 +123,7 @@ mod bitmap {
     type FrameAlloc = bitmap_allocator::BitAlloc16M; // max 64G
 
     /// Global physical frame allocator.
-    static FRAME_ALLOCATOR: Mutex<FrameAlloc> = Mutex::new(FrameAlloc::DEFAULT);
+    static FRAME_ALLOCATOR: IrqLock<FrameAlloc> = IrqLock::new(FrameAlloc::DEFAULT);
 
     /// Physical page reserved for the SMP AP trampoline.
     const SMP_TRAMPOLINE_PAGE: usize = 0x8000 >> PAGE_BITS;
@@ -196,16 +196,16 @@ mod bitmap {
         let _ = FRAME_ALLOCATOR.lock().dealloc(target >> PAGE_BITS);
     }
 
-    struct LockedHeap<const ORDER: usize>(Mutex<Heap<ORDER>>);
+    struct LockedHeap<const ORDER: usize>(IrqLock<Heap<ORDER>>);
 
     impl<const ORDER: usize> LockedHeap<ORDER> {
         pub const fn new() -> Self {
-            LockedHeap(Mutex::new(Heap::<ORDER>::new()))
+            LockedHeap(IrqLock::new(Heap::<ORDER>::new()))
         }
     }
 
     impl<const ORDER: usize> Deref for LockedHeap<ORDER> {
-        type Target = Mutex<Heap<ORDER>>;
+        type Target = IrqLock<Heap<ORDER>>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }

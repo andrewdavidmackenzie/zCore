@@ -8,7 +8,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::bitflags;
 use core::sync::atomic::AtomicBool;
-use lock::Mutex;
+use lock::IrqLock;
 
 #[path = "port_packet.rs"]
 mod port_packet;
@@ -28,7 +28,7 @@ const MAX_ALLOCATED_PACKET_COUNT_PER_PORT: usize = MAX_ALLOCATED_PACKET_COUNT / 
 pub struct Port {
     base: KObjectBase,
     options: PortOptions,
-    inner: Mutex<PortInner>,
+    inner: IrqLock<PortInner>,
 }
 
 impl_kobject!(Port);
@@ -78,7 +78,7 @@ impl Port {
         Ok(Arc::new(Port {
             base: KObjectBase::default(),
             options: PortOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?,
-            inner: Mutex::default(),
+            inner: IrqLock::default(),
         }))
     }
 

@@ -12,13 +12,13 @@
 use alloc::{collections::VecDeque, vec::Vec};
 use core::fmt::{Arguments, Result, Write};
 use core::task::Waker;
-use lock::Mutex;
+use lock::IrqLock;
 
 // --- Console output ---
 
 struct ConsoleWriter;
 
-static CONSOLE_WRITER: Mutex<ConsoleWriter> = Mutex::new(ConsoleWriter);
+static CONSOLE_WRITER: IrqLock<ConsoleWriter> = IrqLock::new(ConsoleWriter);
 
 impl Write for ConsoleWriter {
     fn write_str(&mut self, s: &str) -> Result {
@@ -53,7 +53,7 @@ struct ConsoleInput {
     wakers: Vec<Waker>,
 }
 
-static CONSOLE_INPUT: Mutex<ConsoleInput> = Mutex::new(ConsoleInput {
+static CONSOLE_INPUT: IrqLock<ConsoleInput> = IrqLock::new(ConsoleInput {
     buf: VecDeque::new(),
     wakers: Vec::new(),
 });

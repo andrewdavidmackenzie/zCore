@@ -1,9 +1,9 @@
 use hal_impl::interrupt;
-use {super::*, lock::Mutex};
+use {super::*, lock::IrqLock};
 
 pub struct EventInterrupt {
     vector: usize,
-    inner: Mutex<EventInterruptInner>,
+    inner: IrqLock<EventInterruptInner>,
 }
 
 #[derive(Default)]

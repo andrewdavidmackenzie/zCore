@@ -9,7 +9,7 @@
 
 use crate::scheme::Scheme;
 use alloc::boxed::Box;
-use lock::Mutex;
+use lock::IrqLock;
 use pc_keyboard::{layouts, DecodedKey, HandleControl, ScancodeSet1};
 
 /// I/O port for the i8042 data register.
@@ -27,7 +27,7 @@ type InputCallback = dyn Fn(u8) + Send + Sync;
 /// Decodes i8042 scancodes and pushes ASCII bytes to the console
 /// input via a callback provided at construction time.
 pub struct Ps2Keyboard {
-    inner: Mutex<pc_keyboard::PS2Keyboard<layouts::Us104Key, ScancodeSet1>>,
+    inner: IrqLock<pc_keyboard::PS2Keyboard<layouts::Us104Key, ScancodeSet1>>,
     on_input: Box<InputCallback>,
 }
 
@@ -50,7 +50,7 @@ impl Ps2Keyboard {
         }
 
         Self {
-            inner: Mutex::new(pc_keyboard::PS2Keyboard::new(
+            inner: IrqLock::new(pc_keyboard::PS2Keyboard::new(
                 ScancodeSet1::new(),
                 layouts::Us104Key,
                 HandleControl::MapLettersToUnicode,

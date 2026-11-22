@@ -11,7 +11,7 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 
 use async_trait::async_trait;
-use lock::Mutex;
+use lock::IrqLock;
 use zircon_object::object::*;
 
 use crate::error::{LxError, LxResult};
@@ -43,7 +43,7 @@ struct EventFdInner {
 /// Implements [`FileLike`] so it can be stored in the process fd table.
 pub struct EventFd {
     base: KObjectBase,
-    inner: Mutex<EventFdInner>,
+    inner: IrqLock<EventFdInner>,
 }
 
 impl_kobject!(EventFd);
@@ -67,7 +67,7 @@ impl EventFd {
         }
         EventFd {
             base: KObjectBase::new(),
-            inner: Mutex::new(EventFdInner {
+            inner: IrqLock::new(EventFdInner {
                 counter: initval,
                 flags: open_flags,
                 semaphore,
@@ -96,7 +96,7 @@ impl FileLike for EventFd {
 
     fn dup(&self) -> LxResult<Arc<dyn FileLike>> {
         // Dup creates a new fd pointing to the same eventfd counter.
-        // We can't easily share Arc<Mutex<EventFdInner>> since we own it,
+        // We can't easily share Arc<IrqLock<EventFdInner>> since we own it,
         // so create an independent copy with the same counter value.
         let inner = self.inner.lock();
         Ok(Arc::new(EventFd::new(

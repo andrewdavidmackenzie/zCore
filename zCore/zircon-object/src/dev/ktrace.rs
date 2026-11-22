@@ -12,7 +12,7 @@ use crate::object::ZxError;
 use crate::ZxResult;
 use alloc::vec;
 use alloc::vec::Vec;
-use lock::Mutex;
+use lock::IrqLock;
 
 /// Default trace buffer size (1 MiB). Fuchsia uses 32 MiB by default
 /// but we start smaller since we don't emit records yet.
@@ -94,7 +94,7 @@ const KTRACE_ACTION_STOP: u32 = 1;
 const KTRACE_ACTION_REWIND: u32 = 2;
 
 /// Global kernel trace buffer singleton.
-static KTRACE_BUFFER: Mutex<Option<KTraceBuffer>> = Mutex::new(None);
+static KTRACE_BUFFER: IrqLock<Option<KTraceBuffer>> = IrqLock::new(None);
 
 /// Initialize the global ktrace buffer (call once at boot).
 pub fn ktrace_init() {

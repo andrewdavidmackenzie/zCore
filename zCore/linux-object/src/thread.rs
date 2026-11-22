@@ -10,7 +10,7 @@ use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
 use hal_impl::context::{UserContext, UserContextField};
 use hal_impl::user::{Out, UserInPtr, UserOutPtr, UserPtr};
-use lock::{Mutex, MutexGuard};
+use lock::{IrqLock, IrqLockGuard};
 use zircon_object::task::{CurrentThread, Process, Thread};
 use zircon_object::ZxResult;
 
@@ -19,7 +19,7 @@ pub trait ThreadExt {
     /// create linux thread
     fn create_linux(proc: &Arc<Process>) -> ZxResult<Arc<Self>>;
     /// lock and get Linux thread
-    fn lock_linux(&self) -> MutexGuard<'_, LinuxThread>;
+    fn lock_linux(&self) -> IrqLockGuard<'_, LinuxThread>;
     /// Set pointer to thread ID.
     fn set_tid_address(&self, tidptr: UserOutPtr<i32>);
     /// Get robust list.
@@ -37,7 +37,7 @@ pub trait CurrentThreadExt {
 
 impl ThreadExt for Thread {
     fn create_linux(proc: &Arc<Process>) -> ZxResult<Arc<Self>> {
-        let linux_thread = Mutex::new(LinuxThread {
+        let linux_thread = IrqLock::new(LinuxThread {
             clear_child_tid: 0.into(),
             signals: Sigset::default(),
             signal_mask: Sigset::default(),
@@ -53,9 +53,9 @@ impl ThreadExt for Thread {
         Thread::create_with_ext(proc, "", linux_thread)
     }
 
-    fn lock_linux(&self) -> MutexGuard<'_, LinuxThread> {
+    fn lock_linux(&self) -> IrqLockGuard<'_, LinuxThread> {
         self.ext()
-            .downcast_ref::<Mutex<LinuxThread>>()
+            .downcast_ref::<IrqLock<LinuxThread>>()
             .unwrap()
             .lock()
     }

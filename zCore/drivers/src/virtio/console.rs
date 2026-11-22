@@ -1,6 +1,6 @@
 use core::fmt::{Result, Write};
 
-use lock::Mutex;
+use lock::IrqLock;
 use virtio_drivers::device::console::VirtIOConsole as InnerDriver;
 use virtio_drivers::transport::mmio::MmioTransport;
 
@@ -11,7 +11,7 @@ use crate::scheme::{impl_event_scheme, Scheme, UartScheme};
 use crate::utils::EventListener;
 
 pub struct VirtIoConsole {
-    inner: Mutex<InnerDriver<HalImpl, MmioTransport>>,
+    inner: IrqLock<InnerDriver<HalImpl, MmioTransport>>,
     listener: EventListener,
 }
 
@@ -20,7 +20,7 @@ impl_event_scheme!(VirtIoConsole);
 impl VirtIoConsole {
     pub fn new(transport: MmioTransport) -> DeviceResult<Self> {
         Ok(Self {
-            inner: Mutex::new(InnerDriver::new(transport).virt()?),
+            inner: IrqLock::new(InnerDriver::new(transport).virt()?),
             listener: EventListener::new(),
         })
     }

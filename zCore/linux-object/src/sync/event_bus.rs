@@ -9,7 +9,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use lock::Mutex;
+use lock::IrqLock;
 
 bitflags! {
     #[derive(Default)]
@@ -52,8 +52,8 @@ pub struct EventBus {
 
 impl EventBus {
     /// create an event bus
-    pub fn new() -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(Self::default()))
+    pub fn new() -> Arc<IrqLock<Self>> {
+        Arc::new(IrqLock::new(Self::default()))
     }
 
     /// set event flag
@@ -92,14 +92,14 @@ impl EventBus {
 }
 
 /// wait for a event async
-pub fn wait_for_event(bus: Arc<Mutex<EventBus>>, mask: Event) -> impl Future<Output = Event> {
+pub fn wait_for_event(bus: Arc<IrqLock<EventBus>>, mask: Event) -> impl Future<Output = Event> {
     EventBusFuture { bus, mask }
 }
 
 /// EventBus future for async
 #[must_use = "future does nothing unless polled/`await`-ed"]
 struct EventBusFuture {
-    bus: Arc<Mutex<EventBus>>,
+    bus: Arc<IrqLock<EventBus>>,
     mask: Event,
 }
 

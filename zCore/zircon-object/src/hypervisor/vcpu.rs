@@ -7,7 +7,7 @@ use {
     },
     alloc::sync::Arc,
     core::convert::TryInto,
-    lock::Mutex,
+    lock::IrqLock,
     rvm::{self, Vcpu as VcpuInner},
 };
 
@@ -16,7 +16,7 @@ pub struct Vcpu {
     base: KObjectBase,
     _counter: CountHelper,
     thread: Arc<Thread>,
-    inner: Mutex<VcpuInner>,
+    inner: IrqLock<VcpuInner>,
 }
 
 impl_kobject!(Vcpu);
@@ -28,7 +28,7 @@ impl Vcpu {
         if thread.flags().contains(ThreadFlag::VCPU) {
             return Err(ZxError::BAD_STATE);
         }
-        let inner = Mutex::new(VcpuInner::new(entry, guest.rvm_guest())?);
+        let inner = IrqLock::new(VcpuInner::new(entry, guest.rvm_guest())?);
         thread.update_flags(|flags| flags.insert(ThreadFlag::VCPU));
         Ok(Arc::new(Vcpu {
             base: KObjectBase::new(),

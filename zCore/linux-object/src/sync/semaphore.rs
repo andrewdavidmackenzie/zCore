@@ -10,12 +10,12 @@ use core::future::Future;
 use core::ops::Deref;
 use core::pin::Pin;
 use core::task::{Context, Poll};
-use lock::Mutex;
+use lock::IrqLock;
 
 /// A counting, blocking, semaphore.
 pub struct Semaphore {
     /// value and removed inner struct
-    lock: Arc<Mutex<SemaphoreInner>>,
+    lock: Arc<IrqLock<SemaphoreInner>>,
 }
 
 /// Semaphore inner data
@@ -44,7 +44,7 @@ impl Semaphore {
     /// available. It is valid to initialize a semaphore with a negative count.
     pub fn new(count: isize) -> Semaphore {
         Semaphore {
-            lock: Arc::new(Mutex::new(SemaphoreInner {
+            lock: Arc::new(IrqLock::new(SemaphoreInner {
                 count,
                 removed: false,
                 pid: 0,
@@ -68,7 +68,7 @@ impl Semaphore {
     pub async fn acquire(&self) -> Result<(), LxError> {
         #[must_use = "future does nothing unless polled/`await`-ed"]
         struct SemaphoreFuture {
-            inner: Arc<Mutex<SemaphoreInner>>,
+            inner: Arc<IrqLock<SemaphoreInner>>,
         }
 
         impl Future for SemaphoreFuture {

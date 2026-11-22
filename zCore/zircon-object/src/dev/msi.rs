@@ -2,7 +2,7 @@
 
 use crate::object::*;
 use alloc::sync::Arc;
-use lock::Mutex;
+use lock::IrqLock;
 
 /// An MSI allocation represents a block of contiguous MSI interrupt
 /// vectors allocated from the platform MSI controller.
@@ -13,7 +13,7 @@ pub struct MsiAllocation {
     /// Base IRQ number (0 if not backed by real hardware).
     base_irq: usize,
     /// Which vectors have been used to create Interrupt objects.
-    used: Mutex<u32>,
+    used: IrqLock<u32>,
 }
 
 impl_kobject!(MsiAllocation);
@@ -29,7 +29,7 @@ impl MsiAllocation {
             base: KObjectBase::new(),
             count,
             base_irq,
-            used: Mutex::new(0),
+            used: IrqLock::new(0),
         })
     }
 

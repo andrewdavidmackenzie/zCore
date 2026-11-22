@@ -9,11 +9,11 @@ use ::drivers::irq::gic_400::{GICC_SIZE, GICD_SIZE};
 use ::drivers::irq::gic_v3::{GICD_SIZE, GICR_SIZE as GICC_SIZE};
 use core::fmt::{Debug, Formatter, Result};
 use cortex_a::registers::*;
-use lock::Mutex;
+use lock::IrqLock;
 use tock_registers::interfaces::{Readable, Writeable};
 
-static KERNEL_PT: spin::Lazy<Mutex<PageTable>> = spin::Lazy::new(|| {
-    Mutex::new(init_kernel_page_table().unwrap_or_else(|e| {
+static KERNEL_PT: spin::Lazy<IrqLock<PageTable>> = spin::Lazy::new(|| {
+    IrqLock::new(init_kernel_page_table().unwrap_or_else(|e| {
         panic!("init_kernel_page_table failed: {:?}", e);
     }))
 });

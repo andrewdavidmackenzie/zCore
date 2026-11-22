@@ -4,7 +4,7 @@ use core::mem::size_of;
 use futures::channel::oneshot;
 use hal::TrapReason;
 use hal_impl::context::UserContext;
-use lock::Mutex;
+use lock::IrqLock;
 
 use super::{Job, Process, Task, Thread, ThreadState};
 use crate::ipc::{Channel, MessagePacket};
@@ -14,7 +14,7 @@ use crate::{impl_kobject, ZxError, ZxResult};
 /// Kernel-owned exception channel endpoint.
 pub struct Exceptionate {
     type_: ExceptionChannelType,
-    inner: Mutex<ExceptionateInner>,
+    inner: IrqLock<ExceptionateInner>,
 }
 
 enum ExceptionateInner {
@@ -31,7 +31,7 @@ impl Exceptionate {
     pub(super) fn new(type_: ExceptionChannelType) -> Arc<Self> {
         Arc::new(Exceptionate {
             type_,
-            inner: Mutex::new(ExceptionateInner::Init),
+            inner: IrqLock::new(ExceptionateInner::Init),
         })
     }
 
@@ -428,7 +428,7 @@ pub struct Exception {
     thread: Arc<Thread>,
     type_: ExceptionType,
     report: ExceptionReport,
-    inner: Mutex<ExceptionInner>,
+    inner: IrqLock<ExceptionInner>,
 }
 
 struct ExceptionInner {
@@ -444,7 +444,7 @@ impl Exception {
             thread: thread.clone(),
             type_,
             report: ExceptionReport::new(type_, cx),
-            inner: Mutex::new(ExceptionInner {
+            inner: IrqLock::new(ExceptionInner {
                 current_channel_type: ExceptionChannelType::None,
                 handled: false,
                 second_chance: false,
@@ -466,7 +466,7 @@ impl Exception {
             thread: thread.clone(),
             type_,
             report,
-            inner: Mutex::new(ExceptionInner {
+            inner: IrqLock::new(ExceptionInner {
                 current_channel_type: ExceptionChannelType::None,
                 handled: false,
                 second_chance: false,
@@ -480,7 +480,7 @@ impl Exception {
             thread: thread.clone(),
             type_: ExceptionType::User,
             report: ExceptionReport::new_user(synth_code, synth_data),
-            inner: Mutex::new(ExceptionInner {
+            inner: IrqLock::new(ExceptionInner {
                 current_channel_type: ExceptionChannelType::None,
                 handled: false,
                 second_chance: false,
@@ -494,7 +494,7 @@ impl Exception {
             thread: thread.clone(),
             type_: ExceptionType::PolicyError,
             report: ExceptionReport::new_policy(synth_code, synth_data),
-            inner: Mutex::new(ExceptionInner {
+            inner: IrqLock::new(ExceptionInner {
                 current_channel_type: ExceptionChannelType::None,
                 handled: false,
                 second_chance: false,
@@ -814,7 +814,7 @@ mod tests {
         let exception = Exception::new(&thread, ExceptionType::Synth, None);
 
         // This is used to verify that exceptions are handled in a specific order
-        let handled_order = Arc::new(Mutex::new(Vec::<usize>::new()));
+        let handled_order = Arc::new(IrqLock::new(Vec::<usize>::new()));
 
         let create_handler = |exceptionate: &Arc<Exceptionate>,
                               should_receive: bool,

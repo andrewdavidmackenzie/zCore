@@ -30,7 +30,7 @@
 //! compile-fail acceptance test below.
 
 use lock::lockgraph::{LockAfter, LockFor, Unlocked};
-use lock::{impl_lock_after, MutexGuard};
+use lock::{impl_lock_after, IrqLockGuard};
 
 use super::futex::{Futex, FutexInner, Waiter, WaiterInner};
 
@@ -57,7 +57,7 @@ impl_lock_after!(FutexInnerLock => WaiterInnerLock);
 
 impl LockFor<FutexInnerLock> for Futex {
     type Data = FutexInner;
-    type Guard<'l> = MutexGuard<'l, FutexInner>;
+    type Guard<'l> = IrqLockGuard<'l, FutexInner>;
     fn lock(&self) -> Self::Guard<'_> {
         self.inner.lock()
     }
@@ -65,7 +65,7 @@ impl LockFor<FutexInnerLock> for Futex {
 
 impl LockFor<WaiterInnerLock> for Waiter {
     type Data = WaiterInner;
-    type Guard<'l> = MutexGuard<'l, WaiterInner>;
+    type Guard<'l> = IrqLockGuard<'l, WaiterInner>;
     fn lock(&self) -> Self::Guard<'_> {
         self.inner.lock()
     }
@@ -95,8 +95,8 @@ impl LockFor<WaiterInnerLock> for Waiter {
 #[cfg(test)]
 #[allow(dead_code)] // constructed by the compile-fail doc test above
 pub(crate) struct FutexFixture {
-    futex: lock::Mutex<u32>,
-    waiter: lock::Mutex<u64>,
+    futex: lock::IrqLock<u32>,
+    waiter: lock::IrqLock<u64>,
 }
 
 #[cfg(test)]
@@ -104,8 +104,8 @@ impl FutexFixture {
     #[allow(dead_code)] // used by the compile-fail doc test above
     pub(crate) fn new() -> Self {
         FutexFixture {
-            futex: lock::Mutex::new(1),
-            waiter: lock::Mutex::new(2),
+            futex: lock::IrqLock::new(1),
+            waiter: lock::IrqLock::new(2),
         }
     }
 }
@@ -113,7 +113,7 @@ impl FutexFixture {
 #[cfg(test)]
 impl LockFor<FutexInnerLock> for FutexFixture {
     type Data = u32;
-    type Guard<'l> = MutexGuard<'l, u32>;
+    type Guard<'l> = IrqLockGuard<'l, u32>;
     fn lock(&self) -> Self::Guard<'_> {
         self.futex.lock()
     }
@@ -122,7 +122,7 @@ impl LockFor<FutexInnerLock> for FutexFixture {
 #[cfg(test)]
 impl LockFor<WaiterInnerLock> for FutexFixture {
     type Data = u64;
-    type Guard<'l> = MutexGuard<'l, u64>;
+    type Guard<'l> = IrqLockGuard<'l, u64>;
     fn lock(&self) -> Self::Guard<'_> {
         self.waiter.lock()
     }

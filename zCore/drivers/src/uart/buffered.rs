@@ -1,6 +1,6 @@
 use alloc::{boxed::Box, collections::VecDeque, string::String, sync::Arc};
 
-use lock::Mutex;
+use lock::IrqLock;
 
 use crate::scheme::{impl_event_scheme, Scheme, UartScheme};
 use crate::utils::EventListener;
@@ -10,7 +10,7 @@ const BUF_CAPACITY: usize = 4096;
 
 pub struct BufferedUart {
     inner: Arc<dyn UartScheme>,
-    buf: Mutex<VecDeque<u8>>,
+    buf: IrqLock<VecDeque<u8>>,
     listener: EventListener,
     name: String,
 }
@@ -22,7 +22,7 @@ impl BufferedUart {
         let ret = Arc::new(Self {
             inner: uart.clone(),
             name: alloc::format!("{}-buffered", uart.name()),
-            buf: Mutex::new(VecDeque::with_capacity(BUF_CAPACITY)),
+            buf: IrqLock::new(VecDeque::with_capacity(BUF_CAPACITY)),
             listener: EventListener::new(),
         });
         let cloned = ret.clone();

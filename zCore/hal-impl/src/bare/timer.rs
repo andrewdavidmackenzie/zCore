@@ -20,7 +20,7 @@
 use alloc::boxed::Box;
 use core::time::Duration;
 
-use lock::Mutex;
+use lock::IrqLock;
 use naive_timer::Timer;
 
 /// Maximum interval between timer interrupts (backstop for scheduler
@@ -29,7 +29,7 @@ use naive_timer::Timer;
 /// re-evaluate task priorities.
 const MAX_TIMER_INTERVAL: Duration = Duration::from_millis(10);
 
-static NAIVE_TIMER: spin::Lazy<Mutex<Timer>> = spin::Lazy::new(|| Mutex::new(Timer::default()));
+static NAIVE_TIMER: spin::Lazy<IrqLock<Timer>> = spin::Lazy::new(|| IrqLock::new(Timer::default()));
 
 /// Program this CPU's hardware timer to the next pending deadline,
 /// capped at `now + MAX_TIMER_INTERVAL`.

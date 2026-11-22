@@ -6,7 +6,7 @@
 
 use crate::object::*;
 use alloc::sync::Arc;
-use lock::Mutex;
+use lock::IrqLock;
 
 /// Signal asserted when the counter value is > 0 (bit 4 = 0x10).
 const COUNTER_POSITIVE: Signal = Signal::COUNTER_POSITIVE;
@@ -20,7 +20,7 @@ const COUNTER_NON_POSITIVE: Signal = Signal::COUNTER_NON_POSITIVE;
 pub struct Counter {
     base: KObjectBase,
     _counter: CountHelper,
-    value: Mutex<i64>,
+    value: IrqLock<i64>,
 }
 
 impl_kobject!(Counter
@@ -36,7 +36,7 @@ impl Counter {
         Arc::new(Counter {
             base: KObjectBase::with_signal(COUNTER_NON_POSITIVE),
             _counter: CountHelper::new(),
-            value: Mutex::new(0),
+            value: IrqLock::new(0),
         })
     }
 

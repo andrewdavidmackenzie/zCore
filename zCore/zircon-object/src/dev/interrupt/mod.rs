@@ -11,14 +11,14 @@ use {
         sync::atomic::{AtomicU64, Ordering},
         task::{Context, Poll},
     },
-    lock::Mutex,
+    lock::IrqLock,
 };
 
 /// Global registry of wake sources (interrupt objects with WAKE_VECTOR).
-static WAKE_SOURCES: Mutex<Vec<WakeSourceEntry>> = Mutex::new(Vec::new());
+static WAKE_SOURCES: IrqLock<Vec<WakeSourceEntry>> = IrqLock::new(Vec::new());
 
 /// Pending deadline timer wake entry from a previous non-REPORT_ONLY suspend.
-static DEADLINE_PENDING: Mutex<Option<WakeReportEntry>> = Mutex::new(None);
+static DEADLINE_PENDING: IrqLock<Option<WakeReportEntry>> = IrqLock::new(None);
 
 /// A registered wake source entry.
 pub struct WakeSourceEntry {
@@ -302,14 +302,14 @@ pub struct Interrupt {
     base: KObjectBase,
     has_vcpu: bool,
     flags: InterruptFlags,
-    inner: Mutex<InterruptInner>,
+    inner: IrqLock<InterruptInner>,
     trait_: Box<dyn InterruptTrait>,
     /// Internal event used to wake `wait()` without affecting observable
     /// signal state. Uses `SIGNALED` (bit 3) as the wakeup signal.
     wait_event: KObjectBase,
     /// Optional callback invoked when the last handle is closed.
     /// Used by MSI interrupts to release the vector in the MsiAllocation.
-    on_close: Mutex<Option<Box<dyn FnOnce() + Send + Sync>>>,
+    on_close: IrqLock<Option<Box<dyn FnOnce() + Send + Sync>>>,
 }
 
 #[derive(Default)]
@@ -373,7 +373,7 @@ impl Interrupt {
             inner: Default::default(),
             trait_: VirtualInterrupt::new(),
             wait_event: KObjectBase::new(),
-            on_close: Mutex::new(None),
+            on_close: IrqLock::new(None),
         })
     }
 
@@ -394,7 +394,7 @@ impl Interrupt {
             inner: Default::default(),
             trait_: EventInterrupt::new(vector),
             wait_event: KObjectBase::new(),
-            on_close: Mutex::new(None),
+            on_close: IrqLock::new(None),
         });
         let interrupt_clone = interrupt.clone();
         interrupt

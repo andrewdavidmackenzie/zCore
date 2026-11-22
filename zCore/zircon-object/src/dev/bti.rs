@@ -4,7 +4,7 @@ use {
     crate::vm::*,
     alloc::{sync::Arc, vec::Vec},
     dev::Iommu,
-    lock::Mutex,
+    lock::IrqLock,
 };
 
 /// Bus Transaction Initiator.
@@ -16,7 +16,7 @@ pub struct BusTransactionInitiator {
     iommu: Arc<Iommu>,
     #[allow(dead_code)]
     bti_id: u64,
-    inner: Mutex<BtiInner>,
+    inner: IrqLock<BtiInner>,
 }
 
 #[derive(Default)]
@@ -34,7 +34,7 @@ impl BusTransactionInitiator {
             base: KObjectBase::new(),
             iommu,
             bti_id,
-            inner: Mutex::new(BtiInner::default()),
+            inner: IrqLock::new(BtiInner::default()),
         })
     }
 

@@ -10,7 +10,7 @@ use crate::prelude::IrqHandler;
 use crate::scheme::{IrqScheme, Scheme};
 use crate::utils::IrqManager;
 use crate::DeviceResult;
-use lock::Mutex;
+use lock::IrqLock;
 
 // GICD register offsets (same as GICv2 for most)
 const GICD_CTLR: u32 = 0x000;
@@ -48,7 +48,7 @@ pub struct IntController {
     gicd_base: usize,
     gicr_base: usize,
     nirqs: u32,
-    manager: Mutex<IrqManager<1024>>,
+    manager: IrqLock<IrqManager<1024>>,
 }
 
 unsafe impl Send for IntController {}
@@ -60,7 +60,7 @@ impl IntController {
             gicd_base,
             gicr_base,
             nirqs: 0,
-            manager: Mutex::new(IrqManager::new(0..1024)),
+            manager: IrqLock::new(IrqManager::new(0..1024)),
         }
     }
 

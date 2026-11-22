@@ -13,7 +13,7 @@ use crate::mutex::KernelMutex;
 use crate::object::*;
 use core::sync::atomic::{fence, Ordering};
 use hal_impl::timer::timer_now;
-use lock::Mutex;
+use lock::IrqLock;
 
 /// Clock creation options.
 pub const ZX_CLOCK_OPT_MONOTONIC: u64 = 1 << 0;
@@ -58,7 +58,7 @@ struct ClockStatePage {
 /// A Zircon clock kernel object.
 pub struct Clock {
     base: KObjectBase,
-    inner: Mutex<ClockInner>,
+    inner: IrqLock<ClockInner>,
     /// Options set at creation time.
     options: u64,
     /// Shared state page for `zx_vmar_map_clock` (issue #831).
@@ -112,7 +112,7 @@ impl Clock {
         }
         Ok(Clock {
             base: KObjectBase::new(),
-            inner: Mutex::new(inner),
+            inner: IrqLock::new(inner),
             options,
             state: KernelMutex::new(ClockStatePage {
                 vmo: None,

@@ -1,7 +1,7 @@
 use crate::{common::vm::*, mem::PhysFrame, MMUFlags, PhysAddr, VirtAddr};
 use alloc::vec::Vec;
 use core::{fmt::Debug, marker::PhantomData, slice};
-use lock::Mutex;
+use lock::IrqLock;
 
 pub trait PageTableLevel: Sync + Send {
     const LEVEL: usize;
@@ -163,7 +163,7 @@ impl<L: PageTableLevel, PTE: GenericPTE> PageTableImpl<L, PTE> {
 
     #[allow(unused)]
     fn dump(&self, limit: usize, print_fn: impl Fn(core::fmt::Arguments)) {
-        static LOCK: Mutex<()> = Mutex::new(());
+        static LOCK: IrqLock<()> = IrqLock::new(());
         let _lock = LOCK.lock();
 
         print_fn(format_args!("Root: {:x?}\n", self.table_phys()));

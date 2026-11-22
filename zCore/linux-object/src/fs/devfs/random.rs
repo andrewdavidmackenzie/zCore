@@ -3,7 +3,7 @@
 use alloc::sync::Arc;
 use core::any::Any;
 
-use lock::Mutex;
+use lock::IrqLock;
 use zcore_devfs::DevFS;
 use zcore_fs::vfs::*;
 
@@ -17,7 +17,7 @@ pub struct RandomINodeData {
 pub struct RandomINode {
     secure: bool,
     inode_id: usize,
-    data: Arc<Mutex<RandomINodeData>>,
+    data: Arc<IrqLock<RandomINodeData>>,
 }
 
 impl RandomINode {
@@ -28,7 +28,7 @@ impl RandomINode {
         RandomINode {
             secure,
             inode_id: DevFS::new_inode_id(),
-            data: Arc::new(Mutex::new(RandomINodeData { seed: 1 })),
+            data: Arc::new(IrqLock::new(RandomINodeData { seed: 1 })),
         }
     }
 }

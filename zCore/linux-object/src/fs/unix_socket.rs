@@ -21,7 +21,7 @@ use core::any::Any;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
-use lock::Mutex;
+use lock::IrqLock;
 use zcore_fs::vfs::PollStatus;
 use zircon_object::impl_kobject;
 use zircon_object::object::*;
@@ -34,16 +34,17 @@ use crate::error::{LxError, LxResult};
 /// `connect(path)`, it looks up the listener here and pushes a
 /// new connection into the queue.
 /// Global registry — public for accept() in linux-syscall.
-pub static UNIX_LISTENERS: Mutex<BTreeMap<String, Arc<UnixListener>>> = Mutex::new(BTreeMap::new());
+pub static UNIX_LISTENERS: IrqLock<BTreeMap<String, Arc<UnixListener>>> =
+    IrqLock::new(BTreeMap::new());
 
 /// A Unix domain socket listener (created by bind + listen).
 pub struct UnixListener {
     /// Pending connections waiting to be accept()ed.
     /// Each entry is one end of a connected pair — the other end
     /// was returned to the connecting client.
-    queue: Mutex<VecDeque<Arc<UnixSocketEnd>>>,
+    queue: IrqLock<VecDeque<Arc<UnixSocketEnd>>>,
     /// Notifies accept() when a new connection arrives.
-    eventbus: Mutex<EventBus>,
+    eventbus: IrqLock<EventBus>,
     /// Maximum queue length (backlog from listen()).
     _backlog: usize,
 }
@@ -51,8 +52,8 @@ pub struct UnixListener {
 impl UnixListener {
     fn new(backlog: usize) -> Self {
         Self {
-            queue: Mutex::new(VecDeque::new()),
-            eventbus: Mutex::new(EventBus::default()),
+            queue: IrqLock::new(VecDeque::new()),
+            eventbus: IrqLock::new(EventBus::default()),
             _backlog: backlog,
         }
     }
@@ -136,11 +137,11 @@ struct ChannelData {
 /// of the other.
 pub struct UnixSocketEnd {
     base: KObjectBase,
-    flags: Mutex<OpenFlags>,
+    flags: IrqLock<OpenFlags>,
     /// Channel we read from (peer writes here).
-    read_channel: Arc<Mutex<ChannelData>>,
+    read_channel: Arc<IrqLock<ChannelData>>,
     /// Channel we write to (peer reads from here).
-    write_channel: Arc<Mutex<ChannelData>>,
+    write_channel: Arc<IrqLock<ChannelData>>,
 }
 
 impl_kobject!(UnixSocketEnd);
@@ -151,13 +152,13 @@ impl UnixSocketEnd {
     /// Returns `(end_a, end_b)` where writing to `end_a` can be read
     /// from `end_b` and vice versa.
     pub fn create_pair() -> (Arc<Self>, Arc<Self>) {
-        let channel_ab = Arc::new(Mutex::new(ChannelData {
+        let channel_ab = Arc::new(IrqLock::new(ChannelData {
             buf: VecDeque::new(),
             ancillary_fds: VecDeque::new(),
             eventbus: EventBus::default(),
             ref_count: 2,
         }));
-        let channel_ba = Arc::new(Mutex::new(ChannelData {
+        let channel_ba = Arc::new(IrqLock::new(ChannelData {
             buf: VecDeque::new(),
             ancillary_fds: VecDeque::new(),
             eventbus: EventBus::default(),
@@ -165,13 +166,13 @@ impl UnixSocketEnd {
         }));
         let a = Arc::new(UnixSocketEnd {
             base: KObjectBase::new(),
-            flags: Mutex::new(OpenFlags::RDWR),
+            flags: IrqLock::new(OpenFlags::RDWR),
             read_channel: channel_ab.clone(),
             write_channel: channel_ba.clone(),
         });
         let b = Arc::new(UnixSocketEnd {
             base: KObjectBase::new(),
-            flags: Mutex::new(OpenFlags::RDWR),
+            flags: IrqLock::new(OpenFlags::RDWR),
             read_channel: channel_ba,
             write_channel: channel_ab,
         });
@@ -276,7 +277,7 @@ impl FileLike for UnixSocketEnd {
         self.write_channel.lock().ref_count += 1;
         Ok(Arc::new(UnixSocketEnd {
             base: KObjectBase::new(),
-            flags: Mutex::new(*self.flags.lock()),
+            flags: IrqLock::new(*self.flags.lock()),
             read_channel: self.read_channel.clone(),
             write_channel: self.write_channel.clone(),
         }))

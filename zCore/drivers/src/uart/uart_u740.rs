@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 use core::convert::TryInto;
 use core::ops::{BitAnd, BitOr, Not};
-use lock::Mutex;
+use lock::IrqLock;
 
 use crate::io::{Io, Mmio, ReadOnly};
 use crate::scheme::{impl_event_scheme, Scheme, UartScheme};
@@ -129,7 +129,7 @@ pub struct UartU740Mmio<V: 'static>
 where
     V: Copy + BitAnd<Output = V> + BitOr<Output = V> + Not<Output = V>,
 {
-    inner: Mutex<&'static mut UartU740Inner<Mmio<V>>>,
+    inner: IrqLock<&'static mut UartU740Inner<Mmio<V>>>,
     listener: EventListener,
 }
 
@@ -198,7 +198,7 @@ where
         let uart: &mut UartU740Inner<Mmio<V>> = Mmio::<V>::from_base_as(base);
         uart.init();
         Self {
-            inner: Mutex::new(uart),
+            inner: IrqLock::new(uart),
             listener: EventListener::new(),
         }
     }

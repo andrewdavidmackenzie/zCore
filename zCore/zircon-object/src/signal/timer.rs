@@ -5,7 +5,7 @@ use crate::object::*;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::time::Duration;
-use lock::Mutex;
+use lock::IrqLock;
 
 /// An object that may be signaled at some point in the future
 ///
@@ -18,7 +18,7 @@ pub struct Timer {
     _counter: CountHelper,
     #[allow(dead_code)]
     slack: Slack,
-    inner: Mutex<TimerInner>,
+    inner: IrqLock<TimerInner>,
 }
 
 impl_kobject!(Timer);
@@ -56,7 +56,7 @@ impl Timer {
             base: KObjectBase::default(),
             _counter: CountHelper::new(),
             slack,
-            inner: Mutex::default(),
+            inner: IrqLock::default(),
         })
     }
 
