@@ -82,12 +82,16 @@ impl Futex {
     ///
     /// The owner of the futex is set to nothing, regardless of the wake count.
     pub fn wake(&self, wake_count: usize) -> usize {
-        // Collect waiters under the futex lock, then wake them after
-        // releasing it. This avoids an ABBA deadlock: wake() holds
-        // FutexInner then WaiterInner, while FutexFuture::poll() holds
-        // WaiterInner then FutexInner.
+        // 5F-2: graph-checked futex acquisition. Collect waiters under
+        // the futex lock, then wake them after releasing it — the
+        // collect-then-act pattern that avoids the #102 ABBA.
+        // (FutexInnerLock → WaiterInnerLock is the declared edge; the
+        // graph would permit nested acquisition in that direction,
+        // but the code deliberately releases before waking to keep
+        // the futex lock hold time minimal.)
         let waiters: alloc::vec::Vec<_> = {
-            let mut inner = self.inner.lock();
+            let mut locked = lock::lockgraph::Locked::new(self);
+            let mut inner = locked.lock_and::<super::lock_order::FutexInnerLock>().0;
             inner.set_owner(None);
             let mut collected = alloc::vec::Vec::new();
             for _ in 0..wake_count {
@@ -159,7 +163,14 @@ impl Futex {
             type Output = ZxResult;
 
             fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-                let mut inner = self.waiter.inner.lock();
+                // 5F-2: graph-checked waiter acquisition. The poll
+                // path deliberately does NOT hold WaiterInner across
+                // FutexInner — the collect-then-act pattern. Each
+                // acquisition below enters from Unlocked (or from a
+                // context whose previous guard has been dropped),
+                // keeping the #102 ABBA structurally impossible.
+                let mut locked = lock::lockgraph::Locked::new(self.waiter.as_ref());
+                let mut inner = locked.lock_and::<super::lock_order::WaiterInnerLock>().0;
                 // check wakeup
                 if inner.woken {
                     return Poll::Ready(Ok(()));
@@ -178,18 +189,25 @@ impl Futex {
                     drop(inner);
 
                     // Now lock the futex and do the value check +
-                    // waiter registration.
-                    let mut futex = futex_ref.inner.lock();
+                    // waiter registration. Graph-checked: the futex
+                    // lock is acquired from a fresh context (the
+                    // waiter guard was dropped above).
+                    let mut futex_locked = lock::lockgraph::Locked::new(futex_ref.as_ref());
+                    let mut futex = futex_locked
+                        .lock_and::<super::lock_order::FutexInnerLock>()
+                        .0;
                     let value = futex_ref.load_user_value();
                     if value != self.current_value {
                         // Value changed — cancel the wait. Remove the
                         // waker we just stored.
-                        let mut inner2 = self.waiter.inner.lock();
+                        let mut locked2 = lock::lockgraph::Locked::new(self.waiter.as_ref());
+                        let mut inner2 = locked2.lock_and::<super::lock_order::WaiterInnerLock>().0;
                         inner2.waker.take();
                         return Poll::Ready(Err(ZxError::BAD_STATE));
                     }
                     if !futex.is_valid_new_owner(&self.new_owner, futex_ref.user_addr) {
-                        let mut inner2 = self.waiter.inner.lock();
+                        let mut locked2 = lock::lockgraph::Locked::new(self.waiter.as_ref());
+                        let mut inner2 = locked2.lock_and::<super::lock_order::WaiterInnerLock>().0;
                         inner2.waker.take();
                         return Poll::Ready(Err(ZxError::INVALID_ARGS));
                     }
@@ -220,7 +238,8 @@ impl Futex {
                     // that case and returns Ready immediately instead
                     // of parking on a notification that already
                     // happened.
-                    let inner2 = self.waiter.inner.lock();
+                    let mut locked2 = lock::lockgraph::Locked::new(self.waiter.as_ref());
+                    let inner2 = locked2.lock_and::<super::lock_order::WaiterInnerLock>().0;
                     if inner2.woken {
                         return Poll::Ready(Ok(()));
                     }
@@ -233,17 +252,44 @@ impl Futex {
         // if we wake without be woken, remove myself from the waiter_queue
         impl Drop for FutexFuture {
             fn drop(&mut self) {
-                let inner = self.waiter.inner.lock();
-                if !inner.woken {
-                    let futex_arc = inner.futex.clone();
-                    let mut futex = futex_arc.inner.lock();
-                    if let Some(pos) = futex
-                        .waiter_queue
-                        .iter()
-                        .position(|x| Arc::ptr_eq(x, &self.waiter))
-                    {
-                        futex.waiter_queue.swap_remove_back(pos);
+                // 5F-2: restructured from the original nested
+                // acquisition (WaiterInner held across FutexInner —
+                // the #102 ABBA direction) to collect-then-act.
+                // The original nesting prevented a race where wake()
+                // pops the waiter between dropping WaiterInner and
+                // taking FutexInner. The restructure handles this by
+                // checking queue membership under FutexInner: if
+                // wake() already popped us, we won't find ourselves
+                // in the queue and the removal is a no-op.
+                let futex_arc = {
+                    let mut locked = lock::lockgraph::Locked::new(self.waiter.as_ref());
+                    let inner = locked.lock_and::<super::lock_order::WaiterInnerLock>().0;
+                    if inner.woken {
+                        // Already woken — wake() popped us from the
+                        // queue. Just clear tracking.
+                        if let Some(ref thread) = self.waiter.thread {
+                            thread.set_blocking_futex(0);
+                        }
+                        return;
                     }
+                    inner.futex.clone()
+                }; // WaiterInner released
+
+                // Take FutexInner from a fresh context (legal — the
+                // waiter guard was dropped above).
+                let mut futex_locked = lock::lockgraph::Locked::new(futex_arc.as_ref());
+                let mut futex = futex_locked
+                    .lock_and::<super::lock_order::FutexInnerLock>()
+                    .0;
+                // Check queue membership: if a wake raced between
+                // releasing WaiterInner and acquiring FutexInner and
+                // already popped us, this is a no-op.
+                if let Some(pos) = futex
+                    .waiter_queue
+                    .iter()
+                    .position(|x| alloc::sync::Arc::ptr_eq(x, &self.waiter))
+                {
+                    futex.waiter_queue.swap_remove_back(pos);
                     // Priority inheritance: recompute owner's boost
                     // after removing a waiter.
                     if let Some(ref owner) = futex.owner {
@@ -286,10 +332,12 @@ impl Futex {
     /// If there is at least one thread to wake, the owner of the futex will be
     /// set to the thread which was woken. Otherwise, the futex will have no owner.
     pub fn wake_single_owner(&self) {
-        // Pop waiter and set owner under the lock, then wake after
-        // releasing to avoid ABBA deadlock (see wake() comment).
+        // 5F-2: graph-checked. Pop waiter and set owner under the
+        // lock, then wake after releasing (collect-then-act — the
+        // same pattern as wake()).
         let (waiter_to_wake, new_owner) = {
-            let mut inner = self.inner.lock();
+            let mut locked = lock::lockgraph::Locked::new(self);
+            let mut inner = locked.lock_and::<super::lock_order::FutexInnerLock>().0;
             let popped = inner.waiter_queue.pop_front();
             let owner = popped.as_ref().and_then(|w| w.thread.clone());
             inner.set_owner(owner.clone());
@@ -321,9 +369,12 @@ impl Futex {
     ///
     /// The two futex locks are acquired in a consistent order (by pointer
     /// identity) to prevent deadlocks between concurrent requeue calls
-    /// with swapped source/target addresses. Note: the broader lock
-    /// ordering between `Futex::inner` and `WaiterInner` is a pre-existing
-    /// concern not addressed here (see issue #102).
+    /// with swapped source/target addresses. This is a same-type
+    /// protocol — not graph-expressible (which futex is "first" depends
+    /// on runtime addresses), like the socket endpoint pair and the COW
+    /// tree. The FutexInner ↔ WaiterInner ordering is enforced by the
+    /// lockgraph (5F-1); the #102 concern is resolved by the
+    /// collect-then-act restructuring in wake/poll/Drop (5F-2).
     pub fn requeue(
         &self,
         current_value: i32,
@@ -479,7 +530,13 @@ pub struct WaiterInner {
 impl Waiter {
     /// Wake up the waiting thread.
     fn wake(&self) {
-        let mut inner = self.inner.lock();
+        // 5F-2: graph-checked waiter acquisition. Called from
+        // Futex::wake() AFTER the futex lock is released (the
+        // collect-then-act pattern). Enters from Unlocked or from a
+        // FutexInnerLock context — both legal (FutexInner → WaiterInner
+        // is the declared edge).
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut inner = locked.lock_and::<super::lock_order::WaiterInnerLock>().0;
         inner.woken = true;
         // The waker may not be set yet if wake() races with the
         // first poll of FutexFuture (between dropping the futex lock
@@ -500,7 +557,9 @@ impl Waiter {
     /// the tracking, we must not restore it.
     fn reset_futex(&self, futex: Arc<Futex>) {
         let new_addr = futex.user_addr;
-        let mut inner = self.inner.lock();
+        // 5F-2: graph-checked waiter acquisition (leaf).
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut inner = locked.lock_and::<super::lock_order::WaiterInnerLock>().0;
         let still_active = !inner.woken;
         inner.futex = futex;
         drop(inner);
