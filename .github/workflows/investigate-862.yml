@@ -2,7 +2,8 @@ name: investigate-862
 
 # Diagnostic workflow for issue #862: macOS-aarch64 test binaries
 # SIGTRAP intermittently. Heap corruption (malloc freelist, brk 1).
-# Phase 5: large guard-malloc campaign to catch the corrupting write.
+# Phase 6: AddressSanitizer build — catch the corrupting write with a
+# report (guard-malloc changed timing: 0/150, ASAN preserves it).
 on:
   push:
     branches: [core_tests_flaky_862]
@@ -11,7 +12,7 @@ on:
 jobs:
   macos-sigtrap-investigation:
     runs-on: macos-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,46 +26,36 @@ jobs:
         with:
           key: investigate-862
 
-      - name: Build test binaries
+      - name: Build test binary with AddressSanitizer
         working-directory: zCore
+        env:
+          RUSTFLAGS: "-Zsanitizer=address"
+          CARGO_TARGET_DIR: /tmp/asan-target
         run: |
           cargo test -p zircon-object --features libos,aspace-separate --lib --no-run --message-format=json 2>/dev/null | \
             python3 -c "import sys,json; [print(json.loads(l).get('executable') or '') for l in sys.stdin if '\"executable\"' in l]" | grep -v '^$' > /tmp/testbins.txt
           cat /tmp/testbins.txt
 
-      - name: Guard-malloc campaign (parallel + single-thread, contention)
+      - name: ASAN contended campaign
         run: |
           mkdir -p /tmp/crashes
           BIN=$(head -1 /tmp/testbins.txt)
           for i in 1 2 3 4 5 6; do (while :; do :; done) & echo $! >> /tmp/burners.pid; done
-          total=0; trapped=0
-          for round in $(seq 1 100); do
+          total=0; caught=0
+          for round in $(seq 1 60); do
             total=$((total+1))
-            rc=0; DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib "$BIN" > /tmp/gm-out.txt 2>&1 || rc=$?
+            rc=0; ASAN_OPTIONS=detect_leaks=0:abort_on_error=1 "$BIN" > /tmp/asan-out.txt 2>&1 || rc=$?
             if [ $rc -ne 0 ]; then
-              trapped=$((trapped+1))
-              echo "=== GM-PARALLEL CAUGHT round=$round rc=$rc ==="
-              tail -12 /tmp/gm-out.txt
+              caught=$((caught+1))
+              echo "=== ASAN CAUGHT round=$round rc=$rc ==="
+              head -60 /tmp/asan-out.txt
               sleep 2
               report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
-              [ -n "$report" ] && cp "$report" "/tmp/crashes/gm-parallel-round${round}.ips" || true
+              [ -n "$report" ] && cp "$report" "/tmp/crashes/asan-round${round}.ips" || true
+              cp /tmp/asan-out.txt "/tmp/crashes/asan-round${round}.txt" || true
             fi
           done
-          echo "=== GM-PARALLEL RESULT: $trapped trapped of $total ==="
-          total=0; trapped=0
-          for round in $(seq 1 50); do
-            total=$((total+1))
-            rc=0; DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib "$BIN" --test-threads=1 > /tmp/gm-out.txt 2>&1 || rc=$?
-            if [ $rc -ne 0 ]; then
-              trapped=$((trapped+1))
-              echo "=== GM-ST CAUGHT round=$round rc=$rc ==="
-              tail -12 /tmp/gm-out.txt
-              sleep 2
-              report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
-              [ -n "$report" ] && cp "$report" "/tmp/crashes/gm-st-round${round}.ips" || true
-            fi
-          done
-          echo "=== GM-ST RESULT: $trapped trapped of $total ==="
+          echo "=== ASAN RESULT: $caught caught of $total ==="
 
       - name: Cleanup burners
         if: always()
