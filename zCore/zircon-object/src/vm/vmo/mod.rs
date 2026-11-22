@@ -2433,14 +2433,20 @@ impl VmObject {
         // Acquire parent Arc first, drop the guard, then call —
         // avoids child→parent lock ordering deadlocks.
         if self.trait_.is_reference() {
-            let parent = self.inner.lock().parent.upgrade();
+            let mut locked = lock::lockgraph::Locked::new(self);
+            let parent = locked
+                .lock_and::<super::lock_order::VmObjectInnerLock>()
+                .0
+                .parent
+                .upgrade();
             if let Some(parent) = parent {
                 return parent.set_content_size(size);
             }
         }
         let old;
         {
-            let mut inner = self.inner.lock();
+            let mut locked = lock::lockgraph::Locked::new(self);
+            let mut inner = locked.lock_and::<super::lock_order::VmObjectInnerLock>().0;
             old = inner.content_size;
             inner.content_size = size;
         }
@@ -2453,7 +2459,10 @@ impl VmObject {
             let start_page = size / PAGE_SIZE;
             let removed_pages = old.saturating_sub(size).div_ceil(PAGE_SIZE);
             if removed_pages > 0 {
-                let inner = self.inner.lock();
+                // 5E-3: graph-checked — the range_change below is the
+                // VMO → try-Mapping → PT path (the #711 path).
+                let mut locked = lock::lockgraph::Locked::new(self);
+                let inner = locked.lock_and::<super::lock_order::VmObjectInnerLock>().0;
                 for map_weak in inner.mappings.iter() {
                     if let Some(map) = map_weak.upgrade() {
                         map.range_change(start_page, removed_pages, RangeChangeOp::Unmap);
@@ -2551,7 +2560,15 @@ impl VmObject {
     /// Invalidate PTEs in all mappings of this VMO and its children
     /// for the given range (offset and len in bytes).
     fn invalidate_mappings(&self, offset: usize, len: usize) {
-        let inner = self.inner.lock();
+        // 5E-3: graph-checked VMO acquisition. range_change (below)
+        // takes the mapping via try_lock and the page table — both
+        // downstream of the VMO level per the declared edges
+        // (VMO → Mapping is the eager-map edge; the try_lock is the
+        // #711 defense-in-depth). The child recursion is same-type
+        // (COW tree: collect-then-act — the guard is dropped before
+        // recursing).
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let inner = locked.lock_and::<super::lock_order::VmObjectInnerLock>().0;
         let start_page = offset / PAGE_SIZE;
         let page_count = len / PAGE_SIZE;
         for mapping_weak in &inner.mappings {
