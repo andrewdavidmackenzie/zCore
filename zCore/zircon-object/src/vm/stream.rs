@@ -87,7 +87,11 @@ impl Stream {
 
     /// Read data from the stream at the current seek offset
     pub fn read(&self, data: &mut [u8]) -> ZxResult<usize> {
-        let mut inner = self.inner.lock();
+        // 5E-4: graph-checked stream acquisition. read_at below
+        // takes the VMO lock — Stream → VmObjectInnerLock is the
+        // declared edge.
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut inner = locked.lock_and::<super::lock_order::StreamInnerLock>().0;
         let length = self.read_at(data, inner.seek)?;
         inner.seek += length;
         Ok(length)
@@ -124,7 +128,11 @@ impl Stream {
         if data.is_empty() {
             return Ok(0);
         }
-        let mut inner = self.inner.lock();
+        // 5E-4: graph-checked stream acquisition. append/write_at
+        // below take the VMO lock — Stream → VmObjectInnerLock is
+        // the declared edge.
+        let mut locked = lock::lockgraph::Locked::new(self);
+        let mut inner = locked.lock_and::<super::lock_order::StreamInnerLock>().0;
         let do_append = append || (inner.options & MODE_APPEND) != 0;
         if do_append {
             // Use atomic append to prevent concurrent appenders from
