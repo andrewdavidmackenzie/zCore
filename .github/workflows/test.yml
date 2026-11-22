@@ -36,6 +36,9 @@ jobs:
       - name: Run zircon-object host tests (libos + aspace-separate)
         run: cargo test -p zircon-object --features libos,aspace-separate --no-fail-fast
 
+      - name: Run hal-impl host tests (libos)
+        run: cargo test -p hal-impl --features libos --no-fail-fast
+
       - name: Run Zircon syscall tests (libos)
         run: cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
 
