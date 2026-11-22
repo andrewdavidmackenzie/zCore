@@ -5,6 +5,7 @@ mod counter;
 mod event;
 mod eventpair;
 mod futex;
+pub mod lock_order;
 mod pager;
 mod port;
 mod timer;
