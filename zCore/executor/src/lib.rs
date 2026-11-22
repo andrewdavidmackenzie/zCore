@@ -40,6 +40,7 @@ cfg_if::cfg_if! {
 
 mod context;
 mod executor;
+pub mod lock_order;
 mod runtime;
 pub mod task_collection;
 mod waker_page;
