@@ -123,8 +123,7 @@ static CPU_RUNTIMES: spin::Once<hashbrown::HashMap<u8, Mutex<ExecutorRuntime>>> 
 /// sched_yield).
 /// #862 diagnostics: total force_wake_task invocations (kill sweep /
 /// migration fallback). Compare with per-task wake counts at hang time.
-pub static FORCE_WAKE_COUNT: core::sync::atomic::AtomicU64 =
-    core::sync::atomic::AtomicU64::new(0);
+pub static FORCE_WAKE_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
 static CPU_TASK_COLLECTIONS: spin::Once<hashbrown::HashMap<u8, Arc<TaskCollection>>> =
     spin::Once::new();
