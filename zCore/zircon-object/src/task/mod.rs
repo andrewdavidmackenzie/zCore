@@ -25,13 +25,16 @@ pub use {
 pub trait Task: Sync + Send {
     /// Kill the task. The task do not terminate immediately when killed.
     /// It will terminate after all its children are terminated or some cleanups are finished.
-    fn kill(&self);
+    ///
+    /// Takes `&Arc<Self>` so the lockgraph context (#829) can build
+    /// the upward chain without a weak self-reference.
+    fn kill(self: &Arc<Self>);
 
     /// Suspend the task. Currently only thread or process handles may be suspended.
-    fn suspend(&self);
+    fn suspend(self: &Arc<Self>);
 
     /// Resume the task
-    fn resume(&self);
+    fn resume(self: &Arc<Self>);
 
     /// Get the exceptionate.
     fn exceptionate(&self) -> Arc<Exceptionate>;

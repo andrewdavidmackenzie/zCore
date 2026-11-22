@@ -321,9 +321,10 @@ impl Syscall<'_> {
             if thread.state() == ThreadState::Dying || thread.state() == ThreadState::Dead {
                 return Err(ZxError::BAD_STATE);
             }
-            let thread: Arc<dyn Task> = thread;
-            let token_handle =
-                Handle::new(SuspendToken::create(&thread), Rights::DEFAULT_SUSPEND_TOKEN);
+            let token_handle = Handle::new(
+                SuspendToken::create_for_thread(&thread),
+                Rights::DEFAULT_SUSPEND_TOKEN,
+            );
             token.write(proc.add_handle(token_handle))?;
             return Ok(());
         }
@@ -332,9 +333,8 @@ impl Syscall<'_> {
             if process.id() == proc.id() {
                 return Err(ZxError::NOT_SUPPORTED);
             }
-            let process: Arc<dyn Task> = process;
             let token_handle = Handle::new(
-                SuspendToken::create(&process),
+                SuspendToken::create_for_process(&process),
                 Rights::DEFAULT_SUSPEND_TOKEN,
             );
             token.write(proc.add_handle(token_handle))?;

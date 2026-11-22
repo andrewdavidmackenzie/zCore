@@ -93,11 +93,6 @@ pub struct Process {
     exceptionate: Arc<Exceptionate>,
     debug_exceptionate: Arc<Exceptionate>,
     pub(super) inner: KernelMutex<ProcessInner>,
-    /// Weak self-reference, set at construction. Lets `Task::kill`
-    /// (which only receives `&self`) obtain the `Arc<Process>` needed
-    /// to delegate to the graph-checked `Process::exit`
-    /// (#829 Batch 5D).
-    self_weak: Weak<Self>,
 }
 
 impl_kobject!(Process
@@ -228,7 +223,7 @@ impl Process {
         // On bare-metal, page faults go through the hardware trap handler.
         #[cfg(not(target_os = "none"))]
         crate::vm::vmar::register_cow_vmar(&vmar);
-        let proc = Arc::new_cyclic(|weak| Process {
+        let proc = Arc::new(Process {
             base: KObjectBase::with_name(name),
             _counter: CountHelper::new(),
             job: job.clone(),
@@ -238,12 +233,6 @@ impl Process {
             exceptionate: Exceptionate::new(ExceptionChannelType::Process),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::Debugger),
             inner: KernelMutex::new(ProcessInner::default()),
-            // The weak self-reference is established during
-            // construction (Arc::new_cyclic); note that
-            // `Arc::get_mut` cannot be used for this — a real Weak
-            // existing anywhere blocks get_mut, and the RHS of an
-            // assignment evaluates before the LHS place anyway.
-            self_weak: weak.clone(),
         });
         Job::add_process(job, proc.clone())?;
         Ok(proc)
@@ -272,7 +261,7 @@ impl Process {
             PAGE_SIZE,
         )?;
 
-        let proc = Arc::new_cyclic(|weak| Process {
+        let proc = Arc::new(Process {
             base: KObjectBase::with_name(name),
             _counter: CountHelper::new(),
             job: job.clone(),
@@ -282,8 +271,6 @@ impl Process {
             exceptionate: Exceptionate::new(ExceptionChannelType::Process),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::Debugger),
             inner: KernelMutex::new(ProcessInner::default()),
-            // See create_with_vmar: established via new_cyclic.
-            self_weak: weak.clone(),
         });
 
         // Copy initial properties from source and mark as shared.
@@ -1338,27 +1325,18 @@ impl Process {
 }
 
 impl Task for Process {
-    fn kill(&self) {
-        // Delegate to the graph-checked `Process::exit` via the weak
-        // self-reference: the Task trait only provides `&self`, but
-        // the lockgraph context (`TaskCtx`) needs the `Arc<Process>`
-        // to build the upward chain. If the upgrade fails the process
-        // is already being destroyed and exiting is moot.
-        if let Some(arc) = self.self_weak.upgrade() {
-            Self::exit(&arc, super::TASK_RETCODE_SYSCALL_KILL);
-        }
+    fn kill(self: &Arc<Self>) {
+        // #871: self: &Arc<Self> — the lockgraph context gets the Arc
+        // directly, no weak self-reference needed.
+        Self::exit(self, super::TASK_RETCODE_SYSCALL_KILL);
     }
 
-    fn suspend(&self) {
-        if let Some(arc) = self.self_weak.upgrade() {
-            Self::suspend_checked(&arc);
-        }
+    fn suspend(self: &Arc<Self>) {
+        Self::suspend_checked(self);
     }
 
-    fn resume(&self) {
-        if let Some(arc) = self.self_weak.upgrade() {
-            Self::resume_checked(&arc);
-        }
+    fn resume(self: &Arc<Self>) {
+        Self::resume_checked(self);
     }
 
     fn exceptionate(&self) -> Arc<Exceptionate> {
