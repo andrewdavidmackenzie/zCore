@@ -1,0 +1,69 @@
+name: investigate-862
+
+# Diagnostic workflow for issue #862: macOS-aarch64 test binaries
+# SIGTRAP intermittently. Measures the flake rate and captures macOS
+# crash reports (with backtraces) for trapped runs.
+on:
+  push:
+    branches: [core_tests_flaky_862]
+  workflow_dispatch:
+
+jobs:
+  macos-sigtrap-investigation:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-09-19
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: investigate-862
+
+      - name: Build test binaries
+        working-directory: zCore
+        run: |
+          cargo test -p hal-impl --features libos --no-run --message-format=json 2>/dev/null | \
+            python3 -c "import sys,json; [print(json.loads(l).get('executable') or '') for l in sys.stdin if '\"executable\"' in l]" | grep -v '^$' > /tmp/testbins.txt
+          cargo test -p zircon-object --features libos,aspace-separate --lib --no-run --message-format=json 2>/dev/null | \
+            python3 -c "import sys,json; [print(json.loads(l).get('executable') or '') for l in sys.stdin if '\"executable\"' in l]" | grep -v '^$' >> /tmp/testbins.txt
+          cat /tmp/testbins.txt
+
+      - name: Loop test binaries (capture traps + crash reports)
+        run: |
+          mkdir -p /tmp/crashes
+          total=0; trapped=0
+          for round in $(seq 1 10); do
+            while read -r bin; do
+              total=$((total+1))
+              name=$(basename "$bin" | cut -c1-20)
+              out=$("$bin" 2>&1); rc=$?
+              if [ $rc -ne 0 ]; then
+                trapped=$((trapped+1))
+                echo "=== TRAP round=$round bin=$name rc=$rc ==="
+                echo "$out" | tail -5
+                # macOS writes .ips crash reports here — grab the newest
+                # matching this binary after a short delay
+                sleep 2
+                report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
+                if [ -n "$report" ]; then
+                  cp "$report" "/tmp/crashes/${name}-round${round}.ips" || true
+                fi
+              fi
+            done < /tmp/testbins.txt
+          done
+          echo "=== RESULT: $trapped trapped of $total runs ==="
+          ls -la /tmp/crashes/ || true
+
+      - name: Upload crash reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-crash-reports
+          path: /tmp/crashes/
+          if-no-files-found: ignore
