@@ -77,9 +77,8 @@ impl MockMemory {
             while addr < PMEM_MAP_VADDR + size {
                 // msync returns ENOMEM for unmapped ranges: cheap "is it
                 // mapped" probe without touching the pages.
-                let rc = unsafe {
-                    nix::libc::msync(addr as *mut _, probe_step, nix::libc::MS_ASYNC)
-                };
+                let rc =
+                    unsafe { nix::libc::msync(addr as *mut _, probe_step, nix::libc::MS_ASYNC) };
                 if rc == 0 {
                     mapped.push((addr, probe_step));
                 }
@@ -132,6 +131,29 @@ impl MockMemory {
         }
     }
 
+    /// Remove all anonymous reverse-mapping entries pointing into
+    /// [vaddr, vaddr+len).
+    ///
+    /// Any mapping established in that range is about to be destroyed
+    /// or replaced — `MAP_FIXED` clobbers the existing mapping
+    /// silently — so entries pointing at it must not survive: a stale
+    /// entry later directs `sync_pmem_to_user` to write through a vaddr
+    /// that the host may have reused for its own allocations (heap
+    /// corruption, #862).
+    fn clear_vaddr_entries(&self, vaddr: VirtAddr, len: usize) {
+        let hps = host_page_size();
+        let aligned_vaddr = vaddr & !(hps - 1);
+        let aligned_len = ((vaddr + len + hps - 1) & !(hps - 1)) - aligned_vaddr;
+        let mut anon_map = self.anon_paddr_to_vaddr.lock().unwrap();
+        for vaddrs in anon_map.values_mut() {
+            vaddrs.retain(|&va| {
+                let va_aligned = va & !(hps - 1);
+                va_aligned < aligned_vaddr || va_aligned >= aligned_vaddr + aligned_len
+            });
+        }
+        anon_map.retain(|_, vaddrs| !vaddrs.is_empty());
+    }
+
     /// Map `paddr` to `vaddr` in the guest address space.
     ///
     /// On hosts with 4K pages, this is a direct file-backed MAP_SHARED.
@@ -145,6 +167,15 @@ impl MockMemory {
     pub fn mmap(&self, vaddr: VirtAddr, len: usize, paddr: PhysAddr, prot: MMUFlags) -> bool {
         assert!(paddr < self.size);
         assert!(paddr + len <= self.size);
+
+        // Whatever mapping currently occupies [vaddr, vaddr+len) is
+        // about to be replaced (MAP_FIXED clobbers silently, and the
+        // 16K strategy path munmaps host pages directly). Drop any
+        // reverse-mapping entries pointing into the range first, or
+        // they go stale and later syncs write through a reused vaddr
+        // (#862: macOS heap corruption, "memory corruption of free
+        // block").
+        self.clear_vaddr_entries(vaddr, len);
 
         // On aarch64 macOS, MAP_FIXED fails below ~0x200000000 (8 GiB).
         // Return false instead of panicking so the caller can propagate
@@ -594,4 +625,61 @@ fn mmu_flags_to_prot(f: MMUFlags) -> ProtFlags {
         flags |= ProtFlags::PROT_EXEC;
     }
     flags
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::imp::mem::MOCK_PHYS_MEM;
+
+    /// #862 regression: replacing a mapping at a vaddr (`MAP_FIXED`
+    /// clobbers silently) must invalidate the previous paddr's
+    /// reverse-mapping entry. A stale entry later directs
+    /// `sync_pmem_to_user` to write through a vaddr the host may have
+    /// reused for its own allocations — macOS heap corruption
+    /// ("memory corruption of free block").
+    #[test]
+    fn remap_invalidates_stale_entries() {
+        // Reverse-mapping entries only exist on hosts whose page size
+        // exceeds the guest 4K (the anonymous-mapping strategy);
+        // on 4K hosts mappings are direct file-backed.
+        if host_page_size() <= PAGE_SIZE {
+            return;
+        }
+        let mem = &*MOCK_PHYS_MEM;
+        // Above the macOS aarch64 mmap minimum (8 GiB), the PMEM
+        // window (32–33 GiB) and the aspace region (48 GiB), and
+        // unique to this test.
+        let vaddr: VirtAddr = 0x10_0000_0000;
+        let paddr_a: PhysAddr = 0x1000;
+        let paddr_b: PhysAddr = 0x3000;
+        let aligned = |p: usize| p & !(PAGE_SIZE - 1);
+
+        // vaddr is 16K-aligned, paddr is not → offset mismatch forces
+        // the anonymous path, which records the reverse mapping.
+        assert!(mem.mmap(vaddr, PAGE_SIZE, paddr_a, MMUFlags::READ | MMUFlags::WRITE));
+        {
+            let map = mem.anon_paddr_to_vaddr.lock().unwrap();
+            let entry = map.get(&aligned(paddr_a)).expect("entry for paddr_a");
+            assert!(
+                entry.contains(&aligned(vaddr)),
+                "paddr_a should track vaddr after anon map"
+            );
+        }
+
+        // Replace the mapping at the same vaddr with a different paddr.
+        assert!(mem.mmap(vaddr, PAGE_SIZE, paddr_b, MMUFlags::READ | MMUFlags::WRITE));
+        {
+            let map = mem.anon_paddr_to_vaddr.lock().unwrap();
+            let stale = map
+                .get(&aligned(paddr_a))
+                .is_some_and(|v| v.contains(&aligned(vaddr)));
+            assert!(
+                !stale,
+                "stale reverse-mapping entry survived remap — later syncs would write through the reused vaddr (#862)"
+            );
+        }
+
+        mem.munmap(vaddr, PAGE_SIZE);
+    }
 }
