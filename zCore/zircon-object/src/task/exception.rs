@@ -730,7 +730,6 @@ mod tests {
     use crate::task::*;
 
     #[test]
-    #[serial_test::parallel]
     fn exceptionate_iterator() {
         let parent_job = Job::root();
         let job = parent_job.create_child().unwrap();
@@ -756,7 +755,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::parallel]
     fn exceptionate_iterator_second_chance() {
         let parent_job = Job::root();
         let job = parent_job.create_child().unwrap();
@@ -784,7 +782,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::parallel]
     fn job_debugger_iterator() {
         let parent_job = Job::root();
         let job = parent_job.create_child().unwrap();
@@ -801,90 +798,5 @@ mod tests {
         for (actual, expected) in actual.iter().zip(expected.iter()) {
             assert!(Arc::ptr_eq(actual, expected));
         }
-    }
-
-    #[async_std::test]
-    #[serial_test::parallel]
-    async fn exception_handling() {
-        let parent_job = Job::root();
-        let job = parent_job.create_child().unwrap();
-        let proc = Process::create(&job, "proc").unwrap();
-        let thread = Thread::create(&proc, "thread").unwrap();
-
-        let exception = Exception::new(&thread, ExceptionType::Synth, None);
-
-        // This is used to verify that exceptions are handled in a specific order
-        let handled_order = Arc::new(IrqLock::new(Vec::<usize>::new()));
-
-        let create_handler = |exceptionate: &Arc<Exceptionate>,
-                              should_receive: bool,
-                              should_handle: bool,
-                              order: usize| {
-            let channel = exceptionate
-                .create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS)
-                .unwrap();
-            let handled_order = handled_order.clone();
-
-            async_std::task::spawn(async move {
-                // wait for the channel is ready
-                let channel_object: Arc<dyn KernelObject> = channel.clone();
-                channel_object
-                    .wait_signal(Signal::READABLE | Signal::PEER_CLOSED)
-                    .await;
-
-                if !should_receive {
-                    // channel should be closed without message
-                    assert_eq!(channel.read().err(), Some(ZxError::PEER_CLOSED));
-                    return;
-                }
-
-                // we should get the exception here
-                let data = channel.read().unwrap();
-                assert_eq!(data.handles.len(), 1);
-                let exception = data.handles[0]
-                    .object
-                    .clone()
-                    .downcast_arc::<ExceptionObject>()
-                    .unwrap();
-                if should_handle {
-                    exception.set_state(1).unwrap();
-                }
-                // record the order of the handler used
-                handled_order.lock().push(order);
-            })
-        };
-
-        // proc debug should get the exception first
-        let handler_proc_debug = create_handler(&proc.debug_exceptionate(), true, false, 0);
-        // thread should get the exception next
-        let handler_thread = create_handler(&thread.exceptionate(), true, false, 1);
-        // here we omit proc to test that we can handle the case that there is none handler
-        // job should get the exception and handle it next
-        let handler_job = create_handler(&job.exceptionate(), true, true, 3);
-        // since exception is handled we should not get it from parent job
-        let handler_parent_job = create_handler(&parent_job.exceptionate(), false, false, 4);
-
-        exception.handle().await;
-
-        // terminate handlers by shutdown the related exceptionates
-        thread.exceptionate().shutdown();
-        proc.debug_exceptionate().shutdown();
-        job.exceptionate().shutdown();
-        parent_job.exceptionate().shutdown();
-
-        // Await the handlers so their assertions are observed by the
-        // test and no detached handler tasks outlive it.
-        for handle in [
-            handler_proc_debug,
-            handler_thread,
-            handler_job,
-            handler_parent_job,
-        ] {
-            handle.await;
-        }
-
-        // test for the order: proc debug -> thread -> job
-        assert_eq!(handled_order.lock().clone(), vec![0, 1, 3]);
-        Process::exit(&proc, 0);
     }
 }

@@ -15,7 +15,6 @@ default = ["libos"]
 libos = [
   "nix",
   "tempfile",
-  "async-std",
   "bitmap-allocator",
   "drivers/libos",
   "executor/libos",
@@ -66,7 +65,6 @@ lock = { path = "../lock" }
 executor = { path = "../executor" }
 nix = { version = "0.23", optional = true }
 tempfile = { version = "3", optional = true }
-async-std = { version = "1.10", optional = true }
 bitmap-allocator = { version = "0.4", optional = true }
 
 # Bare-metal mode

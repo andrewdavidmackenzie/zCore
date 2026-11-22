@@ -193,7 +193,6 @@ impl ProfileInfo {
 }
 
 #[cfg(test)]
-#[serial_test::parallel]
 mod tests {
     use super::*;
 

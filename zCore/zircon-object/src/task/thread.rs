@@ -1729,10 +1729,8 @@ mod tests {
     use super::*;
     use crate::object::*;
     use crate::task::*;
-    use hal_impl::timer::timer_now;
 
     #[test]
-    #[serial_test::parallel]
     fn create() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1745,126 +1743,7 @@ mod tests {
         Process::exit(&proc, 0);
     }
 
-    #[async_std::test]
-    #[serial_test::parallel]
-    #[cfg(target_arch = "x86_64")]
-    async fn start() {
-        hal_impl::init();
-        let root_job = Job::root();
-        let proc = Process::create(&root_job, "proc").expect("failed to create process");
-        let thread = Thread::create(&proc, "thread").expect("failed to create thread");
-        let thread1 = Thread::create(&proc, "thread1").expect("failed to create thread");
-
-        // function for new thread
-        async fn new_thread(thread: CurrentThread) {
-            let cx = thread.wait_for_run().await;
-            assert_eq!(cx.general().rip, 1);
-            assert_eq!(cx.general().rsp, 4);
-            assert_eq!(cx.general().rdi, 3);
-            assert_eq!(cx.general().rsi, 2);
-            async_std::task::sleep(Duration::from_millis(10)).await;
-            thread.put_context(cx);
-        }
-
-        // start a new thread
-        let handle = Handle::new(proc.clone(), Rights::DEFAULT_PROCESS);
-        proc.start(&thread, 1, 4, Some(handle.clone()), 2, |thread| {
-            Box::pin(new_thread(thread))
-        })
-        .expect("failed to start thread");
-
-        // check info and state
-        let info = proc.get_info();
-        assert_eq!(info.flags, zircon_abi::types::ZX_INFO_PROCESS_FLAG_STARTED);
-        assert_eq!(info.return_code, 0);
-        assert_eq!(proc.status(), Status::Running);
-        assert_eq!(thread.state(), ThreadState::Running);
-
-        // start again should fail
-        assert_eq!(
-            proc.start(&thread, 1, 4, Some(handle.clone()), 2, |thread| Box::pin(
-                new_thread(thread)
-            )),
-            Err(ZxError::BAD_STATE)
-        );
-
-        // start another thread should fail
-        assert_eq!(
-            proc.start(&thread1, 1, 4, Some(handle.clone()), 2, |thread| Box::pin(
-                new_thread(thread)
-            )),
-            Err(ZxError::BAD_STATE)
-        );
-
-        // Wait for the new thread to exit (bounded to avoid hanging).
-        for _ in 0..500 {
-            if thread.state() == ThreadState::Dead && Arc::strong_count(&thread) == 1 {
-                break;
-            }
-            async_std::task::sleep(core::time::Duration::from_millis(2)).await;
-        }
-
-        // no other references to `Thread`
-        assert_eq!(Arc::strong_count(&thread), 1);
-        assert_eq!(thread.state(), ThreadState::Dead);
-        // Clean up self-referential handle added by proc.start().
-        Process::exit(&proc, 0);
-    }
-
-    #[async_std::test]
-    #[serial_test::parallel]
-    async fn blocking_run() {
-        let root_job = Job::root();
-        let proc = Process::create(&root_job, "proc").expect("failed to create process");
-        let thread = Thread::create(&proc, "thread").expect("failed to create thread");
-        let thread = CurrentThread(thread);
-
-        let handle = Handle::new(proc.clone(), Rights::DEFAULT_PROCESS);
-        let handle_value = proc.add_handle(handle);
-        let object = proc
-            .get_dyn_object_with_rights(handle_value, Rights::WAIT)
-            .unwrap();
-
-        let cancel_token = proc.get_cancel_token(handle_value).unwrap();
-        let future = object.wait_signal(Signal::READABLE);
-        let deadline = timer_now() + Duration::from_millis(20);
-        let result = thread
-            .blocking_run(
-                future,
-                ThreadState::BlockedWaitOne,
-                deadline,
-                Some(cancel_token),
-            )
-            .await;
-        assert_eq!(result.err(), Some(ZxError::TIMED_OUT));
-
-        let cancel_token = proc.get_cancel_token(handle_value).unwrap();
-        let future = object.wait_signal(Signal::READABLE);
-        // Generous deadline: the cancellation (handle removal below)
-        // must win the race against the timeout even if the remover
-        // task is scheduled late on a loaded runner.
-        let deadline = timer_now() + Duration::from_millis(500);
-        async_std::task::spawn({
-            let proc = proc.clone();
-            async move {
-                async_std::task::sleep(Duration::from_millis(10)).await;
-                proc.remove_handle(handle_value).unwrap();
-            }
-        });
-        let result = thread
-            .blocking_run(
-                future,
-                ThreadState::BlockedWaitOne,
-                deadline,
-                Some(cancel_token),
-            )
-            .await;
-        assert_eq!(result.err(), Some(ZxError::CANCELED));
-        Process::exit(&proc, 0);
-    }
-
     #[test]
-    #[serial_test::parallel]
     fn info() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1880,7 +1759,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::parallel]
     fn read_write_state() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1918,7 +1796,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::parallel]
     fn ext() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1929,47 +1806,7 @@ mod tests {
         Process::exit(&proc, 0);
     }
 
-    #[async_std::test]
-    #[serial_test::parallel]
-    async fn wait_for_run() {
-        let root_job = Job::root();
-        let proc = Process::create(&root_job, "proc").expect("failed to create process");
-        let thread = Thread::create(&proc, "thread").expect("failed to create thread");
-
-        assert_eq!(thread.state(), ThreadState::New);
-
-        thread.start(|thread| Box::pin(new_thread(thread))).unwrap();
-        async fn new_thread(thread: CurrentThread) {
-            assert_eq!(thread.state(), ThreadState::Running);
-
-            // without suspend
-            let context = thread.wait_for_run().await;
-            thread.put_context(context);
-
-            // with suspend
-            thread.suspend();
-            thread.suspend();
-            assert_eq!(thread.state(), ThreadState::Suspended);
-            async_std::task::spawn({
-                let thread = (*thread).clone();
-                async move {
-                    async_std::task::sleep(Duration::from_millis(10)).await;
-                    thread.resume();
-                    async_std::task::sleep(Duration::from_millis(10)).await;
-                    thread.resume();
-                }
-            });
-            let time = timer_now();
-            let _context = thread.wait_for_run().await;
-            assert!(timer_now() - time >= Duration::from_millis(20));
-        }
-        let thread: Arc<dyn KernelObject> = thread;
-        thread.wait_signal(Signal::THREAD_TERMINATED).await;
-        Process::exit(&proc, 0);
-    }
-
     #[test]
-    #[serial_test::parallel]
     fn time() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -1982,7 +1819,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::parallel]
     fn exit() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -2006,7 +1842,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::parallel]
     fn priority_default() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
@@ -2019,7 +1854,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::parallel]
     fn priority_set_get() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");

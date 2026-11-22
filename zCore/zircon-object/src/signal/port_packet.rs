@@ -311,7 +311,6 @@ impl Debug for PortPacket {
 }
 
 #[cfg(test)]
-#[serial_test::parallel]
 mod tests {
     use super::*;
     use crate::vm::PAGE_SIZE;

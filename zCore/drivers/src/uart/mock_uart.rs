@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
 
-use async_std::{io, io::prelude::*, task};
 use lock::IrqLock;
 
 use crate::scheme::{impl_event_scheme, Scheme, UartScheme};
@@ -26,23 +25,27 @@ impl MockUart {
     }
 
     pub fn start_irq_service(irq_handler: impl Fn() + Send + Sync + 'static) {
-        task::spawn(async move {
-            loop {
-                let mut buf = [0; UART_BUF_LEN];
-                let remains = UART_BUF_LEN - UART_BUF.lock().len();
-                if remains > 0 {
-                    if let Ok(n) = io::stdin().read(&mut buf[..remains]).await {
-                        {
-                            let mut uart_buf = UART_BUF.lock();
-                            for c in &buf[..n] {
-                                uart_buf.push_back(*c);
-                            }
+        // Use a plain OS thread instead of async-std's task system —
+        // async-std's executor threads outlive the test binary's static
+        // teardown (#873, same fix as hal-impl). A detached OS thread
+        // avoids that entirely.
+        std::thread::spawn(move || loop {
+            let mut buf = [0; UART_BUF_LEN];
+            let remains = UART_BUF_LEN - UART_BUF.lock().len();
+            if remains > 0 {
+                // Read from stdin (blocking on the OS thread)
+                use std::io::Read;
+                if let Ok(n) = std::io::stdin().read(&mut buf[..remains]) {
+                    {
+                        let mut uart_buf = UART_BUF.lock();
+                        for c in &buf[..n] {
+                            uart_buf.push_back(*c);
                         }
-                        irq_handler();
                     }
+                    irq_handler();
                 }
-                task::yield_now().await;
             }
+            std::thread::sleep(std::time::Duration::from_millis(1));
         });
     }
 }

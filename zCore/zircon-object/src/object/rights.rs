@@ -90,7 +90,6 @@ bitflags! {
         /// Used to duplicate a handle with the same rights.
         const SAME_RIGHTS = 1 << 31;
 
-
         /// TRANSFER | DUPLICATE | WAIT | INSPECT
         const BASIC = Self::TRANSFER.bits | Self::DUPLICATE.bits | Self::WAIT.bits | Self::INSPECT.bits;
 
@@ -199,7 +198,6 @@ impl TryFrom<u32> for Rights {
 }
 
 #[cfg(test)]
-#[serial_test::parallel]
 mod tests {
     use super::*;
 

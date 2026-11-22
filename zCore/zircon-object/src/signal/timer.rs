@@ -158,10 +158,6 @@ mod tests {
     // combination means: all other tests still run in parallel with each
     // other, but while a timer test runs, they are all blocked — the
     // timer thread only competes with the one test thread that spawned it.
-    // New tests in this crate must also be marked `#[serial_test::parallel]`
-    // (mod-level for sync-only modules, fn-level in modules with
-    // `#[async_std::test]` tests, where it must come AFTER the
-    // `#[async_std::test]` attribute).
 
     /// Wait for the timer to fire, allowing `grace` beyond `deadline` for
     /// timer-thread wake-up jitter. A timer that never fires fails the test.
@@ -180,7 +176,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::serial]
     fn one_shot() {
         let deadline = timer_now() + Duration::from_millis(15);
         let timer = Timer::one_shot(deadline);
@@ -197,7 +192,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::serial]
     fn set() {
         let start = timer_now();
         let timer = Timer::new();
@@ -227,7 +221,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::serial]
     fn cancel() {
         let deadline = timer_now() + Duration::from_millis(20);
         let timer = Timer::new();

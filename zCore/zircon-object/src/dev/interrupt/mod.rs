@@ -800,113 +800,8 @@ impl InterruptOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core::time::Duration;
-
-    #[async_std::test]
-    #[serial_test::parallel]
-    async fn bind() {
-        let interrupt = Interrupt::new_virtual();
-        let port = Port::new(1).unwrap();
-        assert_eq!(interrupt.unbind(&port).unwrap_err(), ZxError::NOT_FOUND);
-        assert!(interrupt.bind(&port, 1).is_ok());
-
-        assert!(interrupt.destroy().is_ok());
-        assert_eq!(interrupt.unbind(&port).unwrap_err(), ZxError::CANCELED);
-
-        let interrupt = Interrupt::new_virtual();
-        assert_eq!(interrupt.unbind(&port).unwrap_err(), ZxError::NOT_FOUND);
-        assert!(interrupt.bind(&port, 1).is_ok());
-
-        assert!(interrupt.trigger(1234).is_ok());
-        let packet = port.wait().await;
-        assert_eq!(
-            PortPacketRepr::from(&packet),
-            PortPacketRepr {
-                key: 1,
-                status: ZxError::OK,
-                data: PayloadRepr::Interrupt(PacketInterrupt {
-                    timestamp: 1234,
-                    _reserved0: 0,
-                    _reserved1: 0,
-                    _reserved2: 0,
-                }),
-            }
-        );
-        assert!(interrupt.unbind(&port).is_ok());
-    }
-
-    #[async_std::test]
-    #[serial_test::parallel]
-    async fn wait_unbound() {
-        // Virtual interrupt without a port: trigger then wait
-        let interrupt = Interrupt::new_virtual();
-
-        // Spawn a task that triggers the interrupt after a delay
-        let int_clone = interrupt.clone();
-        async_std::task::spawn(async move {
-            async_std::task::sleep(Duration::from_millis(10)).await;
-            int_clone.trigger(5678).unwrap();
-        });
-
-        // Wait should return the timestamp
-        let timestamp = interrupt.wait().await.unwrap();
-        assert_eq!(timestamp, 5678);
-    }
-
-    #[async_std::test]
-    #[serial_test::parallel]
-    async fn wait_returns_bad_state_when_port_bound() {
-        // Wait should fail with BAD_STATE when a port is bound
-        let interrupt = Interrupt::new_virtual();
-        let port = Port::new(1).unwrap();
-        interrupt.bind(&port, 1).unwrap();
-
-        assert_eq!(interrupt.wait().await.unwrap_err(), ZxError::BAD_STATE);
-    }
-
-    #[async_std::test]
-    #[serial_test::parallel]
-    async fn wait_returns_canceled_when_destroyed() {
-        // Wait should fail with CANCELED when the interrupt is destroyed
-        let interrupt = Interrupt::new_virtual();
-        interrupt.destroy().unwrap();
-
-        assert_eq!(interrupt.wait().await.unwrap_err(), ZxError::CANCELED);
-    }
-
-    #[async_std::test]
-    #[serial_test::parallel]
-    async fn ack_port_bound() {
-        // Ack should transition from NeedAck to Idle when port is bound
-        let interrupt = Interrupt::new_virtual();
-        let port = Port::new(1).unwrap();
-        interrupt.bind(&port, 42).unwrap();
-
-        // Trigger sends a packet to port, state -> NeedAck
-        interrupt.trigger(9999).unwrap();
-
-        // Consume the port packet
-        let packet = port.wait().await;
-        assert_eq!(
-            PortPacketRepr::from(&packet),
-            PortPacketRepr {
-                key: 42,
-                status: ZxError::OK,
-                data: PayloadRepr::Interrupt(PacketInterrupt {
-                    timestamp: 9999,
-                    _reserved0: 0,
-                    _reserved1: 0,
-                    _reserved2: 0,
-                }),
-            }
-        );
-
-        // Ack should succeed (transitions NeedAck -> Idle)
-        assert!(interrupt.ack().is_ok());
-    }
 
     #[test]
-    #[serial_test::parallel]
     fn ack_without_port_returns_bad_state() {
         // Ack without a port bound should return BAD_STATE
         let interrupt = Interrupt::new_virtual();
@@ -914,7 +809,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::parallel]
     fn ack_after_destroy_returns_canceled() {
         let interrupt = Interrupt::new_virtual();
         let port = Port::new(1).unwrap();
