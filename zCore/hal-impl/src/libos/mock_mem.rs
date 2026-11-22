@@ -71,6 +71,12 @@ impl MockMemory {
         // what is already mapped there — anything found gets clobbered
         // and its owner will later write through stale pointers.
         if cfg!(test) || std::env::var_os("ZCORE_PMEM_PROBE").is_some() {
+            // Optional pre-init pause so an external `vmmap` can capture
+            // the process state before the fixed mmap.
+            if std::env::var_os("ZCORE_PMEM_SLEEP").is_some() {
+                eprintln!("[pmem-probe] sleeping 10s for external vmmap (pid {})", std::process::id());
+                std::thread::sleep(std::time::Duration::from_secs(10));
+            }
             let probe_step = 0x1000_0000usize; // 256MB coarse
             let mut mapped: Vec<(usize, usize)> = Vec::new();
             let mut addr = PMEM_MAP_VADDR;
