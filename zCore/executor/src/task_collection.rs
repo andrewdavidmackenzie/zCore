@@ -270,9 +270,10 @@ impl TaskCollection {
             return;
         }
         error!(
-            "[stuck] cpu={} task_num={} sched: {}",
+            "[stuck] cpu={} task_num={} force_wakes={} sched: {}",
             self.cpu_id,
             self.task_num.load(Ordering::Relaxed),
+            crate::runtime::FORCE_WAKE_COUNT.load(Ordering::Relaxed),
             crate::sched::debug_summary(&self.sched_state.lock())
         );
         for priority in 0..MAX_PRIORITY {
@@ -346,6 +347,12 @@ impl TaskCollection {
                 // marked wake the scheduler never dispatched. Dump the
                 // full collection + scheduler state (rate-limited).
                 if notified_bits != 0 && scan_num >= 50_000 {
+                    self.dump_stuck_state();
+                }
+                // #862 variant B: long idle WHILE tasks are parked in
+                // this collection (no notified bits — the wake never
+                // arrived at all). Dump after ~30M idle scans.
+                if notified_bits == 0 && task_num > 0 && scan_num >= 30_000_000 {
                     self.dump_stuck_state();
                 }
             }

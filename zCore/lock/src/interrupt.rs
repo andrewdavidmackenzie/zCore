@@ -65,6 +65,8 @@ cfg_if::cfg_if! {
 
 use interrupts::*;
 
+pub(crate) use interrupts::intr_get;
+
 /// Disable interrupts and return whether they were previously enabled.
 ///
 /// Each lock guard stores this return value and passes it to `pop_off`

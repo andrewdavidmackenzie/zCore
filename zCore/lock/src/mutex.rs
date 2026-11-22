@@ -48,6 +48,25 @@ pub fn set_yield_fn(f: fn()) {
 /// Call the registered yield function, or spin_loop if none registered.
 #[inline]
 fn do_yield() {
+    // #862: never yield while an interrupt-disabling critical section
+    // is active on this CPU (i.e., an `InterruptSpinLock` — including
+    // the kernel heap lock — is held). The registered yield function
+    // switches executor tasks; doing that here abandons the current
+    // task mid-critical-section with the lock guard live in its
+    // future, permanently leaking the lock. Every later acquisition
+    // on any CPU then spins forever — the kernel-heap deadlock behind
+    // the intermittent core-tests hangs (six CPUs spinning on the heap
+    // lock held by a parked task, caught via gdb).
+    #[cfg(target_os = "none")]
+    {
+        if !crate::interrupt::intr_get() {
+            // In a critical section: spinning is safe (the holder is
+            // either on another CPU or will be scheduled once this
+            // task releases the spinlock it holds).
+            core::hint::spin_loop();
+            return;
+        }
+    }
     let ptr = YIELD_FN.load(Ordering::Acquire);
     if ptr != 0 {
         let f: fn() = unsafe { core::mem::transmute(ptr) };

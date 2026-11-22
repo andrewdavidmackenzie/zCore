@@ -106,7 +106,7 @@ hal_fn_impl! {
             // ticks = callbacks feeding a wake storm.
             use core::sync::atomic::Ordering;
             let n = TICK_COUNT.fetch_add(1, Ordering::Relaxed);
-            if n > 0 && n % 500 == 0 {
+            if n > 0 && n % 10_000 == 0 {
                 let expired = EXPIRE_COUNT.load(Ordering::Relaxed);
                 let gap_us = before
                     .map(|d| d.as_nanos().saturating_sub(now.as_nanos()) / 1000)

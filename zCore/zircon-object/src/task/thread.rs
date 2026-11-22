@@ -243,6 +243,18 @@ impl ThreadInner {
         if matches!(state, ThreadState::Dying | ThreadState::Dead) {
             warn!("thread state: {} {:?} -> {:?}", base.id, old, state,);
         }
+        // #862 diagnostics: a terminal state must never regress — any
+        // transition away from Dying/Dead loses every downstream kill
+        // check (blocking_run entry, run_user loop) and strands the
+        // thread in a wait whose killer channel was already consumed.
+        if matches!(old, ThreadState::Dying | ThreadState::Dead)
+            && !matches!(state, ThreadState::Dying | ThreadState::Dead)
+        {
+            error!(
+                "[state-regression] thread {} {:?} -> {:?}",
+                base.id, old, state
+            );
+        }
         match self.state() {
             ThreadState::Dead => base.signal_change(
                 Signal::THREAD_RUNNING | Signal::THREAD_SUSPENDED,
@@ -717,7 +729,17 @@ impl Thread {
             if killed {
                 if let Some(killer) = inner.killer.take() {
                     // It's ok to ignore the error since the other end could be closed
-                    killer.send(()).ok();
+                    if killer.send(()).is_err() {
+                        // #862 diagnostics: the kill message was lost —
+                        // the receiver was dropped (the thread left its
+                        // blocking_run between registration and this
+                        // send). The thread will re-park in a wait only
+                        // this message can end.
+                        error!(
+                            "[kill-lost] thread {} (Dying re-kill): receiver dropped",
+                            self.base.id
+                        );
+                    }
                 }
             }
             return;
@@ -729,7 +751,13 @@ impl Thread {
         // For blocking thread, use the killer
         if let Some(killer) = inner.killer.take() {
             // It's ok to ignore the error since the other end could be closed
-            killer.send(()).ok();
+            if killer.send(()).is_err() {
+                // #862 diagnostics: see above.
+                error!(
+                    "[kill-lost] thread {} (first kill): receiver dropped",
+                    self.base.id
+                );
+            }
         }
     }
 
