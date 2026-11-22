@@ -19,7 +19,7 @@ pub struct Futex {
     base: KObjectBase,
     /// User-space address of the futex word.
     user_addr: usize,
-    pub(crate) inner: IrqLock<FutexInner>,
+    pub(super) inner: IrqLock<FutexInner>,
 }
 
 impl_kobject!(Futex);
@@ -517,7 +517,7 @@ impl FutexInner {
 pub struct Waiter {
     /// The thread waiting on the futex.
     thread: Option<Arc<Thread>>,
-    pub(crate) inner: IrqLock<WaiterInner>,
+    pub(super) inner: IrqLock<WaiterInner>,
 }
 
 pub struct WaiterInner {

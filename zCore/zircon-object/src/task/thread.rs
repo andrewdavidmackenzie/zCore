@@ -91,7 +91,7 @@ pub struct Thread {
     /// link (Process → Thread) is Weak to avoid a reference cycle.
     proc: Arc<Process>,
     ext: Box<dyn Any + Send + Sync>,
-    pub(crate) inner: KernelMutex<ThreadInner>,
+    pub(super) inner: KernelMutex<ThreadInner>,
     exceptionate: Arc<Exceptionate>,
 }
 

@@ -92,7 +92,7 @@ pub struct Process {
     ext: Box<dyn Any + Send + Sync>,
     exceptionate: Arc<Exceptionate>,
     debug_exceptionate: Arc<Exceptionate>,
-    pub(crate) inner: KernelMutex<ProcessInner>,
+    pub(super) inner: KernelMutex<ProcessInner>,
     /// Weak self-reference, set at construction. Lets `Task::kill`
     /// (which only receives `&self`) obtain the `Arc<Process>` needed
     /// to delegate to the graph-checked `Process::exit`
