@@ -1,8 +1,9 @@
 name: investigate-862
 
 # Diagnostic workflow for issue #862: macOS-aarch64 test binaries
-# SIGTRAP intermittently (~8%?). Measures the flake rate under
-# contention and captures macOS crash reports (with backtraces).
+# SIGTRAP intermittently. Heap corruption (malloc freelist, brk 1).
+# Phase 3: isolate the async-std-sleep tests and catch the corrupting
+# WRITE in the act using libgmalloc (guard pages per allocation).
 on:
   push:
     branches: [core_tests_flaky_862]
@@ -28,75 +29,49 @@ jobs:
       - name: Build test binaries
         working-directory: zCore
         run: |
-          cargo test -p hal-impl --features libos --no-run --message-format=json 2>/dev/null | \
-            python3 -c "import sys,json; [print(json.loads(l).get('executable') or '') for l in sys.stdin if '\"executable\"' in l]" | grep -v '^$' > /tmp/testbins.txt
           cargo test -p zircon-object --features libos,aspace-separate --lib --no-run --message-format=json 2>/dev/null | \
-            python3 -c "import sys,json; [print(json.loads(l).get('executable') or '') for l in sys.stdin if '\"executable\"' in l]" | grep -v '^$' >> /tmp/testbins.txt
+            python3 -c "import sys,json; [print(json.loads(l).get('executable') or '') for l in sys.stdin if '\"executable\"' in l]" | grep -v '^$' > /tmp/testbins.txt
           cat /tmp/testbins.txt
 
-      - name: Loop binaries under CPU contention (capture traps)
+      - name: A) Async-sleep subset under contention (rate check)
         run: |
           mkdir -p /tmp/crashes
-          # 6 background CPU burners to simulate a loaded/contended runner
-          for i in 1 2 3 4 5 6; do
-            (while :; do :; done) &
-            echo $! >> /tmp/burners.pid
-          done
+          BIN=$(head -1 /tmp/testbins.txt)
+          FILTER='dev::interrupt::tests::wait_unbound:ipc::channel::tests::call:object::tests::wait:object::tests::wait_many:signal::port::tests::wait:signal::futex::tests::wait'
+          for i in 1 2 3 4 5 6; do (while :; do :; done) & echo $! >> /tmp/burners.pid; done
           total=0; trapped=0
-          for round in $(seq 1 20); do
-            while read -r bin; do
-              total=$((total+1))
-              name=$(basename "$bin" | cut -d- -f1)
-              rc=0; out=$("$bin" 2>&1) || rc=$?
-              if [ $rc -ne 0 ]; then
-                trapped=$((trapped+1))
-                echo "=== TRAP round=$round bin=$name rc=$rc ==="
-                echo "$out" | tail -8
-                sleep 2
-                report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
-                if [ -n "$report" ]; then
-                  cp "$report" "/tmp/crashes/${name}-round${round}.ips" || true
-                fi
-              fi
-            done < /tmp/testbins.txt
-          done
-          echo "=== CONTENDED RESULT: $trapped trapped of $total runs ==="
-
-      - name: Single-threaded isolation (identify culprit test)
-        run: |
-          total=0; trapped=0
-          for round in $(seq 1 10); do
-            while read -r bin; do
-              total=$((total+1))
-              name=$(basename "$bin" | cut -d- -f1)
-              rc=0; out=$("$bin" --test-threads=1 2>&1) || rc=$?
-              if [ $rc -ne 0 ]; then
-                trapped=$((trapped+1))
-                echo "=== SINGLE-THREAD TRAP round=$round bin=$name rc=$rc ==="
-                echo "$out" | tail -8
-                sleep 2
-                report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
-                if [ -n "$report" ]; then
-                  cp "$report" "/tmp/crashes/${name}-st-round${round}.ips" || true
-                fi
-              fi
-            done < /tmp/testbins.txt
-          done
-          echo "=== SINGLE-THREAD RESULT: $trapped trapped of $total runs ==="
-
-      - name: Cargo-test invocation (matches CI exactly)
-        working-directory: zCore
-        run: |
-          for round in $(seq 1 10); do
-            if ! cargo test -p hal-impl --features libos --no-fail-fast > /tmp/cargo-out.txt 2>&1; then
-              echo "=== CARGO-TEST TRAP round=$round ==="
-              tail -8 /tmp/cargo-out.txt
+          for round in $(seq 1 30); do
+            total=$((total+1))
+            rc=0; "$BIN" "$FILTER" > /tmp/subset-out.txt 2>&1 || rc=$?
+            if [ $rc -ne 0 ]; then
+              trapped=$((trapped+1))
+              echo "=== SUBSET TRAP round=$round rc=$rc ==="
+              tail -6 /tmp/subset-out.txt
               sleep 2
               report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
-              [ -n "$report" ] && cp "$report" "/tmp/crashes/cargo-round${round}.ips" || true
+              [ -n "$report" ] && cp "$report" "/tmp/crashes/subset-round${round}.ips" || true
             fi
           done
-          echo "=== CARGO-TEST LOOP DONE ==="
+          echo "=== SUBSET RESULT: $trapped trapped of $total ==="
+
+      - name: B) Guard-malloc — catch the corrupting write
+        run: |
+          BIN=$(head -1 /tmp/testbins.txt)
+          FILTER='dev::interrupt::tests::wait_unbound:ipc::channel::tests::call:object::tests::wait:object::tests::wait_many:signal::port::tests::wait:signal::futex::tests::wait'
+          total=0; trapped=0
+          for round in $(seq 1 10); do
+            total=$((total+1))
+            rc=0; DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib "$BIN" "$FILTER" > /tmp/gm-out.txt 2>&1 || rc=$?
+            if [ $rc -ne 0 ]; then
+              trapped=$((trapped+1))
+              echo "=== GUARD-MALLOC CAUGHT round=$round rc=$rc ==="
+              tail -10 /tmp/gm-out.txt
+              sleep 2
+              report=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
+              [ -n "$report" ] && cp "$report" "/tmp/crashes/gmalloc-round${round}.ips" || true
+            fi
+          done
+          echo "=== GUARD-MALLOC RESULT: $trapped trapped of $total ==="
 
       - name: Cleanup burners
         if: always()
