@@ -720,12 +720,16 @@ mod tests {
             "second sibling page must sync from its paddr"
         );
 
-        // User → PMEM: a write through the second user page must be
-        // visible via pmem_read of its paddr.
+        // User → PMEM: a write through each user page must be visible
+        // via pmem_read of its paddr.
         unsafe { core::ptr::write_volatile((base + PAGE_SIZE) as *mut u8, 0xCC) };
         let mut buf = [0u8; 1];
         crate::hal_fn::mem::pmem_read(pb, &mut buf);
         assert_eq!(buf[0], 0xCC, "user write must sync back to its paddr");
+
+        unsafe { core::ptr::write_volatile(base as *mut u8, 0xDD) };
+        crate::hal_fn::mem::pmem_read(pa, &mut buf);
+        assert_eq!(buf[0], 0xDD, "first sibling's user write must sync back");
 
         mem.munmap(base, 2 * PAGE_SIZE);
     }
