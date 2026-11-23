@@ -29,10 +29,10 @@ fuchsia_die() {
     exit 1
 }
 
-# Resolve artifact paths from the build's images.json (robust across
+# Resolve the zircon-a ZBI path from images.json (robust across
 # product/board renames; mirrors what `fx qemu` consumes).
-# Usage: fuchsia_resolve_images
-fuchsia_resolve_images() {
+# Usage: fuchsia_resolve_zbi
+fuchsia_resolve_zbi() {
     [ -f "$FUCHSIA_OUT/images.json" ] ||
         fuchsia_die "no images.json in FUCHSIA_OUT='$FUCHSIA_OUT'
   Point FUCHSIA_ROOT/FUCHSIA_OUT at a built Fuchsia tree, e.g.:
@@ -42,25 +42,38 @@ fuchsia_resolve_images() {
     json="$(python3 - "$FUCHSIA_OUT/images.json" <<'EOF'
 import json, sys
 images = json.load(open(sys.argv[1]))
-zbi = kern = None
-for img in images:
-    if img.get("name") == "zircon-a" and img.get("type") == "zbi":
-        zbi = img["path"]
-    elif img.get("name") == "qemu-kernel":
-        kern = img["path"]
+zbi = next(
+    (img["path"] for img in images
+     if img.get("name") == "zircon-a" and img.get("type") == "zbi"),
+    None,
+)
 if not zbi:
     sys.exit("no zircon-a zbi image in images.json")
-print(f"{zbi}\t{kern or ''}")
+print(zbi)
 EOF
     )" || fuchsia_die "failed to parse images.json"
-    FUCHSIA_ZBI="$FUCHSIA_OUT/$(cut -f1 <<<"$json")"
+    FUCHSIA_ZBI="$FUCHSIA_OUT/$json"
     [ -f "$FUCHSIA_ZBI" ] || fuchsia_die "ZBI not found: $FUCHSIA_ZBI"
+}
 
-    # The boot shim is required: QEMU's -kernel boots the shim, which
-    # implements the Linux boot protocol and hands the ZBI (-initrd)
-    # to the Fuchsia kernel. Without it there is no direct-boot path.
+# Resolve the ZBI and the QEMU boot shim. The shim is required by the
+# run/test targets: QEMU's -kernel boots the shim, which implements
+# the Linux boot protocol and hands the ZBI (-initrd) to the Fuchsia
+# kernel. Without it there is no direct-boot path. (Artifact import
+# only needs the ZBI — see fuchsia_resolve_zbi.)
+# Usage: fuchsia_resolve_images
+fuchsia_resolve_images() {
+    fuchsia_resolve_zbi
     local shim
-    shim="$(cut -f2 <<<"$json")"
+    shim="$(python3 - "$FUCHSIA_OUT/images.json" <<'EOF'
+import json, sys
+images = json.load(open(sys.argv[1]))
+print(next(
+    (img["path"] for img in images if img.get("name") == "qemu-kernel"),
+    "",
+))
+EOF
+    )" || fuchsia_die "failed to parse images.json"
     if [ -z "$shim" ]; then
         fuchsia_die "no qemu-kernel (boot shim) in images.json — this build
   cannot be booted directly by QEMU. Build a full product (e.g.

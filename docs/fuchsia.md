@@ -98,3 +98,41 @@ establish the baseline and verification methodology on real Fuchsia.
 Phase B imports the same artifacts (`userboot.elf`, `vdso.elf`,
 `fuchsia.zbi`) into `prebuilt/fuchsia/x86_64/`; Phase C boots Fuchsia's
 real userboot on zCore with the same marker-based verification.
+
+## Phase B — importing Fuchsia userspace into zCore
+
+```bash
+make fuchsia-import    # snapshot artifacts into prebuilt/fuchsia/x86_64/
+```
+
+Imports from the Fuchsia build (paths via `fuchsia-env.sh` / `images.json`):
+
+| Artifact | Source | Purpose |
+|----------|--------|---------|
+| `userboot.elf` | kernel package bootfs `zircon/userboot` (ZBI `KSTR` item → zstd → bootfs) | Fuchsia's real first process (static PIE, `NEEDED libzircon.so`) |
+| `userboot-test-rust.elf` | `zircon/userboot-test-rust` | minimal test userboot for validating the bootstrap protocol |
+| `vdso.elf` | `zircon/vdso` | the vDSO matched to that userboot |
+| `fuchsia.zbi` | `images.json` zircon-a | full boot image (kernel item unused; userboot unpacks the bootfs) |
+| `PROVENANCE.md` | — | source revision, sizes, sha256s |
+
+The extractor parses the ZBI and bootfs formats directly (stable ABIs),
+so it works from any Fuchsia build output — including a downloaded
+product bundle without sources. Decompression uses the Python ≥ 3.14
+stdlib `compression.zstd`, falling back to the `zstd(1)` CLI.
+
+The **`fuchsia-bringup` product** (`configs/products/fuchsia-bringup.toml`)
+builds a Zircon-only kernel that embeds these artifacts at build time
+(`USERSTART_ELF` → userboot, `PETAL_ZBI` → fuchsia.zbi, `VDSO_BIN` →
+vdso — the same prebuilt-binary pattern as `core-tests`):
+
+```bash
+cargo xtask qemu -m fuchsia-bringup.qemu-x86_64
+```
+
+**Current state (end of Phase B):** the kernel boots, loads Fuchsia's
+userboot as the first process, maps the vDSO and ZBI VMO, and starts
+the thread. userboot then faults (`#UD`) because the kernel does not
+yet apply its `REL`/`RELR` relocations or resolve its `libzircon.so`
+references (RODSO-style loading), and still sends the old processargs
+bootstrap instead of the handles-only two-message protocol. That is
+Phase C (`run_userboot()` launcher).

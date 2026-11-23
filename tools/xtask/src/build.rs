@@ -189,20 +189,50 @@ impl BuildConfig {
         // unless already provided via environment.
         // Skip on riscv64: zircon-abi has compile_error! for 8-arg syscalls.
         if !matches!(arch, Arch::Riscv64) {
-            if let Ok(val) = std::env::var("USERSTART_ELF") {
-                env.insert("USERSTART_ELF".into(), val.into());
+            if selection.product.rootfs_contents == "fuchsia" {
+                // Fuchsia userspace (issue #523): embed the artifacts
+                // imported by `make fuchsia-import` — Fuchsia's real
+                // userboot as the first process, the matching vDSO,
+                // and the full ZBI (userboot unpacks its bootfs).
+                // Env overrides still win, as with the petal defaults;
+                // validate whichever path is actually selected.
+                let dir = crate::rootfs::fuchsia_prebuilt_dir(arch);
+                let select = |var: &str, file: &str| -> PathBuf {
+                    match std::env::var(var) {
+                        Ok(val) => val.into(),
+                        Err(_) => dir.join(file),
+                    }
+                };
+                let userboot = select("USERSTART_ELF", "userboot.elf");
+                let zbi = select("PETAL_ZBI", "fuchsia.zbi");
+                let vdso = select("VDSO_BIN", "vdso.elf");
+                for path in [&userboot, &zbi, &vdso] {
+                    assert!(
+                        path.is_file(),
+                        "fuchsia product requires {} — run `make fuchsia-import` \
+                         (see docs/fuchsia.md; artifacts come from a Fuchsia build)",
+                        path.display()
+                    );
+                }
+                env.insert("USERSTART_ELF".into(), userboot.into_os_string());
+                env.insert("PETAL_ZBI".into(), zbi.into_os_string());
+                env.insert("VDSO_BIN".into(), vdso.into_os_string());
             } else {
-                let userstart_path = crate::petal::build_userstart(arch);
-                env.insert("USERSTART_ELF".into(), userstart_path.into_os_string());
-            }
-            if let Ok(val) = std::env::var("PETAL_ZBI") {
-                env.insert("PETAL_ZBI".into(), val.into());
-            } else {
-                // See petal::zbi_bin_for: boards without a rootfs boot
-                // the product's init program from the embedded ZBI.
-                let zbi_bin = crate::petal::zbi_bin_for(&selection.product.root_proc);
-                let zbi_path = crate::petal::build_petal_zbi(arch, zbi_bin);
-                env.insert("PETAL_ZBI".into(), zbi_path.into_os_string());
+                if let Ok(val) = std::env::var("USERSTART_ELF") {
+                    env.insert("USERSTART_ELF".into(), val.into());
+                } else {
+                    let userstart_path = crate::petal::build_userstart(arch);
+                    env.insert("USERSTART_ELF".into(), userstart_path.into_os_string());
+                }
+                if let Ok(val) = std::env::var("PETAL_ZBI") {
+                    env.insert("PETAL_ZBI".into(), val.into());
+                } else {
+                    // See petal::zbi_bin_for: boards without a rootfs boot
+                    // the product's init program from the embedded ZBI.
+                    let zbi_bin = crate::petal::zbi_bin_for(&selection.product.root_proc);
+                    let zbi_path = crate::petal::build_petal_zbi(arch, zbi_bin);
+                    env.insert("PETAL_ZBI".into(), zbi_path.into_os_string());
+                }
             }
         }
 
@@ -342,10 +372,11 @@ impl QemuArgs {
         let manifest =
             crate::rootfs::Manifest::parse(&build_config.selection.product.rootfs_contents);
 
-        // Always provide a rootfs — the manifest decides its contents
-        // (busybox + petal for linux-flavour products, petal programs
-        // for zircon-only products).
-        let needs_rootfs = true;
+        // Provide a rootfs for the manifests that use one. The Fuchsia
+        // manifest boots from the ZBI embedded in the kernel
+        // (PETAL_ZBI), so it has no ramdisk/initrd rootfs; its
+        // build_image() call still validates the imported artifacts.
+        let needs_rootfs = !matches!(manifest, crate::rootfs::Manifest::Fuchsia);
         let arch = build_config.arch;
         let arch_str = arch.name();
 
