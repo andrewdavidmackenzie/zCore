@@ -54,10 +54,15 @@ async fn futex_wake_during_registration_race() {
         // Spawn a thread that waits on the futex with value 1.
         let waiter = FutexTestThread::start(&ctx.proc, &futex, 1);
 
-        // Give the waiter a chance to enter its registration sequence
-        // (the race window between the value check and the queue push).
-        // A short yield is enough — we want to race with the registration,
-        // not wait for it to complete.
+        // Wait until the waiter has entered its wait (state =
+        // ABOUT_TO_WAIT), then yield once more to give it a chance to
+        // reach the registration sequence (the value check + queue
+        // push). The exact registration window is internal to
+        // FutexFuture::poll and cannot be deterministically targeted;
+        // the yield + 100 iterations give many chances to hit it.
+        while !waiter.has_wait_returned() && !waiter_is_registering(&waiter) {
+            hal_impl::thread::yield_now().await;
+        }
         hal_impl::thread::yield_now().await;
 
         // Change the value and wake. If the waiter is mid-registration,
@@ -75,6 +80,19 @@ async fn futex_wake_during_registration_race() {
         // termination).
         waiter.shutdown().await;
     }
+}
+
+/// Check whether the FutexTestThread's waiter has entered its wait
+/// (state = ABOUT_TO_WAIT) but hasn't returned yet. Used by the
+/// registration race test to know the waiter has at least started
+/// its futex wait before the wake fires.
+fn waiter_is_registering(waiter: &crate::helpers::FutexTestThread) -> bool {
+    use crate::helpers::WAITER_STATE_ABOUT_TO_WAIT;
+    waiter
+        .state
+        .state
+        .load(core::sync::atomic::Ordering::Acquire)
+        == WAITER_STATE_ABOUT_TO_WAIT
 }
 
 /// Run all tests in this module.
