@@ -2636,6 +2636,12 @@ mod tests {
     /// concurrently-running VMO tests also move (allocate/free), so it
     /// must run exclusively: `#[serial_test::serial]` blocks all
     /// `#[serial_test::parallel]` tests for its duration.
+    ///
+    /// For that to hold, every test module whose tests commit paged
+    /// VMO pages (moving the global VMO page counters) must be marked
+    /// `#[serial_test::parallel]` at module level: vm/vmo/paged,
+    /// vm/vmar, vm/stream, signal/clock, signal/pager. New test
+    /// modules that allocate VMO memory must follow the same rule.
     #[test]
     #[serial_test::serial]
     fn zero_page_write() {
@@ -2862,7 +2868,10 @@ mod tests {
     /// mock frame allocator recycling stale physical pages without
     /// zeroing. This causes COW children to occasionally read
     /// content from a previously freed frame instead of the parent's
-    /// page. Runs reliably on bare-metal and Linux CI.
+    /// page. Also flakes on Linux under full-suite concurrency —
+    /// cross-test contamination in the mock memory layer, tracked in
+    /// issue #880 (not yet quarantined: it passes in most runs and
+    /// the failure carries diagnostic value for #880).
     #[test]
     #[cfg_attr(target_os = "macos", ignore)]
     fn many_clones() {
