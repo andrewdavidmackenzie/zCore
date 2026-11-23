@@ -53,7 +53,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)
 	list-products list-boards flash petal-test petal-tests \
 	debug-qemu debug-lldb debug-x86-qemu debug-x86-gdb \
 	pre-push pre-push-quick core-tests core-tests-build \
-	boot-logo uefi-firmware
+	boot-logo uefi-firmware verify
 
 # List available products and boards (like fx list-products / list-boards).
 list-products:
@@ -229,6 +229,41 @@ demo-busybox-uefi:
 # Test: UEFI boot with petal shell, run /bin/zircon-hello
 uefi-boot-test:
 	tools/scripts/uefi-boot-test.sh
+
+# ── Formal verification (Verus) ────────────────────────────────────────
+# Machine-checks the verus! annotations in zircon-object (#833): the
+# Futex core/wrapper contracts and proofs. Requires Verus, installed
+# by `make setup` into .verus/ (optional — the kernel builds and tests
+# fine without it).
+#
+# Usage:
+#   make verify           — run Verus on all crates opted in via
+#                           [package.metadata.verus] (currently
+#                           zircon-object)
+#
+# Not part of pre-push yet (experimental, Phase 1): wire it into CI
+# once the approach is validated.
+
+VERUS_DIR ?= $(CURDIR)/.verus
+VERUS_TOOLCHAIN ?= $(shell grep -o '"toolchain"[^"]*"[^"]*"' $(VERUS_DIR)/version.json 2>/dev/null | grep -o '[0-9]*\.[0-9]*\.[0-9]*' | head -1)
+VERUS_HOST ?= $(shell rustc -vV | grep '^host' | cut -d' ' -f2)
+
+verify:
+	@if [ ! -f "$(VERUS_DIR)/cargo-verus" ]; then \
+		echo "ERROR: Verus not found at $(VERUS_DIR)"; \
+		echo "  Run 'make setup' to install it"; \
+		exit 1; \
+	fi
+	@if [ -z "$(VERUS_TOOLCHAIN)" ]; then \
+		echo "ERROR: could not read Verus toolchain from $(VERUS_DIR)/version.json"; \
+		exit 1; \
+	fi
+	@echo "==> Verus: verifying zircon-object ($(VERUS_TOOLCHAIN)-$(VERUS_HOST))"
+	cd zCore && \
+		RUSTUP_TOOLCHAIN=$(VERUS_TOOLCHAIN)-$(VERUS_HOST) \
+		PATH="$(VERUS_DIR):$$PATH" \
+		$(VERUS_DIR)/cargo-verus focus -p zircon-object --features libos
+	@echo "==> Verus: all proofs passed"
 
 # ── Documentation ──────────────────────────────────────────────────────
 # Build the mdbook documentation site into target/book/.
