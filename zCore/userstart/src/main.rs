@@ -81,7 +81,13 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     // loaded via the ZBI path see the same pair as the rootfs path.
     // A read failure (older kernel, single message) is tolerated:
     // nothing is forwarded.
-    let mut data_buf2 = [0u8; 512];
+    //
+    // Buffer invariant: message 2 never exceeds message 1 — both
+    // carry the same argv, and message 2 has fewer handle_info
+    // entries (6 vs 15). Message 1 already fit in 1024 bytes, so
+    // message 2 does too; the same buffer size makes the invariant
+    // obvious.
+    let mut data_buf2 = [0u8; 1024];
     let mut handles2 = [ZX_HANDLE_INVALID; MAX_HANDLES];
     let mut actual_bytes2: u32 = 0;
     let mut actual_handles2: u32 = 0;
@@ -137,7 +143,15 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     // Extract the extended handles from message 2 by tag. Missing
     // entries stay invalid and are simply not forwarded.
-    let msg2_data = &data_buf2[..actual_bytes2 as usize];
+    // Guard the slice: a failed (BUFFER_TOO_SMALL) read leaves
+    // actual_bytes2 holding the *needed* size, which may exceed the
+    // buffer — slicing with it would panic. Only a successful read's
+    // length (clamped as defense) indexes valid bytes.
+    let msg2_data = if msg2_status == ZX_OK {
+        &data_buf2[..(actual_bytes2 as usize).min(data_buf2.len())]
+    } else {
+        &data_buf2[..0]
+    };
     let find_ext = |pa_type: u32| -> HandleValue {
         if num_handles2 == 0 {
             return ZX_HANDLE_INVALID;
@@ -297,7 +311,10 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     // sends. Message 1 (program bootstrap) transfers ownership of
     // vmar/job/resource/zbi/vdso to init; message 2 passes through
     // the extended handles userstart received.
-    let mut argv_buf = [0u8; 128];
+    // ZBI_BOOTFS_MAX_NAME_LEN is 256, so a 257-byte buffer (name +
+    // NUL) never truncates a valid bootfs name; the min() remains
+    // pure defense against malformed images.
+    let mut argv_buf = [0u8; 257];
     let argv_len = name.len().min(argv_buf.len() - 1);
     argv_buf[..argv_len].copy_from_slice(&name[..argv_len]);
     // argv_buf[argv_len] is already 0 (NUL terminator).

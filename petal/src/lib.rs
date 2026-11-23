@@ -44,13 +44,9 @@ pub struct Bootstrap {
     pub num_handles: usize,
     /// Message 2 data (extended system handles). Empty when the
     /// launcher sent only one message.
-    pub data2: [u8; 512],
-    /// Number of valid bytes in `data2`.
-    pub data2_len: usize,
+    pub data2: alloc::vec::Vec<u8>,
     /// Handle values received from message 2.
-    pub handles2: [u32; 16],
-    /// Number of valid handles in message 2.
-    pub num_handles2: usize,
+    pub handles2: alloc::vec::Vec<u32>,
 }
 
 impl Bootstrap {
@@ -58,7 +54,10 @@ impl Bootstrap {
     ///
     /// Returns `None` if no startup handle is available or the first
     /// channel read fails. A missing second message is tolerated
-    /// (older launchers send only one).
+    /// (older launchers send only one); a larger-than-expected second
+    /// message is retried with an exact-size buffer (the failed read
+    /// reports the needed sizes and leaves the message queued, per
+    /// Zircon semantics).
     pub fn read() -> Option<Self> {
         let ch = take_startup_handle();
         if ch == 0 {
@@ -70,10 +69,8 @@ impl Bootstrap {
             handles: [0u32; 32],
             data_len: 0,
             num_handles: 0,
-            data2: [0u8; 512],
-            handles2: [0u32; 16],
-            data2_len: 0,
-            num_handles2: 0,
+            data2: alloc::vec::Vec::new(),
+            handles2: alloc::vec::Vec::new(),
         };
         let mut ab: u32 = 0;
         let mut ah: u32 = 0;
@@ -93,23 +90,41 @@ impl Bootstrap {
             b.data_len = ab as usize;
             b.num_handles = ah as usize;
             // Message 2 (extended system handles, #884) — optional.
+            let read2 = |data: &mut [u8],
+                         handles: &mut [u32],
+                         ab: &mut u32,
+                         ah: &mut u32|
+             -> zircon_abi::errors::ZxStatus {
+                unsafe {
+                    zx::sys::zx_channel_read(
+                        ch,
+                        0,
+                        data.as_mut_ptr(),
+                        handles.as_mut_ptr(),
+                        data.len() as u32,
+                        handles.len() as u32,
+                        ab,
+                        ah,
+                    )
+                }
+            };
+            let mut data2 = alloc::vec![0u8; 512];
+            let mut handles2 = alloc::vec![0u32; 16];
             let mut ab2: u32 = 0;
             let mut ah2: u32 = 0;
-            let s2 = unsafe {
-                zx::sys::zx_channel_read(
-                    ch,
-                    0,
-                    b.data2.as_mut_ptr(),
-                    b.handles2.as_mut_ptr(),
-                    b.data2.len() as u32,
-                    b.handles2.len() as u32,
-                    &mut ab2,
-                    &mut ah2,
-                )
-            };
+            let mut s2 = read2(&mut data2, &mut handles2, &mut ab2, &mut ah2);
+            if s2 == zircon_abi::errors::ZX_ERR_BUFFER_TOO_SMALL {
+                // Grow to the reported sizes and retry — the message
+                // was not consumed by the failed read.
+                data2 = alloc::vec![0u8; ab2 as usize];
+                handles2 = alloc::vec![0u32; ah2 as usize];
+                s2 = read2(&mut data2, &mut handles2, &mut ab2, &mut ah2);
+            }
             if s2 == 0 {
-                b.data2_len = ab2 as usize;
-                b.num_handles2 = ah2 as usize;
+                data2.truncate(ab2 as usize);
+                handles2.truncate(ah2 as usize);
+                b.data2 = data2;
+                b.handles2 = handles2;
             }
         }
         unsafe { zx::sys::zx_handle_close(ch) };
@@ -132,10 +147,10 @@ impl Bootstrap {
                 }
             }
         }
-        if self.num_handles2 > 0 {
-            let msg2 = &self.data2[..self.data2_len];
+        if !self.handles2.is_empty() {
+            let msg2 = &self.data2[..];
             if let Some(header) = zircon_abi::processargs::ZxProcArgs::from_bytes(msg2) {
-                if let Some(idx) = header.find_handle(msg2, self.num_handles2, pa_type) {
+                if let Some(idx) = header.find_handle(msg2, self.handles2.len(), pa_type) {
                     if idx < self.handles2.len() {
                         return self.handles2[idx];
                     }
