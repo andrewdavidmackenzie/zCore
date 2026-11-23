@@ -102,4 +102,11 @@ impl LocalApic {
     pub fn send_ipi(&mut self, vector: u8, apic_id: u32) {
         unsafe { self.inner.send_ipi(vector, apic_id) }
     }
+
+    /// #862: whether the previous IPI is still in flight (xAPIC
+    /// Delivery Status = Send Pending). Writing the ICR while this is
+    /// true silently drops the new IPI.
+    pub fn ipi_delivery_status(&mut self) -> bool {
+        unsafe { self.inner.get_ipi_delivery_status() }
+    }
 }

@@ -1348,17 +1348,6 @@ impl CurrentThread {
         F: Future<Output = FT> + Unpin,
         FT: IntoResult<T>,
     {
-        // DEBUG843: log what the main thread is blocking on. NOT FOR
-        // COMMIT.
-        if self.inner().base.id == 1029 {
-            let dl: core::time::Duration = deadline;
-            warn!(
-                "BLOCK-1029 state={:?} deadline_ns={} now_ns={}",
-                state,
-                dl.as_nanos(),
-                hal_impl::timer::timer_now().as_nanos()
-            );
-        }
         let (old_state, killed) = {
             let mut inner = self.inner.lock();
             if inner.state() == ThreadState::Dying {

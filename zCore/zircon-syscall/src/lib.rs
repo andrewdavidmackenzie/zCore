@@ -1633,6 +1633,16 @@ impl Syscall<'_> {
             (_, Sys::DEBUG_WRITE | Sys::DEBUG_READ) => {
                 trace!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
             }
+            (Err(ZxError::BAD_STATE) | Err(ZxError::TIMED_OUT), Sys::FUTEX_WAIT) => {
+                // Contended futex wait (value changed between the
+                // userspace read and the wait) and timeouts are the
+                // NORMAL pthread-mutex retry path — under contention
+                // they fire thousands of times. Each error-level line
+                // costs ~350µs of guest time on the emulated UART, so
+                // logging them at error level floods the console and
+                // throttles the whole system (#862 log-flood livelock).
+                trace!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
+            }
             (Err(e), Sys::VMAR_MAP) => {
                 error!(
                     "{}|{} VMAR_MAP({:#x},{:#x},{:#x},{:#x},{:#x},{:#x}) <= {:?}",

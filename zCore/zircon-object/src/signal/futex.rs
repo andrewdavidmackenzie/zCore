@@ -94,9 +94,22 @@ impl Futex {
             let mut inner = locked.lock_and::<super::lock_order::FutexInnerLock>().0;
             inner.set_owner(None);
             let mut collected = alloc::vec::Vec::new();
-            for _ in 0..wake_count {
+            let mut remaining = wake_count;
+            while remaining > 0 {
                 if let Some(waiter) = inner.waiter_queue.pop_front() {
+                    // #862: skip departing waiters (their FutexFuture
+                    // is dropping — a BAD_STATE retry or timeout). A
+                    // departing waiter must not consume a wake-count
+                    // slot: for wake(1) callers (mutex unlock) that
+                    // would permanently lose the wake for the real
+                    // waiter remaining in the queue. Linux's futex
+                    // wake loop skips FUTEX_STATE_EXITING waiters the
+                    // same way.
+                    if waiter.inner.lock().departing {
+                        continue;
+                    }
                     collected.push(waiter);
+                    remaining -= 1;
                 } else {
                     break;
                 }
@@ -104,6 +117,20 @@ impl Futex {
             collected
         };
         let count = waiters.len();
+        // #862 diagnostics: waking fewer waiters than requested means
+        // either nobody was waiting (normal when the wake races the
+        // waiters' registration — they will retry with BAD_STATE) or a
+        // waiter departed (Drop) consuming the count. With ALL-wakes
+        // (barrier), a short queue during contention highlights the
+        // registration race window.
+        if count < wake_count && count > 0 {
+            trace!(
+                "[futex-wake] addr={:#x} requested={} woken={} (short queue)",
+                self.user_addr,
+                wake_count,
+                count
+            );
+        }
         for waiter in &waiters {
             waiter.wake();
         }
@@ -155,6 +182,15 @@ impl Futex {
     ) -> impl Future<Output = ZxResult> {
         #[must_use = "wait does nothing unless polled/`await`-ed"]
         struct FutexFuture {
+            /// #862 diagnostics: BAD_STATE retries on this wait (the
+            /// contention-retry loop).
+            bad_state_retries: usize,
+            /// Whether poll() ever pushed this waiter into the futex
+            /// queue. Distinguishes "popped by a wake during drop"
+            /// (queued=true, not in queue → re-transfer the wake) from
+            /// "never queued" (validation failed before the push →
+            /// nothing to re-transfer).
+            queued: bool,
             waiter: Arc<Waiter>,
             current_value: i32,
             new_owner: Option<Arc<Thread>>,
@@ -162,7 +198,7 @@ impl Futex {
         impl Future for FutexFuture {
             type Output = ZxResult;
 
-            fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
                 // 5F-2: graph-checked waiter acquisition. The poll
                 // path deliberately does NOT hold WaiterInner across
                 // FutexInner — the collect-then-act pattern. Each
@@ -200,6 +236,20 @@ impl Futex {
                     if value != self.current_value {
                         // Value changed — cancel the wait. Remove the
                         // waker we just stored.
+                        // #862 diagnostics: a thread retrying the same
+                        // futex wait with a mismatched value hundreds of
+                        // times = the barrier/mutex retry livelock.
+                        self.bad_state_retries += 1;
+                        if self.bad_state_retries.is_multiple_of(100) {
+                            warn!(
+                                "[futex-retry] thread={:?} addr={:#x} expected={} actual={} retries={}",
+                                self.waiter.thread.as_ref().map(|t| t.id()),
+                                futex_ref.user_addr,
+                                self.current_value,
+                                value,
+                                self.bad_state_retries
+                            );
+                        }
                         let mut locked2 = lock::lockgraph::Locked::new(self.waiter.as_ref());
                         let mut inner2 = locked2.lock_and::<super::lock_order::WaiterInnerLock>().0;
                         inner2.waker.take();
@@ -213,6 +263,7 @@ impl Futex {
                     }
                     futex.set_owner(self.new_owner.clone());
                     futex.waiter_queue.push_back(self.waiter.clone());
+                    self.queued = true;
                     if let Some(ref owner) = futex.owner {
                         if let Some(ref waiter_thread) = self.waiter.thread {
                             let waiter_pri = waiter_thread.effective_priority();
@@ -263,7 +314,7 @@ impl Futex {
                 // in the queue and the removal is a no-op.
                 let futex_arc = {
                     let mut locked = lock::lockgraph::Locked::new(self.waiter.as_ref());
-                    let inner = locked.lock_and::<super::lock_order::WaiterInnerLock>().0;
+                    let mut inner = locked.lock_and::<super::lock_order::WaiterInnerLock>().0;
                     if inner.woken {
                         // Already woken — wake() popped us from the
                         // queue. Just clear tracking.
@@ -272,6 +323,10 @@ impl Futex {
                         }
                         return;
                     }
+                    // Mark departing so a concurrent Futex::wake that
+                    // pops us skips us and wakes the next waiter
+                    // instead of consuming the wake count (#862).
+                    inner.departing = true;
                     inner.futex.clone()
                 }; // WaiterInner released
 
@@ -284,11 +339,11 @@ impl Futex {
                 // Check queue membership: if a wake raced between
                 // releasing WaiterInner and acquiring FutexInner and
                 // already popped us, this is a no-op.
-                if let Some(pos) = futex
+                let in_queue = futex
                     .waiter_queue
                     .iter()
-                    .position(|x| alloc::sync::Arc::ptr_eq(x, &self.waiter))
-                {
+                    .position(|x| alloc::sync::Arc::ptr_eq(x, &self.waiter));
+                if let Some(pos) = in_queue {
                     futex.waiter_queue.swap_remove_back(pos);
                     // Priority inheritance: recompute owner's boost
                     // after removing a waiter.
@@ -301,6 +356,26 @@ impl Futex {
                         }
                     }
                 }
+                // #862: the waiter was neither woken nor in the
+                // queue — a wake popped it in the window before our
+                // departing mark was visible, consuming a wake-count
+                // slot for a waiter that is departing. Re-transfer
+                // the wake to the next queued waiter: the departing
+                // thread returns TIMED_OUT/BAD_STATE and its
+                // userspace retry re-checks the value anyway (Zircon
+                // delivers this wake to the thread as a spurious
+                // ZX_OK; we can't — the future is already dropped —
+                // so we pass it on instead).
+                let next_waiter = if in_queue.is_none() && self.queued {
+                    futex.waiter_queue.pop_front()
+                } else {
+                    None
+                };
+                drop(futex);
+                if let Some(waiter) = next_waiter {
+                    waiter.wake();
+                    return;
+                }
                 // Clear blocking futex tracking.
                 if let Some(ref thread) = self.waiter.thread {
                     thread.set_blocking_futex(0);
@@ -308,11 +383,14 @@ impl Futex {
             }
         }
         FutexFuture {
+            bad_state_retries: 0,
+            queued: false,
             waiter: Arc::new(Waiter {
                 thread,
                 inner: IrqLock::new(WaiterInner {
                     waker: None,
                     woken: false,
+                    departing: false,
                     futex: self.clone(),
                 }),
             }),
@@ -338,7 +416,15 @@ impl Futex {
         let (waiter_to_wake, new_owner) = {
             let mut locked = lock::lockgraph::Locked::new(self);
             let mut inner = locked.lock_and::<super::lock_order::FutexInnerLock>().0;
-            let popped = inner.waiter_queue.pop_front();
+            // #862: skip departing waiters — same rationale as
+            // Futex::wake (a departing waiter must not consume the
+            // single wake slot).
+            let popped = loop {
+                match inner.waiter_queue.pop_front() {
+                    Some(w) if w.inner.lock().departing => continue,
+                    other => break other,
+                }
+            };
             let owner = popped.as_ref().and_then(|w| w.thread.clone());
             inner.set_owner(owner.clone());
             (popped, owner)
@@ -428,8 +514,21 @@ impl Futex {
         // FutexInner, creating an ABBA deadlock with FutexFuture::poll
         // (which locks WaiterInner then FutexInner).
         let requeue_count = requeue_count.min(inner.waiter_queue.len());
-        let waiters_to_requeue: alloc::vec::Vec<_> =
-            inner.waiter_queue.drain(..requeue_count).collect();
+        // #862: skip departing waiters — moving a departing waiter to
+        // the target queue leaves it lingering there after its Drop
+        // (which searches the SOURCE queue), consuming future wakes.
+        let mut waiters_to_requeue: alloc::vec::Vec<_> = alloc::vec::Vec::new();
+        let mut remaining = requeue_count;
+        while remaining > 0 {
+            match inner.waiter_queue.pop_front() {
+                Some(w) if w.inner.lock().departing => continue,
+                Some(w) => {
+                    waiters_to_requeue.push(w);
+                    remaining -= 1;
+                }
+                None => break,
+            }
+        }
         // set owner
         inner.set_owner(None);
         new_inner.set_owner(new_requeue_owner.clone());
@@ -524,6 +623,14 @@ pub struct WaiterInner {
     /// The waker of waiting future. `None` indicates first poll.
     waker: Option<Waker>,
     woken: bool,
+    /// Set by FutexFuture::drop before the waiter leaves the queue
+    /// (#862): a concurrent Futex::wake that pops this waiter must
+    /// skip it and wake the next queued waiter instead — otherwise a
+    /// departing waiter (BAD_STATE retry) consumes a wake-count slot
+    /// and, for wake(1) callers (mutex unlock), the wake is lost.
+    /// Matches Linux's futex wake loop skipping FUTEX_STATE_EXITING
+    /// waiters.
+    departing: bool,
     futex: Arc<Futex>,
 }
 
