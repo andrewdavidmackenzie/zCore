@@ -400,6 +400,10 @@ pub fn run_userboot(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
 
 /// ZBI-fallback boot dispatch: Fuchsia's real userboot when
 /// `kernel.fuchsia-userboot=true`, zCore's userstart otherwise.
+///
+/// The flag requires that `USERSTART_ELF` (the embedded first-process
+/// ELF) is Fuchsia's userboot — the product config wiring sets both
+/// together (see `configs/products/fuchsia-bringup.toml`).
 pub fn run_userboot_or_fuchsia(
     zbi: impl AsRef<[u8]>,
     cmdline: &str,
@@ -421,9 +425,12 @@ pub fn run_userboot_or_fuchsia(
 /// - loads the static-PIE userboot ELF (embedded via `USERSTART_ELF`;
 ///   for `fuchsia-bringup` this is Fuchsia's `userboot.elf`) into a
 ///   child "image" VMAR of the process root VMAR,
-/// - maps the vDSO below it and resolves userboot's `NEEDED
-///   libzircon.so` relocations against the vDSO's symbols
-///   (RODSO-style: RELR relatives + GLOB_DAT/JUMP_SLOT),
+/// - maps the vDSO below it — the kernel does NOT apply userboot's
+///   relocations: the static PIE self-relocates (rcrt1-style) in its
+///   own startup, resolving its `NEEDED libzircon.so` symbols
+///   against the vDSO using the base passed as arg2. (Applying RELR
+///   here as well double-relocated — pointers landed at
+///   `2*load_base + vaddr`.)
 /// - sends the two-message, handles-only bootstrap protocol: message
 ///   1 (process capability: log, proc, root vmar, thread, image
 ///   vmar) and message 2 (system capability: those + root job,

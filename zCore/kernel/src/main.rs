@@ -313,7 +313,8 @@ fn boot_options() -> BootOptions {
             "/bin/hello"
         })
         .to_string();
-    let fuchsia_userboot = cmdline.contains("kernel.fuchsia-userboot=true");
+    let fuchsia_userboot =
+        parse_cmdline_value(&cmdline, "kernel.fuchsia-userboot").is_some_and(|v| v == "true");
     BootOptions {
         cmdline,
         root_proc,
