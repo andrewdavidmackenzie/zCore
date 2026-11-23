@@ -330,3 +330,9 @@ pub fn set_fair(state: &mut SchedState, key: Key) {
         }
     }
 }
+
+/// #862 diagnostics (fair scheduler variant).
+pub fn debug_summary(state: &SchedState) -> alloc::string::String {
+    use alloc::format;
+    format!("(fair) tasks={}", state.tasks.len())
+}

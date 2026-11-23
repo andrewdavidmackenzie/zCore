@@ -243,6 +243,18 @@ impl ThreadInner {
         if matches!(state, ThreadState::Dying | ThreadState::Dead) {
             warn!("thread state: {} {:?} -> {:?}", base.id, old, state,);
         }
+        // #862 diagnostics: a terminal state must never regress — any
+        // transition away from Dying/Dead loses every downstream kill
+        // check (blocking_run entry, run_user loop) and strands the
+        // thread in a wait whose killer channel was already consumed.
+        if matches!(old, ThreadState::Dying | ThreadState::Dead)
+            && !matches!(state, ThreadState::Dying | ThreadState::Dead)
+        {
+            error!(
+                "[state-regression] thread {} {:?} -> {:?}",
+                base.id, old, state
+            );
+        }
         match self.state() {
             ThreadState::Dead => base.signal_change(
                 Signal::THREAD_RUNNING | Signal::THREAD_SUSPENDED,
@@ -716,8 +728,18 @@ impl Thread {
         if inner.state == ThreadState::Dying {
             if killed {
                 if let Some(killer) = inner.killer.take() {
-                    // It's ok to ignore the error since the other end could be closed
-                    killer.send(()).ok();
+                    // A send failure here means the receiver was
+                    // dropped — the thread left its blocking_run
+                    // before this kill arrived. That is the benign
+                    // completion race (the thread is already
+                    // proceeding and will observe Dying at its next
+                    // state check), not a lost kill.
+                    if killer.send(()).is_err() {
+                        debug!(
+                            "[kill-race] thread {} (Dying re-kill): receiver gone — thread already left blocking_run",
+                            self.base.id
+                        );
+                    }
                 }
             }
             return;
@@ -728,8 +750,14 @@ impl Thread {
         }
         // For blocking thread, use the killer
         if let Some(killer) = inner.killer.take() {
-            // It's ok to ignore the error since the other end could be closed
-            killer.send(()).ok();
+            // See the Dying branch above: a send failure is the benign
+            // completion race, not a lost kill.
+            if killer.send(()).is_err() {
+                debug!(
+                    "[kill-race] thread {} (first kill): receiver gone — thread already left blocking_run",
+                    self.base.id
+                );
+            }
         }
     }
 
@@ -1320,17 +1348,6 @@ impl CurrentThread {
         F: Future<Output = FT> + Unpin,
         FT: IntoResult<T>,
     {
-        // DEBUG843: log what the main thread is blocking on. NOT FOR
-        // COMMIT.
-        if self.inner().base.id == 1029 {
-            let dl: core::time::Duration = deadline;
-            warn!(
-                "BLOCK-1029 state={:?} deadline_ns={} now_ns={}",
-                state,
-                dl.as_nanos(),
-                hal_impl::timer::timer_now().as_nanos()
-            );
-        }
         let (old_state, killed) = {
             let mut inner = self.inner.lock();
             if inner.state() == ThreadState::Dying {

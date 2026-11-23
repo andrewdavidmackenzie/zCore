@@ -31,6 +31,10 @@ const MAX_TIMER_INTERVAL: Duration = Duration::from_millis(10);
 
 static NAIVE_TIMER: spin::Lazy<IrqLock<Timer>> = spin::Lazy::new(|| IrqLock::new(Timer::default()));
 
+/// #862 diagnostics: timer activity counters.
+static TICK_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+static EXPIRE_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
 /// Program this CPU's hardware timer to the next pending deadline,
 /// capped at `now + MAX_TIMER_INTERVAL`.
 ///
@@ -42,8 +46,17 @@ fn update_platform_timer_locked(timer: &Timer) {
     let backstop = now + MAX_TIMER_INTERVAL;
     let next = timer.next().unwrap_or(backstop);
     let target = next.min(backstop);
+    // #862 diagnostics: the deadline actually programmed into the
+    // hardware (min of queue head and backstop), for gap reporting.
+    LAST_ARMED_NANOS.store(
+        target.as_nanos() as u64,
+        core::sync::atomic::Ordering::Relaxed,
+    );
     super::arch::timer::set_oneshot_timer(target);
 }
+
+/// #862 diagnostics: the last deadline programmed into the hardware.
+static LAST_ARMED_NANOS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
 hal_fn_impl! {
     impl mod crate::hal_fn::timer {
@@ -67,7 +80,11 @@ hal_fn_impl! {
             crate::interrupt::intr_off();
             {
                 let mut timer = NAIVE_TIMER.lock();
-                timer.add(deadline, callback);
+                // #862 diagnostics: count executed callbacks.
+                timer.add(deadline, move |now| {
+                    EXPIRE_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                    callback(now);
+                });
                 // Expire past-due timers while we hold the lock.
                 let now = super::arch::timer::timer_now();
                 if deadline <= now {
@@ -85,11 +102,28 @@ hal_fn_impl! {
             // Called from the timer interrupt handler.
             // Interrupts are already disabled by the interrupt gate.
             let now = super::arch::timer::timer_now();
-            let mut timer = NAIVE_TIMER.lock();
-            timer.expire(now);
-            // Re-arm to the next deadline under the lock.
-            update_platform_timer_locked(&timer);
-
+            {
+                let mut timer = NAIVE_TIMER.lock();
+                timer.expire(now);
+                // Re-arm to the next deadline under the lock.
+                update_platform_timer_locked(&timer);
+            }
+            // #862 diagnostics: report OUTSIDE the NAIVE_TIMER lock —
+            // the logger allocates and may contend the heap lock, and
+            // logging under the timer lock can deadlock against
+            // timer_set on another CPU. Every 10k ticks: rates and the
+            // gap between now and the deadline actually armed.
+            use core::sync::atomic::Ordering;
+            let n = TICK_COUNT.fetch_add(1, Ordering::Relaxed);
+            if n > 0 && n.is_multiple_of(10_000) {
+                let expired = EXPIRE_COUNT.load(Ordering::Relaxed);
+                let armed = LAST_ARMED_NANOS.load(Ordering::Relaxed);
+                let gap_us = armed.saturating_sub(now.as_nanos() as u64) / 1000;
+                warn!(
+                    "[timer] ticks={} expired={} armed_gap={}us now={:?}",
+                    n, expired, gap_us, now
+                );
+            }
         }
     }
 }

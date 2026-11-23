@@ -121,6 +121,10 @@ static CPU_RUNTIMES: spin::Once<hashbrown::HashMap<u8, Mutex<ExecutorRuntime>>> 
 /// CPUs (the timer handler on the source CPU holds sched_state via
 /// the executor, while trying to acquire the runtime lock in
 /// sched_yield).
+/// #862 diagnostics: total force_wake_task invocations (kill sweep /
+/// migration fallback). Compare with per-task wake counts at hang time.
+pub static FORCE_WAKE_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
 static CPU_TASK_COLLECTIONS: spin::Once<hashbrown::HashMap<u8, Arc<TaskCollection>>> =
     spin::Once::new();
 
@@ -227,6 +231,7 @@ pub(crate) fn steal_task_from_other_cpu_into(dest: &Arc<TaskCollection>) -> Opti
 /// A spurious re-notify is harmless: the task is simply polled
 /// once more and re-parks if its wait is not satisfied.
 pub fn force_wake_task(cpu_id: u8, key: usize, task_id: usize) {
+    FORCE_WAKE_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let Some(map) = CPU_TASK_COLLECTIONS.get() else {
         return;
     };

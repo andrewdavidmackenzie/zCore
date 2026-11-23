@@ -96,6 +96,25 @@ hal_fn_impl! {
                 (cpuid as u32) << 24
             };
             let lapic = ::drivers::irq::x86::Apic::local_apic();
+            // #862: in xAPIC mode, writing the ICR while the previous
+            // IPI is still in flight (Delivery Status = Send Pending)
+            // silently drops the new IPI. The wake's notified bit is
+            // set but the target CPU's HLT is never broken — a lost
+            // wake. Poll Delivery Status until Idle before sending.
+            // (x2APIC MSR writes are serialized and never dropped, so
+            // this only matters in xAPIC MMIO mode.)
+            if !is_x2apic {
+                let mut guard = 0u32;
+                while lapic.ipi_delivery_status() {
+                    core::hint::spin_loop();
+                    guard += 1;
+                    if guard > 100_000_000 {
+                        // The previous IPI is stuck — send anyway; a
+                        // lost IPI is better than a hung CPU.
+                        break;
+                    }
+                }
+            }
             lapic.send_ipi(0xFE, dest);
             Ok(())
         }

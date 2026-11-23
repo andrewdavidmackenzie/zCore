@@ -48,6 +48,25 @@ pub fn set_yield_fn(f: fn()) {
 /// Call the registered yield function, or spin_loop if none registered.
 #[inline]
 fn do_yield() {
+    // #862: never yield while an interrupt-disabling critical section
+    // is active on this CPU (i.e., an `InterruptSpinLock` — including
+    // the kernel heap lock — is held). The registered yield function
+    // switches executor tasks; doing that here abandons the current
+    // task mid-critical-section with the lock guard live in its
+    // future, permanently leaking the lock. Every later acquisition
+    // on any CPU then spins forever — the kernel-heap deadlock behind
+    // the intermittent core-tests hangs (six CPUs spinning on the heap
+    // lock held by a parked task, caught via gdb).
+    #[cfg(target_os = "none")]
+    {
+        if !crate::interrupt::intr_get() {
+            // In a critical section: spinning is safe (the holder is
+            // either on another CPU or will be scheduled once this
+            // task releases the spinlock it holds).
+            core::hint::spin_loop();
+            return;
+        }
+    }
     let ptr = YIELD_FN.load(Ordering::Acquire);
     if ptr != 0 {
         let f: fn() = unsafe { core::mem::transmute(ptr) };
@@ -101,6 +120,18 @@ impl<T: ?Sized> KernelMutex<T> {
     ///
     /// Does NOT disable interrupts.
     pub fn lock(&self) -> KernelMutexGuard<'_, T> {
+        // #862/#829: acquiring a KernelMutex while holding an
+        // interrupt-disabling spinlock is a lock-ordering violation.
+        // The uncontended fast path below is benign (a single CAS, no
+        // yield), and such nesting exists in common kernel paths — but
+        // once CONTENDED with interrupts disabled we cannot yield
+        // (that would abandon the critical section we hold) and cannot
+        // spin forever if the holder is parked on this CPU. Spin a
+        // bounded time (the holder may be on another CPU and release),
+        // then fail loudly instead of deadlocking silently.
+        #[cfg(target_os = "none")]
+        const NESTED_SPIN_MAX_ITERS: u32 = 1_500_000;
+
         loop {
             // Fast path: try to acquire immediately.
             if self
@@ -109,6 +140,41 @@ impl<T: ?Sized> KernelMutex<T> {
                 .is_ok()
             {
                 return KernelMutexGuard { mutex: self };
+            }
+
+            #[cfg(target_os = "none")]
+            {
+                // Contended while a spinlock is held (interrupts off):
+                // do_yield cannot switch tasks here. Bounded spin for a
+                // cross-CPU holder, then panic — a same-CPU parked
+                // holder can never release while we monopolize this
+                // CPU, and silent spinning would hang the system (#862).
+                if !crate::interrupt::intr_get() {
+                    let mut nested_spins = 0u32;
+                    loop {
+                        if self
+                            .locked
+                            .compare_exchange_weak(
+                                false,
+                                true,
+                                Ordering::Acquire,
+                                Ordering::Relaxed,
+                            )
+                            .is_ok()
+                        {
+                            return KernelMutexGuard { mutex: self };
+                        }
+                        nested_spins += 1;
+                        if nested_spins >= NESTED_SPIN_MAX_ITERS {
+                            panic!(
+                                "KernelMutex contended while interrupts disabled \
+                                 (InterruptSpinLock held?) — spinlock→KernelMutex \
+                                 nesting with a non-releasing holder (#829/#862)"
+                            );
+                        }
+                        core::hint::spin_loop();
+                    }
+                }
             }
 
             // Spin phase: spin for a bounded time.
