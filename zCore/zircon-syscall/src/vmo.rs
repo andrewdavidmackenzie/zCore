@@ -751,6 +751,22 @@ impl Syscall<'_> {
                 vmo.create_child(resizable, offset, child_size)
             }
         }?;
+        // Per zx_vmo_create_child: "The content size of the VMO will
+        // be initialized to the given (unrounded) size." Userspace
+        // relies on this — e.g. Fuchsia's userboot creates per-file
+        // bootfs VMOs via create_child(SNAPSHOT_AT_LEAST_ON_WRITE,
+        // offset, file_size), and component_manager's BootfsSvc
+        // reads the content size back to know each file's length.
+        // Without it the child reports content_size 0 and streams
+        // over it see immediate EOF.
+        if options.contains(VmoCloneFlags::REFERENCE) {
+            // A REFERENCE spans the entire parent and behaves as if
+            // operations were done on the parent: mirror its content
+            // size.
+            child_vmo.set_content_size(vmo.content_size())?;
+        } else {
+            child_vmo.set_content_size(size)?;
+        }
         // Mark as immutable if SNAPSHOT + NO_WRITE.
         if no_write && options.contains(VmoCloneFlags::SNAPSHOT) {
             child_vmo.set_immutable();
