@@ -220,7 +220,7 @@ pub async fn run_all() {
     run_module!(exception_ops);
     run_module!(fifo_extra);
     run_module!(fifo_ops);
-    run_module!(futex_extra);
+    run_module!(async futex_extra);
     run_module!(handle_dup);
     run_module!(handle_extra);
     run_module!(interrupt_extra);
