@@ -33,8 +33,13 @@ jobs:
       - name: Run unit test
         run: cargo test --no-fail-fast
 
+      # Single-threaded: the zircon-object host tests share mock
+      # physical memory and global VMO counters; concurrent tests
+      # contaminate each other (~10-15% flake rate, see #880 and the
+      # #[serial_test::parallel] module markers). Same approach as the
+      # zircon-tests step below.
       - name: Run zircon-object host tests (libos + aspace-separate)
-        run: cargo test -p zircon-object --features libos,aspace-separate --no-fail-fast
+        run: cargo test -p zircon-object --features libos,aspace-separate --no-fail-fast -- --test-threads=1
 
       - name: Run hal-impl host tests (libos)
         run: cargo test -p hal-impl --features libos --no-fail-fast

@@ -53,6 +53,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)
 	list-products list-boards flash petal-test petal-tests \
 	debug-qemu debug-lldb debug-x86-qemu debug-x86-gdb \
 	pre-push pre-push-quick core-tests core-tests-build \
+	fuchsia-check fuchsia-run fuchsia-test \
 	boot-logo uefi-firmware
 
 # List available products and boards (like fx list-products / list-boards).
@@ -1046,3 +1047,22 @@ build-fuchsia:
 		source scripts/fx-env.sh && \
 		.jiri_root/bin/fx build
 	@echo "==> Fuchsia build complete at $(FUCHSIA_DIR)/fuchsia"
+
+# ── Fuchsia baseline (issue #523 Phase A) ─────────────────────────────────
+# Run and verify the REAL Fuchsia kernel + userspace (bringup product)
+# from the local Fuchsia checkout, before attempting the same on zCore.
+# Artifact resolution and QEMU flags live in tools/scripts/fuchsia-env.sh.
+
+# Doctor: verify the Fuchsia tree/build exists, print artifact inventory.
+fuchsia-check:
+	@tools/scripts/fuchsia-check.sh
+
+# Interactive: boot real Fuchsia bringup with the serial console on stdio.
+fuchsia-run:
+	@tools/scripts/fuchsia-run.sh
+
+# Automated: boot headlessly and verify userspace markers in the serial
+# log (kernel banner, console shell, driver_manager boot completion).
+# Log saved to target/fuchsia/serial.log.
+fuchsia-test:
+	@tools/scripts/fuchsia-test.sh

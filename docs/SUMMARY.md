@@ -14,6 +14,7 @@
 # Guides
 
 - [LibOS Mode](libos.md)
+- [Fuchsia Baseline](fuchsia.md)
 - [Build Artifacts](build-artifacts.md)
 - [Non-Crate Folders](non-crate-folders.md)
 - [Developer Guidelines](for-developers.md)
