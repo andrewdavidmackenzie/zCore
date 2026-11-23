@@ -1485,7 +1485,7 @@ mod tests {
 
     #[test]
     fn create() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
 
         assert_eq!(proc.related_koid(), root_job.id());
@@ -1495,7 +1495,7 @@ mod tests {
 
     #[test]
     fn handle() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let handle = Handle::new(proc.clone(), Rights::DEFAULT_PROCESS);
 
@@ -1557,7 +1557,7 @@ mod tests {
 
     #[test]
     fn handle_duplicate() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
 
         // duplicate non-exist handle should fail.
@@ -1598,7 +1598,7 @@ mod tests {
 
     #[test]
     fn handle_replace() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
 
         // Add a handle with DUPLICATE + READ rights.
@@ -1642,7 +1642,7 @@ mod tests {
 
     #[test]
     fn get_child() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1656,7 +1656,7 @@ mod tests {
 
     #[test]
     fn properties() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
 
         proc.set_debug_addr(123);
@@ -1669,7 +1669,7 @@ mod tests {
 
     #[test]
     fn exit() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1696,7 +1696,7 @@ mod tests {
 
     #[test]
     fn contains_thread() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1712,7 +1712,7 @@ mod tests {
 
     #[test]
     fn check_policy() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let policy1 = BasicPolicy {
             condition: PolicyCondition::BadHandle,
             action: PolicyAction::Allow,

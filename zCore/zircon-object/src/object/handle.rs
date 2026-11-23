@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_get_info() {
-        let obj = crate::task::Job::root();
+        let obj = crate::task::Job::new_parentless_job();
         let handle1 = Handle::new(obj.clone(), Rights::DEFAULT_JOB);
         let info1 = handle1.get_info();
         assert_eq!(info1.obj_type, 17);

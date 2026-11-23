@@ -23,7 +23,7 @@
 #[cfg(feature = "dynamic-linking")]
 mod loader_service;
 #[cfg(feature = "dynamic-linking")]
-mod vdso_plt;
+pub mod vdso_plt;
 
 use alloc::format;
 use alloc::sync::Arc;
@@ -371,7 +371,7 @@ pub fn spawn_process(
     // We resolve _zx_* and zx_* JUMP_SLOT entries to their vDSO addresses.
     #[cfg(feature = "dynamic-linking")]
     if has_interp {
-        vdso_plt::resolve_vdso_plt(load_data, image_vmar.addr(), vdso_code_addr, &vmar);
+        vdso_plt::resolve_vdso_symbols(load_data, image_vmar.addr(), vdso_code_addr, &vmar);
     }
 
     // Bootstrap channel -- construct a Fuchsia processargs message.

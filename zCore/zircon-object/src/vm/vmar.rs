@@ -316,11 +316,15 @@ impl VmAddressRegion {
         } else {
             self.determine_offset(inner, offset, len, align)?
         };
-        // Clear any stale page table entries in the allocated range.
-        // Previous mappings may have left page table entries that would
-        // cause lazy mappings to read stale physical page content.
+        // NOTE: no page-table walk over the allocated range here.
+        // test_map (via determine_offset) proved the range overlaps
+        // no live child VMAR or mapping, and every mapping-removal
+        // path (unmap_inner, VmMapping unmap/decommit) already clears
+        // its page-table entries — so there is nothing stale to
+        // clear. Walking 0x3fffffeff000 bytes (fuchsia_runtime's
+        // per-process address space) took minutes and made
+        // zx_vmar_allocate appear to hang.
         let alloc_addr = self.addr + offset;
-        self.page_table.lock().unmap_cont(alloc_addr, len).ok(); // ignore errors for already-unmapped pages
         let child = Arc::new(VmAddressRegion {
             flags,
             base: KObjectBase::new(),
