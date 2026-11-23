@@ -982,6 +982,14 @@ impl VmAddressRegion {
             vmar.destroy_internal()?;
         }
         for mapping in inner.mappings.drain(..) {
+            // Invalidate page-table entries at removal time, not only
+            // at Drop: a caller may hold an Arc from find_mapping(),
+            // delaying Drop past this VMAR's destruction. The range
+            // becomes allocatable the moment it leaves `inner`, and a
+            // later stale Drop would otherwise unmap whatever new
+            // mapping took the range. unmap() is idempotent — the
+            // eventual Drop's unmap is a no-op.
+            mapping.unmap();
             drop(mapping);
         }
         *guard = None;
@@ -1001,7 +1009,13 @@ impl VmAddressRegion {
         for vmar in inner.children.drain(..) {
             vmar.destroy_internal()?;
         }
-        inner.mappings.clear();
+        // Same removal-time PT invalidation as destroy_internal: the
+        // mappings leave `inner` here, making their ranges
+        // allocatable, but external Arc holders can delay Drop (and
+        // its unmap) past a new allocation into the same range.
+        for mapping in inner.mappings.drain(..) {
+            mapping.unmap();
+        }
         Ok(())
     }
 

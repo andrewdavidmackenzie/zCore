@@ -759,12 +759,16 @@ impl Syscall<'_> {
         // reads the content size back to know each file's length.
         // Without it the child reports content_size 0 and streams
         // over it see immediate EOF.
-        if options.contains(VmoCloneFlags::REFERENCE) {
-            // A REFERENCE spans the entire parent and behaves as if
-            // operations were done on the parent: mirror its content
-            // size.
-            child_vmo.set_content_size(vmo.content_size())?;
-        } else {
+        //
+        // Exceptions: REFERENCE children alias the parent entirely
+        // (a snapshotted content size would go stale on parent
+        // resize — operations must read through), and slices of
+        // physical/contiguous VMOs keep content size 0 (their size
+        // semantics are the slice bounds, not a stream length).
+        let is_reference = options.contains(VmoCloneFlags::REFERENCE);
+        let is_physical_slice =
+            options.contains(VmoCloneFlags::SLICE) && (vmo.is_physical() || vmo.is_contiguous());
+        if !is_reference && !is_physical_slice {
             child_vmo.set_content_size(size)?;
         }
         // Mark as immutable if SNAPSHOT + NO_WRITE.
