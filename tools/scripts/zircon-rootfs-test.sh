@@ -96,8 +96,12 @@ ELAPSED=0
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   # Check for BOTH the rootfs mount message AND the petal output.
   # This ensures we're testing the rootfs path, not the ZBI fallback.
+  # The argv check verifies the processargs protocol end-to-end:
+  # argv[0] must be the program path as invoked (Fuchsia semantics,
+  # #884).
   if grep -q "Zircon rootfs boot: loading" "$OUTPUT" 2>/dev/null && \
-     grep -q "Hello from Zircon on zCore!" "$OUTPUT" 2>/dev/null; then
+     grep -q "Hello from Zircon on zCore!" "$OUTPUT" 2>/dev/null && \
+     grep -q 'argv\[0\]="/bin/hello"' "$OUTPUT" 2>/dev/null; then
     echo "PASS: Zircon rootfs boot (pattern found after ${ELAPSED}s)"
     kill "$QEMU_PID" 2>/dev/null || true
     wait "$QEMU_PID" 2>/dev/null || true
@@ -109,7 +113,8 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     QEMU_EXIT=0
     wait "$QEMU_PID" || QEMU_EXIT=$?
     if grep -q "Zircon rootfs boot: loading" "$OUTPUT" 2>/dev/null && \
-       grep -q "Hello from Zircon on zCore!" "$OUTPUT" 2>/dev/null; then
+       grep -q "Hello from Zircon on zCore!" "$OUTPUT" 2>/dev/null && \
+       grep -q 'argv\[0\]="/bin/hello"' "$OUTPUT" 2>/dev/null; then
       echo "PASS: Zircon rootfs boot (exit=$QEMU_EXIT)"
       rm -f "$OUTPUT"
       exit 0

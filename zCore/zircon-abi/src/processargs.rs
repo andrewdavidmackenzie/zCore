@@ -175,16 +175,45 @@ impl ZxProcArgs {
         }
         None
     }
+
+    /// Get the `i`-th argument (argv[i]).
+    ///
+    /// Per the processargs protocol, arguments are NUL-terminated
+    /// strings packed at `args_off` in the message data; `args_num`
+    /// counts them. argv[0] is conventionally the program name/path
+    /// as invoked — Fuchsia's launchers and userboot both guarantee
+    /// this.
+    pub fn arg<'a>(&self, data: &'a [u8], i: u32) -> Option<&'a [u8]> {
+        if i >= self.args_num {
+            return None;
+        }
+        let mut off = self.args_off as usize;
+        let mut idx = 0u32;
+        while off < data.len() {
+            let nul = off + data[off..].iter().position(|&b| b == 0)?;
+            if idx == i {
+                return Some(&data[off..nul]);
+            }
+            idx += 1;
+            off = nul + 1;
+        }
+        None
+    }
 }
 
-/// Build a processargs message data buffer (requires alloc).
+/// Write a processargs message into `buf` (no allocation).
 ///
 /// Wire format: `[ZxProcArgs header (36 bytes)][handle_info u32 array][argv]`
 ///
 /// `argv` is NUL-separated and NUL-terminated (e.g. `"arg1\0arg2\0"`).
 /// Pass an empty slice if there are no arguments.
-#[cfg(feature = "alloc")]
-pub fn build_message(handle_info: &[u32], argv: &[u8]) -> alloc::vec::Vec<u8> {
+///
+/// Returns the number of bytes written, or 0 if `buf` is too small
+/// (callers control buffer sizes; a silent truncation would corrupt
+/// the message). This is the single definition of the processargs
+/// wire format for writers — kernel-side launchers and the userspace
+/// `userstart` both use it (see #884).
+pub fn write_message(handle_info: &[u32], argv: &[u8], buf: &mut [u8]) -> usize {
     let header_size = core::mem::size_of::<ZxProcArgs>();
     let handle_info_off = header_size as u32;
     let args_off = handle_info_off + (handle_info.len() as u32) * 4;
@@ -194,6 +223,10 @@ pub fn build_message(handle_info: &[u32], argv: &[u8]) -> alloc::vec::Vec<u8> {
         argv.iter().filter(|&&b| b == 0).count() as u32
     };
     let total_size = (args_off as usize) + argv.len();
+
+    if buf.len() < total_size {
+        return 0;
+    }
 
     let header = ZxProcArgs {
         protocol: ZX_PROCARGS_PROTOCOL,
@@ -206,9 +239,83 @@ pub fn build_message(handle_info: &[u32], argv: &[u8]) -> alloc::vec::Vec<u8> {
         names_off: total_size as u32,
         names_num: 0,
     };
-
+    buf[..header_size].copy_from_slice(header.as_bytes());
     let handle_info_bytes = unsafe {
         core::slice::from_raw_parts(handle_info.as_ptr().cast::<u8>(), handle_info.len() * 4)
     };
-    [header.as_bytes(), handle_info_bytes, argv].concat()
+    buf[header_size..total_size - argv.len()].copy_from_slice(handle_info_bytes);
+    buf[total_size - argv.len()..total_size].copy_from_slice(argv);
+    total_size
+}
+
+/// Build a processargs message data buffer (requires alloc).
+///
+/// Wire format: `[ZxProcArgs header (36 bytes)][handle_info u32 array][argv]`
+///
+/// `argv` is NUL-separated and NUL-terminated (e.g. `"arg1\0arg2\0"`).
+/// Pass an empty slice if there are no arguments.
+#[cfg(feature = "alloc")]
+pub fn build_message(handle_info: &[u32], argv: &[u8]) -> alloc::vec::Vec<u8> {
+    let mut buf = alloc::vec![0u8; write_message_size(handle_info, argv)];
+    let len = write_message(handle_info, argv, &mut buf);
+    debug_assert_eq!(len, buf.len());
+    buf
+}
+
+/// The exact buffer size `write_message` needs for these inputs.
+pub fn write_message_size(handle_info: &[u32], argv: &[u8]) -> usize {
+    core::mem::size_of::<ZxProcArgs>() + handle_info.len() * 4 + argv.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Round-trip: write_message → parse → find_handle / arg.
+    #[test]
+    fn write_message_round_trip() {
+        let handle_info = [
+            pa_hnd(PA_PROC_SELF, 0),
+            pa_hnd(PA_VMO_VDSO, 0),
+            pa_hnd(PA_JOB_DEFAULT, 0),
+        ];
+        let argv = b"bin/hello\0--flag\0";
+        let mut buf = [0u8; 256];
+        let len = write_message(&handle_info, argv, &mut buf);
+        assert_eq!(len, write_message_size(&handle_info, argv));
+        assert!(len > 0);
+
+        let msg = &buf[..len];
+        let header = ZxProcArgs::from_bytes(msg).expect("valid header");
+        assert_eq!(header.args_num, 2);
+        assert_eq!(
+            header.find_handle(msg, 3, PA_VMO_VDSO),
+            Some(1),
+            "tag lookup after round-trip"
+        );
+        assert_eq!(header.arg(msg, 0), Some(&b"bin/hello"[..]));
+        assert_eq!(header.arg(msg, 1), Some(&b"--flag"[..]));
+        assert_eq!(header.arg(msg, 2), None);
+    }
+
+    /// write_message refuses to truncate: a too-small buffer yields 0.
+    #[test]
+    fn write_message_rejects_small_buffer() {
+        let handle_info = [pa_hnd(PA_PROC_SELF, 0)];
+        let mut buf = [0u8; 8]; // far too small
+        assert_eq!(write_message(&handle_info, b"", &mut buf), 0);
+    }
+
+    /// The alloc frontend produces byte-identical output to the
+    /// no-alloc writer.
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn build_message_matches_write_message() {
+        let handle_info = [pa_hnd(PA_PROC_SELF, 0), pa_hnd(PA_JOB_DEFAULT, 0)];
+        let argv = b"hello\0";
+        let via_alloc = build_message(&handle_info, argv);
+        let mut buf = [0u8; 128];
+        let len = write_message(&handle_info, argv, &mut buf);
+        assert_eq!(&via_alloc[..], &buf[..len]);
+    }
 }

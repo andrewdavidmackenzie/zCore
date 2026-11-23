@@ -215,7 +215,20 @@ run_test() {
 # Run all petal tests
 FAILED=0
 
+# The hello argv check verifies the processargs protocol end-to-end
+# (#884): argv[0] is the program name/path as invoked. The rootfs
+# path (aarch64) passes the invoked path "/bin/hello"; the ZBI path
+# (x86_64 UEFI, per-petal images) forwards the bootfs entry name
+# "bin/hello" — matching how Fuchsia's userboot passes e.g.
+# "bin/component_manager" as argv[0].
+case "$ARCH" in
+  aarch64) HELLO_ARGV='argv\[0\]="/bin/hello"' ;;
+  x86_64) HELLO_ARGV='argv\[0\]="bin/hello"' ;;
+  *) HELLO_ARGV='argv\[0\]=' ;;
+esac
+
 run_test "hello" "Hello from Zircon on zCore!" || FAILED=$((FAILED + 1))
+run_test "hello" "$HELLO_ARGV" || FAILED=$((FAILED + 1))
 run_test "channel-test" "channel_test: PASS" || FAILED=$((FAILED + 1))
 run_test "vmo-test" "vmo_test: PASS" || FAILED=$((FAILED + 1))
 run_test "vdso-test" "vdso_test: PASS" || FAILED=$((FAILED + 1))

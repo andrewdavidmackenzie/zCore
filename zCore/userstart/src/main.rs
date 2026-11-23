@@ -74,7 +74,42 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     debug_print(b"userstart: received bootstrap handles\n");
 
-    // Close the bootstrap channel -- we've read all the handles
+    // Message 2: the extended system handles (sub-resources,
+    // boot-options, UTC clock) that the kernel sends after the
+    // program-bootstrap message (#884). userstart does not use them
+    // itself — it forwards them to the program it starts, so programs
+    // loaded via the ZBI path see the same pair as the rootfs path.
+    // A read failure (older kernel, single message) is tolerated:
+    // nothing is forwarded.
+    //
+    // Buffer invariant: message 2 never exceeds message 1 — both
+    // carry the same argv, and message 2 has fewer handle_info
+    // entries (6 vs 15). Message 1 already fit in 1024 bytes, so
+    // message 2 does too; the same buffer size makes the invariant
+    // obvious.
+    let mut data_buf2 = [0u8; 1024];
+    let mut handles2 = [ZX_HANDLE_INVALID; MAX_HANDLES];
+    let mut actual_bytes2: u32 = 0;
+    let mut actual_handles2: u32 = 0;
+    let msg2_status = unsafe {
+        zx_channel_read(
+            bootstrap_handle,
+            0, // options
+            data_buf2.as_mut_ptr(),
+            handles2.as_mut_ptr(),
+            data_buf2.len() as u32,
+            MAX_HANDLES as u32,
+            &mut actual_bytes2,
+            &mut actual_handles2,
+        )
+    };
+    let num_handles2 = if msg2_status == ZX_OK {
+        actual_handles2 as usize
+    } else {
+        0
+    };
+
+    // Close the bootstrap channel -- we've read all the messages.
     unsafe { zx_handle_close(bootstrap_handle) };
 
     // Parse the processargs header to find handles by type tag.
@@ -105,6 +140,35 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     let root_resource = find_handle(&header, msg_data, &handles, num_handles, PA_RESOURCE);
     let zbi_vmo = find_handle(&header, msg_data, &handles, num_handles, PA_VMO_BOOTDATA);
     let vdso_vmo = find_handle(&header, msg_data, &handles, num_handles, PA_VMO_VDSO);
+
+    // Extract the extended handles from message 2 by tag. Missing
+    // entries stay invalid and are simply not forwarded.
+    // Guard the slice: a failed (BUFFER_TOO_SMALL) read leaves
+    // actual_bytes2 holding the *needed* size, which may exceed the
+    // buffer — slicing with it would panic. Only a successful read's
+    // length (clamped as defense) indexes valid bytes.
+    let msg2_data = if msg2_status == ZX_OK {
+        &data_buf2[..(actual_bytes2 as usize).min(data_buf2.len())]
+    } else {
+        &data_buf2[..0]
+    };
+    let find_ext = |pa_type: u32| -> HandleValue {
+        if num_handles2 == 0 {
+            return ZX_HANDLE_INVALID;
+        }
+        match ZxProcArgs::from_bytes(msg2_data)
+            .and_then(|h| h.find_handle(msg2_data, num_handles2, pa_type))
+        {
+            Some(idx) if idx < handles2.len() => handles2[idx],
+            _ => ZX_HANDLE_INVALID,
+        }
+    };
+    let ext_mmio = find_ext(PA_MMIO_RESOURCE);
+    let ext_irq = find_ext(PA_IRQ_RESOURCE);
+    let ext_ioport = find_ext(PA_IOPORT_RESOURCE);
+    let ext_system = find_ext(PA_SYSTEM_RESOURCE);
+    let ext_boot_opts = find_ext(PA_VMO_KERNEL_FILE);
+    let ext_utc = find_ext(PA_CLOCK_UTC);
 
     // Step 2: Read the ZBI VMO to find the init program
     let mut zbi_size: usize = 0;
@@ -230,33 +294,108 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         zx_channel_create(0, &mut init_channel_local, &mut init_channel_remote)
     });
 
-    // Duplicate the process handle so the child can reference itself.
+    // Duplicate the process and thread handles: the originals stay
+    // with userstart (process_start borrows them by handle value);
+    // the copies go into init's message 1.
     let mut init_proc_self: HandleValue = ZX_HANDLE_INVALID;
     check("handle_duplicate(proc_self)", unsafe {
         zx_handle_duplicate(init_proc, ZX_RIGHT_SAME_RIGHTS, &mut init_proc_self)
     });
+    let mut init_thread_self: HandleValue = ZX_HANDLE_INVALID;
+    check("handle_duplicate(thread_self)", unsafe {
+        zx_handle_duplicate(init_thread, ZX_RIGHT_SAME_RIGHTS, &mut init_thread_self)
+    });
 
-    // Forward bootstrap handles to init using processargs format.
-    let forward_handles = [init_proc_self, root_job, root_resource, zbi_vmo, init_vmar];
-    let forward_info: [u32; 5] = [
+    // Forward the bootstrap pair to init (#884), using the shared
+    // processargs writer — the same structure the rootfs-spawn path
+    // sends. Message 1 (program bootstrap) transfers ownership of
+    // vmar/job/resource/zbi/vdso to init; message 2 passes through
+    // the extended handles userstart received.
+    // ZBI_BOOTFS_MAX_NAME_LEN is 256, so a 257-byte buffer (name +
+    // NUL) never truncates a valid bootfs name; the min() remains
+    // pure defense against malformed images.
+    let mut argv_buf = [0u8; 257];
+    let argv_len = name.len().min(argv_buf.len() - 1);
+    argv_buf[..argv_len].copy_from_slice(&name[..argv_len]);
+    // argv_buf[argv_len] is already 0 (NUL terminator).
+    let msg1_handles: [HandleValue; 7] = [
+        init_proc_self,
+        init_thread_self,
+        init_vmar,
+        root_job,
+        vdso_vmo,
+        root_resource,
+        zbi_vmo,
+    ];
+    let msg1_info: [u32; 7] = [
         pa_hnd(PA_PROC_SELF, 0),
+        pa_hnd(PA_THREAD_SELF, 0),
+        pa_hnd(PA_VMAR_ROOT, 0),
         pa_hnd(PA_JOB_DEFAULT, 0),
+        pa_hnd(PA_VMO_VDSO, 0),
         pa_hnd(PA_RESOURCE, 0),
         pa_hnd(PA_VMO_BOOTDATA, 0),
-        pa_hnd(PA_VMAR_ROOT, 0),
     ];
-    let mut fwd_buf = [0u8; 128];
-    let fwd_len = write_processargs_header(&forward_info, &mut fwd_buf);
-    check("channel_write", unsafe {
+    let mut msg1_buf = [0u8; 256];
+    let msg1_len = write_message(&msg1_info, &argv_buf[..argv_len + 1], &mut msg1_buf);
+    if msg1_len == 0 {
+        debug_print(b"userstart: message 1 buffer too small\n");
+        process_exit(1);
+    }
+    check("channel_write(msg1)", unsafe {
         zx_channel_write(
             init_channel_local,
             0,
-            fwd_buf.as_ptr(),
-            fwd_len as u32,
-            forward_handles.as_ptr(),
-            forward_handles.len() as u32,
+            msg1_buf.as_ptr(),
+            msg1_len as u32,
+            msg1_handles.as_ptr(),
+            msg1_handles.len() as u32,
         )
     });
+
+    // Message 2: forward the extended handles that were received.
+    let ext_pairs: [(u32, HandleValue); 6] = [
+        (PA_MMIO_RESOURCE, ext_mmio),
+        (PA_IRQ_RESOURCE, ext_irq),
+        (PA_IOPORT_RESOURCE, ext_ioport),
+        (PA_SYSTEM_RESOURCE, ext_system),
+        (PA_VMO_KERNEL_FILE, ext_boot_opts),
+        (PA_CLOCK_UTC, ext_utc),
+    ];
+    let mut msg2_handles = [ZX_HANDLE_INVALID; 6];
+    let mut msg2_info = [0u32; 6];
+    let mut msg2_n = 0usize;
+    for &(tag, h) in &ext_pairs {
+        if h != ZX_HANDLE_INVALID {
+            msg2_handles[msg2_n] = h;
+            msg2_info[msg2_n] = pa_hnd(tag, 0);
+            msg2_n += 1;
+        }
+    }
+    if msg2_n > 0 {
+        let mut msg2_buf = [0u8; 128];
+        let msg2_len = write_message(&msg2_info[..msg2_n], &[], &mut msg2_buf);
+        if msg2_len == 0 {
+            debug_print(b"userstart: message 2 buffer too small\n");
+            process_exit(1);
+        }
+        check("channel_write(msg2)", unsafe {
+            zx_channel_write(
+                init_channel_local,
+                0,
+                msg2_buf.as_ptr(),
+                msg2_len as u32,
+                msg2_handles.as_ptr(),
+                msg2_n as u32,
+            )
+        });
+    }
+    // Close any message-2 handles that were not forwarded.
+    for &h in handles2.iter().take(num_handles2) {
+        if h != ZX_HANDLE_INVALID && !msg2_handles[..msg2_n].contains(&h) {
+            unsafe { zx_handle_close(h) };
+        }
+    }
 
     debug_print(b"userstart: starting init process\n");
     check("process_start", unsafe {
@@ -290,46 +429,24 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         core::hint::spin_loop();
     }
 
-    // Close our handles and exit
+    // Close our handles and exit. init_vmar, zbi_vmo, vdso_vmo,
+    // root_job, and root_resource were transferred to init via
+    // message 1 — closing them here would close already-transferred
+    // (invalid) handles.
     unsafe {
         zx_handle_close(init_proc);
         zx_handle_close(init_thread);
-        zx_handle_close(init_vmar);
         // code_vmo is local to load_elf/load_flat and already consumed
         zx_handle_close(stack_vmo);
-        zx_handle_close(zbi_vmo);
-        // Close remaining bootstrap handles
+        // Close remaining bootstrap handles, skipping transferred ones.
+        let transferred = [root_job, root_resource, zbi_vmo, vdso_vmo];
         for &h in &handles[..num_handles] {
-            if h != ZX_HANDLE_INVALID {
+            if h != ZX_HANDLE_INVALID && !transferred.contains(&h) {
                 zx_handle_close(h);
             }
         }
         zx_process_exit(0);
     }
-}
-
-/// Write a processargs header + handle_info into a buffer.
-/// Returns the number of bytes written.
-fn write_processargs_header(handle_info: &[u32], buf: &mut [u8]) -> usize {
-    let header_size = core::mem::size_of::<ZxProcArgs>();
-    let total = header_size + handle_info.len() * 4;
-    let header = ZxProcArgs {
-        protocol: ZX_PROCARGS_PROTOCOL,
-        version: ZX_PROCARGS_VERSION,
-        handle_info_off: header_size as u32,
-        args_off: total as u32,
-        args_num: 0,
-        environ_off: total as u32,
-        environ_num: 0,
-        names_off: total as u32,
-        names_num: 0,
-    };
-    buf[..header_size].copy_from_slice(header.as_bytes());
-    let info_bytes = unsafe {
-        core::slice::from_raw_parts(handle_info.as_ptr().cast::<u8>(), handle_info.len() * 4)
-    };
-    buf[header_size..total].copy_from_slice(info_bytes);
-    total
 }
 
 /// Apply ELF dynamic relocations from the PT_DYNAMIC segment.
