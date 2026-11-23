@@ -9,10 +9,12 @@ pub const POL_OVERRIDE_DENY: u32 = 1;
 #[derive(Default, Copy, Clone)]
 pub struct JobPolicy {
     // TODO: use bitset
-    action: [Option<PolicyAction>; 15],
+    // Sized for ZX_POL_MAX (18) — must cover every PolicyCondition
+    // discriminant or indexed access panics.
+    action: [Option<PolicyAction>; 18],
     /// Per-condition override flag. `true` means override is allowed (V2).
     /// For V1 policies (no flags field), defaults to `false` (deny override).
-    override_allow: [bool; 15],
+    override_allow: [bool; 18],
 }
 
 impl JobPolicy {
@@ -60,6 +62,9 @@ impl JobPolicy {
                 PolicyCondition::NewTimer as usize,
                 PolicyCondition::NewProcess as usize,
                 PolicyCondition::NewProfile as usize,
+                PolicyCondition::NewPager as usize,
+                PolicyCondition::NewIOB as usize,
+                PolicyCondition::NewSampler as usize,
             ]
         } else {
             alloc::vec![condition as usize]
