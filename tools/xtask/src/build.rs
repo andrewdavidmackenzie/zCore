@@ -194,11 +194,18 @@ impl BuildConfig {
                 // imported by `make fuchsia-import` — Fuchsia's real
                 // userboot as the first process, the matching vDSO,
                 // and the full ZBI (userboot unpacks its bootfs).
-                // Env overrides still win, as with the petal defaults.
+                // Env overrides still win, as with the petal defaults;
+                // validate whichever path is actually selected.
                 let dir = crate::rootfs::fuchsia_prebuilt_dir(arch);
-                let userboot = dir.join("userboot.elf");
-                let zbi = dir.join("fuchsia.zbi");
-                let vdso = dir.join("vdso.elf");
+                let select = |var: &str, file: &str| -> PathBuf {
+                    match std::env::var(var) {
+                        Ok(val) => val.into(),
+                        Err(_) => dir.join(file),
+                    }
+                };
+                let userboot = select("USERSTART_ELF", "userboot.elf");
+                let zbi = select("PETAL_ZBI", "fuchsia.zbi");
+                let vdso = select("VDSO_BIN", "vdso.elf");
                 for path in [&userboot, &zbi, &vdso] {
                     assert!(
                         path.is_file(),
@@ -207,21 +214,9 @@ impl BuildConfig {
                         path.display()
                     );
                 }
-                if let Ok(val) = std::env::var("USERSTART_ELF") {
-                    env.insert("USERSTART_ELF".into(), val.into());
-                } else {
-                    env.insert("USERSTART_ELF".into(), userboot.into_os_string());
-                }
-                if let Ok(val) = std::env::var("PETAL_ZBI") {
-                    env.insert("PETAL_ZBI".into(), val.into());
-                } else {
-                    env.insert("PETAL_ZBI".into(), zbi.into_os_string());
-                }
-                if let Ok(val) = std::env::var("VDSO_BIN") {
-                    env.insert("VDSO_BIN".into(), val.into());
-                } else {
-                    env.insert("VDSO_BIN".into(), vdso.into_os_string());
-                }
+                env.insert("USERSTART_ELF".into(), userboot.into_os_string());
+                env.insert("PETAL_ZBI".into(), zbi.into_os_string());
+                env.insert("VDSO_BIN".into(), vdso.into_os_string());
             } else {
                 if let Ok(val) = std::env::var("USERSTART_ELF") {
                     env.insert("USERSTART_ELF".into(), val.into());

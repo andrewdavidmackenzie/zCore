@@ -24,6 +24,10 @@
 # from any Fuchsia build output. Decompression uses the Python >= 3.14
 # stdlib zstd module, falling back to the zstd(1) CLI.
 #
+# Everything is staged in a temp directory and moved into place only
+# after every extraction and copy succeeds, so a failure mid-import
+# cannot leave a half-updated prebuilt/fuchsia/.
+#
 # Usage: tools/scripts/fuchsia-import.sh [arch]
 #   arch: x86_64 (default) or aarch64 — the prebuilt/fuchsia/<arch>/
 #         subdir to populate. The arch is inferred from FUCHSIA_OUT's
@@ -36,7 +40,10 @@ set -euo pipefail
 
 source "$(dirname "$0")/fuchsia-env.sh"
 
-fuchsia_resolve_images
+# Only the ZBI is needed here — the QEMU boot shim is a run/test
+# concern, and a build without one (e.g. a product bundle) can still
+# be a valid import source.
+fuchsia_resolve_zbi
 
 # Infer the target arch from the build dir name (bringup.x64-balanced,
 # bringup.qemu-arm64-balanced, ...), overridable as $1.
@@ -61,18 +68,19 @@ if git -C "$FUCHSIA_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
     REV="$(git -C "$FUCHSIA_ROOT" log -1 --format='%H (%cd %s)' --date=short)"
 fi
 
-# Carve the kernel-package files out of the ZBI. Python does the format
-# parsing; the shell handles copying and provenance.
-IMPORT_TMP="$(mktemp -d)"
-trap 'rm -rf "$IMPORT_TMP"' EXIT
+# Stage everything here; move into DEST only once all of it exists.
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
 
-python3 - "$FUCHSIA_ZBI" "$IMPORT_TMP" <<'EOF'
+# Carve the kernel-package files out of the ZBI. Python does the
+# format parsing; the shell handles staging and provenance.
+python3 - "$FUCHSIA_ZBI" "$STAGE" <<'EOF'
 import hashlib
 import struct
 import sys
 from pathlib import Path
 
-zbi_path, out_dir = sys.argv[1], Path(sys.argv[2])
+zbi_path, stage_dir = sys.argv[1], Path(sys.argv[2])
 
 ITEM_MAGIC = 0xB5781729
 TYPE_CONTAINER = 0x544F4F42  # "BOOT"
@@ -113,7 +121,7 @@ def find_kernel_payload(zbi: bytes) -> bytes:
     off, end = 32, min(32 + clen, len(zbi))
     while off + 32 <= end:
         itype, ilen = struct.unpack_from("<II", zbi, off)
-        magic, = struct.unpack_from("<I", zbi, off + 24)
+        (magic,) = struct.unpack_from("<I", zbi, off + 24)
         if magic != ITEM_MAGIC:
             sys.exit(f"bad item magic at {off:#x}")
         if itype == TYPE_STORAGE_KERNEL:
@@ -135,6 +143,13 @@ def parse_bootfs(img: bytes) -> dict:
         if name_len == 0:
             break
         name = img[off + 12 : off + 12 + name_len].rstrip(b"\0").decode()
+        # Bounds check: Python slicing would silently shorten an
+        # out-of-range range, producing a truncated artifact.
+        if data_off > len(img) or data_len > len(img) - data_off:
+            sys.exit(
+                f"bootfs entry '{name}' range [{data_off:#x}, {data_off + data_len:#x}) "
+                f"exceeds the kernel package size {len(img):#x} — corrupt image?"
+            )
         entries[name] = (data_off, data_len)
         off += (12 + name_len + 3) & ~3
     return entries
@@ -157,20 +172,14 @@ for src, dest_name in WANTED.items():
     data = kernel_pkg[data_off : data_off + data_len]
     if data[:4] != b"\x7fELF":
         sys.exit(f"'{src}' is not an ELF")
-    out = out_dir / dest_name
+    out = stage_dir / dest_name
     out.write_bytes(data)
     print(f"  {src} -> {dest_name} ({data_len} bytes, sha256 {hashlib.sha256(data).hexdigest()[:12]}…)")
 EOF
 
-# Move the carved files into the destination.
-for f in userboot.elf userboot-test-rust.elf vdso.elf; do
-    [ -f "$IMPORT_TMP/$f" ] || fuchsia_die "internal error: $f missing from extraction"
-    mv -f "$IMPORT_TMP/$f" "$DEST/$f"
-done
-
-# Copy the full ZBI (bootfs + cmdline items; the kernel item is unused
-# by zCore but kept so the artifact is the complete, bootable image).
-cp -f "$FUCHSIA_ZBI" "$DEST/fuchsia.zbi"
+# Stage the full ZBI too (bootfs + cmdline items; the kernel item is
+# unused by zCore but kept so the artifact is the complete image).
+cp -f "$FUCHSIA_ZBI" "$STAGE/fuchsia.zbi"
 
 # Provenance: what was imported, from where, with which hashes.
 sha256_of() {
@@ -194,7 +203,7 @@ sha256_of() {
     echo "| File | Source (kernel package bootfs) | Size | sha256 |"
     echo "|------|-------------------------------|------|--------|"
     for f in userboot.elf userboot-test-rust.elf vdso.elf fuchsia.zbi; do
-        [ -f "$DEST/$f" ] || continue
+        [ -f "$STAGE/$f" ] || continue
         src="copied from images.json zircon-a"
         case "$f" in
             userboot.elf) src="zircon/userboot" ;;
@@ -202,9 +211,14 @@ sha256_of() {
             vdso.elf) src="zircon/vdso" ;;
         esac
         printf '| `%s` | `%s` | %s | `%s` |\n' \
-            "$f" "$src" "$(wc -c <"$DEST/$f" | tr -d ' ')" "$(sha256_of "$DEST/$f")"
+            "$f" "$src" "$(wc -c <"$STAGE/$f" | tr -d ' ')" "$(sha256_of "$STAGE/$f")"
     done
-} > "$DEST/PROVENANCE.md"
+} > "$STAGE/PROVENANCE.md"
 
-echo "fuchsia-import: wrote $DEST/PROVENANCE.md"
+# Everything succeeded — move the staged bundle into place.
+for f in userboot.elf userboot-test-rust.elf vdso.elf fuchsia.zbi PROVENANCE.md; do
+    [ -f "$STAGE/$f" ] || fuchsia_die "internal error: $f missing from staging"
+    mv -f "$STAGE/$f" "$DEST/$f"
+done
+
 echo "fuchsia-import: DONE"
