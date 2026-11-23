@@ -316,6 +316,69 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     };
     kernel_channel.write(msg).unwrap();
 
+    // Message 2 — the extended system message, mirroring the pair
+    // that `spawn_process` sends on the rootfs boot path (#884):
+    // sub-resources, boot-options, and a UTC clock for libc's
+    // clock_gettime(CLOCK_REALTIME). Nothing reads it today (petal
+    // programs read message 1 only); userstart forwards it to the
+    // program it starts, so anything loaded from the ZBI path sees
+    // the same bootstrap semantics as the rootfs path.
+    let mmio_resource = Resource::create("mmio", ResourceKind::MMIO, 0, 0, ResourceFlags::empty());
+    let irq_resource = Resource::create("irq", ResourceKind::IRQ, 0, 0, ResourceFlags::empty());
+    let ioport_resource = Resource::create(
+        "ioport",
+        ResourceKind::IOPORT,
+        0,
+        0x10000, // covers entire x86 I/O port space (0x0000-0xFFFF)
+        ResourceFlags::empty(),
+    );
+    let system_resource = Resource::create(
+        "system",
+        ResourceKind::SYSTEM,
+        0,
+        16, // covers all ZX_RSRC_SYSTEM_*_BASE values (0..15)
+        ResourceFlags::empty(),
+    );
+    let boot_opts_vmo = VmObject::new_paged(1);
+    boot_opts_vmo.set_name("boot-options.txt");
+    boot_opts_vmo.write(0, cmdline.as_bytes()).ok();
+    let utc_clock = Arc::new(
+        zircon_object::signal::Clock::new(zircon_object::signal::ZX_CLOCK_OPT_AUTO_START).unwrap(),
+    );
+    let msg2_handles = Vec::from([
+        Handle::new(mmio_resource, Rights::DEFAULT_RESOURCE), // PA_MMIO_RESOURCE
+        Handle::new(irq_resource, Rights::DEFAULT_RESOURCE),  // PA_IRQ_RESOURCE
+        Handle::new(ioport_resource, Rights::DEFAULT_RESOURCE), // PA_IOPORT_RESOURCE
+        Handle::new(system_resource, Rights::DEFAULT_RESOURCE), // PA_SYSTEM_RESOURCE
+        Handle::new(boot_opts_vmo, Rights::DEFAULT_VMO), // PA_VMO_KERNEL_FILE (boot-options.txt)
+        Handle::new(
+            utc_clock,
+            Rights::DUPLICATE
+                | Rights::TRANSFER
+                | Rights::READ
+                | Rights::WAIT
+                | Rights::INSPECT
+                | Rights::SIGNAL
+                | Rights::MAP,
+        ), // PA_CLOCK_UTC
+    ]);
+    let msg2_info = [
+        pa_hnd(PA_MMIO_RESOURCE, 0),
+        pa_hnd(PA_IRQ_RESOURCE, 0),
+        pa_hnd(PA_IOPORT_RESOURCE, 0),
+        pa_hnd(PA_SYSTEM_RESOURCE, 0),
+        pa_hnd(PA_VMO_KERNEL_FILE, 0),
+        pa_hnd(PA_CLOCK_UTC, 0),
+    ];
+    let msg2_data = zircon_abi::processargs::build_message(&msg2_info, &argv);
+    kernel_channel
+        .write(MessagePacket {
+            data: msg2_data,
+            handles: msg2_handles,
+            cancel_senders: Vec::new(),
+        })
+        .unwrap();
+
     // Pass the vDSO code base address as arg2 to _start(handle, vdso_base).
     // This matches Fuchsia's convention.
     proc.start(&thread, entry, sp, Some(handle), _vdso_code_addr, thread_fn)
@@ -888,6 +951,7 @@ pub fn zircon_spawn_config() -> zircon_object::task::spawn::SpawnConfig {
         stack_pages: 8,
         thread_fn,
         extra_args: alloc::vec::Vec::new(),
+        argv0: alloc::string::String::new(),
     }
 }
 
@@ -929,6 +993,8 @@ pub fn run_from_data(
     let job = Job::root();
     let mut config = zircon_spawn_config();
     config.extra_args = extra_args;
+    // argv[0] = the program path as invoked (Fuchsia semantics).
+    config.argv0 = init_path.into();
     zircon_object::task::spawn::spawn_process(&job, "init", program_data, &config)
         .expect("failed to spawn init process")
 }

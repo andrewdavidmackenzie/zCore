@@ -179,6 +179,10 @@ pub struct SpawnConfig {
     pub thread_fn: crate::task::thread::ThreadFn,
     /// Extra argv entries (appended after argv[0] = program name).
     pub extra_args: alloc::vec::Vec<alloc::string::String>,
+    /// argv[0] override: the program name/path as invoked (Fuchsia
+    /// semantics — launchers pass the resolved program path). When
+    /// empty, the process `name` is used.
+    pub argv0: alloc::string::String,
 }
 
 /// Spawn a new Zircon process from raw ELF data.
@@ -389,7 +393,15 @@ pub fn spawn_process(
 
     // Build argv early -- it's included in message 1 for the new-style
     // libc startup (StartCompilerAbi + _zx_startup_get_handles).
-    let mut argv = format!("{}\0", name);
+    // argv[0] is the program name/path as invoked (Fuchsia
+    // semantics); the config's argv0 override wins over the process
+    // name.
+    let argv0 = if config.argv0.is_empty() {
+        name
+    } else {
+        config.argv0.as_str()
+    };
+    let mut argv = format!("{}\0", argv0);
     for arg in &config.extra_args {
         argv.push_str(arg);
         argv.push('\0');
@@ -591,8 +603,7 @@ pub fn spawn_process(
     // Create a UTC clock for libc's clock_gettime(CLOCK_REALTIME).
     // Auto-started so it's immediately readable.
     use crate::signal::Clock;
-    const ZX_CLOCK_OPT_AUTO_START: u64 = 1 << 0;
-    let utc_clock = Clock::new(ZX_CLOCK_OPT_AUTO_START)?;
+    let utc_clock = Clock::new(crate::signal::ZX_CLOCK_OPT_AUTO_START)?;
     let utc_clock = alloc::sync::Arc::new(utc_clock);
 
     let msg2_handles = alloc::vec![
