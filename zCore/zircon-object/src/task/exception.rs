@@ -731,7 +731,7 @@ mod tests {
 
     #[test]
     fn exceptionate_iterator() {
-        let parent_job = Job::root();
+        let parent_job = Job::new_parentless_job();
         let job = parent_job.create_child().unwrap();
         let proc = Process::create(&job, "proc").unwrap();
         let thread = Thread::create(&proc, "thread").unwrap();
@@ -756,7 +756,7 @@ mod tests {
 
     #[test]
     fn exceptionate_iterator_second_chance() {
-        let parent_job = Job::root();
+        let parent_job = Job::new_parentless_job();
         let job = parent_job.create_child().unwrap();
         let proc = Process::create(&job, "proc").unwrap();
         let thread = Thread::create(&proc, "thread").unwrap();
@@ -783,7 +783,7 @@ mod tests {
 
     #[test]
     fn job_debugger_iterator() {
-        let parent_job = Job::root();
+        let parent_job = Job::new_parentless_job();
         let job = parent_job.create_child().unwrap();
         let child_job = job.create_child().unwrap();
         let _grandson_job = child_job.create_child().unwrap();

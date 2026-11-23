@@ -166,7 +166,7 @@ mod tests {
         // acquire the thread lock, and the graph REJECTS reaching the
         // process lock from it (compile-time — verified by the
         // acceptance tests in lock_order.rs).
-        let job = Job::root();
+        let job = Job::new_parentless_job();
         let proc = Process::create(&job, "demo").unwrap();
         let thread = Thread::create(&proc, "demo-main").unwrap();
 
@@ -184,7 +184,7 @@ mod tests {
         // lock, and the graph permits process → thread (a
         // process-level TaskCtx carries the process; acquiring the
         // THREAD lock requires the Thread variant — see for_thread).
-        let job = Job::root();
+        let job = Job::new_parentless_job();
         let proc = Process::create(&job, "demo").unwrap();
 
         let ctx = TaskCtx::from_process(proc);
@@ -203,7 +203,7 @@ mod tests {
         // legal (transitivity). This is the shape Process::exit
         // would use after collecting threads: hold the process lock,
         // then take thread locks (process → thread is downstream).
-        let job = Job::root();
+        let job = Job::new_parentless_job();
         let proc = Process::create(&job, "demo").unwrap();
         let thread = Thread::create(&proc, "demo-main").unwrap();
 
@@ -223,7 +223,7 @@ mod tests {
         // object to lock (availability is runtime, ordering is
         // compile-time). Use a process/thread-level context to
         // acquire process locks.
-        let job = Job::root();
+        let job = Job::new_parentless_job();
         let ctx = TaskCtx::from_job(job);
         let mut locked = ctx.locked();
         // Legal: the job's own lock.

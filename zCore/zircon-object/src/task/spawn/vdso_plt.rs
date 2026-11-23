@@ -1,9 +1,13 @@
-//! vDSO PLT resolution for dynamically-linked ELF binaries.
+//! vDSO symbol resolution for dynamically-linked ELF binaries.
 //!
-//! Eagerly resolves `_zx_*` and `zx_*` symbols in the loaded ELF's PLT GOT
-//! to point to the vDSO trampoline addresses. This is needed because
-//! `ld.so.1` calls `_zx_*` functions via PLT before its lazy binding
-//! resolver is initialized.
+//! Eagerly resolves `_zx_*` and `zx_*` relocations in a loaded ELF
+//! against the mapped vDSO's dynamic symbol table:
+//! - `JUMP_SLOT` (PLT GOT entries) — needed because `ld.so.1` calls
+//!   `_zx_*` functions via PLT before its lazy binding resolver is
+//!   initialized;
+//! - `GLOB_DAT` (non-PLT GOT entries) — needed by static PIEs that
+//!   link against the vDSO directly (RODSO-style, e.g. Fuchsia's
+//!   userboot, which has `NEEDED libzircon.so` and `BIND_NOW`).
 //!
 //! Only needed when running dynamically-linked Fuchsia binaries.
 
@@ -11,15 +15,17 @@ use alloc::sync::Arc;
 
 use crate::vm::VmAddressRegion;
 
-/// Eagerly resolve vDSO symbols in an ELF's PLT GOT.
+/// Resolve vDSO symbol relocations (GLOB_DAT and JUMP_SLOT) in a
+/// loaded ELF against the vDSO mapped at `vdso_base`.
 ///
 /// Parses the vDSO ELF to build a symbol lookup table, then patches
-/// JUMP_SLOT entries in `elf_data` that reference `_zx_*` or `zx_*`
-/// symbols to point to the vDSO trampoline addresses.
-///
-/// This is needed because `ld.so.1` calls `_zx_*` functions via PLT
-/// before its lazy binding resolver is initialized.
-pub(crate) fn resolve_vdso_plt(
+/// GOT entries in `elf_data` (loaded at `elf_base`) that reference
+/// `_zx_*` or `zx_*` symbols to point to the vDSO trampoline
+/// addresses. Handles both the PLT relocation section (DT_JMPREL)
+/// and the dynamic relocation section (DT_REL), covering ld.so.1
+/// (lazy PLT) and RODSO-style static PIEs like userboot (BIND_NOW
+/// GLOB_DAT) alike.
+pub fn resolve_vdso_symbols(
     elf_data: &[u8],
     elf_base: usize,
     vdso_base: usize,
@@ -172,8 +178,10 @@ pub(crate) fn resolve_vdso_plt(
         sym_idx // Total number of symbols
     };
 
-    // Now parse ld.so.1's dynamic section to find its JMPREL entries
-    // We need: DT_JMPREL, DT_PLTRELSZ, DT_SYMTAB, DT_STRTAB
+    // Now parse the target ELF's dynamic section for its relocation
+    // sections and symbol tables. Two relocation sections matter:
+    // DT_JMPREL/DT_PLTRELSZ (PLT slots — JUMP_SLOT) and
+    // DT_REL/DT_RELSZ (.rel.dyn — GLOB_DAT and relatives).
     let elf = match xmas_elf::ElfFile::new(elf_data) {
         Ok(e) => e,
         Err(_) => return,
@@ -181,6 +189,8 @@ pub(crate) fn resolve_vdso_plt(
 
     let mut ld_jmprel = 0u64;
     let mut ld_pltrelsz = 0u64;
+    let mut ld_rel = 0u64;
+    let mut ld_relsz = 0u64;
     let mut ld_symtab = 0u64;
     let mut ld_strtab = 0u64;
     let mut ld_syment = 24u64;
@@ -205,6 +215,8 @@ pub(crate) fn resolve_vdso_plt(
                     5 => ld_strtab = val,   // DT_STRTAB
                     6 => ld_symtab = val,   // DT_SYMTAB
                     11 => ld_syment = val,  // DT_SYMENT
+                    17 => ld_rel = val,     // DT_REL
+                    18 => ld_relsz = val,   // DT_RELSZ
                     19 => ld_relent = val,  // DT_RELENT
                     23 => ld_jmprel = val,  // DT_JMPREL
                     _ => {}
@@ -212,73 +224,108 @@ pub(crate) fn resolve_vdso_plt(
             }
         }
     }
-    if ld_jmprel == 0 || ld_pltrelsz == 0 {
-        return;
-    }
-    // Use DT_RELENT if available, otherwise default to 16 (REL on x86_64)
+    // Use DT_RELENT if available, otherwise default to 16 (REL on x86_64).
     if ld_relent == 0 {
         ld_relent = 16;
     }
 
-    let count = ld_pltrelsz as usize / ld_relent as usize;
+    // Resolve one relocation section: entries at `rel_off` (vaddr)
+    // of `rel_sz` bytes. Both JUMP_SLOT and GLOB_DAT patch a GOT
+    // entry at r_offset with the resolved vDSO symbol address.
+    //
+    // Relocation types: x86_64 GLOB_DAT=6 / JUMP_SLOT=7;
+    // aarch64 GLOB_DAT=1025 / JUMP_SLOT=1026.
     let mut resolved = 0usize;
-    for i in 0..count {
-        let off = ld_jmprel as usize + i * ld_relent as usize;
-        if off + 16 > elf_data.len() {
-            break;
+    let mut resolve_section = |rel_off: u64, rel_sz: u64| {
+        if rel_off == 0 || rel_sz == 0 {
+            return;
         }
-        let r_offset = u64::from_le_bytes(elf_data[off..off + 8].try_into().unwrap());
-        let r_info = u64::from_le_bytes(elf_data[off + 8..off + 16].try_into().unwrap());
-        let r_type = (r_info & 0xFFFF_FFFF) as u32;
-        let r_sym = (r_info >> 32) as usize;
+        let count = rel_sz as usize / ld_relent as usize;
+        for i in 0..count {
+            let off = rel_off as usize + i * ld_relent as usize;
+            if off + 16 > elf_data.len() {
+                break;
+            }
+            let r_offset = u64::from_le_bytes(elf_data[off..off + 8].try_into().unwrap());
+            let r_info = u64::from_le_bytes(elf_data[off + 8..off + 16].try_into().unwrap());
+            let r_type = (r_info & 0xFFFF_FFFF) as u32;
+            let r_sym = (r_info >> 32) as usize;
 
-        // Only handle JUMP_SLOT
-        if r_type != 7 && r_type != 1026 {
-            continue;
-        }
+            match r_type {
+                7 | 1026 => {} // JUMP_SLOT (x86_64 | aarch64)
+                6 | 1025 => {} // GLOB_DAT (x86_64 | aarch64)
+                _ => continue,
+            }
 
-        // Look up the symbol name in ld.so.1's .dynstr
-        let sym_off = ld_symtab as usize + r_sym * ld_syment as usize;
-        if sym_off + 4 > elf_data.len() {
-            continue;
-        }
-        let st_name = u32::from_le_bytes(elf_data[sym_off..sym_off + 4].try_into().unwrap());
-        let name_off = ld_strtab as usize + st_name as usize;
-        if name_off >= elf_data.len() {
-            continue;
-        }
-        let name_end = elf_data[name_off..]
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(0);
-        let sym_name = core::str::from_utf8(&elf_data[name_off..name_off + name_end]).unwrap_or("");
+            // Look up the symbol name in the target ELF's .dynstr
+            let sym_off = ld_symtab as usize + r_sym * ld_syment as usize;
+            if sym_off + 24 > elf_data.len() {
+                continue;
+            }
+            let st_name = u32::from_le_bytes(elf_data[sym_off..sym_off + 4].try_into().unwrap());
+            let st_info = elf_data[sym_off + 4];
+            let binding = st_info >> 4; // STB_LOCAL=0, GLOBAL=1, WEAK=2
+            let name_off = ld_strtab as usize + st_name as usize;
+            if name_off >= elf_data.len() {
+                continue;
+            }
+            let name_end = elf_data[name_off..]
+                .iter()
+                .position(|&b| b == 0)
+                .unwrap_or(0);
+            let sym_name =
+                core::str::from_utf8(&elf_data[name_off..name_off + name_end]).unwrap_or("");
 
-        // Only resolve _zx_* and zx_* symbols (vDSO exports)
-        if !sym_name.starts_with("_zx_") && !sym_name.starts_with("zx_") {
-            continue;
-        }
-
-        // Look up this symbol in the vDSO
-        if let Some(vdso_addr) = lookup_vdso_symbol(
-            vmar,
-            vdso_base,
-            vdso_symtab,
-            vdso_strtab,
-            vdso_syment,
-            vdso_nchain,
-            sym_name,
-        ) {
             let got_addr = elf_base + r_offset as usize;
-            if vmar
-                .write_memory(got_addr, &vdso_addr.to_ne_bytes())
-                .is_ok()
-            {
-                resolved += 1;
+
+            // Weak undefined symbols (scudo allocator hooks, ZSTD trace
+            // hooks, ...) are absent from the vDSO by design: the ABI
+            // resolves them to NULL and callers test before calling.
+            // Leaving the link-time placeholder in the GOT makes those
+            // null-checks see garbage (observed: zstd's bootfs
+            // decompression calling ZSTD_trace_decompress_begin through
+            // a stale PLT slot).
+            let is_vdso_symbol = sym_name.starts_with("_zx_") || sym_name.starts_with("zx_");
+            if !is_vdso_symbol {
+                if binding == 2 && vmar.write_memory(got_addr, &0u64.to_ne_bytes()).is_ok() {
+                    resolved += 1;
+                }
+                continue;
+            }
+
+            // Look up this symbol in the vDSO
+            if let Some(vdso_addr) = lookup_vdso_symbol(
+                vmar,
+                vdso_base,
+                vdso_symtab,
+                vdso_strtab,
+                vdso_syment,
+                vdso_nchain,
+                sym_name,
+            ) {
+                if vmar
+                    .write_memory(got_addr, &vdso_addr.to_ne_bytes())
+                    .is_ok()
+                {
+                    resolved += 1;
+                }
+            } else if binding == 2 {
+                // Weak symbol not provided by the vDSO: NULL.
+                if vmar.write_memory(got_addr, &0u64.to_ne_bytes()).is_ok() {
+                    resolved += 1;
+                }
+            } else {
+                warn!(
+                    "resolve_vdso_symbols: unresolved non-weak symbol {}",
+                    sym_name
+                );
             }
         }
-    }
+    };
+    resolve_section(ld_rel, ld_relsz);
+    resolve_section(ld_jmprel, ld_pltrelsz);
     info!(
-        "resolve_vdso_plt: resolved {} vDSO symbols in PLT",
+        "resolve_vdso_symbols: resolved {} vDSO GOT entries (GLOB_DAT + JUMP_SLOT)",
         resolved
     );
 }

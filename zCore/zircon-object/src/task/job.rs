@@ -102,9 +102,27 @@ impl Job {
     }
 
     /// Create the root job.
+    ///
+    /// Named "root" like Fuchsia's root job dispatcher — userboot
+    /// identifies the root job handle by this name (see
+    /// `src/bringup/lib/userboot/rust/src/program.rs`).
+    ///
+    /// This is a **singleton**: there is exactly one root job in the
+    /// system (Fuchsia: `GetRootJobDispatcher()`). Callers ranging
+    /// from process launchers to the shutdown logic must all observe
+    /// the same job, or job-signal semantics (JOB_NO_CHILDREN =
+    /// "system is empty") break.
     pub fn root() -> Arc<Self> {
+        static ROOT: spin::Lazy<Arc<Job>> = spin::Lazy::new(Job::new_parentless_job);
+        ROOT.clone()
+    }
+
+    /// Create a fresh parentless ("root-like") job. Only `root()`
+    /// (the singleton) and tests may create these — everything else
+    /// must parent under an existing job.
+    pub(crate) fn new_parentless_job() -> Arc<Self> {
         let job = Arc::new(Job {
-            base: KObjectBase::with_signal(Self::empty_signals()),
+            base: KObjectBase::with_signal(Job::empty_signals()),
             _counter: CountHelper::new(),
             parent: None,
             parent_policy: JobPolicy::default(),
@@ -112,6 +130,7 @@ impl Job {
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::JobDebugger),
             inner: KernelMutex::new(JobInner::default()),
         });
+        job.base.set_name("root");
         job.inner.lock().self_ref = Arc::downgrade(&job);
         job
     }
@@ -642,7 +661,7 @@ mod tests {
 
     #[test]
     fn create() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let job = Job::create_child(&root_job).expect("failed to create job");
 
         let child = root_job
@@ -660,7 +679,7 @@ mod tests {
 
     #[test]
     fn set_policy() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
 
         // default policy
         assert_eq!(
@@ -742,7 +761,7 @@ mod tests {
 
     #[test]
     fn parent_child() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let job = Job::create_child(&root_job).expect("failed to create job");
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
 
@@ -765,7 +784,7 @@ mod tests {
 
     #[test]
     fn check() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         assert!(root_job.is_empty());
         let job = root_job.create_child().expect("failed to create job");
         assert_eq!(root_job.check_root_job(), Ok(()));
@@ -781,7 +800,7 @@ mod tests {
 
     #[test]
     fn critical_process() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let job = root_job.create_child().unwrap();
         let job1 = root_job.create_child().unwrap();
 

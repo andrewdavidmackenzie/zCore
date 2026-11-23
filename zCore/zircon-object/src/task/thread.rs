@@ -1753,7 +1753,7 @@ mod tests {
 
     #[test]
     fn create() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
         assert_eq!(thread.flags(), ThreadFlag::empty());
@@ -1766,7 +1766,7 @@ mod tests {
 
     #[test]
     fn info() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1781,7 +1781,7 @@ mod tests {
 
     #[test]
     fn read_write_state() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1818,7 +1818,7 @@ mod tests {
 
     #[test]
     fn ext() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1829,7 +1829,7 @@ mod tests {
 
     #[test]
     fn time() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1841,7 +1841,7 @@ mod tests {
 
     #[test]
     fn exit() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1864,7 +1864,7 @@ mod tests {
 
     #[test]
     fn priority_default() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1876,7 +1876,7 @@ mod tests {
 
     #[test]
     fn priority_set_get() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 

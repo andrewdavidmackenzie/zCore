@@ -52,9 +52,10 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
     {
         let options = boot_options();
         info!("Boot options: {:#?}", options);
+        let fuchsia_userboot = options.fuchsia_userboot;
         let proc = boot_init(options);
         STARTED.store(true, Ordering::SeqCst);
-        wait_for_exit(Some(proc))
+        wait_for_exit(Some(proc), fuchsia_userboot)
     }
 }
 
@@ -161,7 +162,7 @@ fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Proc
     // No rootfs or binary not found — fall back to embedded ZBI.
     info!("No rootfs or init binary not found, using embedded ZBI");
     let zbi = load_zbi();
-    zircon_loader::zircon::run_userboot(zbi, &options.cmdline)
+    zircon_loader::zircon::run_userboot_or_fuchsia(zbi, &options.cmdline, options.fuchsia_userboot)
 }
 
 /// Load the petal ZBI (Zircon Boot Image) for userboot fallback.
@@ -196,7 +197,7 @@ pub extern "Rust" fn secondary_core_init() -> ! {
     }
     hal_impl::secondary_init();
     info!("secondary core {} initialized", hal_impl::cpu::cpu_id());
-    wait_for_exit(None)
+    wait_for_exit(None, false)
 }
 
 /// Wait for the init process to exit, then reset the system.
@@ -205,17 +206,28 @@ pub extern "Rust" fn secondary_core_init() -> ! {
 /// (either `PROCESS_TERMINATED` or `USER_SIGNAL_0`), logs the exit code,
 /// and resets. On secondary cores, enters the executor idle loop to
 /// service tasks spawned by the primary core (the future never completes).
-fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
+fn wait_for_exit(proc: Option<Arc<Process>>, fuchsia_userboot: bool) -> ! {
     let exit_code = if let Some(proc) = proc {
         let future = async move {
             use zircon_object::object::Signal;
-            let object: Arc<dyn KernelObject> = proc.clone();
-            // Wait for either termination signal — Linux processes use
-            // PROCESS_TERMINATED, Zircon processes use USER_SIGNAL_0.
-            // In dual-flavour mode, wait for either.
-            let signal = Signal::PROCESS_TERMINATED | Signal::USER_SIGNAL_0;
-            object.wait_signal(signal).await;
-            check_exit_code(proc)
+            if fuchsia_userboot {
+                // Fuchsia semantics: userboot exiting after handing off
+                // to the next program is normal — the system lives as
+                // long as the root job has children. Wait for the root
+                // job to become empty (JOB_NO_CHILDREN) instead of for
+                // the first process to exit.
+                let job: Arc<dyn KernelObject> = zircon_object::task::Job::root();
+                job.wait_signal(Signal::JOB_NO_CHILDREN).await;
+                0
+            } else {
+                let object: Arc<dyn KernelObject> = proc.clone();
+                // Wait for either termination signal — Linux processes use
+                // PROCESS_TERMINATED, Zircon processes use USER_SIGNAL_0.
+                // In dual-flavour mode, wait for either.
+                let signal = Signal::PROCESS_TERMINATED | Signal::USER_SIGNAL_0;
+                object.wait_signal(signal).await;
+                check_exit_code(proc)
+            }
         };
         hal_impl::run_executor(future)
     } else {
@@ -280,6 +292,10 @@ struct BootOptions {
     cmdline: alloc::string::String,
     /// Root process path (e.g. "/bin/busybox?sh" or "/bin/hello").
     root_proc: alloc::string::String,
+    /// Boot Fuchsia's real userboot as the first process via the
+    /// handles-only two-message protocol (issue #523 Phase C).
+    /// Set by `kernel.fuchsia-userboot=true` on the cmdline.
+    fuchsia_userboot: bool,
 }
 
 /// Parse boot options from the kernel command line.
@@ -297,7 +313,12 @@ fn boot_options() -> BootOptions {
             "/bin/hello"
         })
         .to_string();
-    BootOptions { cmdline, root_proc }
+    let fuchsia_userboot = cmdline.contains("kernel.fuchsia-userboot=true");
+    BootOptions {
+        cmdline,
+        root_proc,
+        fuchsia_userboot,
+    }
 }
 
 /// Extract a value from a "KEY=VALUE KEY2=VALUE2" cmdline string.

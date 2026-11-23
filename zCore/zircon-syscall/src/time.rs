@@ -27,7 +27,9 @@ impl Syscall<'_> {
         info!("clock.create: options={:#x}", options);
         let clock = Clock::new(options)?;
         let proc = self.thread.proc();
-        // Fuchsia's default clock rights include MAP for vmar_map_clock.
+        // Fuchsia's default clock rights include MAP for vmar_map_clock
+        // and GET/SET_PROPERTY — userspace names clocks (component_manager
+        // names its UTC clock "utc_from_cm").
         let handle = proc.add_handle(Handle::new(
             Arc::new(clock),
             Rights::DUPLICATE
@@ -37,7 +39,9 @@ impl Syscall<'_> {
                 | Rights::WAIT
                 | Rights::INSPECT
                 | Rights::SIGNAL
-                | Rights::MAP,
+                | Rights::MAP
+                | Rights::GET_PROPERTY
+                | Rights::SET_PROPERTY,
         ));
         out.write(handle)?;
         Ok(())
