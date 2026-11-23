@@ -230,6 +230,46 @@ demo-busybox-uefi:
 uefi-boot-test:
 	tools/scripts/uefi-boot-test.sh
 
+# ── Formal verification (Verus) ────────────────────────────────────────
+# Runs Verus on the verification/ directory to check kernel struct
+# invariants (#833). Requires Verus (installed by `make setup` into
+# .verus/). Optional — the kernel builds and tests fine without it.
+#
+# Usage:
+#   make verify           — run all Verus proofs
+#   make verify V=xxx     — run a specific proof file (e.g., V=futex_proof)
+
+VERUS ?= $(CURDIR)/.verus/verus
+VERIFY_DIR = verification
+
+.PHONY: verify verify-list
+verify:
+	@if [ ! -f "$(VERUS)" ]; then \
+		echo "ERROR: Verus not found at $(VERUS)"; \
+		echo "  Run 'make setup' to install it, or set VERUS=<path>"; \
+		exit 1; \
+	fi
+	@if [ -n "$(V)" ]; then \
+		echo "==> Verus: $(VERIFY_DIR)/$(V).rs"; \
+		$(VERUS) $(VERIFY_DIR)/$(V).rs; \
+	else \
+		echo "==> Verus: running all proofs in $(VERIFY_DIR)/"; \
+		FAIL=0; \
+		for f in $(VERIFY_DIR)/*.rs; do \
+			echo "  $$f"; \
+			$(VERUS) "$$f" || FAIL=1; \
+		done; \
+		if [ $$FAIL -ne 0 ]; then \
+			echo "==> Verus: FAILED"; \
+			exit 1; \
+		fi; \
+	fi
+	@echo "==> Verus: all proofs passed"
+
+verify-list:
+	@echo "Verus proof files in $(VERIFY_DIR)/:"
+	@ls -1 $(VERIFY_DIR)/*.rs 2>/dev/null | sed 's/.*\//  /' | sed 's/\.rs$$//'
+
 # ── Documentation ──────────────────────────────────────────────────────
 # Build the mdbook documentation site into target/book/.
 docs:

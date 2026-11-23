@@ -105,6 +105,50 @@ if [ "$MISSING" -ne 0 ]; then
     exit 1
 fi
 
+# --- Verus (optional: formal verification) -------------------------------
+# Verus is used by `make verify` to check kernel struct invariants
+# (#833). It's optional — the kernel builds and tests fine without it.
+VERUS_DIR="$PROJECT_DIR/.verus"
+if [ ! -f "$VERUS_DIR/verus" ]; then
+    echo "==> Installing Verus (formal verification, optional)..."
+    VERUS_VERSION="0.2026.11.22.1ce6a59"
+    VERUS_PLATFORM="$(uname -m)-$(uname -s | tr '[:upper:]' '[:lower:]')"
+    case "$VERUS_PLATFORM" in
+        arm64-darwin)  VERUS_PLATFORM="arm64-macos" ;;
+        x86_64-darwin) VERUS_PLATFORM="x86-macos" ;;
+        x86_64-linux)  VERUS_PLATFORM="x86_64-linux" ;;
+        aarch64-linux) VERUS_PLATFORM="aarch64-linux" ;;
+        *)
+            echo "  WARNING: no Verus release for $VERUS_PLATFORM — skipping."
+            echo "  Install manually from https://github.com/verus-lang/verus/releases"
+            VERUS_PLATFORM=""
+            ;;
+    esac
+    if [ -n "$VERUS_PLATFORM" ]; then
+        VERUS_URL="https://github.com/verus-lang/verus/releases/download/release%2F${VERUS_VERSION}/verus-${VERUS_VERSION}-${VERUS_PLATFORM}.zip"
+        if curl -sL -o /tmp/verus-install.zip "$VERUS_URL"; then
+            mkdir -p "$VERUS_DIR"
+            unzip -qo /tmp/verus-install.zip -d /tmp/verus-extract
+            cp -R /tmp/verus-extract/verus-${VERUS_VERSION}-${VERUS_PLATFORM}/* "$VERUS_DIR/"
+            chmod +x "$VERUS_DIR/verus" "$VERUS_DIR/rust_verify" "$VERUS_DIR/z3" 2>/dev/null || true
+            rm -rf /tmp/verus-install.zip /tmp/verus-extract
+            echo "  ok: Verus installed to $VERUS_DIR"
+            # Verus needs a specific Rust toolchain
+            VERUS_TOOLCHAIN=$(cat "$VERUS_DIR/version.json" 2>/dev/null | grep -o '"rustc[^"]*"[^"]*"[^"]*"' | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*' | head -1)
+            if [ -n "$VERUS_TOOLCHAIN" ]; then
+                echo "  Installing Rust toolchain $VERUS_TOOLCHAIN for Verus..."
+                rustup install "$VERUS_TOOLCHAIN-$(rustup show | grep 'Default host' | awk '{print $4}')" 2>/dev/null || true
+            fi
+        else
+            echo "  WARNING: failed to download Verus — skipping."
+            echo "  Install manually from https://github.com/verus-lang/verus/releases"
+        fi
+    fi
+else
+    echo "  ok: Verus already installed at $VERUS_DIR"
+fi
+
 echo "==> Setup complete."
 echo "    Next: make run CONFIG=busybox.qemu-aarch64   (boots the busybox shell)"
 echo "    Or:   cargo zcore set busybox.qemu-aarch64   (persist a default selection)"
+echo "    Formal verification: make verify              (runs Verus proofs, #833)"
