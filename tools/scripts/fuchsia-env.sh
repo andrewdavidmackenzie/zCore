@@ -54,11 +54,20 @@ print(f"{zbi}\t{kern or ''}")
 EOF
     )" || fuchsia_die "failed to parse images.json"
     FUCHSIA_ZBI="$FUCHSIA_OUT/$(cut -f1 <<<"$json")"
+    [ -f "$FUCHSIA_ZBI" ] || fuchsia_die "ZBI not found: $FUCHSIA_ZBI"
+
+    # The boot shim is required: QEMU's -kernel boots the shim, which
+    # implements the Linux boot protocol and hands the ZBI (-initrd)
+    # to the Fuchsia kernel. Without it there is no direct-boot path.
     local shim
     shim="$(cut -f2 <<<"$json")"
-    FUCHSIA_QEMU_KERNEL=""
-    [ -n "$shim" ] && FUCHSIA_QEMU_KERNEL="$FUCHSIA_OUT/$shim"
-    [ -f "$FUCHSIA_ZBI" ] || fuchsia_die "ZBI not found: $FUCHSIA_ZBI"
+    if [ -z "$shim" ]; then
+        fuchsia_die "no qemu-kernel (boot shim) in images.json — this build
+  cannot be booted directly by QEMU. Build a full product (e.g.
+  fx set bringup.x64 && fx build) or point FUCHSIA_OUT at one."
+    fi
+    FUCHSIA_QEMU_KERNEL="$FUCHSIA_OUT/$shim"
+    [ -f "$FUCHSIA_QEMU_KERNEL" ] || fuchsia_die "boot shim not found: $FUCHSIA_QEMU_KERNEL"
 }
 
 # Pick a QEMU binary: FUCHSIA_QEMU_BIN override, else the system one.

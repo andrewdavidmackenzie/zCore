@@ -37,7 +37,7 @@ echo "ZBI:         $FUCHSIA_ZBI ($(du -h "$FUCHSIA_ZBI" | cut -f1))"
 if [ -n "$FUCHSIA_QEMU_KERNEL" ]; then
     echo "boot shim:   $FUCHSIA_QEMU_KERNEL"
 else
-    echo "boot shim:   (none — direct kernel boot only)"
+    echo "boot shim:   (not resolved — run-fuchsia targets will fail)"
 fi
 
 fuchsia_resolve_qemu

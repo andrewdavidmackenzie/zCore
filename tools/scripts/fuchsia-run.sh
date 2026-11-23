@@ -21,7 +21,7 @@ fuchsia_qemu_args
 
 echo "fuchsia-run: FUCHSIA_OUT=$FUCHSIA_OUT"
 echo "fuchsia-run: ZBI=$FUCHSIA_ZBI"
-[ -n "$FUCHSIA_QEMU_KERNEL" ] && echo "fuchsia-run: shim=$FUCHSIA_QEMU_KERNEL"
+echo "fuchsia-run: shim=$FUCHSIA_QEMU_KERNEL"
 echo "fuchsia-run: KVM=$FUCHSIA_KVM memory=${FUCHSIA_MEMORY}M smp=$FUCHSIA_SMP"
 echo "fuchsia-run: serial console on stdio (Ctrl-A x to quit QEMU)"
 echo

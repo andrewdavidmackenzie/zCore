@@ -65,8 +65,12 @@ trap cleanup EXIT
     -append "$FUCHSIA_CMDLINE" &
 QEMU_PID=$!
 
-# Wait for each marker in order.
+# Wait for each marker in order. Track the byte offset after each
+# match and search only the log beyond it, so a log containing the
+# markers out of order cannot pass: the next marker must appear
+# *after* its predecessor.
 NEXT=0
+POS=0
 START=$SECONDS
 while [ "$NEXT" -lt "${#MARKERS[@]}" ]; do
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then
@@ -79,8 +83,11 @@ while [ "$NEXT" -lt "${#MARKERS[@]}" ]; do
         tail -5 "$LOG" | sed 's/^/  /' >&2 || true
         exit 1
     fi
-    # -a treats the log as text (it contains ANSI escapes).
-    if grep -aq "${MARKERS[$NEXT]}" "$LOG"; then
+    # -a treats the log as text (it contains ANSI escapes); -b gives
+    # byte offsets relative to the tail slice starting after POS.
+    MATCH="$(tail -c +"$((POS + 1))" "$LOG" | grep -abo -- "${MARKERS[$NEXT]}" | head -n 1 || true)"
+    if [ -n "$MATCH" ]; then
+        POS=$((POS + ${MATCH%%:*} + ${#MARKERS[$NEXT]}))
         NEXT=$((NEXT + 1))
         echo "fuchsia-test: marker $NEXT/${#MARKERS[@]} OK: ${MARKERS[$NEXT-1]} (${SECONDS}s)"
     else
