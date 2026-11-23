@@ -23,3 +23,4 @@ __pycache__
 .idea/
 .jiri_root/
 tools/.build-cache/
+.verus/
