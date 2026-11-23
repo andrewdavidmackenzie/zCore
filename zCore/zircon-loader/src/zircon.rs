@@ -32,7 +32,7 @@ use zircon_object::task::{
 };
 
 use zircon_object::util::elf_loader::ElfExt;
-use zircon_object::vm::VmObject;
+use zircon_object::vm::{pages, VmObject};
 use zircon_object::ZxError;
 
 /// Register the VMAR permission checker for libos user copies.
@@ -151,9 +151,14 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
         "USERSTART_ELF not set at compile time. Use rootfs-based boot instead."
     );
     let elf = ElfFile::new(userstart_elf_bytes).expect("failed to parse userstart ELF");
-    let size = elf.load_segment_size();
     // Map the userstart ELF as a single RWX region.
-    let code_pages = size;
+    // `load_segment_size()` returns BYTES (page-aligned); convert to
+    // pages for `new_paged` and back for the map length. Passing the
+    // byte count as the page count would create a VMO 4096x too big
+    // and the eager-commit map would try to commit that much physical
+    // memory — fine for small petal ELFs by accident, NO_MEMORY for
+    // the ~1 MB Fuchsia userboot.
+    let code_pages = pages(elf.load_segment_size());
     let code_vmo = VmObject::new_paged(code_pages);
     // Write each PT_LOAD segment's data into the VMO at its virtual
     // address offset. The ELF is linked at base 0, so p_vaddr values
