@@ -1,0 +1,23 @@
+# fuchsia-bringup: boot Fuchsia's real userboot and the bringup
+# userspace (component_manager + bootstrap components) on zCore.
+#
+# Userspace artifacts are imported from a Fuchsia build by
+# `make fuchsia-import` into prebuilt/fuchsia/<arch>/ — the same
+# prebuilt-binary pattern as the core-tests product. The kernel embeds
+# them at build time:
+#   USERSTART_ELF -> userboot.elf   (Fuchsia's first process)
+#   PETAL_ZBI     -> fuchsia.zbi    (userboot unpacks its bootfs)
+#   VDSO_BIN      -> vdso.elf       (the matching vDSO)
+#
+# NOTE: booting requires the kernel-side userboot launcher (issue #523
+# Phase C: handles-only two-message bootstrap protocol + RODSO-style
+# vDSO relocation resolution). Until that lands, the boot stops at the
+# first process.
+
+flavour = ""
+root-proc = "userboot"
+log = "warn"
+rootfs-contents = "fuchsia"
+
+# The imported artifacts are x86_64 (built from bringup.x64-balanced).
+supported-boards = ["qemu-x86_64"]

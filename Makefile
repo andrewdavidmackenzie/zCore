@@ -53,7 +53,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)
 	list-products list-boards flash petal-test petal-tests \
 	debug-qemu debug-lldb debug-x86-qemu debug-x86-gdb \
 	pre-push pre-push-quick core-tests core-tests-build \
-	fuchsia-check fuchsia-run fuchsia-test \
+	fuchsia-check fuchsia-run fuchsia-test fuchsia-import \
 	boot-logo uefi-firmware
 
 # List available products and boards (like fx list-products / list-boards).
@@ -1056,6 +1056,11 @@ build-fuchsia:
 # Doctor: verify the Fuchsia tree/build exists, print artifact inventory.
 fuchsia-check:
 	@tools/scripts/fuchsia-check.sh
+
+# Import Fuchsia userspace artifacts (userboot, vDSO, fuchsia.zbi)
+# from the Fuchsia build into prebuilt/fuchsia/x86_64/ with provenance.
+fuchsia-import:
+	@tools/scripts/fuchsia-import.sh
 
 # Interactive: boot real Fuchsia bringup with the serial console on stdio.
 fuchsia-run:
