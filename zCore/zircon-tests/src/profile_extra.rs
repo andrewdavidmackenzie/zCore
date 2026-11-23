@@ -29,7 +29,7 @@ fn profile_create_invalid() {
 fn profile_set_on_thread() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "prof-thread").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -63,7 +63,7 @@ fn profile_set_on_thread() {
 fn profile_set_on_job() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "prof-vmar").unwrap();
 
     // Create a profile
@@ -111,7 +111,7 @@ fn profile_priority() {
     assert!(profile.info.flags().contains(ProfileInfoFlags::PRIORITY));
 
     // Attempt to apply to a thread via syscall
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "prio-test").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 

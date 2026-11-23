@@ -19,7 +19,7 @@ extern crate alloc;
 /// A newly created job should have a default permissive policy.
 fn default_policy() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let child = root.create_child().unwrap();
     // Default policy allows all operations.
     assert_ne!(child.id(), 0);
@@ -29,7 +29,7 @@ fn default_policy() {
 /// Set a basic policy on a job. Children should inherit the policy.
 fn set_basic_policy() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     let policies = [BasicPolicy {
@@ -53,7 +53,7 @@ fn set_basic_policy() {
 /// Policies set on a parent job are inherited by child jobs.
 fn policy_inheritance() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let parent = root.create_child().unwrap();
 
     let policies = [BasicPolicy {
@@ -79,7 +79,7 @@ fn policy_inheritance() {
 /// under this job should fail.
 fn policy_deny_new_vmo() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     let policies = [BasicPolicy {
@@ -110,7 +110,7 @@ fn policy_deny_new_vmo() {
 /// returns ACCESS_DENIED for NewChannel under a deny policy.
 fn policy_deny_new_channel() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     let policies = [BasicPolicy {
@@ -132,7 +132,7 @@ fn policy_deny_new_channel() {
 /// fail with ACCESS_DENIED.
 fn policy_deny_new_event() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     let policies = [BasicPolicy {
@@ -154,7 +154,7 @@ fn policy_deny_new_event() {
 /// fail with ACCESS_DENIED.
 fn policy_deny_new_socket() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     let policies = [BasicPolicy {
@@ -176,7 +176,7 @@ fn policy_deny_new_socket() {
 /// with ACCESS_DENIED.
 fn policy_deny_new_fifo() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     let policies = [BasicPolicy {
@@ -198,7 +198,7 @@ fn policy_deny_new_fifo() {
 /// with ACCESS_DENIED.
 fn policy_deny_new_timer() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     let policies = [BasicPolicy {
@@ -220,7 +220,7 @@ fn policy_deny_new_timer() {
 /// with ACCESS_DENIED.
 fn policy_deny_new_port() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     let policies = [BasicPolicy {
@@ -242,7 +242,7 @@ fn policy_deny_new_port() {
 /// on a child. The child should not be able to relax the policy.
 fn policy_override_deny() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let parent = root.create_child().unwrap();
 
     // Set V2 policy with OVERRIDE_DENY on parent.
@@ -281,7 +281,7 @@ fn policy_override_deny() {
 /// able to set their own policies freely.
 fn policy_override_allow() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let parent = root.create_child().unwrap();
 
     // Set V2 policy with OVERRIDE_ALLOW on parent.
@@ -324,7 +324,7 @@ fn policy_override_allow() {
 /// this job should get EXECUTE right. Tests ZX_POL_AMBIENT_MARK_VMO_EXEC.
 fn policy_ambient_mark_vmo_exec() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     let policies = [BasicPolicy {
@@ -354,7 +354,7 @@ fn policy_ambient_mark_vmo_exec() {
 /// policy on a non-empty job should return BAD_STATE.
 fn policy_on_empty_job_only() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     // Add a child job so the job is no longer empty.
@@ -380,7 +380,7 @@ fn policy_on_empty_job_only() {
 /// All conditions should be applied together.
 fn policy_batch_application() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     let policies = [

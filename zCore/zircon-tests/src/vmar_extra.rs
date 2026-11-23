@@ -11,7 +11,7 @@ use zircon_object::vm::{MMUFlags, VmObject, VmarFlags, PAGE_SIZE};
 /// Process root VMAR exists and has valid properties.
 fn vmar_root_exists() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-test").unwrap();
     let vmar = proc.vmar();
     assert_ne!(vmar.id(), 0);
@@ -21,7 +21,7 @@ fn vmar_root_exists() {
 /// Allocate a child VMAR region.
 fn vmar_allocate_child() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-test").unwrap();
     let vmar = proc.vmar();
 
@@ -45,7 +45,7 @@ fn vmar_allocate_child() {
 /// Unmap a previously mapped region.
 fn vmar_unmap() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-test").unwrap();
     let vmar = proc.vmar();
 
@@ -60,7 +60,7 @@ fn vmar_unmap() {
 /// Destroy a child VMAR.
 fn vmar_destroy_child() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-test").unwrap();
     let vmar = proc.vmar();
 
@@ -78,7 +78,7 @@ fn vmar_destroy_child() {
 /// Create a child VMAR and destroy it.
 fn create_destroy() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-test").unwrap();
     let vmar = proc.vmar();
 
@@ -95,7 +95,7 @@ fn create_destroy() {
 /// Bad size/alignment should fail with INVALID_ARGS.
 fn create_invalid_args() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-test").unwrap();
     let vmar = proc.vmar();
 
@@ -129,7 +129,7 @@ fn create_out_of_bounds() {
 /// Destroying an already-destroyed VMAR returns BAD_STATE.
 fn destroy_twice() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-test").unwrap();
     let vmar = proc.vmar();
 
@@ -323,7 +323,7 @@ fn unmap_not_mapped() {
 /// Unmapping part of a mapping splits it.
 fn unmap_partial() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-test").unwrap();
     let root_vmar = proc.vmar();
     let vmo = VmObject::new_paged(4);

@@ -11,7 +11,7 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 /// Protect sub-ranges of a mapping, then re-protect to merge them.
 fn merge_mappings() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "merge-protect").unwrap();
     let vmar = proc.vmar();
 
@@ -46,7 +46,7 @@ fn merge_mappings() {
 /// Protect then unmap a mapping.
 fn unmap() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "unmap-protect").unwrap();
     let vmar = proc.vmar();
 

@@ -221,7 +221,7 @@ fn property_socket_tx_threshold() {
 /// Set and get ZX_PROP_JOB_KILL_ON_OOM on a job.
 fn property_job_kill_on_oom() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let job_h = ctx.proc.add_handle(Handle::new(
         job,
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,

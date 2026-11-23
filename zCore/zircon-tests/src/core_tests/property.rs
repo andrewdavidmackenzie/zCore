@@ -78,7 +78,7 @@ pub(crate) const PROP_EXCEPTION_STRATEGY: u32 = 18;
 /// Set and get ZX_PROP_NAME on a Job.
 fn job_name() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let job_h = ctx.proc.add_handle(Handle::new(
         job,
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,

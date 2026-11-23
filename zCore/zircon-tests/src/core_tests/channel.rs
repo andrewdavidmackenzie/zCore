@@ -815,7 +815,7 @@ async fn concurrent_reads_consume_unique_elements() {
     use zircon_object::task::{CurrentThread, Job, Process, Thread};
 
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "conc-read").unwrap();
 
     let (end_a, end_b) = Channel::create();
@@ -936,7 +936,7 @@ async fn wait_many_is_signaled_on_any_element_write() {
     use zircon_object::task::{CurrentThread, Job, Process, Thread};
 
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "wait-many").unwrap();
 
     let (local_1, remote_1) = Channel::create();

@@ -12,7 +12,7 @@ use zircon_object::task::{Job, Process, Thread};
 /// and that valid KOIDs are found correctly.
 fn invalid_handle_returns_bad_handle() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "child-test").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
     let thread_koid = thread.id();

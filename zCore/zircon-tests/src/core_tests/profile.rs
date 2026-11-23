@@ -44,7 +44,7 @@ pub(crate) fn make_deadline_info(
 fn profile_test_apply_scheduling_profile_to_vmar_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-prof").unwrap();
 
     let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 16);
@@ -414,7 +414,7 @@ fn sched_profile_deadline_pi_utilization_panic_repro() {
 fn sched_profile_set_profile_with_non_zero_options_is_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "opts-test").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -442,7 +442,7 @@ fn sched_profile_set_profile_with_non_zero_options_is_invalid_args() {
 fn sched_profile_set_thread_priority_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "prio-set").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 

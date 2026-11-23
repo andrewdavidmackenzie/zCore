@@ -7,7 +7,7 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 /// (No direct C++ binary equivalent — additional round-trip coverage.)
 fn read_write_round_trip() {
     let _ctx = crate::helpers::TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "debug-rw").unwrap();
     let vmar = proc.vmar();
 

@@ -22,7 +22,7 @@ fn as_kobject(thread: &Arc<Thread>) -> Arc<dyn KernelObject> {
 /// signal THREAD_SUSPENDED.
 async fn suspend_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -53,7 +53,7 @@ async fn suspend_thread() {
 /// executing from where it stopped.
 async fn resume_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -88,7 +88,7 @@ async fn resume_thread() {
 /// All should stop and be resumable.
 async fn suspend_multiple_threads() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let t1 = Thread::create(&proc, "t1").unwrap();
     let t2 = Thread::create(&proc, "t2").unwrap();
@@ -124,7 +124,7 @@ async fn suspend_multiple_threads() {
 /// Drop a suspend token. The thread should automatically resume.
 async fn suspend_token_drop() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -161,7 +161,7 @@ async fn suspend_token_drop() {
 /// suspends require matching resumes. We test via SuspendToken.
 async fn multiple_suspend_tokens() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -205,7 +205,7 @@ async fn multiple_suspend_tokens() {
 /// Kill a suspended thread. The thread should die without resuming.
 async fn kill_while_suspended() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -233,7 +233,7 @@ async fn kill_while_suspended() {
 /// Read state should succeed.
 async fn suspended_thread_state() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -270,7 +270,7 @@ async fn suspended_thread_state() {
 /// The new state should take effect when the thread resumes.
 async fn write_state_while_suspended() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -308,7 +308,7 @@ async fn write_state_while_suspended() {
 /// Suspend all threads in a process simultaneously.
 async fn suspend_process() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let t1 = Thread::create(&proc, "t1").unwrap();
     let t2 = Thread::create(&proc, "t2").unwrap();
@@ -365,7 +365,7 @@ async fn suspend_resume_race_with_dying_threads() {
     helpers::ensure_hal_init();
     const ROUNDS: usize = 30;
     for _round in 0..ROUNDS {
-        let job = Job::root();
+        let job = Job::new_parentless_job();
         let proc = Process::create(&job, "race-proc").unwrap();
         // Workers that terminate quickly; their `terminate()` →
         // `remove_thread()` (thread lock → process lock) must be

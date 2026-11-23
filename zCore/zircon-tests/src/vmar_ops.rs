@@ -15,7 +15,7 @@ extern crate alloc;
 /// should have a valid KOID and be within the parent's range.
 fn allocate_sub_vmar() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
     let root_vmar = proc.vmar();
@@ -27,7 +27,7 @@ fn allocate_sub_vmar() {
 /// return a valid address within the VMAR range.
 fn map_vmo() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
     let vmar = proc.vmar();
@@ -42,7 +42,7 @@ fn map_vmo() {
 /// be free for reuse.
 fn unmap_vmo() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
     let vmar = proc.vmar();
@@ -60,7 +60,7 @@ fn unmap_vmo() {
 /// at different addresses.
 fn map_multiple_vmos() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
     let vmar = proc.vmar();
@@ -84,7 +84,7 @@ fn map_multiple_vmos() {
 /// Map a multi-page VMO into the VMAR.
 fn map_large_vmo() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
     let vmar = proc.vmar();
@@ -98,7 +98,7 @@ fn map_large_vmo() {
 /// Map a VMO at a non-zero offset within the VMO.
 fn map_with_offset() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
     let vmar = proc.vmar();
@@ -114,7 +114,7 @@ fn map_with_offset() {
 /// unmapped.
 fn destroy_sub_vmar() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
     let vmar = proc.vmar();
@@ -162,7 +162,7 @@ fn map_overlapping() {
 /// Query VMAR info and verify the address range.
 fn vmar_info() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
     let vmar = proc.vmar();

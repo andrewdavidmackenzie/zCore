@@ -64,7 +64,7 @@ pub(crate) fn as_kobject(thread: &alloc::sync::Arc<Thread>) -> alloc::sync::Arc<
 /// report has ZX_EXCP_POLICY_CODE_BAD_SYSCALL and synth_data==1.
 async fn bad_syscall_caller() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "bad-syscall-caller-proc").unwrap();
 
     // Create exception channel on the process.
@@ -117,7 +117,7 @@ async fn bad_syscall_caller() {
 /// number). Verify synth_data==10000 in the exception report.
 async fn bad_syscall_number() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "bad-syscall-number-proc").unwrap();
 
     // Create exception channel on the process.
@@ -168,7 +168,7 @@ async fn bad_syscall_number() {
 /// Basic thread creation, start, and termination.
 async fn basics() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "basics-proc").unwrap();
     let thread = Thread::create(&proc, "basic-thread").unwrap();
 
@@ -292,7 +292,7 @@ fn debug_registers_dr6_reset_on_debug_exception() {
 /// returns the expected size (48 bytes on x86_64).
 fn debug_registers_validation() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -355,7 +355,7 @@ fn debug_registers_watchpoint_syscall_panic_repro() {
 /// Creating a thread with an empty name should succeed.
 fn empty_name_succeeds() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
 
     // Empty name via kernel API
@@ -389,7 +389,7 @@ fn empty_name_succeeds() {
 /// to THREAD_EXIT (state=2), and verify the thread terminates.
 async fn exit_via_exception() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "exit-via-exc-proc").unwrap();
 
     // Create exception channel on the process before starting the thread.
@@ -444,7 +444,7 @@ async fn exit_via_exception() {
 /// at least one CPU set and represents a contiguous range 0..N-1.
 fn get_affinity() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -467,7 +467,7 @@ async fn get_info_runtime() {
     helpers::ensure_hal_init();
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "runtime-proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -520,7 +520,7 @@ async fn get_info_runtime() {
 /// with a 16-byte buffer). Verify cumulative runtime tracking.
 async fn get_info_runtime_v1() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "runtime-v1-proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -552,7 +552,7 @@ async fn get_info_runtime_v1() {
 /// After running, it should be a valid CPU number.
 async fn get_last_scheduled_cpu() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "last-cpu-proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -585,7 +585,7 @@ async fn get_last_scheduled_cpu() {
 fn info_task_stats_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -620,7 +620,7 @@ fn info_task_stats_fails() {
 fn info_thread_stats_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -664,7 +664,7 @@ fn info_thread_stats_fails() {
 /// when the reduced handle lacks a required right.
 fn invalid_rights() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -694,7 +694,7 @@ fn invalid_rights() {
 /// string, so we verify the name starts with the expected prefix.
 fn long_name_succeeds() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
 
     let long_name = "abcdefghijklmnopqrstuvwxyz0123456789-this-is-a-very-long-name";
@@ -784,7 +784,7 @@ fn noncanonical_rip_address_syscall() {
 /// and transition to Dead.
 fn nonstarted_thread() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -812,7 +812,7 @@ fn nonstarted_thread() {
 /// Thread::start which corresponds to zx_thread_start.
 async fn process_start_on_second_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let t1 = Thread::create(&proc, "t1").unwrap();
     let t2 = Thread::create(&proc, "t2").unwrap();
@@ -841,7 +841,7 @@ async fn process_start_on_second_thread() {
 /// Read FP register state on a suspended thread.
 async fn reading_fp_register_state() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -906,7 +906,7 @@ async fn reading_fp_register_state() {
 /// read_state output.
 async fn reading_general_register_state() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -974,7 +974,7 @@ async fn reading_general_register_state() {
 /// and the mxcsr field is a valid value.
 async fn reading_vector_register_state() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -1027,7 +1027,7 @@ async fn reading_vector_register_state() {
 /// signal-while-suspended verification.
 async fn resume_suspended() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -1086,7 +1086,7 @@ async fn resume_suspended() {
 /// they are set via context. C++ verifies PC, SP, arg0, arg1.
 fn start_regs() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -1154,7 +1154,7 @@ fn start_regs_noncanonical_tp() {
 /// the values set via setup_uspace.
 async fn start_regs_suspended() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -1206,7 +1206,7 @@ async fn start_regs_suspended() {
 /// Pre-suspend, start, then resume — thread should run.
 async fn start_suspended_and_resumed_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -1235,7 +1235,7 @@ async fn start_suspended_and_resumed_thread() {
 /// Start a pre-suspended thread — should be suspended not running.
 async fn start_suspended_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -1265,7 +1265,7 @@ async fn start_suspended_thread() {
 /// should remain Dead.
 async fn suspend_after_death() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -1302,7 +1302,7 @@ async fn suspend_after_death() {
 /// receives the reply and terminates.
 async fn suspend_channel_call() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "suspend-channel-call-proc").unwrap();
 
     // Start a thread that does channel_call (blocks waiting for reply).
@@ -1418,7 +1418,7 @@ fn suspend_invalid_targets() {
 /// Multiple suspend tokens — requires matching resumes.
 async fn suspend_multiple() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -1453,7 +1453,7 @@ async fn suspend_multiple() {
 /// forwards result to the result port.
 async fn suspend_port_call() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "suspend-port-call-proc").unwrap();
 
     // Start a thread that does port_wait (blocks waiting for packet).
@@ -1531,7 +1531,7 @@ async fn suspend_port_call() {
 /// and terminates.
 async fn suspend_single_wait_async_signal_delivery() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "suspend-signal-delivery-proc").unwrap();
 
     // Start a thread that waits on an event for USER_SIGNAL_0.
@@ -1634,7 +1634,7 @@ async fn suspend_single_wait_async_signal_delivery() {
 /// resume, verify thread continues and eventually terminates.
 async fn suspend_sleeping() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "suspend-sleeping-proc").unwrap();
 
     // Start a thread that sleeps for a long time.
@@ -1693,7 +1693,7 @@ async fn suspend_sleeping() {
 /// Verify that suspending a thread stops its execution.
 async fn suspend_stops_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -1797,7 +1797,7 @@ fn syscall_debugger_modify_result() {
 /// argument registers, but the register struct should still be valid).
 async fn syscall_suspended_register_state() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -1889,7 +1889,7 @@ fn thread_start_invalid_entry() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
 
     // Test 1: kernel-space entry address
@@ -1946,7 +1946,7 @@ fn thread_start_invalid_entry() {
 /// Start a process thread (initial thread).
 async fn thread_start_on_initial_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "initial").unwrap();
 
@@ -1975,7 +1975,7 @@ async fn thread_start_on_initial_thread() {
 /// ZX_EXCP_FATAL_PAGE_FAULT exception with fault_address==0.
 async fn thread_start_with_zero_instruction_pointer() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "zero-ip-proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -2059,7 +2059,7 @@ fn watchpoint_syscall_panic() {
 /// Write/read debug register state — should fail (not implemented).
 fn write_read_debug_register_state() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -2097,7 +2097,7 @@ fn write_read_debug_register_state() {
 #[cfg(target_arch = "x86_64")]
 fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -2139,7 +2139,7 @@ fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
 /// On aarch64: NOT_SUPPORTED (FP uses vector regs).
 async fn writing_fp_register_state() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -2205,7 +2205,7 @@ async fn writing_fp_register_state() {
 /// Write general register state on a suspended thread.
 async fn writing_general_register_state() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -2258,7 +2258,7 @@ async fn writing_general_register_state() {
 /// - smaller buffer → BUFFER_TOO_SMALL
 fn writing_single_step_state() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -2318,7 +2318,7 @@ fn writing_single_step_state() {
 /// Write vector register state — should fail (not implemented).
 async fn writing_vector_register_state() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -2374,7 +2374,7 @@ async fn writing_vector_register_state() {
 /// On other archs: write returns NOT_SUPPORTED.
 fn writing_vector_register_state_unsupported_fields_ignored() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 

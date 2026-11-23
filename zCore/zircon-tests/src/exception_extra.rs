@@ -213,7 +213,7 @@ fn create_on_dead_task() {
     let sc = ctx.syscall();
 
     // Create a child job, add it as a handle, then kill it.
-    let parent_job = Job::root();
+    let parent_job = Job::new_parentless_job();
     let child_job = parent_job.create_child().unwrap();
     let rights = Rights::INSPECT
         | Rights::DUPLICATE
@@ -246,7 +246,7 @@ fn channel_closed_on_task_death() {
     let sc = ctx.syscall();
 
     // Create a child job and bind exception channel.
-    let parent_job = Job::root();
+    let parent_job = Job::new_parentless_job();
     let child_job = parent_job.create_child().unwrap();
     let rights = Rights::INSPECT
         | Rights::DUPLICATE

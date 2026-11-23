@@ -117,10 +117,14 @@ impl Job {
         ROOT.clone()
     }
 
-    /// Create a fresh parentless ("root-like") job. Only `root()`
-    /// (the singleton) and tests may create these — everything else
-    /// must parent under an existing job.
-    pub(crate) fn new_parentless_job() -> Arc<Self> {
+    /// Create a fresh parentless ("root-like") job.
+    ///
+    /// Only `root()` (the singleton) and tests/sandboxes may create
+    /// these — everything else must parent under an existing job.
+    /// Used by test contexts that need isolation from the shared
+    /// root job (a killed root poisons the singleton for the rest
+    /// of the run).
+    pub fn new_parentless_job() -> Arc<Self> {
         let job = Arc::new(Job {
             base: KObjectBase::with_signal(Job::empty_signals()),
             _counter: CountHelper::new(),

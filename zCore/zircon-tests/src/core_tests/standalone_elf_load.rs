@@ -71,7 +71,7 @@ fn load() {
     assert_eq!(elf.header.pt1.magic, [0x7f, b'E', b'L', b'F']);
 
     // Create a process + VMAR to load into (C++ uses root VMAR).
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "elf-load-test").unwrap();
     let vmar = proc.vmar();
 

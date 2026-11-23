@@ -54,7 +54,7 @@ fn retrieve_oom() {
     );
 
     // Create a child job — it is not the root job.
-    let root_job = Job::root();
+    let root_job = Job::new_parentless_job();
     let child_job = Job::create_child(&root_job).unwrap();
     assert_ne!(child_job.id(), root_job.id());
     // In Fuchsia, using child_job for system_get_event → ACCESS_DENIED.

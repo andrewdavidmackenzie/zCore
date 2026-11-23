@@ -86,7 +86,7 @@ fn info_handle_basic_timer() {
 /// Query ZX_INFO_HANDLE_BASIC on a job. Should return type JOB.
 fn info_handle_basic_job() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let child = root.create_child().unwrap();
     assert_eq!(child.type_name(), "Job");
 }
@@ -96,7 +96,7 @@ fn info_handle_basic_job() {
 fn info_handle_basic_process() {
     use zircon_object::task::Process;
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = Process::create(&job, "test-proc").unwrap();
     assert_eq!(proc.type_name(), "Process");
@@ -107,7 +107,7 @@ fn info_handle_basic_process() {
 fn info_handle_basic_thread() {
     use zircon_object::task::{Process, Thread};
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = Process::create(&job, "info-proc").unwrap();
     let thread = Thread::create(&proc, "test-thread").unwrap();
@@ -210,7 +210,7 @@ fn info_process_maps() {
     let sc = ctx.syscall();
 
     // Create a child process under a child job.
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let child_job = root.create_child().unwrap();
     let child_proc = Process::create(&child_job, "maps-target").unwrap();
     let child_h = ctx.proc.add_handle(Handle::new(
@@ -249,7 +249,7 @@ fn info_process_vmos() {
     let sc = ctx.syscall();
 
     // Create a child process and add a VMO handle to it.
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let child_job = root.create_child().unwrap();
     let child_proc = Process::create(&child_job, "vmos-target").unwrap();
 
@@ -394,7 +394,7 @@ fn job_info_invalid_handle() {
 
 fn job_info_zero_buffer() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let job_h = ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB));
 
     let mut buf = [0u8; 0];
@@ -1404,7 +1404,7 @@ fn handle_count_bad_avail() {
 
 fn job_info_null_avail() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let job_h = ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB));
 
     let mut buf = AlignedBuf::<JOB_INFO_SIZE>::new();
@@ -1423,7 +1423,7 @@ fn job_info_null_avail() {
 
 fn job_info_null_actual() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let job_h = ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB));
 
     let mut buf = AlignedBuf::<JOB_INFO_SIZE>::new();
@@ -1442,7 +1442,7 @@ fn job_info_null_actual() {
 
 fn job_info_null_actual_and_avail() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let job_h = ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB));
 
     let mut buf = AlignedBuf::<JOB_INFO_SIZE>::new();
@@ -1460,7 +1460,7 @@ fn job_info_null_actual_and_avail() {
 
 fn job_info_invalid_buffer() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let job_h = ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB));
 
     let mut actual: usize = 0;
@@ -1480,7 +1480,7 @@ fn job_info_invalid_buffer() {
 
 fn job_info_bad_actual() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let job_h = ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB));
 
     let mut buf = AlignedBuf::<JOB_INFO_SIZE>::new();
@@ -1500,7 +1500,7 @@ fn job_info_bad_actual() {
 
 fn job_info_bad_avail() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let job_h = ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB));
 
     let mut buf = AlignedBuf::<JOB_INFO_SIZE>::new();
@@ -1775,7 +1775,7 @@ fn process_info_handle_table_zero_buffer() {
 /// and avail reporting the number of entries.
 fn process_info_maps_zero_buffer() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let target = Process::create(&job, "maps-zero").unwrap();
     let proc_h = ctx
         .proc
@@ -1792,7 +1792,7 @@ fn process_info_maps_zero_buffer() {
 /// and avail reporting the number of VMOs.
 fn process_info_vmos_zero_buffer() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let target = Process::create(&job, "vmos-zero").unwrap();
 
     // Add a VMO handle so avail > 0.
@@ -3850,7 +3850,7 @@ fn resource_info_handle_basic_bad_avail() {
 
 fn job_info_on_self() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let job_h = ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB));
 
     let mut buf = [0u8; JOB_INFO_SIZE];

@@ -44,7 +44,7 @@ fn empty_mask_is_valid() {
     assert_ne!(out, 0);
 
     // Create a thread and apply the profile.
-    let job = zircon_object::task::Job::root();
+    let job = zircon_object::task::Job::new_parentless_job();
     let proc = zircon_object::task::Process::create(&job, "cpu-mask-proc").unwrap();
     let thread = zircon_object::task::Thread::create(&proc, "cpu-mask-thread").unwrap();
 
@@ -104,7 +104,7 @@ fn apply_profile() {
         );
 
         // Create a thread and apply the profile.
-        let job = zircon_object::task::Job::root();
+        let job = zircon_object::task::Job::new_parentless_job();
         let proc = zircon_object::task::Process::create(&job, "cpu-apply").unwrap();
         let thread = zircon_object::task::Thread::create(&proc, "t").unwrap();
 

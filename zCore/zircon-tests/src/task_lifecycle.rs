@@ -14,7 +14,7 @@ extern crate alloc;
 /// JOB_NO_CHILDREN when all children are gone.
 fn job_create_and_destroy() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let child = root.create_child().unwrap();
     let child_id = child.id();
     assert_ne!(child_id, 0);
@@ -27,7 +27,7 @@ fn job_create_and_destroy() {
 /// level should have the correct parent KOID.
 fn nested_job_hierarchy() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let child = root.create_child().unwrap();
     let grandchild = child.create_child().unwrap();
     let great_grandchild = grandchild.create_child().unwrap();
@@ -42,7 +42,7 @@ fn nested_job_hierarchy() {
 fn kill_job_kills_children() {
     use zircon_object::task::{Process, Task};
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let parent = root.create_child().unwrap();
     let child = parent.create_child().unwrap();
     let grandchild = child.create_child().unwrap();
@@ -66,7 +66,7 @@ fn kill_job_kills_children() {
 /// of the job.
 fn process_create_in_job() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "test-proc").unwrap();
     assert_ne!(proc.id(), 0);
@@ -78,7 +78,7 @@ fn process_create_in_job() {
 fn thread_create_in_process() {
     use zircon_object::task::{Process, Thread};
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = Process::create(&job, "test-proc").unwrap();
     let thread = Thread::create(&proc, "test-thread").unwrap();
@@ -90,7 +90,7 @@ fn thread_create_in_process() {
 /// and signal TERMINATED.
 fn kill_empty_process() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "empty-proc").unwrap();
     Process::exit(&proc, -1);
@@ -105,7 +105,7 @@ fn kill_empty_process() {
 /// be killed.
 fn kill_job_with_process() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "child-proc").unwrap();
     Job::kill_with_code(&job, -1024);
@@ -120,7 +120,7 @@ fn kill_job_with_process() {
 /// Create multiple processes in the same job. All should coexist.
 fn multiple_processes_in_job() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let p1 = zircon_object::task::Process::create(&job, "proc-1").unwrap();
     let p2 = zircon_object::task::Process::create(&job, "proc-2").unwrap();
@@ -133,7 +133,7 @@ fn multiple_processes_in_job() {
 /// Try to create a process in a killed job. Should return BAD_STATE.
 fn create_process_in_dead_job() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     Job::kill_with_code(&job, -1024);
     let result = zircon_object::task::Process::create(&job, "dead-proc");
@@ -144,7 +144,7 @@ fn create_process_in_dead_job() {
 /// Try to create a child job in a killed job. Should return BAD_STATE.
 fn create_child_job_in_dead_job() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     Job::kill_with_code(&job, -1024);
     let result = job.create_child();
@@ -156,7 +156,7 @@ fn create_child_job_in_dead_job() {
 /// at least a moderately deep hierarchy.
 fn job_max_height() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let mut current = root.create_child().unwrap();
     // Create 10 levels deep
     for _ in 0..10 {
@@ -169,7 +169,7 @@ fn job_max_height() {
 /// Verify process return code is tracked on exit.
 fn process_return_code_tracking() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "retcode-test").unwrap();
 
@@ -190,7 +190,7 @@ fn process_return_code_tracking() {
 /// no processes.
 fn job_no_processes_signal() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     // Initially: no processes, signal should be set
@@ -212,7 +212,7 @@ fn job_no_processes_signal() {
 /// child jobs.
 fn job_no_jobs_signal() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
 
     // Initially: no child jobs, signal should be set

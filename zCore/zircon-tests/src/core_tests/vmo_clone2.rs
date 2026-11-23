@@ -1081,7 +1081,7 @@ fn map_range_read_only() {
     use zircon_object::vm::MMUFlags;
 
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "map-ro").unwrap();
     let vmar = proc.vmar();
 
