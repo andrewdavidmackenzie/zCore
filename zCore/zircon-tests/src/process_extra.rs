@@ -10,21 +10,21 @@ use zircon_object::task::{Job, Process, Status, Thread};
 
 fn process_create() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "test-proc").unwrap();
     assert_ne!(proc.id(), 0);
 }
 
 fn process_name() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "my-process").unwrap();
     assert_eq!(proc.name(), "my-process");
 }
 
 fn process_get_info() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "info-test").unwrap();
     let info = proc.get_info();
     assert_eq!(info.return_code, 0);
@@ -32,7 +32,7 @@ fn process_get_info() {
 
 fn process_add_thread() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "thread-test").unwrap();
     let thread = Thread::create(&proc, "thread-1").unwrap();
     assert_ne!(thread.id(), 0);
@@ -42,7 +42,7 @@ fn process_add_thread() {
 /// A freshly created process with no threads should not be started.
 fn process_not_started_initially() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "signal-test").unwrap();
 
     // A fresh process has not been started — STARTED flag should not be set.
@@ -53,7 +53,7 @@ fn process_not_started_initially() {
 
 fn process_handle_table() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "handle-test").unwrap();
 
     // Add a handle
@@ -73,14 +73,14 @@ fn process_handle_table() {
 
 fn process_type_name() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "test-proc").unwrap();
     assert_eq!(proc.type_name(), "Process");
 }
 
 fn process_set_name() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "original").unwrap();
     assert_eq!(proc.name(), "original");
 
@@ -90,7 +90,7 @@ fn process_set_name() {
 
 fn process_related_koid() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "test").unwrap();
     // Process's related koid should be its parent job
     assert_eq!(proc.related_koid(), job.id());
@@ -98,7 +98,7 @@ fn process_related_koid() {
 
 fn process_multiple_handles() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "handle-test").unwrap();
 
     let (ch0, _ch1) = zircon_object::ipc::Channel::create();
@@ -125,7 +125,7 @@ fn process_multiple_handles() {
 
 fn process_get_info_exited() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "exit-test").unwrap();
 
     // Exit with a specific code
@@ -139,7 +139,7 @@ fn process_get_info_exited() {
 /// Process exit code is retrievable after exit.
 fn process_exit_code() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "exit-code").unwrap();
 
     // Before exit, exit_code returns None
@@ -158,7 +158,7 @@ fn process_exit_code() {
 /// (Additional verification that type_name returns "Process".)
 fn process_type_name_check() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "type-check").unwrap();
     assert_eq!(proc.type_name(), "Process");
 }
@@ -166,7 +166,7 @@ fn process_type_name_check() {
 /// Multiple handles to different objects in the same process.
 fn process_multiple_handles_dup() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "multi-dup").unwrap();
 
     let (ch0, _ch1) = Channel::create();
@@ -193,7 +193,7 @@ fn process_multiple_handles_dup() {
 /// Set and retrieve process name (already tested, but C++ exact name).
 fn process_set_name_cxx() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "before").unwrap();
     assert_eq!(proc.name(), "before");
 
@@ -208,7 +208,7 @@ fn process_set_name_cxx() {
 /// Process related_koid is the parent job's koid.
 fn process_related_koid_cxx() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let child_job = Job::create_child(&root).unwrap();
     let proc = Process::create(&child_job, "related").unwrap();
 
@@ -220,7 +220,7 @@ fn process_related_koid_cxx() {
 /// Process status transitions: Init -> Exited.
 fn process_status() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "status-test").unwrap();
 
     // Initially not started
@@ -243,7 +243,7 @@ fn process_status() {
 /// Enumerate the process's own handle table.
 fn process_handle_table_self() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "handle-table").unwrap();
 
     // Initially empty
@@ -274,7 +274,7 @@ fn process_handle_table_self() {
 /// Enumerate handles and check types are correct.
 fn process_handle_table_self_detailed() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "detailed-ht").unwrap();
 
     // Add a channel handle
@@ -307,7 +307,7 @@ fn process_handle_table_self_detailed() {
 fn process_get_child() {
     use zircon_object::object::KernelObject;
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "get-child-test").unwrap();
 
     let thread = Thread::create(&proc, "child-thread").unwrap();
@@ -327,7 +327,7 @@ fn process_get_child() {
 fn process_create_destroyed() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let child_job = job.create_child().unwrap();
 
     // Kill the child job
@@ -342,7 +342,7 @@ fn process_create_destroyed() {
 fn process_kill_process() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "kill-test").unwrap();
 
     // Process should not be terminated initially
@@ -374,7 +374,7 @@ fn process_kill_process() {
 fn process_vmar_info() {
     use zircon_object::object::KernelObject;
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-info-test").unwrap();
 
     let vmar = proc.vmar();

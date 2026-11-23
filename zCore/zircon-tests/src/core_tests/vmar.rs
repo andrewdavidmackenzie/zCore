@@ -49,7 +49,7 @@ fn alignment_vmar_allocate_test() {
 /// Map VMOs with various alignment and verify address alignment.
 fn alignment_vmar_map_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "align-map").unwrap();
     let vmar = proc.vmar();
 
@@ -154,7 +154,7 @@ fn bad_range_op_nested_vmar() {
 /// Map, use read_memory, unmap, verify read_memory fails after unmap.
 fn concurrent_unmap_read_memory() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "read-mem").unwrap();
     let vmar = proc.vmar();
 
@@ -185,7 +185,7 @@ fn concurrent_unmap_read_memory() {
 /// verify mappings are gone.
 fn destroy_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "destroy-test").unwrap();
     let vmar = proc.vmar();
 
@@ -211,7 +211,7 @@ fn destroy_test() {
 /// Operations on a destroyed VMAR should fail.
 fn destroyed_vmar_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "destroyed-vmar").unwrap();
     let vmar = proc.vmar();
 
@@ -262,7 +262,7 @@ fn invalid_args_test() {
 /// Allocate a VMAR with COMPACT flag, map VMOs in it.
 fn map_in_compact_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "compact-test").unwrap();
     let vmar = proc.vmar();
 
@@ -311,7 +311,7 @@ fn map_in_upper_limit_test() {
 /// (the space is reclaimed).
 fn map_over_destroyed_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "map-destroyed").unwrap();
     let vmar = proc.vmar();
 
@@ -398,7 +398,7 @@ fn nested_region_perms_test() {
 /// get_info returns correct fields for VMAR.
 fn object_info_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "info-test").unwrap();
     let vmar = proc.vmar();
 
@@ -463,7 +463,7 @@ fn overmapping_test() {
 /// Map 4 pages, unmap the middle 2, verify via read_memory.
 fn partial_unmap_and_read() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "partial-unmap-r").unwrap();
     let vmar = proc.vmar();
 
@@ -508,7 +508,7 @@ fn partial_unmap_and_read() {
 /// Map 4 pages, unmap the middle 2, verify the mapping was split.
 fn partial_unmap_and_write() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "partial-unmap-w").unwrap();
     let vmar = proc.vmar();
 
@@ -539,7 +539,7 @@ fn partial_unmap_and_write() {
 /// Map at a VMO offset, then partially unmap. Verify via read_memory.
 fn partial_unmap_with_vmar_offset() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "partial-off").unwrap();
     let vmar = proc.vmar();
 
@@ -581,7 +581,7 @@ fn partial_unmap_with_vmar_offset() {
 /// 3. Protect across a gap (unmapped region) → NOT_FOUND
 fn protect_multiple_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "protect-multi").unwrap();
     let vmar = proc.vmar();
 
@@ -676,7 +676,7 @@ fn protect_multiple_test() {
 /// pages remain mapped (readable via read_memory) after the split.
 fn protect_split_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "protect-split").unwrap();
     let vmar = proc.vmar();
 
@@ -741,7 +741,7 @@ fn protect_split_test() {
 /// 3. child.protect(READ|WRITE) → succeeds (child still has CAN_MAP_WRITE)
 fn protect_subregion_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "protect-sub").unwrap();
     let vmar = proc.vmar();
 
@@ -1021,7 +1021,7 @@ fn range_op_stream_size_wraparound() {
 /// Map VMO, zero a range through VMO API, verify through mapping.
 fn range_op_zero() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "range-zero").unwrap();
     let vmar = proc.vmar();
 
@@ -1068,7 +1068,7 @@ fn rights_drop_test() {
 /// Map with non-page-aligned size should fail.
 fn unaligned_len_map_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "unaligned-map").unwrap();
     let vmar = proc.vmar();
 
@@ -1084,7 +1084,7 @@ fn unaligned_len_map_test() {
 /// Unmap/protect with non-page-aligned length should fail.
 fn unaligned_len_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "unaligned-len").unwrap();
     let vmar = proc.vmar();
 
@@ -1112,7 +1112,7 @@ fn unaligned_len_test() {
 /// Then verifies the same with a second mapping below.
 fn unmap_base_not_mapped_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "unmap-base").unwrap();
     let vmar = proc.vmar();
 
@@ -1178,7 +1178,7 @@ fn unmap_base_not_mapped_test() {
 /// and part of the right one. Verify remaining pages, then unmap rest.
 fn unmap_multiple_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "unmap-multi").unwrap();
     let vmar = proc.vmar();
 
@@ -1284,7 +1284,7 @@ fn unmap_multiple_test() {
 /// Map VMO in a child VMAR, unmap from child, verify parent intact.
 fn unmap_op_children() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "unmap-children").unwrap();
     let vmar = proc.vmar();
 
@@ -1307,7 +1307,7 @@ fn unmap_op_children() {
 /// Map 4 pages, unmap the middle 2 to split the mapping.
 fn unmap_split_test() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "unmap-split").unwrap();
     let vmar = proc.vmar();
 
@@ -1343,7 +1343,7 @@ fn unmap_split_test() {
 /// Map read-only, verify read works. write_memory should fail.
 fn write_read_only_memory() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "write-ro").unwrap();
     let vmar = proc.vmar();
 

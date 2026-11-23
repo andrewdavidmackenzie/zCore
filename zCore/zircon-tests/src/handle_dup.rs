@@ -56,7 +56,7 @@ fn duplicate_channel_handle() {
 /// Duplicate a job handle. Both should reference the same job.
 fn duplicate_job_handle() {
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let child = root.create_child().unwrap();
     let child_id = child.id();
     let h1 = Handle::new(child.clone(), Rights::DEFAULT_JOB);

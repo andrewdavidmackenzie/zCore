@@ -1429,7 +1429,7 @@ impl TestContext {
     /// Create a minimal Zircon process/thread context for testing.
     pub fn new() -> Self {
         ensure_hal_init();
-        let job = Job::root();
+        let job = Job::new_parentless_job();
         let proc = Process::create(&job, "test-proc").unwrap();
         let thread = Thread::create(&proc, "test-thread").unwrap();
         let current = CurrentThread::new_for_test(thread);
@@ -1564,7 +1564,7 @@ impl PagerProcessTestThread {
     /// pager-backed with no pages supplied), blocking on the demand-
     /// paging path.
     pub fn start(vmo: Arc<VmObject>) -> Self {
-        let job = Job::root();
+        let job = Job::new_parentless_job();
         let proc = Process::create(&job, "pager-test-proc").unwrap();
         let pager_state = Arc::new(PagerReadState {
             vmo,

@@ -26,7 +26,7 @@ use zircon_object::task::{Job, Process, Thread};
 /// distinct register state including the TLS base pointer.
 fn thread_identity_for_tls() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "tls-test").unwrap();
 
     // Create multiple threads — each must have a unique KOID

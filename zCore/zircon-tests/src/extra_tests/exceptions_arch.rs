@@ -32,7 +32,7 @@ fn data_abort() {
 fn instruction_abort() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let rights = Rights::INSPECT
         | Rights::DUPLICATE
         | Rights::TRANSFER

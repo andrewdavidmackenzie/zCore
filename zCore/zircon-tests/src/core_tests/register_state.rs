@@ -39,7 +39,7 @@ fn context_switch_of_gs_base() {
     // We verify the thread creation infrastructure works (the part
     // that is architecture-independent).
     let _ctx = crate::helpers::TestContext::new();
-    let job = zircon_object::task::Job::root();
+    let job = zircon_object::task::Job::new_parentless_job();
     let proc = zircon_object::task::Process::create(&job, "gs-base-test").unwrap();
 
     // Create num_cpus * 2 threads (1 CPU in zCore → 2 threads).

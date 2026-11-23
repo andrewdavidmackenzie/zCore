@@ -14,7 +14,7 @@ use zircon_object::ZxError;
 /// even in test mode test mode.
 async fn process_get_info_runtime() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "runtime-test").unwrap();
     let thread = Thread::create(&proc, "runtime-thread").unwrap();
 
@@ -52,7 +52,7 @@ async fn process_get_info_runtime() {
 /// Same as GetInfoRuntime but for V1 runtime info format.
 async fn process_get_info_runtime_v1() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "runtime-v1-test").unwrap();
     let thread = Thread::create(&proc, "runtime-v1-thread").unwrap();
 
@@ -94,7 +94,7 @@ async fn process_get_info_runtime_v1() {
 /// C++ source: zircon/system/utest/core/process/process.cc
 fn process_wait_async_cancel_self() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "wait-cancel").unwrap();
     let _thread = Thread::create(&proc, "th").unwrap();
     let port = zircon_object::signal::Port::new(0).unwrap();
@@ -124,7 +124,7 @@ fn process_wait_async_cancel_self() {
 /// Creating a process with an empty name should succeed.
 fn empty_name_succeeds() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "").unwrap();
     assert_eq!(proc.name(), "");
 }
@@ -139,7 +139,7 @@ fn long_name_succeeds() {
     let ctx = TestContext::new();
 
     // Add the root job to the handle table
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let job_h = ctx
         .proc
         .add_handle(Handle::new(job, Rights::MANAGE_PROCESS | Rights::WRITE));
@@ -193,7 +193,7 @@ fn long_name_succeeds() {
 /// at the syscall level.
 fn get_runtime_no_permission() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "no-perm").unwrap();
     let sc = ctx.syscall();
 
@@ -247,7 +247,7 @@ async fn mini_process_sanity() {
     use crate::helpers;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "mini-proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -279,7 +279,7 @@ async fn process_start_no_handle() {
     use crate::helpers;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "no-handle-proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -307,7 +307,7 @@ fn process_start_non_userspace_entry() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "kern-entry").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -342,7 +342,7 @@ async fn process_start_fail() {
     use crate::helpers;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "start-fail").unwrap();
     let thread1 = Thread::create(&proc, "t1").unwrap();
     let thread2 = Thread::create(&proc, "t2").unwrap();
@@ -373,7 +373,7 @@ async fn process_not_killed_via_thread_close() {
     use crate::helpers;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "no-kill-close").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
     let thread_clone = thread.clone();
@@ -411,7 +411,7 @@ async fn process_not_killed_via_process_close() {
     use crate::helpers;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "no-kill-proc-close").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -442,7 +442,7 @@ async fn process_not_killed_via_process_close() {
 fn kill_channel_handle_cycle() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let child_job = job.create_child().unwrap();
 
     let proc_a = Process::create(&child_job, "proc-a").unwrap();
@@ -477,7 +477,7 @@ fn kill_channel_handle_cycle() {
 /// Process info flags reflect created/started/exited states.
 fn info_reflects_process_state() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "state-test").unwrap();
     let _thread = Thread::create(&proc, "th").unwrap();
 
@@ -509,7 +509,7 @@ async fn suspend() {
     use zircon_object::task::Task;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "suspend-test").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -576,7 +576,7 @@ async fn suspend_multiple_threads() {
     use zircon_object::task::Task;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "multi-suspend").unwrap();
     let t1 = Thread::create(&proc, "t1").unwrap();
     let t2 = Thread::create(&proc, "t2").unwrap();
@@ -621,7 +621,7 @@ async fn suspend_before_creating_threads() {
     use zircon_object::task::Task;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "pre-suspend").unwrap();
 
     // Suspend before creating any threads
@@ -653,7 +653,7 @@ async fn suspend_before_starting_threads() {
     use zircon_object::task::Task;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "pre-start-suspend").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -685,7 +685,7 @@ async fn suspend_process_then_thread() {
     use zircon_object::task::Task;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "proc-then-thread").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -723,7 +723,7 @@ async fn suspend_thread_then_process() {
     use zircon_object::task::Task;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "thread-then-proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -759,7 +759,7 @@ async fn suspend_thread_and_process_before_starting_process() {
     use zircon_object::task::Task;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "both-suspend").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -794,7 +794,7 @@ async fn suspend_twice() {
     use zircon_object::task::Task;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "double-suspend").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -827,7 +827,7 @@ async fn suspend_twice_before_creating_threads() {
     use zircon_object::task::Task;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "pre-double-suspend").unwrap();
 
     proc.suspend();
@@ -862,7 +862,7 @@ async fn suspend_with_dying_thread() {
     use zircon_object::task::Task;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "dying-thread").unwrap();
     let t1 = Thread::create(&proc, "t1").unwrap();
     let t2 = Thread::create(&proc, "t2").unwrap();
@@ -903,7 +903,7 @@ fn create_and_kill_job_race_stress() {
     // Run 100 iterations of creating a child job, creating a process,
     // and killing the job — some will fail, some will succeed.
     for _ in 0..ITERATIONS {
-        let root = Job::root();
+        let root = Job::new_parentless_job();
         let child = root.create_child().unwrap();
 
         // Kill the job
@@ -936,7 +936,7 @@ async fn process_start_write_thread_state() {
     use zircon_object::task::{Task, ThreadStateKind};
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "write-state").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -973,7 +973,7 @@ async fn process_start_write_thread_state() {
 /// and subsequent get_info should not crash.
 fn forbid_destroy_root_vmar() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-destroy").unwrap();
 
     let vmar = proc.vmar();
@@ -1052,7 +1052,7 @@ fn process_hw_trace_context_id_property() {
 fn info_process_no_process_handles() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "no-handles").unwrap();
     let _thread = Thread::create(&proc, "t1").unwrap();
 

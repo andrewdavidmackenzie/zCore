@@ -82,7 +82,7 @@ fn assert_death_segsel(proc: &alloc::sync::Arc<Process>, name: &str, segsel: u16
 /// dies; we simulate by creating + killing a thread per register.
 fn load_last_gdt_entry() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "load-gdt").unwrap();
 
     // C++ tests each of ds, ss, es, gs, fs with lastGDTEntry (0xfffb).
@@ -105,7 +105,7 @@ fn load_last_gdt_entry() {
 /// because Zircon doesn't set up an LDT.
 fn load_first_ldt_entry() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "load-ldt").unwrap();
 
     for sreg in SEG_REGISTERS {
@@ -125,7 +125,7 @@ fn load_first_ldt_entry() {
 /// `ljmp *<addr>`. This causes a #GP because the GDT entry is invalid.
 fn jump_to_last_gdt_entry() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "jmp-gdt").unwrap();
 
     // C++ far_jmp struct: { uint32_t offset = 0; uint16_t segsel = 0xfffb; }
@@ -142,7 +142,7 @@ fn jump_to_last_gdt_entry() {
 /// Far-jumping to the first LDT entry should fault.
 fn jump_to_first_ldt_entry() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "jmp-ldt").unwrap();
 
     // C++ far_jmp struct: { uint32_t offset = 0; uint16_t segsel = 0x0007; }

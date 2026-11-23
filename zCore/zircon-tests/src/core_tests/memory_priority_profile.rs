@@ -115,7 +115,7 @@ fn apply_profile() {
     assert_ne!(out_default, 0);
 
     // Get VMAR handle with appropriate rights.
-    let job = zircon_object::task::Job::root();
+    let job = zircon_object::task::Job::new_parentless_job();
     let proc = zircon_object::task::Process::create(&job, "mem-prof").unwrap();
     let vmar = proc.vmar();
     let vmar_h = ctx.proc.add_handle(zircon_object::object::Handle::new(
@@ -167,7 +167,7 @@ fn rights() {
     )
     .expect("create profile should succeed");
 
-    let job = zircon_object::task::Job::root();
+    let job = zircon_object::task::Job::new_parentless_job();
     let proc = zircon_object::task::Process::create(&job, "rights-test").unwrap();
     let vmar = proc.vmar();
 

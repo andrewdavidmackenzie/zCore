@@ -24,7 +24,7 @@ fn map_in_prototype() {
     let _ctx = TestContext::new();
 
     // Create a process with a VMAR (the "prototype" role).
-    let job = zircon_object::task::Job::root();
+    let job = zircon_object::task::Job::new_parentless_job();
     let proc = zircon_object::task::Process::create(&job, "prototype").unwrap();
     let vmar = proc.vmar();
 
@@ -64,7 +64,7 @@ fn map_in_prototype() {
 fn restricted_vmar_not_shared() {
     let _ctx = TestContext::new();
 
-    let job = zircon_object::task::Job::root();
+    let job = zircon_object::task::Job::new_parentless_job();
     let proc_a = zircon_object::task::Process::create(&job, "proc-a").unwrap();
     let proc_b = zircon_object::task::Process::create(&job, "proc-b").unwrap();
 
@@ -107,7 +107,7 @@ fn invalid_prototype() {
     let sc = ctx.syscall();
 
     // Create a regular process — not shared (options=0).
-    let job = zircon_object::task::Job::root();
+    let job = zircon_object::task::Job::new_parentless_job();
     let proc = zircon_object::task::Process::create(&job, "prototype").unwrap();
 
     // The process is a regular process — not shared.
@@ -150,7 +150,7 @@ fn invalid_prototype() {
 fn properties_copied() {
     let _ctx = TestContext::new();
 
-    let job = zircon_object::task::Job::root();
+    let job = zircon_object::task::Job::new_parentless_job();
     let proc_a = zircon_object::task::Process::create(&job, "proc-a").unwrap();
     let proc_b = zircon_object::task::Process::create(&job, "proc-b").unwrap();
 

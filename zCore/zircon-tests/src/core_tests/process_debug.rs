@@ -11,7 +11,7 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 /// Read memory from a mapped VMO via VMAR read_memory.
 fn read_memory() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "debug-read").unwrap();
     let vmar = proc.vmar();
 
@@ -33,7 +33,7 @@ fn read_memory() {
 /// Write memory to a mapped VMO via VMAR write_memory.
 fn write_memory() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "debug-write").unwrap();
     let vmar = proc.vmar();
 
@@ -55,7 +55,7 @@ fn write_memory() {
 /// Read from unmapped address should fail.
 fn read_unmapped() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "debug-unmapped").unwrap();
     let vmar = proc.vmar();
 
@@ -76,7 +76,7 @@ fn read_unmapped() {
 /// Verify process VMAR info for debug purposes.
 fn debug_utilities() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "debug-util").unwrap();
     let vmar = proc.vmar();
 
@@ -105,7 +105,7 @@ fn vdso_protection() {
 /// Write to unmapped address should fail.
 fn write_at_invalid_offset() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "debug-write-bad").unwrap();
     let vmar = proc.vmar();
 

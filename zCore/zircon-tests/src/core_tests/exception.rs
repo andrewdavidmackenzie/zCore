@@ -25,7 +25,7 @@ pub(crate) fn add_process_handle(ctx: &TestContext) -> HandleValue {
 
 /// Helper: get a handle to a job.
 pub(crate) fn add_job_handle(ctx: &TestContext) -> HandleValue {
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let rights = Rights::INSPECT
         | Rights::DUPLICATE
         | Rights::TRANSFER
@@ -53,7 +53,7 @@ fn unhandled_hardware_exception() {
     // Without mini-process, verify that killing a process sets the
     // expected return code (similar to what an unhandled exception would do).
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let child_job = job.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&child_job, "exc-proc").unwrap();
 
@@ -74,7 +74,7 @@ fn unhandled_hardware_exception() {
 /// processes within a killed job are terminated.
 fn unhandled_policy_exception() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let child_job = job.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&child_job, "policy-proc").unwrap();
 

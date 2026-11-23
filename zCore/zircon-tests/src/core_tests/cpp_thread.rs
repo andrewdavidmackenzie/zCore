@@ -35,7 +35,7 @@ extern crate alloc;
 ///   zx_handle_close (resource cleanup)
 fn create_and_verify_thread_handle() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "cpp-thread").unwrap();
     let thread = Thread::create(&proc, "worker").unwrap();
 

@@ -73,7 +73,7 @@ fn create_policy_denied_returns_access_denied() {
     crate::helpers::ensure_hal_init();
     use zircon_object::task::{CurrentThread, Job, Process, Thread};
 
-    let root_job = Job::root();
+    let root_job = Job::new_parentless_job();
     let child_job = root_job.create_child().unwrap();
 
     // Set a deny policy for NewChannel on the child job
