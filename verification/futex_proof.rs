@@ -96,6 +96,8 @@ verus! {
     }
 
     /// Wait spec: value check then add waiter + set owner.
+    /// The invariant bound is preserved: successful waits require
+    /// waiter_count < the maximum, so the increment stays in bounds.
     pub open spec fn spec_wait(
         pre: FutexState,
         current_value: FutexValue,
@@ -252,23 +254,41 @@ verus! {
     // ── Executable model with verified postconditions ───────────
 
     /// Executable wake on u64 state.
+    /// Returns the REMAINING waiter count (not the woken count).
     pub fn model_wake(
         count: u64,
         wake_count: u64,
         owner_action: OwnerAction,
-    ) -> (post_count: u64)
+    ) -> (remaining: u64)
         requires
             count <= 0xFFFF_FFFF,
         ensures
-            post_count <= count,
-            post_count >= 0,
+            remaining <= count,
+            remaining == count - spec_wake_woken(count as int, wake_count as int, owner_action),
+    {
+        match owner_action {
+            OwnerAction::Release => {
+                count - if count < wake_count { count } else { wake_count }
+            },
+            OwnerAction::AssignWoken => {
+                if count > 0 { count - 1 } else { count }
+            },
+        }
+    }
+
+    /// Spec helper: how many threads are woken.
+    pub open spec fn spec_wake_woken(
+        count: int,
+        wake_count: int,
+        owner_action: OwnerAction,
+    ) -> int
     {
         match owner_action {
             OwnerAction::Release => {
                 if count < wake_count { count } else { wake_count }
             },
             OwnerAction::AssignWoken => {
-                if count > 0 { count - 1 } else { count }
+                if count > 0 { 1 } else { 0 }
             },
         }
     }

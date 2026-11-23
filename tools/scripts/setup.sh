@@ -116,8 +116,8 @@ if [ ! -f "$VERUS_DIR/verus" ]; then
     case "$VERUS_PLATFORM" in
         arm64-darwin)  VERUS_PLATFORM="arm64-macos" ;;
         x86_64-darwin) VERUS_PLATFORM="x86-macos" ;;
-        x86_64-linux)  VERUS_PLATFORM="x86_64-linux" ;;
-        aarch64-linux) VERUS_PLATFORM="aarch64-linux" ;;
+        x86_64-linux)  VERUS_PLATFORM="x86-linux" ;;
+        aarch64-linux) VERUS_PLATFORM="arm64-linux" ;;
         *)
             echo "  WARNING: no Verus release for $VERUS_PLATFORM — skipping."
             echo "  Install manually from https://github.com/verus-lang/verus/releases"
@@ -125,19 +125,32 @@ if [ ! -f "$VERUS_DIR/verus" ]; then
             ;;
     esac
     if [ -n "$VERUS_PLATFORM" ]; then
+        # Use a private temp directory to prevent symlink attacks
+        # and interference from concurrent setup runs.
+        VERUS_TMP="$(mktemp -d)"
+        trap 'rm -rf "$VERUS_TMP"' EXIT
         VERUS_URL="https://github.com/verus-lang/verus/releases/download/release%2F${VERUS_VERSION}/verus-${VERUS_VERSION}-${VERUS_PLATFORM}.zip"
-        if curl -sL -o /tmp/verus-install.zip "$VERUS_URL"; then
-            mkdir -p "$VERUS_DIR"
-            unzip -qo /tmp/verus-install.zip -d /tmp/verus-extract
-            cp -R /tmp/verus-extract/verus-${VERUS_VERSION}-${VERUS_PLATFORM}/* "$VERUS_DIR/"
-            chmod +x "$VERUS_DIR/verus" "$VERUS_DIR/rust_verify" "$VERUS_DIR/z3" 2>/dev/null || true
-            rm -rf /tmp/verus-install.zip /tmp/verus-extract
-            echo "  ok: Verus installed to $VERUS_DIR"
-            # Verus needs a specific Rust toolchain
-            VERUS_TOOLCHAIN=$(cat "$VERUS_DIR/version.json" 2>/dev/null | grep -o '"rustc[^"]*"[^"]*"[^"]*"' | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*' | head -1)
-            if [ -n "$VERUS_TOOLCHAIN" ]; then
-                echo "  Installing Rust toolchain $VERUS_TOOLCHAIN for Verus..."
-                rustup install "$VERUS_TOOLCHAIN-$(rustup show | grep 'Default host' | awk '{print $4}')" 2>/dev/null || true
+        if curl -sL --fail --retry 3 -o "$VERUS_TMP/verus.zip" "$VERUS_URL"; then
+            if unzip -qo "$VERUS_TMP/verus.zip" -d "$VERUS_TMP"; then
+                mkdir -p "$VERUS_DIR"
+                # The archive contains an unversioned directory named
+                # after the platform (e.g., verus-arm64-macos/).
+                cp -R "$VERUS_TMP/verus-${VERUS_PLATFORM}/"* "$VERUS_DIR/"
+                chmod +x "$VERUS_DIR/verus" "$VERUS_DIR/rust_verify" "$VERUS_DIR/z3" 2>/dev/null || true
+                echo "  ok: Verus installed to $VERUS_DIR"
+                # Install the Rust toolchain Verus needs (non-fatal —
+                # the toolchain may already be present or auto-install
+                # on first use).
+                VERUS_TOOLCHAIN=$(grep -o '"toolchain"[^"]*"[^"]*"' "$VERUS_DIR/version.json" 2>/dev/null | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*' | head -1) || true
+                if [ -n "$VERUS_TOOLCHAIN" ]; then
+                    VERUS_HOST=$(rustup show 2>/dev/null | grep 'Default host' | awk '{print $3}') || true
+                    if [ -n "$VERUS_HOST" ]; then
+                        echo "  Installing Rust toolchain $VERUS_TOOLCHAIN for Verus..."
+                        rustup install "$VERUS_TOOLCHAIN-$VERUS_HOST" 2>/dev/null || true
+                    fi
+                fi
+            else
+                echo "  WARNING: failed to extract Verus archive — skipping."
             fi
         else
             echo "  WARNING: failed to download Verus — skipping."
