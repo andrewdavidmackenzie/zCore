@@ -49,12 +49,37 @@ impl Syscall<'_> {
         if count != 0 {
             let total = count.checked_mul(elem_size).ok_or(ZxError::INVALID_ARGS)?;
             self.check_user_buffer_read(user_bytes.as_addr(), total)?;
-            let data = user_bytes.read_array(total)?;
-            let actual_count = self
-                .thread
-                .proc()
-                .get_object_with_rights::<Fifo>(handle_value, Rights::WRITE)?
-                .write(elem_size, &data, count)?;
+            // Read user data in page-sized chunks, writing each chunk
+            // to the FIFO directly — no total-sized kernel allocation
+            // (#471). FIFO writes are element-granular; each chunk is
+            // a multiple of elem_size elements.
+            let proc = self.thread.proc();
+            let fifo = proc.get_object_with_rights::<Fifo>(handle_value, Rights::WRITE)?;
+            let mut remaining = total;
+            let mut total_written = 0usize;
+            user_bytes.for_each_chunk::<ZxError>(total, |chunk| {
+                // Round down to a whole number of elements.
+                let elem_count = chunk.len() / elem_size;
+                if elem_count == 0 {
+                    return Ok(0);
+                }
+                let byte_count = elem_count * elem_size;
+                match fifo.write(elem_size, &chunk[..byte_count], elem_count) {
+                    Ok(n) => {
+                        let written = n * elem_size;
+                        remaining -= written;
+                        total_written += written;
+                        if remaining == 0 {
+                            Ok(0) // all data written, stop
+                        } else {
+                            Ok(written)
+                        }
+                    }
+                    Err(ZxError::SHOULD_WAIT) => Ok(0), // FIFO full, stop
+                    Err(e) => Err(e),
+                }
+            })?;
+            let actual_count = total_written / elem_size;
             actual_count_ptr.write_if_not_null(actual_count)?;
             Ok(())
         } else {

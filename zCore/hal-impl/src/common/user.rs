@@ -814,6 +814,9 @@ impl<P: Read> UserPtr<u8, P> {
                 .map_err(E::from)?;
             }
             let consumed = f(&buf[..chunk_len])?;
+            if consumed == 0 {
+                break;
+            }
             total_consumed += consumed;
             offset += chunk_len;
         }

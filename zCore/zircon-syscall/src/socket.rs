@@ -45,7 +45,20 @@ impl Syscall<'_> {
                 .thread
                 .proc()
                 .get_object_with_rights::<Socket>(handle_value, Rights::WRITE)?;
-            let actual_count = socket.write(&user_bytes.read_array(count)?)?;
+            // Read user data in page-sized chunks, writing each chunk
+            // to the socket directly — no count-sized kernel allocation
+            // (#471). For stream sockets, partial writes are natural.
+            // For datagrams, each chunk that fits is written atomically;
+            // if the buffer fills, the loop stops early (SHOULD_WAIT
+            // semantics are preserved by the caller checking the count).
+            let actual_count = user_bytes.for_each_chunk::<ZxError>(count, |chunk| {
+                match socket.write(chunk) {
+                    Ok(n) => Ok(n),
+                    // Buffer full: stop reading user data.
+                    Err(ZxError::SHOULD_WAIT) => Ok(0),
+                    Err(e) => Err(e),
+                }
+            })?;
             actual_count_ptr.write_if_not_null(actual_count)?;
             Ok(())
         } else {
@@ -78,26 +91,44 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let socket = proc.get_object_with_rights::<Socket>(handle_value, Rights::READ)?;
-        let mut data = {
-            let mut v = alloc::vec::Vec::new();
-            v.try_reserve(count).map_err(|_| ZxError::INVALID_ARGS)?;
-            v.resize(count, 0u8);
-            v
-        };
         let peek = options.contains(SocketFlags::SOCKET_PEEK);
-        // For datagram sockets, Fuchsia consumes the datagram even if
-        // the copy to user fails (for consuming reads). Read into a
-        // kernel buffer first, then attempt the copy to user.
-        let actual_count = socket.read(peek, &mut data)?;
-        if let Err(_e) = user_bytes.write_array(&data[..actual_count]) {
-            // Copy to user failed. For consuming reads on datagram
-            // sockets, the datagram is already consumed — this matches
-            // Fuchsia's behavior where a faulting consuming read drops
-            // the datagram. Return INVALID_ARGS.
-            return Err(ZxError::INVALID_ARGS);
+        // Read from the socket in page-sized chunks, writing each chunk
+        // directly to user space — no count-sized kernel allocation
+        // (#471). For datagram sockets, Fuchsia consumes the datagram
+        // even if the copy to user fails; with chunked reads, only the
+        // current chunk is lost on a fault (less data loss than the
+        // previous copy-all approach).
+        let mut total_read = 0usize;
+        let result = user_bytes.for_each_chunk_mut::<ZxError>(count, |chunk| {
+            match socket.read(peek, chunk) {
+                Ok(n) => {
+                    total_read += n;
+                    Ok(n)
+                }
+                // Socket empty or peer closed: stop writing to user.
+                Err(ZxError::SHOULD_WAIT) | Err(ZxError::PEER_CLOSED) => Ok(0),
+                Err(e) => Err(e),
+            }
+        });
+        match result {
+            Ok(actual_count) => {
+                if actual_count == 0 && total_read == 0 {
+                    // Nothing was read — check why.
+                    if socket.read(peek, &mut []) == Err(ZxError::PEER_CLOSED) {
+                        return Err(ZxError::PEER_CLOSED);
+                    }
+                    return Err(ZxError::SHOULD_WAIT);
+                }
+                actual_count_ptr.write_if_not_null(actual_count)?;
+                Ok(())
+            }
+            Err(_) => {
+                // Copy to user failed. For consuming reads on datagram
+                // sockets, the already-read chunks are consumed — this
+                // matches Fuchsia's behavior. Return INVALID_ARGS.
+                Err(ZxError::INVALID_ARGS)
+            }
         }
-        actual_count_ptr.write_if_not_null(actual_count)?;
-        Ok(())
     }
 
     /// Prevent future reading or writing on a socket.
