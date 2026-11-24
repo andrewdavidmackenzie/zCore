@@ -19,6 +19,9 @@ extern crate log;
 pub mod debuglog;
 pub mod dev;
 mod error;
+/// Kernel-object invariants and the `inv!` assert macro (#888).
+#[macro_use]
+pub mod invariants;
 #[cfg(feature = "hypervisor")]
 pub mod hypervisor;
 pub mod ipc;

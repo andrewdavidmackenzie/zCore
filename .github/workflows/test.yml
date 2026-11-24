@@ -39,7 +39,7 @@ jobs:
       # #[serial_test::parallel] module markers). Same approach as the
       # zircon-tests step below.
       - name: Run zircon-object host tests (libos + aspace-separate)
-        run: cargo test -p zircon-object --features libos,aspace-separate --no-fail-fast -- --test-threads=1
+        run: cargo test -p zircon-object --features libos,aspace-separate,invariant-checks --no-fail-fast -- --test-threads=1
 
       - name: Run hal-impl host tests (libos)
         run: cargo test -p hal-impl --features libos --no-fail-fast

@@ -317,6 +317,8 @@ impl Process {
             if inner.status != Status::Init {
                 return Err(ZxError::BAD_STATE);
             }
+            // INV-PROCESS-2: Running is only entered from Init.
+            inv!(matches!(inner.status, Status::Init));
             inner.status = Status::Running;
             inner.start_time = hal_impl::timer::timer_now().as_nanos() as i64;
             handle_value = arg1.map_or(INVALID_HANDLE, |handle| inner.add_handle(handle));
@@ -366,11 +368,17 @@ impl Process {
                     // Still dying (threads shutting down). Update the
                     // retcode so kill's code takes precedence over
                     // terminate's default of 0.
+                    // INV-PROCESS-2: an Exited→Exited rewrite is allowed
+                    // only before termination completes (code frozen after).
+                    inv!(!inner.terminated);
                     inner.status = Status::Exited(retcode);
                     return;
                 }
                 _ => {}
             }
+            // INV-PROCESS-2: Exited is entered from Init/Running (the
+            // match above handled the already-Exited cases).
+            inv!(matches!(inner.status, Status::Init | Status::Running));
             inner.status = Status::Exited(retcode);
             if inner.threads.is_empty() {
                 zero_handles_objects = inner.clear_handles();
@@ -493,6 +501,11 @@ impl Process {
                     // Should not happen — exit() or remove_thread() should
                     // always set the status before calling terminate().
                     // Fall back to 0 if it does.
+                    inv!(
+                        matches!(inner.status, Status::Init | Status::Running),
+                        "INV-PROCESS-2: terminate() fallback reached from {:?}",
+                        inner.status
+                    );
                     inner.status = Status::Exited(0);
                     0
                 }
@@ -689,7 +702,13 @@ impl Process {
     /// a process needs to appear started without actually running
     /// a thread.
     pub fn set_status_running(&self) {
-        self.inner.lock().status = Status::Running;
+        let mut inner = self.inner.lock();
+        // INV-PROCESS-2: test helper must not resurrect an exited process.
+        inv!(
+            !matches!(inner.status, Status::Exited(_)),
+            "INV-PROCESS-2: set_status_running on exited process"
+        );
+        inner.status = Status::Running;
     }
 
     /// Transition from Init to Running if the process hasn't been started yet.
@@ -699,6 +718,7 @@ impl Process {
     pub fn ensure_running(&self) {
         let mut inner = self.inner.lock();
         if inner.status == Status::Init {
+            // INV-PROCESS-2: Running only from Init (guard above).
             inner.status = Status::Running;
             inner.start_time = hal_impl::timer::timer_now().as_nanos() as i64;
         }
@@ -930,11 +950,21 @@ impl Process {
     /// Get a futex from the process, keyed by user-space address.
     pub fn get_futex(&self, user_addr: usize) -> Arc<Futex> {
         let mut inner = self.inner.lock();
-        inner
+        let futex = inner
             .futexes
             .entry(user_addr)
             .or_insert_with(|| Futex::new(user_addr))
-            .clone()
+            .clone();
+        // INV-PROCESS-5: the table key always matches the futex's own
+        // user address (a mismatch would route wakes to the wrong
+        // futex).
+        inv!(
+            futex.user_addr() == user_addr,
+            "INV-PROCESS-5: futex table key {:#x} maps to futex keyed {:#x}",
+            user_addr,
+            futex.user_addr()
+        );
+        futex
     }
 
     /// Duplicate a handle with new `rights`, return the new handle value.
@@ -1113,7 +1143,34 @@ impl Process {
             thread.suspend();
         }
         inner.threads.push(Arc::downgrade(&thread));
+        // INV-PROCESS-1 (invariants module): the thread's strong
+        // back-reference must be this process.
+        inv!(
+            Arc::ptr_eq(&thread.proc(), arc_self),
+            "INV-PROCESS-1: add_thread called with a thread owned by another process"
+        );
         Ok(())
+    }
+
+    /// Check INV-PROCESS-1 (invariants module): every live thread in
+    /// this process's list belongs to exactly this process.
+    ///
+    /// Called by tests after thread/process operations (enable the
+    /// `invariant-checks` feature; compiled out otherwise).
+    #[cfg(feature = "invariant-checks")]
+    pub fn check_thread_invariants(self: &Arc<Self>) {
+        let inner = self.inner.lock();
+        for weak in &inner.threads {
+            if let Some(thread) = weak.upgrade() {
+                assert!(
+                    Arc::ptr_eq(&thread.proc(), self),
+                    "INV-PROCESS-1: thread {} in process {}'s list has proc {}",
+                    thread.id(),
+                    self.id(),
+                    thread.proc().id()
+                );
+            }
+        }
     }
 
     /// Remove a thread from the process.
@@ -1184,8 +1241,18 @@ impl Process {
                 // (read from the held job guard above) when the last
                 // thread dies during a job kill.
                 if !matches!(inner.status, Status::Exited(_)) {
+                    // INV-PROCESS-2: the last-thread exit write comes
+                    // from a live status.
+                    inv!(matches!(inner.status, Status::Init | Status::Running));
                     inner.status = Status::Exited(job_return_code);
                 }
+                // INV-PROCESS-6: when the thread list empties, the
+                // process must be Exited.
+                inv!(
+                    matches!(inner.status, Status::Exited(_)),
+                    "INV-PROCESS-6: last thread removed but status is {:?}",
+                    inner.status
+                );
                 terminated = true;
             }
         }
@@ -1355,8 +1422,31 @@ impl ProcessInner {
         let key = (self.max_handle_id << 2) | 0x3u32;
         info!("add handle: {:#x}, {:?}", key, handle.object);
         self.max_handle_id += 1;
+        // INV-PROCESS-3: handle values are unique in the table (an
+        // existing key would silently replace the previous handle).
+        inv!(
+            !self.handles.contains_key(&key),
+            "INV-PROCESS-3: handle key {:#x} already present",
+            key
+        );
         handle.object.inc_handle_count();
         self.handles.insert(key, (handle, Vec::new()));
+        // INV-PROCESS-4: the object's handle count is incremented
+        // when the handle enters the table. Race-free form only: the
+        // count is a global atomic shared across processes, so a
+        // before/after snapshot can false-positive under concurrent
+        // handle operations from other processes (review finding on
+        // #891). The checkable local property: an object with a
+        // handle in a table has a positive count (this handle's
+        // reference guarantees at least one).
+        #[cfg(feature = "invariant-checks")]
+        {
+            let stored = &self.handles.get(&key).unwrap().0;
+            assert!(
+                stored.object.handle_count() >= 1,
+                "INV-PROCESS-4: handle in table but count is zero"
+            );
+        }
         key
     }
 
@@ -1372,6 +1462,15 @@ impl ProcessInner {
             .handles
             .remove(&handle_value)
             .ok_or(ZxError::BAD_HANDLE)?;
+        // INV-PROCESS-4: the count is decremented exactly when the
+        // handle leaves the table. Race-free form: this handle's
+        // existence holds one reference, so the count must be
+        // positive before the decrement — a zero here means an
+        // unpaired decrement (review finding on #891).
+        inv!(
+            handle.object.handle_count() >= 1,
+            "INV-PROCESS-4: dec_handle_count on a zero count"
+        );
         handle.object.dec_handle_count();
         for sender in queue {
             let _ = sender.send(());
