@@ -1305,10 +1305,10 @@ impl Syscall<'_> {
                 // SMAP: single atomic store to user futex word.
                 #[allow(unsafe_code)]
                 {
+                    // SAFETY: no context switch within the atomic store.
                     unsafe {
-                        hal_impl::user::smap_allow();
+                        let _smap = hal_impl::user::UserMemAccess::new();
                         (*(a0 as *const AtomicI32)).store(a2 as i32, Ordering::Release);
-                        hal_impl::user::smap_deny();
                     }
                 }
                 let _ = self.sys_futex_wake(a0.into(), a1 as _);
