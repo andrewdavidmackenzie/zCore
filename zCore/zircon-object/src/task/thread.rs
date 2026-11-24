@@ -1698,28 +1698,51 @@ pub struct ThreadInfo {
 
 struct ThreadSwitchFuture {
     thread: Arc<Thread>,
-    // #523/#829: this was an `IrqLock`, whose guard `poll` held across
-    // the ENTIRE poll — every syscall, page fault, exception dispatch
-    // and teardown executed inside an interrupt-disabling critical
-    // section (per-CPU IrqLock depth +1 for the whole thread
-    // execution). Any KernelMutex contended in that state escalated
-    // to the mutex.rs nested-spin panic — the residual crash-teardown
-    // panics, caught live via the lock_anomaly_detected breakpoint
-    // (push site thread.rs:1732 on every anomalous CPU). The lock had
-    // exactly one accessor (this poll), so it provided no mutual
-    // exclusion at all — only the IF=0. Removed; the future is a
-    // Pin<Box> and needs no external locking.
+    // #523/#829: this was an `IrqLock` (on all arches), whose guard
+    // `poll` held across the ENTIRE poll — every syscall, page fault,
+    // exception dispatch and teardown executed inside an
+    // interrupt-disabling critical section (per-CPU IrqLock depth +1
+    // for the whole thread execution). Any KernelMutex contended in
+    // that state escalated to the mutex.rs nested-spin panic — the
+    // fuchsia crash-teardown cascade, root-caused live via the
+    // lock_anomaly_detected breakpoint (push site thread.rs:1732 on
+    // every anomalous CPU). The lock had exactly one accessor (this
+    // poll), so it provided no mutual exclusion at all — only IF=0.
+    //
+    // Removed on x86_64: the coroutine switch now saves/restores
+    // rflags, so a task resumed from a park runs with its own
+    // interrupt state (verified: fuchsia bringup, busybox and
+    // boot-test all pass).
+    //
+    // KEPT on aarch64/riscv64 for now: their executor switches do
+    // not yet save/restore the interrupt state correctly (the
+    // aarch64 DAIF attempt regressed busybox boot — GIC EOI ordering
+    // and per-CPU state still need auditing against Zircon's
+    // "context switch only with interrupts disabled" invariant).
+    // Until that lands, polls there run under the lock as they
+    // always have — the previously-green behavior.
+    #[cfg(target_arch = "x86_64")]
     future: ThreadFuturePinned,
+    #[cfg(not(target_arch = "x86_64"))]
+    future: lock::IrqLock<ThreadFuturePinned>,
 }
 
 impl ThreadSwitchFuture {
     pub fn new(thread: Arc<Thread>, future: ThreadFuturePinned) -> Self {
-        Self { future, thread }
+        Self {
+            #[cfg(target_arch = "x86_64")]
+            future,
+            #[cfg(not(target_arch = "x86_64"))]
+            future: lock::IrqLock::new(future),
+            thread,
+        }
     }
 }
 
 impl Future for ThreadSwitchFuture {
     type Output = ();
+    // `mut` is only needed by the x86_64 as_mut() path.
+    #[cfg_attr(not(target_arch = "x86_64"), allow(unused_mut))]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let proc = self.thread.proc.clone();
 
@@ -1741,7 +1764,10 @@ impl Future for ThreadSwitchFuture {
             }
         }
         hal_impl::thread::set_current_thread(Some(self.thread.clone()));
+        #[cfg(target_arch = "x86_64")]
         let ret = self.future.as_mut().poll(cx);
+        #[cfg(not(target_arch = "x86_64"))]
+        let ret = self.future.lock().as_mut().poll(cx);
         hal_impl::thread::set_current_thread(None);
         // Switch back to the kernel page table and clear tracking.
         // This ensures that when we drop(proc), if the page table
