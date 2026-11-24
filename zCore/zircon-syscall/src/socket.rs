@@ -92,41 +92,52 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let socket = proc.get_object_with_rights::<Socket>(handle_value, Rights::READ)?;
         let peek = options.contains(SocketFlags::SOCKET_PEEK);
-        // Read from the socket in page-sized chunks, writing each chunk
-        // directly to user space — no count-sized kernel allocation
-        // (#471). For datagram sockets, Fuchsia consumes the datagram
-        // even if the copy to user fails; with chunked reads, only the
-        // current chunk is lost on a fault (less data loss than the
-        // previous copy-all approach).
-        let mut total_read = 0usize;
-        let result = user_bytes.for_each_chunk_mut::<ZxError>(count, |chunk| {
-            match socket.read(peek, chunk) {
-                Ok(n) => {
-                    total_read += n;
-                    Ok(n)
-                }
-                // Socket empty or peer closed: stop writing to user.
-                Err(ZxError::SHOULD_WAIT) | Err(ZxError::PEER_CLOSED) => Ok(0),
-                Err(e) => Err(e),
-            }
-        });
-        match result {
-            Ok(actual_count) => {
-                if actual_count == 0 && total_read == 0 {
-                    // Nothing was read — check why.
-                    if socket.read(peek, &mut []) == Err(ZxError::PEER_CLOSED) {
-                        return Err(ZxError::PEER_CLOSED);
+        if peek {
+            // Peek returns the same data on each call, so chunked reads
+            // would repeat it. Use the bounded copy-all (socket buffer
+            // is capped at 256 KiB).
+            let mut data = {
+                let mut v = alloc::vec::Vec::new();
+                v.try_reserve(count).map_err(|_| ZxError::INVALID_ARGS)?;
+                v.resize(count, 0u8);
+                v
+            };
+            let actual_count = socket.read(peek, &mut data)?;
+            user_bytes.write_array(&data[..actual_count])?;
+            actual_count_ptr.write_if_not_null(actual_count)?;
+            Ok(())
+        } else {
+            // Consuming read: chunked is safe — each read consumes
+            // different data. Write directly to user space with no
+            // count-sized kernel allocation (#471).
+            let mut first_err = None;
+            let result = user_bytes.for_each_chunk_mut::<ZxError>(count, |chunk| {
+                match socket.read(false, chunk) {
+                    Ok(n) => Ok(n),
+                    // Socket empty or peer closed: stop, remember why.
+                    Err(e) => {
+                        if first_err.is_none() {
+                            first_err = Some(e);
+                        }
+                        Ok(0)
                     }
-                    return Err(ZxError::SHOULD_WAIT);
                 }
-                actual_count_ptr.write_if_not_null(actual_count)?;
-                Ok(())
-            }
-            Err(_) => {
-                // Copy to user failed. For consuming reads on datagram
-                // sockets, the already-read chunks are consumed — this
-                // matches Fuchsia's behavior. Return INVALID_ARGS.
-                Err(ZxError::INVALID_ARGS)
+            });
+            match result {
+                Ok(actual_count) => {
+                    if actual_count == 0 {
+                        // Nothing was read — return the original error.
+                        return Err(first_err.unwrap_or(ZxError::SHOULD_WAIT));
+                    }
+                    actual_count_ptr.write_if_not_null(actual_count)?;
+                    Ok(())
+                }
+                Err(_) => {
+                    // Copy to user failed after the socket data was
+                    // consumed — matches Fuchsia's consuming-read
+                    // semantics. Return INVALID_ARGS.
+                    Err(ZxError::INVALID_ARGS)
+                }
             }
         }
     }

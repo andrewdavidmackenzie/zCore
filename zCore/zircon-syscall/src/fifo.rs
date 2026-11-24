@@ -55,8 +55,8 @@ impl Syscall<'_> {
             // a multiple of elem_size elements.
             let proc = self.thread.proc();
             let fifo = proc.get_object_with_rights::<Fifo>(handle_value, Rights::WRITE)?;
-            let mut remaining = total;
             let mut total_written = 0usize;
+            let mut first_err = None;
             user_bytes.for_each_chunk::<ZxError>(total, |chunk| {
                 // Round down to a whole number of elements.
                 let elem_count = chunk.len() / elem_size;
@@ -66,19 +66,26 @@ impl Syscall<'_> {
                 let byte_count = elem_count * elem_size;
                 match fifo.write(elem_size, &chunk[..byte_count], elem_count) {
                     Ok(n) => {
-                        let written = n * elem_size;
-                        remaining -= written;
-                        total_written += written;
-                        if remaining == 0 {
-                            Ok(0) // all data written, stop
+                        total_written += n * elem_size;
+                        if n < elem_count {
+                            Ok(0) // partial write: FIFO nearly full, stop
                         } else {
-                            Ok(written)
+                            Ok(n * elem_size)
                         }
                     }
-                    Err(ZxError::SHOULD_WAIT) => Ok(0), // FIFO full, stop
-                    Err(e) => Err(e),
+                    Err(e) => {
+                        if first_err.is_none() {
+                            first_err = Some(e);
+                        }
+                        Ok(0) // stop reading user data on error
+                    }
                 }
             })?;
+            if total_written == 0 {
+                // Nothing was written — propagate the FIFO's error
+                // (SHOULD_WAIT when full, etc.).
+                return Err(first_err.unwrap_or(ZxError::SHOULD_WAIT));
+            }
             let actual_count = total_written / elem_size;
             actual_count_ptr.write_if_not_null(actual_count)?;
             Ok(())
