@@ -181,6 +181,28 @@ impl Futex {
         self.inner.lock().owner.clone()
     }
 
+    /// Check INV-FUTEX-7 (invariants module): the futex's owner is
+    /// never itself a waiter on this futex ("The owner of a futex may
+    /// never simultaneously be a waiter for the same futex").
+    ///
+    /// Uses the owner's tracked blocking address — the same signal
+    /// `is_valid_new_owner` checks on the wait path. Called by tests
+    /// at quiet points (enable the `invariant-checks` feature;
+    /// compiled out otherwise).
+    #[cfg(feature = "invariant-checks")]
+    pub fn check_owner_invariant(&self) {
+        let inner = self.inner.lock();
+        if let Some(owner) = &inner.owner {
+            assert_ne!(
+                owner.blocking_futex_addr(),
+                self.user_addr,
+                "INV-FUTEX-7: futex {:#x} owner {} is waiting on it",
+                self.user_addr,
+                owner.id()
+            );
+        }
+    }
+
     /// Try to get the owner without blocking. Returns `None` if the
     /// futex inner lock is already held (avoids deadlock in the
     /// transitive priority inheritance path).
@@ -290,6 +312,17 @@ impl Futex {
                         let mut locked2 = lock::lockgraph::Locked::new(self.waiter.as_ref());
                         let mut inner2 = locked2.lock_and::<super::lock_order::WaiterInnerLock>().0;
                         inner2.waker.take();
+                        // INV-FUTEX-8: a value-mismatch (BAD_STATE) return
+                        // never leaves the waiter queued on the futex
+                        // (checked under the futex lock, which we still
+                        // hold here).
+                        inv!(
+                            !futex
+                                .waiter_queue
+                                .iter()
+                                .any(|w| Arc::ptr_eq(w, &self.waiter)),
+                            "INV-FUTEX-8: BAD_STATE return with waiter queued"
+                        );
                         return Poll::Ready(Err(ZxError::BAD_STATE));
                     }
                     if !futex.is_valid_new_owner(&self.new_owner, futex_ref.user_addr) {

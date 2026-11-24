@@ -599,6 +599,18 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn commit(&self, offset: usize, len: usize) -> ZxResult {
         let (_guard, inner) = self.get_inner_mut();
+        // INV-VMO-2: commit ranges stay within the VMO (zx_vmo_op_range
+        // returns OUT_OF_RANGE for invalid ranges; internal callers
+        // validate or clamp — Fuchsia's CommitRangeInternal trims).
+        // Firing here means a caller commits beyond the current size
+        // (e.g. a mapping outliving a shrink).
+        inv!(
+            offset.saturating_add(len) <= inner.size,
+            "INV-VMO-2: commit({:#x}, {}) beyond size {}",
+            offset,
+            len,
+            inner.size
+        );
         let start_page = offset / PAGE_SIZE;
         // Use div_ceil to commit partial pages — a sub-page write
         // still needs the containing page committed.
@@ -625,6 +637,8 @@ impl VMObjectTrait for VMObjectPaged {
         if end > inner.size {
             return Err(ZxError::OUT_OF_RANGE);
         }
+        // INV-VMO-2: decommit ranges stay within the VMO.
+        inv!(end <= inner.size);
         // Cannot decommit pinned pages.
         if inner.pin_count > 0 {
             let start_page = offset / PAGE_SIZE;
