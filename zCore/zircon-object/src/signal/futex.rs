@@ -180,6 +180,34 @@ impl Futex {
         self.inner.lock().owner.clone()
     }
 
+    /// Check INV-FUTEX-7 (invariants module): the futex's owner is
+    /// never itself a waiter on this futex ("The owner of a futex may
+    /// never simultaneously be a waiter for the same futex").
+    ///
+    /// A waiter is a thread currently in the queue, so the check scans
+    /// the queue for the owner by identity — exact and race-free under
+    /// the futex lock. (The owner's tracked blocking address is NOT a
+    /// valid proxy: after `wake_single_owner` it still points at this
+    /// futex until the woken FutexFuture drops and clears it — review
+    /// finding on #893.) Called by the futex tests at quiet points
+    /// (enable the `invariant-checks` feature; compiled out otherwise).
+    #[cfg(feature = "invariant-checks")]
+    pub fn check_owner_invariant(&self) {
+        let inner = self.inner.lock();
+        if let Some(owner) = &inner.owner {
+            let owner_is_waiter = inner
+                .waiter_queue
+                .iter()
+                .any(|w| w.thread.as_ref().is_some_and(|t| Arc::ptr_eq(t, owner)));
+            assert!(
+                !owner_is_waiter,
+                "INV-FUTEX-7: futex {:#x} owner {} is queued on it",
+                self.user_addr,
+                owner.id()
+            );
+        }
+    }
+
     /// Try to get the owner without blocking. Returns `None` if the
     /// futex inner lock is already held (avoids deadlock in the
     /// transitive priority inheritance path).
@@ -289,6 +317,17 @@ impl Futex {
                         let mut locked2 = lock::lockgraph::Locked::new(self.waiter.as_ref());
                         let mut inner2 = locked2.lock_and::<super::lock_order::WaiterInnerLock>().0;
                         inner2.waker.take();
+                        // INV-FUTEX-8: a value-mismatch (BAD_STATE) return
+                        // never leaves the waiter queued on the futex
+                        // (checked under the futex lock, which we still
+                        // hold here).
+                        inv!(
+                            !futex
+                                .waiter_queue
+                                .iter()
+                                .any(|w| Arc::ptr_eq(w, &self.waiter)),
+                            "INV-FUTEX-8: BAD_STATE return with waiter queued"
+                        );
                         return Poll::Ready(Err(ZxError::BAD_STATE));
                     }
                     if !futex.is_valid_new_owner(&self.new_owner, futex_ref.user_addr) {

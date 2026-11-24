@@ -628,6 +628,14 @@ async fn requeue_single_owner() {
     futex2.wake(usize::MAX);
     assert_woke_thread_count(&threads, 3).await;
 
+    // INV-FUTEX-7 sweep (#893): after the requeue/wake sequences
+    // settle, neither futex's owner may still be queued on it.
+    #[cfg(feature = "invariant-checks")]
+    {
+        futex1.check_owner_invariant();
+        futex2.check_owner_invariant();
+    }
+
     for t in &threads {
         t.shutdown().await;
     }
@@ -677,6 +685,12 @@ async fn wait_invalid_owner() {
     // C++: EXPECT_OK(zx_futex_wake(&futex, 1));
     futex.wake(1);
     waiter.wait_until_woken().await;
+
+    // INV-FUTEX-7 sweep (#893): the rejected owner-is-waiter state
+    // must not persist — after the wake, no owner is queued.
+    #[cfg(feature = "invariant-checks")]
+    futex.check_owner_invariant();
+
     waiter.shutdown().await;
 }
 

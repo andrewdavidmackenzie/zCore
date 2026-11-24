@@ -28,8 +28,8 @@
 //! | INV-FUTEX-4 | `wake_single_owner`: the owner is the woken waiter's thread, or none if no waiter/thread | [zx_futex_wake_single_owner](https://fuchsia.dev/fuchsia-src/reference/syscalls/futex_wake_single_owner) | inline in `wake_single_owner` |
 //! | INV-FUTEX-5 | Requeue conserves waiters: `woken + requeued + discarded-departing + remaining == initial` (departing waiters are popped and discarded by the requeue loop) | [zx_futex_requeue](https://fuchsia.dev/fuchsia-src/reference/syscalls/futex_requeue) | inline in `requeue` (source side, under both locks) |
 //! | INV-FUTEX-6 | Requeue failure is atomic: on `Err`, neither futex's queue or owner changed | [zx_futex_requeue](https://fuchsia.dev/fuchsia-src/reference/syscalls/futex_requeue) | inline in `requeue` error paths |
-//! | INV-FUTEX-7 | The owner of a futex is never simultaneously a waiter on it | [futex docs](https://fuchsia.dev/fuchsia-src/reference/kernel_objects/futex) | TBD (cross-object sweep candidate) |
-//! | INV-FUTEX-8 | `wait` value mismatch returns `BAD_STATE` without queueing | [futex docs](https://fuchsia.dev/fuchsia-src/reference/kernel_objects/futex) | Phase 2 (async path) |
+//! | INV-FUTEX-7 | The owner of a futex is never simultaneously a waiter on it | [futex docs](https://fuchsia.dev/fuchsia-src/reference/kernel_objects/futex) | `check_owner_invariant` sweep (queue scan under the futex lock; wired into the futex core-tests) |
+//! | INV-FUTEX-8 | `wait` value mismatch returns `BAD_STATE` without queueing | [futex docs](https://fuchsia.dev/fuchsia-src/reference/kernel_objects/futex) | inline in `FutexFuture::poll`'s BAD_STATE branch, under the futex lock (Batch 3) |
 //!
 //! The target-side requeue conservation is deliberately NOT asserted
 //! across the lock release: between dropping the futex locks and
@@ -85,7 +85,7 @@
 //! | ID | Invariant | Source | Enforcement |
 //! |---|---|---|---|
 //! | INV-VMO-1 | `set_content_size_and_resize` sets `content_size` exactly to the effective new value, and the VMO length covers it | our documented behavior | inline in `set_content_size_and_resize` |
-//! | INV-VMO-2 | Committed-page accounting bounds | VMO docs | TBD — needs doc verification (zero-page/COW/pager paths make the bound conditional) |
+//! | INV-VMO-2 | Commit/decommit ranges stay within the VMO size (zx_vmo_op_range: OUT_OF_RANGE for invalid ranges; Fuchsia's CommitRangeInternal trims) | [zx_vmo_op_range](https://fuchsia.dev/fuchsia-src/reference/syscalls/vmo_op_range) | inline in `commit` and `decommit` (Batch 3) |
 //! | INV-VMO-3 | A child slice is wholly contained in the parent | VMO child docs | inline in the slice creation checks |
 
 /// Assert a kernel-object invariant.
