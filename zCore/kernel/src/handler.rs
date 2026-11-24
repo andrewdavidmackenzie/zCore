@@ -1,4 +1,4 @@
-use hal_impl::{KernelHandler, MMUFlags};
+use hal_impl::{KernelHandler, MMUFlags, PhysAddr};
 use zircon_object::object::KernelObject;
 use zircon_object::task::Thread;
 
@@ -35,11 +35,11 @@ impl KernelHandler for ZcoreKernelHandler {
         }
     }
 
-    fn frame_alloc_contiguous(&self, frame_count: usize, align_log2: usize) -> Option<usize> {
+    fn frame_alloc_contiguous(&self, frame_count: usize, align_log2: usize) -> Option<PhysAddr> {
         hal_impl::memory::frame_alloc(frame_count, align_log2)
     }
 
-    fn frame_dealloc(&self, paddr: usize) {
+    fn frame_dealloc(&self, paddr: PhysAddr) {
         hal_impl::memory::frame_dealloc(paddr);
     }
 

@@ -13,7 +13,7 @@ pub fn free_pmem_regions() -> Vec<Range<PhysAddr>> {
             if r.memory_type == MemoryType::Conventional {
                 let start = r.phys_start as usize;
                 let end = start + r.page_count as usize * PAGE_SIZE;
-                Some(start..end)
+                Some(PhysAddr::new(start)..PhysAddr::new(end))
             } else {
                 None
             }
@@ -30,8 +30,8 @@ fn cacheline_size() -> usize {
 /// Flush the physical frame.
 pub fn frame_flush(target: PhysAddr) {
     unsafe {
-        for paddr in (target..target + PAGE_SIZE).step_by(cacheline_size()) {
-            _mm_clflush(phys_to_virt(paddr) as *const u8);
+        for paddr in (target.0..target.0 + PAGE_SIZE).step_by(cacheline_size()) {
+            _mm_clflush(phys_to_virt(PhysAddr::new(paddr)) as *const u8);
         }
         _mm_mfence();
     }

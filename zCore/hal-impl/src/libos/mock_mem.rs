@@ -18,7 +18,7 @@ pub struct MockMemory {
     /// Reverse mapping: paddr (4K-aligned) → user vaddrs, for anonymous
     /// pages only. Used to sync data between PMEM and user VA.
     /// Multiple vaddrs can map the same paddr (shared-frame aliasing).
-    anon_paddr_to_vaddr: std::sync::Mutex<std::collections::HashMap<usize, Vec<usize>>>,
+    anon_paddr_to_vaddr: std::sync::Mutex<std::collections::HashMap<PhysAddr, Vec<usize>>>,
 }
 
 /// State of a host page in the large-page mapping path.
@@ -117,7 +117,7 @@ impl MockMemory {
     ///   (`map_anon`'s raw munmap) — every entry pointing into it must
     ///   go, or later syncs write through vaddrs the host may reuse.
     fn remove_entries_in(
-        map: &mut std::collections::HashMap<usize, Vec<usize>>,
+        map: &mut std::collections::HashMap<PhysAddr, Vec<usize>>,
         start: usize,
         end: usize,
         granularity: usize,
@@ -143,8 +143,8 @@ impl MockMemory {
     /// Returns `true` on success, `false` if the mapping could not be
     /// created (e.g., macOS rejects `MAP_FIXED` at low virtual addresses).
     pub fn mmap(&self, vaddr: VirtAddr, len: usize, paddr: PhysAddr, prot: MMUFlags) -> bool {
-        assert!(paddr < self.size);
-        assert!(paddr + len <= self.size);
+        assert!(paddr.0 < self.size);
+        assert!(paddr.0 + len <= self.size);
 
         // On aarch64 macOS, MAP_FIXED fails below ~0x200000000 (8 GiB).
         // Return false instead of panicking so the caller can propagate
@@ -201,7 +201,8 @@ impl MockMemory {
 
             let prot_noexec = mmu_flags_to_prot(prot) - ProtFlags::PROT_EXEC;
             let flags = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
-            match unsafe { mman::mmap(vaddr as _, len, prot_noexec, flags, self.fd, paddr as _) } {
+            match unsafe { mman::mmap(vaddr as _, len, prot_noexec, flags, self.fd, paddr.0 as _) }
+            {
                 Ok(_) => {}
                 Err(err) => {
                     warn!(
@@ -229,7 +230,7 @@ impl MockMemory {
         // fall back to MAP_ANON + memcpy (no aliasing for that page).
 
         let aligned_vaddr = vaddr & !(hps - 1);
-        let aligned_paddr = paddr & !(hps - 1);
+        let aligned_paddr = PhysAddr::new(paddr.0 & !(hps - 1));
 
         // Hold the reverse-mapping lock across the strategy. The lock
         // order (anon map -> host pages) matches `munmap`, and holding
@@ -256,7 +257,7 @@ impl MockMemory {
             // accessing *vaddr reads file[paddr]. This means
             // vaddr % hps == paddr % hps.
             let vaddr_offset = vaddr & (hps - 1);
-            let paddr_offset = paddr & (hps - 1);
+            let paddr_offset = paddr.0 & (hps - 1);
             let can_file_back = vaddr_offset == paddr_offset;
 
             // Helper: create anonymous mapping for this host page.
@@ -264,33 +265,34 @@ impl MockMemory {
             // Takes the reverse map: the raw munmap below destroys every
             // guest mapping in this host page, so all entries pointing
             // into it must be dropped first (#862).
-            let map_anon = |anon_map: &mut std::collections::HashMap<usize, Vec<usize>>| -> bool {
-                Self::remove_entries_in(anon_map, aligned_vaddr, aligned_vaddr + hps, hps);
-                // On macOS, MAP_FIXED | MAP_ANON can return EACCES if the
-                // address previously had a MAP_SHARED file mapping. Clear
-                // any stale association first.
-                let _ = unsafe { mman::munmap(aligned_vaddr as _, hps) };
-                let result = unsafe {
-                    mman::mmap(
-                        aligned_vaddr as _,
-                        hps,
-                        ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                        MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED | MapFlags::MAP_ANON,
-                        -1,
-                        0,
-                    )
-                };
-                match result {
-                    Ok(_) => true,
-                    Err(err) => {
-                        eprintln!(
-                            "mmap anon failed: vaddr={:#x}, len={:#x}: {:?}",
-                            aligned_vaddr, hps, err
-                        );
-                        false
+            let map_anon =
+                |anon_map: &mut std::collections::HashMap<PhysAddr, Vec<usize>>| -> bool {
+                    Self::remove_entries_in(anon_map, aligned_vaddr, aligned_vaddr + hps, hps);
+                    // On macOS, MAP_FIXED | MAP_ANON can return EACCES if the
+                    // address previously had a MAP_SHARED file mapping. Clear
+                    // any stale association first.
+                    let _ = unsafe { mman::munmap(aligned_vaddr as _, hps) };
+                    let result = unsafe {
+                        mman::mmap(
+                            aligned_vaddr as _,
+                            hps,
+                            ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                            MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED | MapFlags::MAP_ANON,
+                            -1,
+                            0,
+                        )
+                    };
+                    match result {
+                        Ok(_) => true,
+                        Err(err) => {
+                            eprintln!(
+                                "mmap anon failed: vaddr={:#x}, len={:#x}: {:?}",
+                                aligned_vaddr, hps, err
+                            );
+                            false
+                        }
                     }
-                }
-            };
+                };
 
             // false for file-backed (data is in the file),
             // true for anonymous (must copy from PMEM).
@@ -306,12 +308,12 @@ impl MockMemory {
                             prot_flags,
                             flags,
                             self.fd,
-                            aligned_paddr as _,
+                            aligned_paddr.0 as _,
                         )
                     };
                     match result {
                         Ok(_) => {
-                            pages.insert(aligned_vaddr, HostPageState::FileBacked(aligned_paddr));
+                            pages.insert(aligned_vaddr, HostPageState::FileBacked(aligned_paddr.0));
                             false // data is in the file
                         }
                         Err(_) => {
@@ -332,7 +334,7 @@ impl MockMemory {
                     true
                 }
                 Some(HostPageState::FileBacked(existing_paddr))
-                    if existing_paddr == aligned_paddr && can_file_back =>
+                    if existing_paddr == aligned_paddr.0 && can_file_back =>
                 {
                     // Same file region, compatible offsets. No-op.
                     false
@@ -384,13 +386,13 @@ impl MockMemory {
                     );
                 }
             }
-            let src = (self.map_vaddr + paddr) as *const u8;
+            let src = (self.map_vaddr + paddr.0) as *const u8;
             let dst = vaddr as *mut u8;
             unsafe { core::ptr::copy_nonoverlapping(src, dst, len) };
 
             // Track paddr→vaddr for anonymous pages so we can sync later.
             // Multiple vaddrs can map the same paddr (shared-frame aliasing).
-            let aligned_paddr = paddr & !(PAGE_SIZE - 1);
+            let aligned_paddr = PhysAddr::new(paddr.0 & !(PAGE_SIZE - 1));
             let aligned_va = vaddr & !(PAGE_SIZE - 1);
             anon_map.entry(aligned_paddr).or_default().push(aligned_va);
         }
@@ -454,12 +456,12 @@ impl MockMemory {
         let map = self.anon_paddr_to_vaddr.lock().unwrap();
         let page_size = PAGE_SIZE;
         let hps = host_page_size();
-        let start_page = paddr & !(page_size - 1);
-        let end = paddr + len;
-        let mut page = start_page;
+        let start_page = PhysAddr::new(paddr.0 & !(page_size - 1));
+        let end = paddr.0 + len;
+        let mut page = start_page.0;
         while page < end {
-            if let Some(vaddrs) = map.get(&page) {
-                let offset_in_page = paddr.saturating_sub(page);
+            if let Some(vaddrs) = map.get(&PhysAddr::new(page)) {
+                let offset_in_page = paddr.0.saturating_sub(page);
                 let copy_start = page + offset_in_page;
                 let copy_end = (page + page_size).min(end);
                 let copy_len = copy_end - copy_start;
@@ -492,11 +494,11 @@ impl MockMemory {
         let map = self.anon_paddr_to_vaddr.lock().unwrap();
         let hps = host_page_size();
         let page_size = PAGE_SIZE;
-        let start_page = paddr & !(page_size - 1);
-        let end = paddr + len;
-        let mut page = start_page;
+        let start_page = PhysAddr::new(paddr.0 & !(page_size - 1));
+        let end = paddr.0 + len;
+        let mut page = start_page.0;
         while page < end {
-            if let Some(vaddrs) = map.get(&page) {
+            if let Some(vaddrs) = map.get(&PhysAddr::new(page)) {
                 if let Some(&vaddr) = vaddrs.first() {
                     // Verify the user VA is still mapped (#709).
                     let host_page = vaddr & !(hps - 1);
@@ -504,7 +506,7 @@ impl MockMemory {
                         page += page_size;
                         continue;
                     }
-                    let offset_in_page = paddr.saturating_sub(page);
+                    let offset_in_page = paddr.0.saturating_sub(page);
                     let copy_start = page + offset_in_page;
                     let copy_end = (page + page_size).min(end);
                     let copy_len = copy_end - copy_start;
@@ -590,13 +592,13 @@ impl MockMemory {
     /// `sync_pmem_to_user` from writing to stale user VAs after
     /// the frame is recycled (#709).
     pub fn clear_paddr_mappings(&self, paddr: PhysAddr) {
-        let aligned = paddr & !(PAGE_SIZE - 1);
+        let aligned = PhysAddr::new(paddr.0 & !(PAGE_SIZE - 1));
         self.anon_paddr_to_vaddr.lock().unwrap().remove(&aligned);
     }
 
     pub fn phys_to_virt(&self, paddr: PhysAddr) -> VirtAddr {
-        assert!(paddr < self.size);
-        self.map_vaddr + paddr
+        assert!(paddr.0 < self.size);
+        self.map_vaddr + paddr.0
     }
 
     pub fn as_ptr<T>(&self, paddr: PhysAddr) -> *const T {
@@ -653,8 +655,8 @@ mod tests {
         // window (32–33 GiB) and the aspace region (48 GiB), and
         // unique to this test.
         let vaddr: VirtAddr = 0x10_0000_0000;
-        let paddr_a: PhysAddr = 0x1000;
-        let paddr_b: PhysAddr = 0x3000;
+        let paddr_a: PhysAddr = PhysAddr::new(0x1000);
+        let paddr_b: PhysAddr = PhysAddr::new(0x3000);
         let aligned = |p: usize| p & !(PAGE_SIZE - 1);
 
         // vaddr is 16K-aligned, paddr is not → offset mismatch forces
@@ -662,7 +664,9 @@ mod tests {
         assert!(mem.mmap(vaddr, PAGE_SIZE, paddr_a, MMUFlags::READ | MMUFlags::WRITE));
         {
             let map = mem.anon_paddr_to_vaddr.lock().unwrap();
-            let entry = map.get(&aligned(paddr_a)).expect("entry for paddr_a");
+            let entry = map
+                .get(&PhysAddr::new(aligned(paddr_a.0)))
+                .expect("entry for paddr_a");
             assert!(
                 entry.contains(&aligned(vaddr)),
                 "paddr_a should track vaddr after anon map"
@@ -674,7 +678,7 @@ mod tests {
         {
             let map = mem.anon_paddr_to_vaddr.lock().unwrap();
             let stale = map
-                .get(&aligned(paddr_a))
+                .get(&PhysAddr::new(aligned(paddr_a.0)))
                 .is_some_and(|v| v.contains(&aligned(vaddr)));
             assert!(
                 !stale,
@@ -698,8 +702,8 @@ mod tests {
         let mem = &*MOCK_PHYS_MEM;
         // 16K-aligned base, distinct from other tests' ranges.
         let base: VirtAddr = 0x11_0000_0000;
-        let pa: PhysAddr = 0x11000; // offset 0x1000 in its host page → anon path
-        let pb: PhysAddr = 0x13000; // different paddr for the sibling page
+        let pa: PhysAddr = PhysAddr::new(0x11000); // offset 0x1000 in its host page → anon path
+        let pb: PhysAddr = PhysAddr::new(0x13000); // different paddr for the sibling page
         let flags = MMUFlags::READ | MMUFlags::WRITE;
 
         assert!(mem.mmap(base, PAGE_SIZE, pa, flags));

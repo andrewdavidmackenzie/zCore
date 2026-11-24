@@ -13,11 +13,11 @@ fn cut_off(total: Range<PhysAddr>, cut: &Range<PhysAddr>) -> Vec<Range<PhysAddr>
     } else {
         // no overlap on the left
         if total.start < cut.start {
-            regions.push(total.start..align_down(cut.start));
+            regions.push(PhysAddr::new(total.start.0)..PhysAddr::new(align_down(cut.start.0)));
         }
         // no overlap on the right
         if cut.end < total.end {
-            regions.push(align_up(cut.end)..total.end);
+            regions.push(PhysAddr::new(align_up(cut.end.0))..total.end);
         }
     }
     regions
@@ -32,15 +32,16 @@ pub fn free_pmem_regions() -> Vec<Range<PhysAddr>> {
     FREE_PMEM_REGIONS.init_once(|| {
         let initrd = super::INITRD_REGION.as_ref();
         let dtb = Range::<PhysAddr> {
-            start: KCONFIG.dtb_paddr,
-            end: KCONFIG.dtb_paddr + KCONFIG.dtb_size,
+            start: PhysAddr::new(KCONFIG.dtb_paddr),
+            end: PhysAddr::new(KCONFIG.dtb_paddr + KCONFIG.dtb_size),
         };
         let min_start =
             align_up(end as *const () as usize + PAGE_SIZE) - KCONFIG.phys_to_virt_offset;
 
         let mut regions = Vec::new();
         for r in super::MEMORY_REGIONS.iter() {
-            let base = align_up(r.start.max(min_start))..align_down(r.end);
+            let base = PhysAddr::new(align_up(r.start.0.max(min_start)))
+                ..PhysAddr::new(align_down(r.end.0));
             let mut no_dtb = cut_off(base, &dtb);
             if let Some(initrd) = initrd {
                 for range in no_dtb {

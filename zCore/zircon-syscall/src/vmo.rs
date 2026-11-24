@@ -801,10 +801,10 @@ impl Syscall<'_> {
         // Validate kind (MMIO) — ROOT bypasses this check.
         rsrc.validate(ResourceKind::MMIO)
             .map_err(|_| ZxError::ACCESS_DENIED)?;
-        if size == 0 || !page_aligned(size) || !page_aligned(paddr) {
+        if size == 0 || !page_aligned(size) || !page_aligned(paddr.0) {
             return Err(ZxError::INVALID_ARGS);
         }
-        if paddr.overflowing_add(size).1 {
+        if paddr.0.overflowing_add(size).1 {
             return Err(ZxError::INVALID_ARGS);
         }
         // For non-root resources, validate that [paddr, paddr+size) fits
@@ -820,7 +820,7 @@ impl Syscall<'_> {
                 .saturating_add(rsrc_size)
                 .saturating_add(PAGE_SIZE - 1)
                 & !(PAGE_SIZE - 1);
-            if paddr < rsrc_page_base || paddr + size > rsrc_page_end {
+            if paddr.0 < rsrc_page_base || paddr.0 + size > rsrc_page_end {
                 return Err(ZxError::OUT_OF_RANGE);
             }
         }

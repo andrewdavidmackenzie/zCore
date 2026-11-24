@@ -3,6 +3,7 @@ use x2apic::lapic::{
 };
 
 use super::{consts, Phys2VirtFn};
+use hal::PhysAddr;
 
 static mut LOCAL_APIC: Option<LocalApic> = None;
 static mut BSP_ID: Option<u8> = None;
@@ -24,7 +25,7 @@ impl LocalApic {
     }
 
     pub unsafe fn init_bsp(phys_to_virt: Phys2VirtFn) {
-        let base_vaddr = phys_to_virt(xapic_base() as usize);
+        let base_vaddr = phys_to_virt(PhysAddr::new(xapic_base() as usize));
         let mut inner = LocalApicBuilder::new()
             .timer_vector(consts::X86_INT_APIC_TIMER)
             .error_vector(consts::X86_INT_APIC_ERROR)

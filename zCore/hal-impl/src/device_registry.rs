@@ -129,12 +129,12 @@ mod virtio_drivers_ffi {
 
     #[no_mangle]
     extern "C" fn virtio_phys_to_virt(paddr: PhysAddr) -> VirtAddr {
-        paddr + KCONFIG.phys_to_virt_offset
+        paddr.0 + KCONFIG.phys_to_virt_offset
     }
 
     #[no_mangle]
     extern "C" fn virtio_virt_to_phys(vaddr: VirtAddr) -> PhysAddr {
-        vaddr - KCONFIG.phys_to_virt_offset
+        PhysAddr::new(vaddr - KCONFIG.phys_to_virt_offset)
     }
 }
 
@@ -160,12 +160,12 @@ mod drivers_ffi {
 
     #[no_mangle]
     extern "C" fn drivers_phys_to_virt(paddr: PhysAddr) -> VirtAddr {
-        paddr + KCONFIG.phys_to_virt_offset
+        paddr.0 + KCONFIG.phys_to_virt_offset
     }
 
     #[no_mangle]
     extern "C" fn drivers_virt_to_phys(vaddr: VirtAddr) -> PhysAddr {
-        vaddr - KCONFIG.phys_to_virt_offset
+        PhysAddr::new(vaddr - KCONFIG.phys_to_virt_offset)
     }
 
     use crate::hal_fn::timer::timer_now;

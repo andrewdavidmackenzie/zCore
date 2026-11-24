@@ -26,7 +26,7 @@ static ACTIVE_PAGE_TABLE: [AtomicUsize; MAX_CORE_NUM] = {
 /// Called from `activate_paging` BEFORE writing CR3/TTBR/SATP.
 pub fn set_active_page_table(table_phys: PhysAddr) {
     let cpu = crate::cpu::cpu_index();
-    ACTIVE_PAGE_TABLE[cpu].store(table_phys, Ordering::Release);
+    ACTIVE_PAGE_TABLE[cpu].store(table_phys.0, Ordering::Release);
 }
 
 /// Record that this CPU is no longer using any user page table
@@ -42,7 +42,7 @@ pub fn clear_active_page_table() {
 pub fn active_cpus_for_table(table_phys: PhysAddr) -> u64 {
     let mut mask = 0u64;
     for (i, entry) in ACTIVE_PAGE_TABLE.iter().enumerate().take(MAX_CORE_NUM) {
-        if entry.load(Ordering::Acquire) == table_phys {
+        if entry.load(Ordering::Acquire) == table_phys.0 {
             mask |= 1 << i;
         }
     }
@@ -58,7 +58,7 @@ pub fn active_cpus_for_table(table_phys: PhysAddr) -> u64 {
 pub fn wait_for_page_table_release(table_phys: PhysAddr) {
     // Switch THIS CPU away first if it has the table loaded.
     let my_cpu = crate::cpu::cpu_index();
-    if ACTIVE_PAGE_TABLE[my_cpu].load(Ordering::Acquire) == table_phys {
+    if ACTIVE_PAGE_TABLE[my_cpu].load(Ordering::Acquire) == table_phys.0 {
         // Switch to the kernel page table.
         // On x86_64, the kernel shares the upper half of every page
         // table, so we can use any valid page table. Use the boot

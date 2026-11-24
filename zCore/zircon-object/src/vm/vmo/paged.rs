@@ -2539,7 +2539,7 @@ impl VMObjectPagedInner {
         }
         let mut base = 0;
         for (key, ps) in self.frames.iter() {
-            let new_base = ps.frame.paddr() - key * PAGE_SIZE;
+            let new_base = ps.frame.paddr().0 - key * PAGE_SIZE;
             if base == 0 || new_base == base {
                 base = new_base;
             } else {

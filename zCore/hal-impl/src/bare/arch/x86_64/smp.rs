@@ -6,6 +6,7 @@
 //! `secondary_main()` function.
 
 use crate::mem::phys_to_virt;
+use crate::PhysAddr;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
@@ -233,7 +234,7 @@ pub fn park_aps_init() {
     // (destination) is ignored — set it to 0.
     // Read APIC base from MSR and convert to virtual address.
     let apic_base = unsafe { x86::msr::rdmsr(0x1B) & 0xFFFF_F000 };
-    let apic_virt = phys_to_virt(apic_base as usize);
+    let apic_virt = phys_to_virt(PhysAddr::new(apic_base as usize));
 
     // Software-enable the BSP's APIC first (required to send IPIs).
     // Set bit 8 (APIC Software Enable) in the Spurious Interrupt Vector
@@ -389,7 +390,7 @@ pub fn boot_application_processors() {
         "trampoline too large for one page"
     );
 
-    let trampoline_virt = phys_to_virt(TRAMPOLINE_PHYS);
+    let trampoline_virt = phys_to_virt(PhysAddr::new(TRAMPOLINE_PHYS));
     info!(
         "Copying {} bytes of trampoline to phys {:#x}",
         AP_TRAMPOLINE.len(),
@@ -431,7 +432,7 @@ pub fn boot_application_processors() {
         let stack_top = (stack as u64 + AP_STACK_SIZE as u64) - 8;
 
         // Set up trampoline data
-        let data_virt = phys_to_virt(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET);
+        let data_virt = phys_to_virt(PhysAddr::new(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET));
         let data = unsafe { &mut *(data_virt as *mut TrampolineData) };
         data.cr3 = cr3;
         data.entry = ap_entry as *const () as u64;
@@ -443,7 +444,7 @@ pub fn boot_application_processors() {
         data.ap_ready.store(0, Ordering::SeqCst);
 
         // Copy the GDT into the trampoline page (must be accessible in real/protected mode)
-        let gdt_dest = phys_to_virt(TRAMPOLINE_PHYS + gdt_offset());
+        let gdt_dest = phys_to_virt(PhysAddr::new(TRAMPOLINE_PHYS + gdt_offset()));
         unsafe {
             core::ptr::copy_nonoverlapping(
                 TRAMPOLINE_GDT.as_ptr() as *const u8,
@@ -466,7 +467,8 @@ pub fn boot_application_processors() {
         // Verify via identity-mapped read
         let verify_entry = unsafe {
             core::ptr::read_volatile(
-                (phys_to_virt(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET + 8)) as *const u64,
+                (phys_to_virt(PhysAddr::new(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET + 8)))
+                    as *const u64,
             )
         };
         info!(
@@ -503,7 +505,8 @@ pub fn boot_application_processors() {
             info!("AP {} started (APIC ID {})", apic_id, ready_val);
         } else {
             // Check if the AP wrote anything by reading raw memory
-            let raw_ptr = phys_to_virt(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET + 36) as *const u32;
+            let raw_ptr = phys_to_virt(PhysAddr::new(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET + 36))
+                as *const u32;
             let raw_val = unsafe { core::ptr::read_volatile(raw_ptr) };
             warn!(
                 "AP {} did not respond (ap_ready={}, raw@0x8124={:#x})",
@@ -534,7 +537,9 @@ impl acpi::AcpiHandler for SmpAcpiHandler {
         let aligned_end = (physical_address + size + page_size - 1) & !(page_size - 1);
         acpi::PhysicalMapping::new(
             physical_address,
-            core::ptr::NonNull::new_unchecked(phys_to_virt(physical_address) as *mut T),
+            core::ptr::NonNull::new_unchecked(
+                phys_to_virt(PhysAddr::new(physical_address)) as *mut T
+            ),
             size,
             aligned_end - aligned_start,
             self.clone(),
@@ -586,11 +591,14 @@ fn enumerate_aps(rsdp: usize) -> Vec<u32> {
 /// page so the AP can enable paging without faulting.
 fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
     use crate::mem::phys_to_virt;
+    use crate::PhysAddr;
 
     let page = phys_addr & !0xFFF;
 
     // Walk PML4 -> PDPT -> PD -> PT, creating entries as needed
-    let pml4 = unsafe { core::slice::from_raw_parts_mut(phys_to_virt(pml4_phys) as *mut u64, 512) };
+    let pml4 = unsafe {
+        core::slice::from_raw_parts_mut(phys_to_virt(PhysAddr::new(pml4_phys)) as *mut u64, 512)
+    };
 
     let pml4_idx = (page >> 39) & 0x1FF;
     if pml4[pml4_idx] == 0 {
@@ -599,7 +607,9 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
     }
     let pdpt_phys = (pml4[pml4_idx] & PTE_ADDR_MASK) as usize;
 
-    let pdpt = unsafe { core::slice::from_raw_parts_mut(phys_to_virt(pdpt_phys) as *mut u64, 512) };
+    let pdpt = unsafe {
+        core::slice::from_raw_parts_mut(phys_to_virt(PhysAddr::new(pdpt_phys)) as *mut u64, 512)
+    };
     let pdpt_idx = (page >> 30) & 0x1FF;
     if pdpt[pdpt_idx] == 0 {
         let frame = alloc_zeroed_page();
@@ -614,7 +624,9 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
     }
     let pd_phys = (pdpt[pdpt_idx] & PTE_ADDR_MASK) as usize;
 
-    let pd = unsafe { core::slice::from_raw_parts_mut(phys_to_virt(pd_phys) as *mut u64, 512) };
+    let pd = unsafe {
+        core::slice::from_raw_parts_mut(phys_to_virt(PhysAddr::new(pd_phys)) as *mut u64, 512)
+    };
     let pd_idx = (page >> 21) & 0x1FF;
     if pd[pd_idx] == 0 {
         let frame = alloc_zeroed_page();
@@ -629,7 +641,9 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
     }
     let pt_phys = (pd[pd_idx] & PTE_ADDR_MASK) as usize;
 
-    let pt = unsafe { core::slice::from_raw_parts_mut(phys_to_virt(pt_phys) as *mut u64, 512) };
+    let pt = unsafe {
+        core::slice::from_raw_parts_mut(phys_to_virt(PhysAddr::new(pt_phys)) as *mut u64, 512)
+    };
     let pt_idx = (page >> 12) & 0x1FF;
     pt[pt_idx] = page as u64 | 0x3; // present + writable, identity mapped
 
@@ -688,14 +702,18 @@ fn virt_to_phys(vaddr: usize) -> usize {
     unsafe {
         core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack));
     }
-    let pml4 =
-        unsafe { core::slice::from_raw_parts((phys_to_virt(cr3 & !0xFFF)) as *const u64, 512) };
+    let pml4 = unsafe {
+        core::slice::from_raw_parts(
+            (phys_to_virt(PhysAddr::new(cr3 & !0xFFF))) as *const u64,
+            512,
+        )
+    };
     let pml4e = pml4[(vaddr >> 39) & 0x1FF];
     assert!(pml4e & 1 != 0, "PML4 entry not present for {:#x}", vaddr);
 
     let pdpt = unsafe {
         core::slice::from_raw_parts(
-            phys_to_virt((pml4e & PTE_ADDR_MASK) as usize) as *const u64,
+            phys_to_virt(PhysAddr::new((pml4e & PTE_ADDR_MASK) as usize)) as *const u64,
             512,
         )
     };
@@ -708,7 +726,7 @@ fn virt_to_phys(vaddr: usize) -> usize {
 
     let pd = unsafe {
         core::slice::from_raw_parts(
-            phys_to_virt((pdpte & PTE_ADDR_MASK) as usize) as *const u64,
+            phys_to_virt(PhysAddr::new((pdpte & PTE_ADDR_MASK) as usize)) as *const u64,
             512,
         )
     };
@@ -721,7 +739,7 @@ fn virt_to_phys(vaddr: usize) -> usize {
 
     let pt = unsafe {
         core::slice::from_raw_parts(
-            phys_to_virt((pde & PTE_ADDR_MASK) as usize) as *const u64,
+            phys_to_virt(PhysAddr::new((pde & PTE_ADDR_MASK) as usize)) as *const u64,
             512,
         )
     };

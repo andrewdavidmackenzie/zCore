@@ -38,7 +38,7 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
         pt.map_cont(
             crate::addr::align_down(start),
             crate::addr::align_up(end - start),
-            start - KCONFIG.phys_to_virt_offset,
+            PhysAddr::new(start - KCONFIG.phys_to_virt_offset),
             flags,
         )
     };
@@ -72,8 +72,8 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
     // uart
     let uart_base = super::uart_base();
     map_range(
-        phys_to_virt(uart_base),
-        phys_to_virt(uart_base) + UART_SIZE,
+        phys_to_virt(PhysAddr::new(uart_base)),
+        phys_to_virt(PhysAddr::new(uart_base)) + UART_SIZE,
         MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
     )?;
     // gic (use the same offsets as drivers.rs)
@@ -81,20 +81,20 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
     let gicc_offset = super::drivers::GIC_GICC_OFFSET;
     let gicd_offset = super::drivers::GIC_GICD_OFFSET;
     map_range(
-        phys_to_virt(gic_base + gicc_offset),
-        phys_to_virt(gic_base + gicc_offset) + GICC_SIZE,
+        phys_to_virt(PhysAddr::new(gic_base + gicc_offset)),
+        phys_to_virt(PhysAddr::new(gic_base + gicc_offset)) + GICC_SIZE,
         MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
     )?;
     map_range(
-        phys_to_virt(gic_base + gicd_offset),
-        phys_to_virt(gic_base + gicd_offset) + GICD_SIZE,
+        phys_to_virt(PhysAddr::new(gic_base + gicd_offset)),
+        phys_to_virt(PhysAddr::new(gic_base + gicd_offset)) + GICD_SIZE,
         MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
     )?;
     // virtio_drivers (skip on boards without VirtIO)
     if VIRTIO_BASE != 0 {
         map_range(
-            phys_to_virt(VIRTIO_BASE),
-            phys_to_virt(VIRTIO_BASE) + VIRTIO_SIZE,
+            phys_to_virt(PhysAddr::new(VIRTIO_BASE)),
+            phys_to_virt(PhysAddr::new(VIRTIO_BASE)) + VIRTIO_SIZE,
             MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
         )?;
     }
@@ -159,8 +159,8 @@ pub fn flush_tlb_all() {
 hal_fn_impl! {
     impl mod crate::hal_fn::vm {
         fn activate_paging(vmtoken: PhysAddr) {
-            let check_if_user = (vmtoken & USER_TABLE_FLAG) != 0;
-            let vmtoken = vmtoken & PHYS_ADDR_MASK;
+            let check_if_user = (vmtoken.0 & USER_TABLE_FLAG) != 0;
+            let vmtoken = vmtoken.0 & PHYS_ADDR_MASK;
             if check_if_user {
                 TTBR0_EL1.set(vmtoken as _);
             } else {
@@ -173,7 +173,7 @@ hal_fn_impl! {
         }
 
         fn current_vmtoken() -> PhysAddr {
-            TTBR1_EL1.get() as _
+            PhysAddr::new(TTBR1_EL1.get() as usize)
         }
 
         fn flush_tlb(vaddr: Option<VirtAddr>) {
@@ -348,7 +348,7 @@ impl From<PTF> for MMUFlags {
 pub struct AARCH64PTE(u64);
 impl GenericPTE for AARCH64PTE {
     fn addr(&self) -> PhysAddr {
-        (self.0 as usize & PHYS_ADDR_MASK) as _
+        PhysAddr::new(self.0 as usize & PHYS_ADDR_MASK)
     }
     fn flags(&self) -> MMUFlags {
         PTF::from_bits_truncate(self.0 as usize).into()
@@ -363,7 +363,7 @@ impl GenericPTE for AARCH64PTE {
         !PTF::from_bits_truncate(self.0 as usize).intersects(PTF::NON_BLOCK)
     }
     fn set_addr(&mut self, paddr: PhysAddr) {
-        self.0 = (paddr & PHYS_ADDR_MASK) as u64;
+        self.0 = (paddr.0 & PHYS_ADDR_MASK) as u64;
     }
     fn set_flags(&mut self, flags: MMUFlags, is_huge: bool) {
         let mut flags = PTF::from(flags) | PTF::AF;
@@ -373,7 +373,7 @@ impl GenericPTE for AARCH64PTE {
         self.0 = (self.0 & PHYS_ADDR_MASK as u64) | flags.bits() as u64;
     }
     fn set_table(&mut self, paddr: PhysAddr) {
-        self.0 = ((paddr & PHYS_ADDR_MASK) | PTF::VALID.bits() | PTF::NON_BLOCK.bits()) as u64;
+        self.0 = ((paddr.0 & PHYS_ADDR_MASK) | PTF::VALID.bits() | PTF::NON_BLOCK.bits()) as u64;
     }
     fn clear(&mut self) {
         self.0 = 0

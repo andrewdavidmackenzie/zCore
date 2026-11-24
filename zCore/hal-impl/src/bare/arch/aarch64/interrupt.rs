@@ -1,5 +1,6 @@
 //! Interrupts management.
 use crate::DeviceResult;
+use crate::PhysAddr;
 use alloc::vec::Vec;
 use cortex_a::asm::wfi;
 
@@ -44,7 +45,7 @@ hal_fn_impl! {
             // Send SGI 0 (Software Generated Interrupt) to the target CPU
             // via GICD_SGIR. The GIC delivers SGI 0 as IRQ 0 to the target.
             let gic_base = super::gic_base();
-            let gicd_base = crate::mem::phys_to_virt(gic_base + super::drivers::GIC_GICD_OFFSET);
+            let gicd_base = crate::mem::phys_to_virt(PhysAddr::new(gic_base + super::drivers::GIC_GICD_OFFSET));
             let gicd_sgir = gicd_base + 0xF00; // GICD_SGIR offset
             // GICD_SGIR format: [25:24] = target list filter (0b00 = use target list)
             //                   [23:16] = CPU target list (bitmask)

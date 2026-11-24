@@ -49,7 +49,7 @@ hal_fn_impl! {
     impl mod crate::hal_fn::vm {
         fn activate_paging(vmtoken: PhysAddr) {
             use x86_64::structures::paging::PhysFrame;
-            let frame = PhysFrame::containing_address(x86_64::PhysAddr::new(vmtoken as _));
+            let frame = PhysFrame::containing_address(x86_64::PhysAddr::new(vmtoken.0 as u64));
             if Cr3::read().0 != frame {
                 crate::common::vm::set_active_page_table(vmtoken);
                 unsafe { Cr3::write(frame, Cr3Flags::empty()) };
@@ -58,7 +58,7 @@ hal_fn_impl! {
         }
 
         fn current_vmtoken() -> PhysAddr {
-            Cr3::read().0.start_address().as_u64() as _
+            PhysAddr::new(Cr3::read().0.start_address().as_u64() as usize)
         }
 
         fn flush_tlb(vaddr: Option<VirtAddr>) {
@@ -147,7 +147,7 @@ pub struct X86PTE(u64);
 
 impl GenericPTE for X86PTE {
     fn addr(&self) -> PhysAddr {
-        (self.0 & PHYS_ADDR_MASK) as _
+        PhysAddr::new((self.0 & PHYS_ADDR_MASK) as usize)
     }
     fn flags(&self) -> MMUFlags {
         ptf_to_mmu(PTF::from_bits_truncate(self.0))
@@ -163,17 +163,17 @@ impl GenericPTE for X86PTE {
     }
 
     fn set_addr(&mut self, paddr: PhysAddr) {
-        self.0 = (self.0 & !PHYS_ADDR_MASK) | (paddr as u64 & PHYS_ADDR_MASK);
+        self.0 = (self.0 & !PHYS_ADDR_MASK) | (paddr.0 as u64 & PHYS_ADDR_MASK);
     }
     fn set_flags(&mut self, flags: MMUFlags, is_huge: bool) {
         let mut flags: PTF = mmu_to_ptf(flags);
         if is_huge {
             flags |= PTF::HUGE_PAGE;
         }
-        self.0 = self.addr() as u64 | flags.bits();
+        self.0 = self.addr().0 as u64 | flags.bits();
     }
     fn set_table(&mut self, paddr: PhysAddr) {
-        self.0 = (paddr as u64 & PHYS_ADDR_MASK)
+        self.0 = (paddr.0 as u64 & PHYS_ADDR_MASK)
             | (PTF::PRESENT | PTF::WRITABLE | PTF::USER_ACCESSIBLE).bits();
     }
     fn clear(&mut self) {

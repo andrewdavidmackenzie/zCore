@@ -32,7 +32,7 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
         pt.map_cont(
             crate::addr::align_down(start),
             crate::addr::align_up(end - start),
-            start - KCONFIG.phys_to_virt_offset,
+            PhysAddr::new(start - KCONFIG.phys_to_virt_offset),
             flags | MMUFlags::HUGE_PAGE,
         )
     };
@@ -89,8 +89,10 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
     }}
     // device tree
     map_range(
-        phys_to_virt(align_down(KCONFIG.dtb_paddr)),
-        phys_to_virt(align_up(KCONFIG.dtb_paddr + KCONFIG.dtb_size)),
+        phys_to_virt(PhysAddr::new(align_down(KCONFIG.dtb_paddr))),
+        phys_to_virt(PhysAddr::new(align_up(
+            KCONFIG.dtb_paddr + KCONFIG.dtb_size,
+        ))),
         MMUFlags::READ,
     )?;
     // physical frames
@@ -123,7 +125,7 @@ hal_fn_impl! {
                 #[cfg(target_arch = "riscv64")]
                 let mode = satp::Mode::Sv39;
                 unsafe {
-                    satp::set(mode, 0, vmtoken >> 12);
+                    satp::set(mode, 0, vmtoken.0 >> 12);
                     asm::sfence_vma_all();
                 }
                 debug!("cpu {} switch table {:x?} -> {:x?}", crate::cpu::cpu_id(), old_token, vmtoken);
@@ -131,7 +133,7 @@ hal_fn_impl! {
         }
 
         fn current_vmtoken() -> PhysAddr {
-            satp::read().ppn() << 12
+            PhysAddr::new(satp::read().ppn() << 12)
         }
 
         fn flush_tlb(vaddr: Option<VirtAddr>) {
@@ -239,7 +241,7 @@ pub struct Rv64PTE(u64);
 
 impl GenericPTE for Rv64PTE {
     fn addr(&self) -> PhysAddr {
-        ((self.0 & PHYS_ADDR_MASK) << 2) as _
+        PhysAddr::new(((self.0 & PHYS_ADDR_MASK) << 2) as usize)
     }
     fn flags(&self) -> MMUFlags {
         PTF::from_bits_truncate(self.0 as usize).into()
@@ -255,7 +257,7 @@ impl GenericPTE for Rv64PTE {
     }
 
     fn set_addr(&mut self, paddr: PhysAddr) {
-        self.0 = (self.0 & !PHYS_ADDR_MASK) | ((paddr as u64 >> 2) & PHYS_ADDR_MASK);
+        self.0 = (self.0 & !PHYS_ADDR_MASK) | ((paddr.0 as u64 >> 2) & PHYS_ADDR_MASK);
     }
     fn set_flags(&mut self, flags: MMUFlags, _is_huge: bool) {
         let flags = PTF::from(flags) | PTF::ACCESSED | PTF::DIRTY;
@@ -263,7 +265,7 @@ impl GenericPTE for Rv64PTE {
         self.0 = (self.0 & PHYS_ADDR_MASK) | flags.bits() as u64;
     }
     fn set_table(&mut self, paddr: PhysAddr) {
-        self.0 = ((paddr as u64 >> 2) & PHYS_ADDR_MASK) | PTF::VALID.bits() as u64;
+        self.0 = ((paddr.0 as u64 >> 2) & PHYS_ADDR_MASK) | PTF::VALID.bits() as u64;
     }
     fn clear(&mut self) {
         self.0 = 0

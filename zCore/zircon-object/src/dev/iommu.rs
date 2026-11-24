@@ -59,9 +59,9 @@ impl Iommu {
         }
         let p_addr = vmo.commit_page(offset / PAGE_SIZE, flags)?;
         if vmo.is_paged() {
-            Ok((p_addr, PAGE_SIZE))
+            Ok((p_addr.0, PAGE_SIZE))
         } else {
-            Ok((p_addr, pages(size)))
+            Ok((p_addr.0, pages(size)))
         }
     }
 
@@ -83,9 +83,9 @@ impl Iommu {
         }
         let p_addr = vmo.commit_page(offset / PAGE_SIZE, MMUFlags::empty())?;
         if vmo.is_paged() {
-            Ok((p_addr, PAGE_SIZE))
+            Ok((p_addr.0, PAGE_SIZE))
         } else {
-            Ok((p_addr, pages(size) * PAGE_SIZE))
+            Ok((p_addr.0, pages(size) * PAGE_SIZE))
         }
     }
 }

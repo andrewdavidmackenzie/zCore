@@ -47,7 +47,7 @@ impl PhysFrame {
     /// This function is unsafe because the user must ensure that this is an available physical
     /// frame.
     pub unsafe fn from_paddr(paddr: PhysAddr) -> Self {
-        assert!(crate::addr::is_aligned(paddr));
+        assert!(crate::addr::is_aligned(paddr.0));
         Self {
             paddr,
             allocated: false,

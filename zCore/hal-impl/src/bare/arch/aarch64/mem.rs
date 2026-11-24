@@ -14,10 +14,12 @@ fn cut_off(total: Range<PhysAddr>, cut: &Range<PhysAddr>) -> Vec<Range<PhysAddr>
         regions.push(total);
     } else {
         if total.start < cut.start {
-            regions.push(total.start..crate::addr::align_down(cut.start));
+            regions.push(
+                PhysAddr::new(total.start.0)..PhysAddr::new(crate::addr::align_down(cut.start.0)),
+            );
         }
         if cut.end < total.end {
-            regions.push(align_up(cut.end)..total.end);
+            regions.push(PhysAddr::new(align_up(cut.end.0))..total.end);
         }
     }
     regions
@@ -28,11 +30,12 @@ pub fn free_pmem_regions() -> Vec<Range<PhysAddr>> {
     let end = crate::addr::align_down(super::phys_memory_end());
 
     #[allow(clippy::single_range_in_vec_init)]
-    let mut regions = vec![start as PhysAddr..end as PhysAddr];
+    let mut regions = vec![PhysAddr::new(start)..PhysAddr::new(end)];
 
     // Exclude the DTB region
     if KCONFIG.dtb_paddr != 0 && KCONFIG.dtb_size != 0 {
-        let dtb = KCONFIG.dtb_paddr..KCONFIG.dtb_paddr + KCONFIG.dtb_size;
+        let dtb =
+            PhysAddr::new(KCONFIG.dtb_paddr)..PhysAddr::new(KCONFIG.dtb_paddr + KCONFIG.dtb_size);
         regions = regions.into_iter().flat_map(|r| cut_off(r, &dtb)).collect();
     }
 
