@@ -23,7 +23,7 @@
 //! | ID | Invariant | Source | Enforcement |
 //! |---|---|---|---|
 //! | INV-FUTEX-1 | `wake(n)` returns `r` with `r ≤ n` and `r ≤ queued waiters` | [zx_futex_wake](https://fuchsia.dev/fuchsia-src/reference/syscalls/futex_wake) | inline in `Futex::wake` |
-//! | INV-FUTEX-2 | Departing waiters never consume a wake-count slot: the wake loop runs until the budget is spent or the queue is exhausted (race-free form — exact non-departing counts race with concurrent drops) | #862/#875 (Linux skips `FUTEX_STATE_EXITING` likewise) | inline in `Futex::wake` |
+//! | INV-FUTEX-2 | Departing waiters never consume a wake-count slot: the wake loop runs until the budget is spent or the queue is exhausted (race-free form — exact non-departing counts race with concurrent drops) | #862/#875, #889 for the requeue wake phase (Linux skips `FUTEX_STATE_EXITING` likewise) | inline in `Futex::wake` and `requeue` |
 //! | INV-FUTEX-3 | After `wake` (any count), the futex has no owner | [zx_futex_wake](https://fuchsia.dev/fuchsia-src/reference/syscalls/futex_wake) | inline in `Futex::wake` |
 //! | INV-FUTEX-4 | `wake_single_owner`: the owner is the woken waiter's thread, or none if no waiter/thread | [zx_futex_wake_single_owner](https://fuchsia.dev/fuchsia-src/reference/syscalls/futex_wake_single_owner) | inline in `wake_single_owner` |
 //! | INV-FUTEX-5 | Requeue conserves waiters: `woken + requeued + discarded-departing + remaining == initial` (departing waiters are popped and discarded by the requeue loop) | [zx_futex_requeue](https://fuchsia.dev/fuchsia-src/reference/syscalls/futex_requeue) | inline in `requeue` (source side, under both locks) |
