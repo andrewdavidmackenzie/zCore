@@ -610,15 +610,48 @@ impl Futex {
         }
         // Collect waiters to wake under the lock, wake after release
         // to avoid ABBA deadlock (see wake() comment).
+        //
+        // #889: skip departing waiters — same rationale as Futex::wake
+        // (#862/#875): a departing waiter (its FutexFuture is dropping —
+        // a BAD_STATE retry or timeout) must not consume a wake-count
+        // slot; for wake(1) callers (mutex unlock) that would
+        // permanently lose the wake for the real waiter behind it.
+        // Linux's futex requeue path skips FUTEX_STATE_EXITING waiters
+        // in the wake phase the same way futex_wake does.
+        //
+        // Departing waiters are popped and discarded — they enter
+        // neither the woken nor the requeued set, so the conservation
+        // accounting below counts them explicitly (INV-FUTEX-5).
+        #[cfg(feature = "invariant-checks")]
+        let mut discarded_departing = 0usize;
         let mut waiters_to_wake = alloc::vec::Vec::new();
-        for _ in 0..wake_count {
-            if let Some(waiter) = inner.waiter_queue.pop_front() {
-                waiters_to_wake.push(waiter);
-            } else {
-                break;
+        let mut remaining = wake_count;
+        while remaining > 0 {
+            match inner.waiter_queue.pop_front() {
+                Some(w) if w.inner.lock().departing => {
+                    #[cfg(feature = "invariant-checks")]
+                    {
+                        discarded_departing += 1;
+                    }
+                    continue;
+                }
+                Some(w) => {
+                    waiters_to_wake.push(w);
+                    remaining -= 1;
+                }
+                None => break,
             }
         }
         let woken = waiters_to_wake.len();
+        // INV-FUTEX-2 analog (#889, race-free form): the wake phase
+        // runs until the budget is spent or the queue is exhausted.
+        inv!(
+            woken == wake_count || inner.waiter_queue.is_empty(),
+            "INV-FUTEX-2: requeue wake phase returned {} of {} with {} still queued",
+            woken,
+            wake_count,
+            inner.waiter_queue.len()
+        );
         // Collect waiters to requeue under the lock, but do NOT call
         // reset_futex here — that would lock WaiterInner while holding
         // FutexInner, creating an ABBA deadlock with FutexFuture::poll
@@ -629,13 +662,9 @@ impl Futex {
         // (which searches the SOURCE queue), consuming future wakes.
         let mut waiters_to_requeue: alloc::vec::Vec<_> = alloc::vec::Vec::new();
         let mut remaining = requeue_count;
-        // Departing waiters are popped and discarded (they belong to a
-        // dropping future) — they enter neither the woken nor the
-        // requeued set, so conservation must count them explicitly
-        // (review finding on #891). The counter is only read by the
-        // INV-FUTEX-5 assert, so it exists only in feature builds.
-        #[cfg(feature = "invariant-checks")]
-        let mut discarded_departing = 0usize;
+        // The discarded_departing counter was declared before the wake
+        // phase above — both phases' discards feed the INV-FUTEX-5
+        // conservation accounting.
         while remaining > 0 {
             match inner.waiter_queue.pop_front() {
                 Some(w) if w.inner.lock().departing => {
