@@ -893,7 +893,7 @@ pre-push-quick:
 	@echo "==> [3/10] Unit tests..."
 	cargo test --no-fail-fast
 	@echo "==> [4/10] zircon-object host tests (libos + aspace-separate)..."
-	cargo test -p zircon-object --features libos,aspace-separate,invariant-checks --no-fail-fast
+	cargo test -p zircon-object --features libos,aspace-separate,invariant-checks --no-fail-fast -- --test-threads=1
 	@echo "==> [5/10] hal-impl host tests (libos)..."
 	cargo test -p hal-impl --features libos --no-fail-fast
 	@echo "==> [6/10] Zircon syscall tests (libos)..."
@@ -918,7 +918,7 @@ pre-push:
 	@echo "==> [3/21] Unit tests..."
 	cargo test --no-fail-fast
 	@echo "==> [4/21] zircon-object host tests (libos + aspace-separate)..."
-	cargo test -p zircon-object --features libos,aspace-separate,invariant-checks --no-fail-fast
+	cargo test -p zircon-object --features libos,aspace-separate,invariant-checks --no-fail-fast -- --test-threads=1
 	@echo "==> [5/21] hal-impl host tests (libos)..."
 	cargo test -p hal-impl --features libos --no-fail-fast
 	@echo "==> [6/21] Zircon syscall tests (libos)..."

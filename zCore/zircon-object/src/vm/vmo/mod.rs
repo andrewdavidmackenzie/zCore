@@ -2132,6 +2132,8 @@ impl VmObject {
         if offset > parent_size || size > parent_size - offset {
             return Err(ZxError::INVALID_ARGS);
         }
+        // INV-VMO-3: a child slice is wholly contained in the parent.
+        inv!(offset + size <= parent_size);
         if self.resizable && !allow_resizable_parent {
             return Err(ZxError::NOT_SUPPORTED);
         }
@@ -2319,6 +2321,13 @@ impl VmObject {
         }
         // Re-acquire the lock to update content_size.
         self.inner.lock().content_size = new_content_size;
+        // INV-VMO-1: content_size is set exactly to the effective new
+        // value, and the VMO length always covers it.
+        inv!(
+            self.inner.lock().content_size == new_content_size
+                && self.trait_.len() >= new_content_size,
+            "INV-VMO-1: content_size/size coupling broken"
+        );
         Ok(new_content_size)
     }
 

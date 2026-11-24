@@ -93,6 +93,13 @@ impl Channel {
             let msg = recv_queue.pop_front().unwrap();
             if recv_queue.is_empty() {
                 self.base.signal_clear(Signal::READABLE);
+                // INV-CHANNEL-2: READABLE cleared exactly when the
+                // queue drains (checked under the queue lock, which
+                // also guards the signal update above).
+                inv!(
+                    !self.base.signal().contains(Signal::READABLE),
+                    "INV-CHANNEL-2: READABLE set on empty queue"
+                );
             }
             return Ok(msg);
         }
@@ -160,7 +167,17 @@ impl Channel {
         // the call). With the handler registered first, any reply with
         // matching txid will be delivered via the oneshot channel.
         let (sender, receiver) = oneshot::channel();
-        self.call_reply.lock().insert(txid, sender);
+        {
+            let mut replies = self.call_reply.lock();
+            // INV-CHANNEL-4: outstanding call txids are unique (a
+            // duplicate would swallow a reply into a dead oneshot).
+            inv!(
+                !replies.contains_key(&txid),
+                "INV-CHANNEL-4: duplicate txid {:#x}",
+                txid
+            );
+            replies.insert(txid, sender);
+        }
         // Guard removes the call_reply entry if the future is dropped
         // (e.g., on timeout). Without this, orphaned entries accumulate
         // and can swallow replies intended for push_general.
@@ -193,6 +210,14 @@ impl Channel {
             return Err(ZxError::SHOULD_WAIT);
         }
         send_queue.push_back(msg);
+        // INV-CHANNEL-1: the queue never exceeds the pending-message
+        // budget.
+        inv!(
+            send_queue.len() <= Self::MAX_PENDING_MSG_COUNT,
+            "INV-CHANNEL-1: queue over budget ({} > {})",
+            send_queue.len(),
+            Self::MAX_PENDING_MSG_COUNT
+        );
         // Always signal READABLE, matching Fuchsia's WriteSelf which
         // calls RaiseSignalsLocked(ZX_CHANNEL_READABLE) on every push.
         // signal_change short-circuits when the signal is already set,
@@ -203,6 +228,13 @@ impl Channel {
         // immediately in add_signal_callback, but if push_general
         // skips signal_set, a subsequent push won't re-notify.
         self.base.signal_set(Signal::READABLE);
+        // INV-CHANNEL-2: a non-empty queue is always READABLE (the
+        // queue lock freezes the queue; the signal update above is
+        // under the same lock, so no drain can interleave).
+        inv!(
+            self.base.signal().contains(Signal::READABLE),
+            "INV-CHANNEL-2: queue non-empty but READABLE unset"
+        );
         Ok(())
     }
 
@@ -251,6 +283,13 @@ impl Drop for Channel {
         if let Some(peer) = self.peer.upgrade() {
             peer.base
                 .signal_change(Signal::WRITABLE, Signal::PEER_CLOSED);
+            // INV-CHANNEL-3: closing an endpoint marks the peer
+            // PEER_CLOSED and clears WRITABLE.
+            inv!(
+                peer.base.signal().contains(Signal::PEER_CLOSED)
+                    && !peer.base.signal().contains(Signal::WRITABLE),
+                "INV-CHANNEL-3: peer not marked PEER_CLOSED after close"
+            );
             for (_, sender) in core::mem::take(&mut *peer.call_reply.lock()).into_iter() {
                 let _ = sender.send(Err(ZxError::PEER_CLOSED));
             }

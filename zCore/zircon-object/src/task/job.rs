@@ -142,6 +142,8 @@ impl Job {
         if self.depth() >= Self::MAX_HEIGHT {
             return Err(ZxError::OUT_OF_RANGE);
         }
+        // INV-JOB-1: the tree depth stays within MAX_HEIGHT.
+        inv!(self.depth() < Self::MAX_HEIGHT);
         let child = Arc::new(Job {
             base: KObjectBase::with_signal(Self::empty_signals()),
             _counter: CountHelper::new(),
@@ -554,8 +556,12 @@ impl Job {
             if inner.killed {
                 return;
             }
+            // INV-JOB-2: the kill code is written exactly once (first
+            // writer wins; later kills are no-ops per the guard above).
+            inv!(!inner.killed);
             inner.killed = true;
             inner.return_code = return_code;
+            inv!(inner.killed && inner.return_code == return_code);
             (
                 inner.children.clone(),
                 inner

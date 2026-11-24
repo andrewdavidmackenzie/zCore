@@ -208,6 +208,26 @@ impl Socket {
         let actual_count = data.len();
         inner.data.extend(data);
         inner.datagram_len.push_back(actual_count);
+        // INV-SOCKET-1: datagrams are all-or-nothing — the write
+        // either fully lands or fails (checked by the caller), and
+        // the datagram-length accounting always matches the buffered
+        // bytes.
+        #[cfg(feature = "invariant-checks")]
+        {
+            let accounted: usize = inner.datagram_len.iter().sum();
+            assert_eq!(
+                accounted,
+                inner.data.len(),
+                "INV-SOCKET-1: datagram accounting {} != buffered {}",
+                accounted,
+                inner.data.len()
+            );
+            assert_eq!(
+                *inner.datagram_len.back().unwrap(),
+                actual_count,
+                "INV-SOCKET-1: partial datagram queued"
+            );
+        }
         Ok(actual_count)
     }
 
@@ -493,6 +513,13 @@ impl Socket {
                 if let Some(ref peer) = peer {
                     peer.base.signal_set(Signal::SOCKET_PEER_WRITE_DISABLED);
                 }
+                // INV-SOCKET-2: disabling writes clears WRITABLE and
+                // sets the disable markers on both endpoints.
+                inv!(
+                    self.base.signal().contains(Signal::SOCKET_WRITE_DISABLED)
+                        && !self.base.signal().contains(Signal::WRITABLE),
+                    "INV-SOCKET-2: WRITE_DISABLED without signal state"
+                );
             }
             WRITE_ENABLED => {
                 // Can only re-enable writes if:
@@ -510,6 +537,13 @@ impl Socket {
                 }
                 self.base
                     .signal_change(Signal::SOCKET_WRITE_DISABLED, Signal::WRITABLE);
+                // INV-SOCKET-2: re-enabling writes restores WRITABLE
+                // and clears the disable marker.
+                inv!(
+                    self.base.signal().contains(Signal::WRITABLE)
+                        && !self.base.signal().contains(Signal::SOCKET_WRITE_DISABLED),
+                    "INV-SOCKET-2: WRITE_ENABLED without signal state"
+                );
             }
             0 => {}
             _ => return Err(ZxError::INVALID_ARGS),
