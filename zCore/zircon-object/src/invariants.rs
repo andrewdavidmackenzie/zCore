@@ -49,10 +49,44 @@
 //! | INV-PROCESS-5 | Futex-table keying: every entry `(addr, futex)` has `futex.user_addr == addr` | our `ProcessInner::futexes` | inline in `get_futex` |
 //! | INV-PROCESS-6 | Last-thread rule: when the thread list empties, the process is `Exited` | [process docs](https://fuchsia.dev/fuchsia-src/reference/kernel_objects/process) | inline in `remove_thread` |
 //!
-//! ### Batch 2 candidates (see #888)
+//! ### Job (#888 Batch 2)
 //!
-//! Job (INV-JOB-1..3), Channel (INV-CHANNEL-1..4), Port (INV-PORT-1..2),
-//! Socket (INV-SOCKET-1..2), VmObject (INV-VMO-1..3).
+//! | ID | Invariant | Source | Enforcement |
+//! |---|---|---|---|
+//! | INV-JOB-1 | Tree depth < `MAX_HEIGHT` (32) | Zircon job docs | inline in `create_child` + `check_invariants` sweep |
+//! | INV-JOB-2 | The kill code is written exactly once (first writer wins; later kills are no-ops) | job docs + kill propagation | inline in `kill_with_code` |
+//! | INV-JOB-3 | `JOB_NO_JOBS` ⟺ children empty; `JOB_NO_PROCESSES` ⟺ processes empty; `JOB_NO_CHILDREN` ⟺ both empty | job docs | `check_invariants` sweep (signal readback outside the job lock — call at quiet points) |
+//!
+//! ### Channel (#888 Batch 2)
+//!
+//! | ID | Invariant | Source | Enforcement |
+//! |---|---|---|---|
+//! | INV-CHANNEL-1 | The receive queue never exceeds `MAX_PENDING_MSG_COUNT` | channel docs | inline in `push_general` (under the queue lock) |
+//! | INV-CHANNEL-2 | `READABLE` set ⟺ queue non-empty | channel docs | inline in `push_general` and `check_and_read` (under the queue lock, which also guards the signal update) |
+//! | INV-CHANNEL-3 | Closing an endpoint marks the peer `PEER_CLOSED` and clears `WRITABLE` | channel docs | inline in `Drop for Channel` |
+//! | INV-CHANNEL-4 | Outstanding call txids are unique | channel_call semantics | inline in `call` (under the call_reply lock) |
+//!
+//! ### Port (#888 Batch 2)
+//!
+//! | ID | Invariant | Source | Enforcement |
+//! |---|---|---|---|
+//! | INV-PORT-1 | Queued packets stay within `MAX_ALLOCATED_PACKET_COUNT_PER_PORT` (4096) — including kernel-sourced packets, which our push path does not itself limit | port docs | inline in `push_user` and `push_with_source` |
+//! | INV-PORT-2 | A successful cancel removes the subscription entry entirely (re-framed from "observer uniqueness" — multiple subscriptions per (source, key) are legal in Fuchsia) | wait_async/cancel semantics | inline in `cancel_async` |
+//!
+//! ### Socket (#888 Batch 2)
+//!
+//! | ID | Invariant | Source | Enforcement |
+//! |---|---|---|---|
+//! | INV-SOCKET-1 | Datagram writes are all-or-nothing, and the datagram-length accounting matches the buffered bytes | socket docs | inline in `write_datagram` (under the inner lock) |
+//! | INV-SOCKET-2 | Disabling writes clears `WRITABLE`/sets the disable markers; re-enabling restores them | socket disposition model | inline in `set_disposition` |
+//!
+//! ### VmObject (#888 Batch 2)
+//!
+//! | ID | Invariant | Source | Enforcement |
+//! |---|---|---|---|
+//! | INV-VMO-1 | `set_content_size_and_resize` sets `content_size` exactly to the effective new value, and the VMO length covers it | our documented behavior | inline in `set_content_size_and_resize` |
+//! | INV-VMO-2 | Committed-page accounting bounds | VMO docs | TBD — needs doc verification (zero-page/COW/pager paths make the bound conditional) |
+//! | INV-VMO-3 | A child slice is wholly contained in the parent | VMO child docs | inline in the slice creation checks |
 
 /// Assert a kernel-object invariant.
 ///

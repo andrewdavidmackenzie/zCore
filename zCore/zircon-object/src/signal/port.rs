@@ -103,12 +103,23 @@ impl Port {
     /// subscription entry without removing the just-queued packet.
     pub fn cancel_async(&self, source_koid: KoID, key: u64) -> ZxResult {
         let mut inner = self.inner.lock();
+        #[cfg(feature = "invariant-checks")]
+        let had_entry = inner.async_subscriptions.contains_key(&(source_koid, key));
         if let Some(flags) = inner.async_subscriptions.remove(&(source_koid, key)) {
             for flag in flags {
                 flag.store(true, core::sync::atomic::Ordering::Relaxed);
             }
+            // INV-PORT-2: a successful cancel removes the subscription
+            // entry entirely — a stale entry would swallow later
+            // re-registrations' cancels.
+            inv!(had_entry);
+            inv!(
+                !inner.async_subscriptions.contains_key(&(source_koid, key)),
+                "INV-PORT-2: cancel left the subscription entry behind"
+            );
             Ok(())
         } else {
+            inv!(!had_entry);
             Err(ZxError::NOT_FOUND)
         }
     }
@@ -224,6 +235,16 @@ impl Port {
             packet: packet.into(),
             source_koid,
         });
+        // INV-PORT-1: kernel-sourced packets count against the same
+        // per-port budget (our push path does not enforce the limit
+        // itself — the assert documents the spec; firing means a
+        // divergence from Fuchsia's accounting).
+        inv!(
+            inner.queue.len() <= MAX_ALLOCATED_PACKET_COUNT_PER_PORT,
+            "INV-PORT-1: port queue over budget via push_with_source ({} > {})",
+            inner.queue.len(),
+            MAX_ALLOCATED_PACKET_COUNT_PER_PORT
+        );
         // Signal READABLE while still holding the port inner lock to
         // prevent a TOCTOU race: without this, a concurrent `wait()`
         // could dequeue the packet and `signal_clear(READABLE)` between
@@ -279,6 +300,14 @@ impl Port {
             packet,
             source_koid: 0,
         });
+        // INV-PORT-1: queued packets stay within the per-port limit
+        // (Fuchsia: kMaxAllocatedPacketCountPerPort).
+        inv!(
+            inner.queue.len() <= MAX_ALLOCATED_PACKET_COUNT_PER_PORT,
+            "INV-PORT-1: port queue over budget ({} > {})",
+            inner.queue.len(),
+            MAX_ALLOCATED_PACKET_COUNT_PER_PORT
+        );
         // Signal READABLE while still holding the port inner lock —
         // see push_with_source for rationale on the TOCTOU fix.
         self.base.signal_set(Signal::READABLE);
