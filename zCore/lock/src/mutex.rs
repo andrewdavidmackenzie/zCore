@@ -200,13 +200,23 @@ impl<T: ?Sized> KernelMutex<T> {
                             // the caller identify which lock; the raw stack
                             // words above rsp are mostly return addresses
                             // for offline symbolization against the kernel
-                            // ELF.
+                            // ELF (x86_64 — reading sp is arch-specific).
                             let mutex_addr = core::ptr::addr_of!(self.locked) as usize;
                             let caller = core::panic::Location::caller();
-                            let rsp: usize;
-                            unsafe { core::arch::asm!("mov {}, rsp", out(reg) rsp) };
-                            let stack =
-                                unsafe { core::slice::from_raw_parts(rsp as *const usize, 40) };
+                            #[cfg(target_arch = "x86_64")]
+                            let stack = {
+                                let rsp: usize;
+                                unsafe {
+                                    core::arch::asm!(
+                                        "mov {}, rsp",
+                                        out(reg) rsp,
+                                        options(nomem, nostack, preserves_flags)
+                                    )
+                                };
+                                unsafe { core::slice::from_raw_parts(rsp as *const usize, 40) }
+                            };
+                            #[cfg(not(target_arch = "x86_64"))]
+                            let stack: &[usize] = &[];
                             panic!(
 <<<<<<< HEAD
                                 "KernelMutex contended while interrupts disabled \
