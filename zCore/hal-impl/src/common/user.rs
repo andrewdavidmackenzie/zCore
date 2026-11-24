@@ -252,7 +252,8 @@ unsafe fn guarded_user_copy(dst: *mut u8, src: *const u8, len: usize) -> Result<
     }
 
     user_copy_enter(recovery_pc);
-    smap_allow();
+    // SAFETY: no context switch within the guarded copy.
+    let smap = unsafe { UserMemAccess::new() };
 
     // Byte-by-byte copy loop. Using a loop instead of
     // copy_from_nonoverlapping ensures the faulting instruction is
@@ -282,7 +283,10 @@ unsafe fn guarded_user_copy(dst: *mut u8, src: *const u8, len: usize) -> Result<
         }
     }
 
-    smap_deny();
+    // Close the SMAP window before leaving the user-copy region
+    // (explicit drop — the guard's natural scope end would run after
+    // user_copy_leave).
+    drop(smap);
     let (fault_addr, is_perm) = user_copy_leave();
     if fault_addr != 0 {
         if is_perm {
@@ -356,9 +360,9 @@ unsafe fn guarded_user_copy(dst: *mut u8, src: *const u8, len: usize) -> Result<
 ///
 /// # Safety
 ///
-/// Must be paired with a subsequent `smap_deny()` call.
+/// Prefer [`UserMemAccess`], which makes the pairing structural.
 #[inline(always)]
-pub unsafe fn smap_allow() {
+pub(crate) unsafe fn smap_allow() {
     #[cfg(all(target_arch = "x86_64", target_os = "none"))]
     if HAS_SMAP.load(core::sync::atomic::Ordering::Relaxed) {
         core::arch::asm!("stac", options(nomem, nostack));
@@ -372,32 +376,72 @@ pub unsafe fn smap_allow() {
 ///
 /// # Safety
 ///
-/// Must follow a preceding `smap_allow()` call.
+/// Prefer [`UserMemAccess`], which makes the pairing structural.
 #[inline(always)]
-pub unsafe fn smap_deny() {
+pub(crate) unsafe fn smap_deny() {
     #[cfg(all(target_arch = "x86_64", target_os = "none"))]
     if HAS_SMAP.load(core::sync::atomic::Ordering::Relaxed) {
         core::arch::asm!("clac", options(nomem, nostack));
     }
 }
 
-/// Execute a closure with SMAP temporarily disabled.
+/// RAII guard for a user-memory access window (SMAP, #887).
 ///
-/// This is the primary way to access user memory from kernel mode
-/// on x86_64 with SMAP enabled. The closure runs between `stac` and
-/// `clac` instructions.
+/// `new` opens the window (`stac`); `drop` closes it (`clac`). Rust
+/// guarantees the drop runs on every exit path — normal return, `?`,
+/// `break`, early `return` — so the "forgot to close the window"
+/// bug class (SMAP left open kernel-wide, silently defeating the
+/// protection) is impossible to express.
+///
+/// Not `Send`/`Sync`: SMAP state is per-CPU. The guard must not
+/// context-switch or be held across one.
 ///
 /// Note: some methods (as_slice, as_ref) return references to user
-/// memory that remain live after this closure returns. For full
-/// SMAP correctness, those callers would need copy-based APIs
-/// instead. For now, the syscall entry path disables SMAP for the
-/// entire syscall duration as a pragmatic compromise.
+/// memory that remain live after this guard drops. For full SMAP
+/// correctness, those callers need copy-based APIs instead. For now,
+/// the syscall entry path disables SMAP for the entire syscall
+/// duration as a pragmatic compromise.
+pub struct UserMemAccess {
+    /// `*mut ()` is neither `Send` nor `Sync`.
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl UserMemAccess {
+    /// Open the user-memory access window.
+    ///
+    /// # Safety
+    ///
+    /// The caller must not context-switch while holding this guard
+    /// (SMAP state is per-CPU). Hold it only for the duration of the
+    /// user-memory access itself.
+    #[inline(always)]
+    pub unsafe fn new() -> Self {
+        smap_allow();
+        UserMemAccess {
+            _not_send: PhantomData,
+        }
+    }
+}
+
+impl Drop for UserMemAccess {
+    #[inline(always)]
+    fn drop(&mut self) {
+        // SAFETY: closing the window this guard opened; the raw call
+        // is private to this module.
+        unsafe { smap_deny() };
+    }
+}
+
+/// Execute a closure with SMAP temporarily disabled.
+///
+/// The primary way to access user memory from kernel mode on x86_64
+/// with SMAP enabled. The closure runs between `stac` and `clac`
+/// instructions; the pairing is structural via [`UserMemAccess`].
 #[inline(always)]
 fn with_user_access<R>(f: impl FnOnce() -> R) -> R {
-    unsafe { smap_allow() };
-    let result = f();
-    unsafe { smap_deny() };
-    result
+    // SAFETY: no context switch within this function.
+    let _smap = unsafe { UserMemAccess::new() };
+    f()
 }
 
 // Raw pointer from user space.
