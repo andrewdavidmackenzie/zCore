@@ -591,7 +591,7 @@ pub fn spawn_process(
             for f in frames {
                 core::mem::forget(f);
             }
-            Some((SIZE, paddr))
+            Some((SIZE, paddr.0))
         });
         if let Some((size, paddr)) = reservation {
             let opt = alloc::format!("kernel.test.ram.reserve=0x{:x},0x{:x}\n", size, paddr);
