@@ -1717,13 +1717,14 @@ impl Future for ThreadSwitchFuture {
         // torn down — stop polling. In libos mode (hosted OS) there are
         // no real page tables, so table_phys is always 0; skip the check.
         #[cfg(target_os = "none")]
-        if table_phys == 0 {
+        if table_phys.0 == 0 {
             return Poll::Ready(());
         }
         cfg_if! {
             if #[cfg(all(target_os = "none", target_arch = "aarch64"))] {
+                use hal::PhysAddr;
                 use hal_impl::arch::config::USER_TABLE_FLAG;
-                hal_impl::vm::activate_paging(table_phys | USER_TABLE_FLAG);
+                hal_impl::vm::activate_paging(PhysAddr::new(table_phys.0 | USER_TABLE_FLAG));
             } else {
                 hal_impl::vm::activate_paging(table_phys);
             }

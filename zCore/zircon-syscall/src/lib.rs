@@ -16,6 +16,7 @@ use core::sync::atomic::{AtomicI32, Ordering};
 
 use futures::pin_mut;
 use hal::MMUFlags;
+use hal::PhysAddr;
 use hal_impl::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
 use zircon_object::object::{wait_signal_many, KernelObject, KoID, Rights, Signal};
 use zircon_object::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
@@ -1184,7 +1185,7 @@ impl Syscall<'_> {
                 self.sys_vmo_create_child(a0 as _, a1 as _, a2 as _, a3 as _, a4.into())
             }
             Sys::VMO_CREATE_PHYSICAL => {
-                self.sys_vmo_create_physical(a0 as _, a1 as _, a2 as _, a3.into())
+                self.sys_vmo_create_physical(a0 as _, PhysAddr::new(a1), a2 as _, a3.into())
             }
             Sys::VMO_CREATE_CONTIGUOUS => {
                 self.sys_vmo_create_contiguous(a0 as _, a1 as _, a2 as _, a3.into())

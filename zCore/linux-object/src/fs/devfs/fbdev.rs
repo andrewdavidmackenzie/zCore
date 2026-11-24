@@ -5,6 +5,7 @@ use core::{any::Any, convert::From};
 
 use hal::scheme::display::{ColorFormat, DisplayInfo};
 use hal::DisplayScheme;
+use hal::PhysAddr;
 use hal_impl::vm::{GenericPageTable, PageTable};
 use zcore_devfs::DevFS;
 use zcore_fs::vfs::*;
@@ -102,7 +103,7 @@ impl From<DisplayInfo> for FbFixScreeninfo {
     fn from(info: DisplayInfo) -> Self {
         let smem_start =
             if let Ok((paddr, _, _)) = PageTable::from_current().query(info.fb_base_vaddr) {
-                paddr as u64
+                paddr.0 as u64
             } else {
                 u64::MAX
             };
@@ -270,7 +271,10 @@ impl FbDev {
             return Err(LxError::ENOMEM);
         }
         let len = len.min(info.fb_size - offset);
-        Ok(VmObject::new_physical(paddr as usize + offset, pages(len)))
+        Ok(VmObject::new_physical(
+            PhysAddr::new(paddr as usize + offset),
+            pages(len),
+        ))
     }
 }
 

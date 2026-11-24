@@ -655,8 +655,8 @@ mod tests {
         // window (32–33 GiB) and the aspace region (48 GiB), and
         // unique to this test.
         let vaddr: VirtAddr = 0x10_0000_0000;
-        let paddr_a: PhysAddr = 0x1000;
-        let paddr_b: PhysAddr = 0x3000;
+        let paddr_a: PhysAddr = PhysAddr::new(0x1000);
+        let paddr_b: PhysAddr = PhysAddr::new(0x3000);
         let aligned = |p: usize| p & !(PAGE_SIZE - 1);
 
         // vaddr is 16K-aligned, paddr is not → offset mismatch forces
@@ -664,7 +664,9 @@ mod tests {
         assert!(mem.mmap(vaddr, PAGE_SIZE, paddr_a, MMUFlags::READ | MMUFlags::WRITE));
         {
             let map = mem.anon_paddr_to_vaddr.lock().unwrap();
-            let entry = map.get(&aligned(paddr_a)).expect("entry for paddr_a");
+            let entry = map
+                .get(&PhysAddr::new(aligned(paddr_a.0)))
+                .expect("entry for paddr_a");
             assert!(
                 entry.contains(&aligned(vaddr)),
                 "paddr_a should track vaddr after anon map"
@@ -676,7 +678,7 @@ mod tests {
         {
             let map = mem.anon_paddr_to_vaddr.lock().unwrap();
             let stale = map
-                .get(&aligned(paddr_a))
+                .get(&PhysAddr::new(aligned(paddr_a.0)))
                 .is_some_and(|v| v.contains(&aligned(vaddr)));
             assert!(
                 !stale,
@@ -700,8 +702,8 @@ mod tests {
         let mem = &*MOCK_PHYS_MEM;
         // 16K-aligned base, distinct from other tests' ranges.
         let base: VirtAddr = 0x11_0000_0000;
-        let pa: PhysAddr = 0x11000; // offset 0x1000 in its host page → anon path
-        let pb: PhysAddr = 0x13000; // different paddr for the sibling page
+        let pa: PhysAddr = PhysAddr::new(0x11000); // offset 0x1000 in its host page → anon path
+        let pb: PhysAddr = PhysAddr::new(0x13000); // different paddr for the sibling page
         let flags = MMUFlags::READ | MMUFlags::WRITE;
 
         assert!(mem.mmap(base, PAGE_SIZE, pa, flags));

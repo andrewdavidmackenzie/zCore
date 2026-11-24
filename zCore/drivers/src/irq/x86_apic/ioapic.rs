@@ -3,6 +3,7 @@ use core::{fmt, ptr::NonNull};
 
 use acpi::platform::interrupt::InterruptModel;
 use acpi::{AcpiHandler, AcpiTables, PhysicalMapping};
+use hal::PhysAddr;
 use lock::IrqLock;
 use x2apic::ioapic::{IoApic as IoApicInner, IrqFlags, IrqMode};
 
@@ -27,7 +28,7 @@ impl AcpiHandler for AcpiMapHandler {
         let aligned_end = (physical_address + size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         PhysicalMapping::new(
             physical_address,
-            NonNull::new_unchecked((self.phys_to_virt)(physical_address) as *mut T),
+            NonNull::new_unchecked((self.phys_to_virt)(PhysAddr::new(physical_address)) as *mut T),
             size,
             aligned_end - aligned_start,
             self.clone(),
@@ -157,7 +158,7 @@ impl IoApicList {
                     .map(|i| {
                         IoApic::new(
                             i.id,
-                            phys_to_virt(i.address as usize),
+                            phys_to_virt(PhysAddr::new(i.address as usize)),
                             i.global_system_interrupt_base,
                         )
                     })

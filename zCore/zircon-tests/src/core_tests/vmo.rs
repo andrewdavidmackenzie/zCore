@@ -1136,8 +1136,8 @@ fn physical_vmo_invalid_initial_size() {
     // size=0 should return INVALID_ARGS.
     let result = sc.sys_vmo_create_physical(
         root_resource,
-        PAGE_SIZE, // valid paddr
-        0,         // size=0
+        hal_impl::PhysAddr::new(PAGE_SIZE), // valid paddr
+        0,                                  // size=0
         hal_impl::user::UserOutPtr::from(&mut out as *mut u32 as usize),
     );
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
@@ -1145,7 +1145,7 @@ fn physical_vmo_invalid_initial_size() {
     // Non-page-aligned size should return INVALID_ARGS.
     let result = sc.sys_vmo_create_physical(
         root_resource,
-        PAGE_SIZE,
+        hal_impl::PhysAddr::new(PAGE_SIZE),
         PAGE_SIZE + 1, // not aligned
         hal_impl::user::UserOutPtr::from(&mut out as *mut u32 as usize),
     );

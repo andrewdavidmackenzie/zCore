@@ -157,8 +157,8 @@ mod bitmap {
             if region.is_empty() {
                 continue;
             }
-            let frame_start = region.start >> PAGE_BITS;
-            let frame_end = ((region.end - 1) >> PAGE_BITS) + 1;
+            let frame_start = region.start.0 >> PAGE_BITS;
+            let frame_end = ((region.end.0 - 1) >> PAGE_BITS) + 1;
             if frame_start < frame_end {
                 ba.insert(frame_start..frame_end);
                 log::trace!(
@@ -182,10 +182,10 @@ mod bitmap {
         let ret = FRAME_ALLOCATOR
             .lock()
             .alloc_contiguous(None, frame_count, align_log2)
-            .map(|idx| idx << PAGE_BITS);
+            .map(|idx| PhysAddr::new(idx << PAGE_BITS));
         log::trace!(
             "frame_alloc_contiguous(): {ret:x?} ~ {end_ret:x?}, align_log2={align_log2}",
-            end_ret = ret.map(|x| x + frame_count),
+            end_ret = ret.map(|x| x.0 + frame_count * (1 << PAGE_BITS)),
         );
         ret
     }
@@ -193,7 +193,7 @@ mod bitmap {
     pub fn frame_dealloc(target: PhysAddr) {
         use bitmap_allocator::BitAlloc;
         log::trace!("frame_dealloc(): {target:x}");
-        let _ = FRAME_ALLOCATOR.lock().dealloc(target >> PAGE_BITS);
+        let _ = FRAME_ALLOCATOR.lock().dealloc(target.0 >> PAGE_BITS);
     }
 
     struct LockedHeap<const ORDER: usize>(IrqLock<Heap<ORDER>>);

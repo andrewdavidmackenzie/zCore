@@ -1734,7 +1734,7 @@ impl ExceptionTestThread {
 /// Returns the physical address of the allocated contiguous region.
 /// Frames are intentionally leaked (not freed on drop) because the
 /// physical VMO takes ownership of the backing memory.
-pub fn alloc_phys_addr(pages: usize) -> usize {
+pub fn alloc_phys_addr(pages: usize) -> hal_impl::PhysAddr {
     use hal_impl::mem::PhysFrame;
     let frames = PhysFrame::new_contiguous(pages, 0);
     assert!(

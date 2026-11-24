@@ -169,7 +169,7 @@ mod tests {
         // Addresses and paddr must be PAGE_SIZE-aligned (4K or 16K).
         let vaddr1 = VBASE + PAGE_SIZE;
         let vaddr2 = VBASE + 2 * PAGE_SIZE;
-        let paddr = PAGE_SIZE;
+        let paddr = PhysAddr::new(PAGE_SIZE);
 
         pt.map(
             Page::new_aligned(vaddr1, PageSize::default_page()),

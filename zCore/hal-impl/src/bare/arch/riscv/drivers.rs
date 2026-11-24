@@ -13,9 +13,9 @@ struct IoMapperImpl;
 
 impl IoMapper for IoMapperImpl {
     fn query_or_map(&self, paddr: PhysAddr, size: usize) -> Option<VirtAddr> {
-        let vaddr = if paddr > (1 << 39) {
+        let vaddr = if paddr.0 > (1 << 39) {
             // To retrieve avaliable sv39 vaddr
-            paddr | (0x1ffffff << 39)
+            paddr.0 | (0x1ffffff << 39)
         } else {
             phys_to_virt(paddr)
         };
@@ -56,9 +56,11 @@ impl IoMapper for IoMapperImpl {
 /// Initialize device drivers.
 pub(super) fn init() -> DeviceResult {
     // prase DTB and probe devices
-    let dev_list =
-        DevicetreeDriverBuilder::new(phys_to_virt(crate::KCONFIG.dtb_paddr), IoMapperImpl)?
-            .build()?;
+    let dev_list = DevicetreeDriverBuilder::new(
+        phys_to_virt(PhysAddr::new(crate::KCONFIG.dtb_paddr)),
+        IoMapperImpl,
+    )?
+    .build()?;
     // add drivers
     for dev in dev_list.into_iter() {
         if let Device::Uart(uart) = dev {

@@ -2,6 +2,7 @@ use super::{phys_to_virt, PAGE_SIZE};
 use crate::builder::IoMapper;
 use crate::{Device, DeviceError, DeviceResult};
 use alloc::{format, sync::Arc, vec::Vec};
+use hal::PhysAddr;
 use pci_types::capability::PciCapability;
 use pci_types::*;
 
@@ -79,7 +80,7 @@ impl ConfigRegionAccess for PciAccess {
 ))]
 impl ConfigRegionAccess for PciAccess {
     unsafe fn read(&self, address: PciAddress, offset: u16) -> u32 {
-        let addr = phys_to_virt(PCI_BASE)
+        let addr = phys_to_virt(PhysAddr::new(PCI_BASE))
             + (((address.bus() as usize) << 20)
                 | ((address.device() as usize) << 15)
                 | ((address.function() as usize) << 12)
@@ -88,7 +89,7 @@ impl ConfigRegionAccess for PciAccess {
     }
 
     unsafe fn write(&self, address: PciAddress, offset: u16, value: u32) {
-        let addr = phys_to_virt(PCI_BASE)
+        let addr = phys_to_virt(PhysAddr::new(PCI_BASE))
             + (((address.bus() as usize) << 20)
                 | ((address.device() as usize) << 15)
                 | ((address.function() as usize) << 12)
@@ -225,7 +226,7 @@ fn init_driver(
                 if let Some(bar) = endpoint.bar(0, access) {
                     let (addr, _len) = bar.unwrap_mem();
                     let irq = unsafe { enable_msi(dev.address, access) };
-                    let vaddr = phys_to_virt(addr);
+                    let vaddr = phys_to_virt(PhysAddr::new(addr));
                     info!("Found ixgbe dev {:#x}, irq: {:?}", vaddr, irq);
                     return Err(DeviceError::NotSupported);
                 }
@@ -279,7 +280,7 @@ pub fn detach_driver(_address: &PciAddress) -> bool {
 pub fn init(mapper: Option<Arc<dyn IoMapper>>) -> DeviceResult<Vec<Device>> {
     let access = PciAccess;
     let mapper_driver = if let Some(m) = mapper {
-        m.query_or_map(PCI_BASE, PAGE_SIZE * 256 * 32 * 8);
+        m.query_or_map(PhysAddr::new(PCI_BASE), PAGE_SIZE * 256 * 32 * 8);
         Some(m)
     } else {
         None

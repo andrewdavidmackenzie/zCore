@@ -28,12 +28,15 @@ pub fn cmdline() -> String {
 
 pub fn init_ram_disk() -> Option<&'static mut [u8]> {
     INITRD_REGION.as_ref().map(|range| unsafe {
-        core::slice::from_raw_parts_mut(phys_to_virt(range.start) as *mut u8, range.len())
+        core::slice::from_raw_parts_mut(
+            phys_to_virt(range.start) as *mut u8,
+            range.end.0 - range.start.0,
+        )
     })
 }
 
 pub fn primary_init_early() {
-    let dt = Devicetree::from(phys_to_virt(crate::KCONFIG.dtb_paddr)).unwrap();
+    let dt = Devicetree::from(phys_to_virt(PhysAddr::new(crate::KCONFIG.dtb_paddr))).unwrap();
     if let Some(cmdline) = dt.bootargs() {
         info!("Load kernel cmdline from DTB: {:?}", cmdline);
         CMDLINE.init_once_by(cmdline.into());
