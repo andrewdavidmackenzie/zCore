@@ -111,9 +111,11 @@ impl KernelHandler for ZcoreKernelHandler {
 /// `Arc::into_raw` pointer (0 = empty). Producers claim a slot with a
 /// CAS; the reaper drains with a swap. Interrupt-safe: no locks, no
 /// allocation.
+#[cfg_attr(feature = "baremetal-test", allow(dead_code))]
 static REAP_SLOTS: [AtomicUsize; 16] = [const { AtomicUsize::new(0) }; 16];
 
 /// Queue a thread for task-context teardown. Interrupt-safe.
+#[cfg_attr(feature = "baremetal-test", allow(dead_code))]
 fn queue_reap(thread: Arc<Thread>) {
     let ptr = Arc::into_raw(thread) as usize;
     for slot in &REAP_SLOTS {
@@ -140,6 +142,7 @@ fn queue_reap(thread: Arc<Thread>) {
 /// The thread's own future was orphaned by
 /// `executor::abandon_current_poll` — it never runs its exit path — so
 /// the reaper drives the observable effects from outside.
+#[cfg_attr(feature = "baremetal-test", allow(dead_code))]
 async fn reaper_loop() {
     loop {
         for slot in &REAP_SLOTS {
@@ -168,6 +171,7 @@ async fn reaper_loop() {
 
 /// Spawn the kernel-trap reaper task. Call once during kernel init,
 /// after the executor runtimes exist.
+#[cfg_attr(feature = "baremetal-test", allow(dead_code))]
 pub fn spawn_reaper() {
     hal_impl::thread::spawn(reaper_loop());
 }
