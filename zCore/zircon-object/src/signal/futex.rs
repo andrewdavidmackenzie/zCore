@@ -93,6 +93,21 @@ impl Futex {
             let mut locked = lock::lockgraph::Locked::new(self);
             let mut inner = locked.lock_and::<super::lock_order::FutexInnerLock>().0;
             inner.set_owner(None);
+            // INV-FUTEX-3: the owner is cleared regardless of the wake
+            // count (asserted after the collection loop too, so a
+            // regression in the loop can't reintroduce an owner).
+            inv!(
+                inner.owner.is_none(),
+                "INV-FUTEX-3: owner not cleared by wake"
+            );
+            #[cfg(feature = "invariant-checks")]
+            let queued = inner.waiter_queue.len();
+            #[cfg(feature = "invariant-checks")]
+            let departing_queued = inner
+                .waiter_queue
+                .iter()
+                .filter(|w| w.inner.lock().departing)
+                .count();
             let mut collected = alloc::vec::Vec::new();
             let mut remaining = wake_count;
             while remaining > 0 {
@@ -114,6 +129,27 @@ impl Futex {
                     break;
                 }
             }
+            // INV-FUTEX-1: at most wake_count, at most the queued
+            // waiters (zx_futex_wake).
+            inv!(
+                collected.len() <= wake_count && collected.len() <= queued,
+                "INV-FUTEX-1: wake({}) returned {} with {} queued",
+                wake_count,
+                collected.len(),
+                queued
+            );
+            // INV-FUTEX-2: departing waiters never consume a wake
+            // slot — exactly min(wake_count, non-departing queued)
+            // (#862/#875).
+            inv!(
+                collected.len() == wake_count.min(queued - departing_queued),
+                "INV-FUTEX-2: wake({}) returned {} with {} queued ({} departing)",
+                wake_count,
+                collected.len(),
+                queued,
+                departing_queued
+            );
+            inv!(inner.owner.is_none(), "INV-FUTEX-3: owner set during wake");
             collected
         };
         let count = waiters.len();
@@ -138,6 +174,11 @@ impl Futex {
     }
 
     // ------ Advanced APIs on Zircon ------
+
+    /// The user-space address this futex is keyed by.
+    pub fn user_addr(&self) -> usize {
+        self.user_addr
+    }
 
     /// Get the owner of the futex.
     pub fn owner(&self) -> Option<Arc<Thread>> {
@@ -483,7 +524,27 @@ impl Futex {
             (a, b)
         };
 
+        // INV-FUTEX-6: failure must be atomic — capture the state
+        // both locks protect, and assert it unchanged at every error
+        // return below ("if the call fails for any reason, no changes
+        // to ownership for either futex are made").
+        #[cfg(feature = "invariant-checks")]
+        let inv_pre = (
+            inner.owner.as_ref().map(|t| t.id()),
+            inner.waiter_queue.len(),
+            new_inner.owner.as_ref().map(|t| t.id()),
+            new_inner.waiter_queue.len(),
+        );
+        #[cfg(feature = "invariant-checks")]
+        let unchanged = || {
+            inner.owner.as_ref().map(|t| t.id()) == inv_pre.0
+                && inner.waiter_queue.len() == inv_pre.1
+                && new_inner.owner.as_ref().map(|t| t.id()) == inv_pre.2
+                && new_inner.waiter_queue.len() == inv_pre.3
+        };
+
         if check_value && self.load_user_value() != current_value {
+            inv!(unchanged(), "INV-FUTEX-6: requeue failed after mutation");
             return Err(ZxError::BAD_STATE);
         }
         // Check new_requeue_owner is not blocking on EITHER futex.
@@ -495,6 +556,7 @@ impl Futex {
         if let Some(ref owner) = new_requeue_owner {
             let owner_futex = owner.blocking_futex_addr();
             if owner_futex == self.user_addr || owner_futex == requeue_futex.user_addr {
+                inv!(unchanged(), "INV-FUTEX-6: requeue failed after mutation");
                 return Err(ZxError::INVALID_ARGS);
             }
         }

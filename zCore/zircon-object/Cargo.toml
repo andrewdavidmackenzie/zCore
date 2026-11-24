@@ -19,6 +19,10 @@ linux = []
 hypervisor = []
 ## Expose test-only constructors (e.g., CurrentThread::new_for_test).
 testing = []
+## Compile kernel-object invariant asserts (`inv!`, #888). Test kernels
+## (rust-tests via the kernel's `baremetal-test` feature) and host test
+## builds enable this; production kernels compile the asserts away.
+invariant-checks = []
 
 libos = [
     "hal-impl/libos",

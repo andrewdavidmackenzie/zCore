@@ -19,7 +19,10 @@ doc = false
 # Print colorless logs
 colorless-log = []
 thead-maee = ["hal-impl/thead-maee"]
-baremetal-test = ["dep:zircon-tests"]
+# Bare-metal test kernel: runs the zircon-tests suite instead of a
+# user-space root process. Enables zircon-object's invariant asserts
+# (inv!, #888) so the suite checks them.
+baremetal-test = ["dep:zircon-tests", "zircon-object/invariant-checks"]
 sched-fair = ["executor/sched-fair"]
 
 
