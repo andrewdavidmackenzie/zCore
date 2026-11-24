@@ -190,7 +190,7 @@ fn kernel_trap_fatal(reason: &'static str, tf: &TrapFrame) -> ! {
         tf.r13,
         tf.r14,
         tf.r15,
-        &code,
+        code,
     ));
     // Let the kernel kill the current thread (if any) so the rest of
     // the system observes the death. Must not unwind; the handler is
