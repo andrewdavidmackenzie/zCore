@@ -5,7 +5,9 @@ use crate::{addr::is_aligned, MMUFlags, PhysAddr, VirtAddr, PAGE_SIZE};
 
 hal_fn_impl! {
     impl mod crate::hal_fn::vm {
-        fn current_vmtoken() -> PhysAddr { 0 }
+        fn current_vmtoken() -> PhysAddr {
+            PhysAddr::ZERO
+        }
         fn activate_paging(_vmtoken: PhysAddr) {}
     }
 }
@@ -47,13 +49,13 @@ impl Default for PageTable {
 
 impl GenericPageTable for PageTable {
     fn table_phys(&self) -> PhysAddr {
-        0
+        PhysAddr::ZERO
     }
 
     fn map(&mut self, page: Page, paddr: PhysAddr, flags: MMUFlags) -> PagingResult {
         // The mmap uses PAGE_SIZE for the mapping length.
-        debug_assert!(is_aligned(paddr));
-        if paddr < PMEM_SIZE {
+        debug_assert!(is_aligned(paddr.0));
+        if paddr.0 < PMEM_SIZE {
             if MOCK_PHYS_MEM.mmap(page.vaddr, PAGE_SIZE, paddr, flags) {
                 self.entries.insert(page.vaddr, PageEntry { paddr, flags });
                 Ok(())
@@ -67,7 +69,11 @@ impl GenericPageTable for PageTable {
 
     fn unmap(&mut self, vaddr: VirtAddr) -> PagingResult<(PhysAddr, PageSize)> {
         // Read the physical address before unmap_cont removes the entry.
-        let paddr = self.entries.get(&vaddr).map(|e| e.paddr).unwrap_or(0);
+        let paddr = self
+            .entries
+            .get(&vaddr)
+            .map(|e| e.paddr)
+            .unwrap_or(PhysAddr::ZERO);
         self.unmap_cont(vaddr, PAGE_SIZE)?;
         Ok((paddr, PageSize::default_page()))
     }
@@ -116,7 +122,7 @@ impl GenericPageTable for PageTable {
         let pmem_base = MOCK_PHYS_MEM.map_vaddr();
         if (pmem_base..pmem_base + PMEM_SIZE).contains(&vaddr) {
             Ok((
-                vaddr - pmem_base,
+                PhysAddr::new(vaddr - pmem_base),
                 MMUFlags::READ | MMUFlags::WRITE,
                 PageSize::default_page(),
             ))

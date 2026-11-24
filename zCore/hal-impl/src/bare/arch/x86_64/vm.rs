@@ -163,7 +163,7 @@ impl GenericPTE for X86PTE {
     }
 
     fn set_addr(&mut self, paddr: PhysAddr) {
-        self.0 = (self.0 & !PHYS_ADDR_MASK) | (paddr as u64 & PHYS_ADDR_MASK);
+        self.0 = (self.0 & !PHYS_ADDR_MASK) | (paddr.0 as u64 & PHYS_ADDR_MASK);
     }
     fn set_flags(&mut self, flags: MMUFlags, is_huge: bool) {
         let mut flags: PTF = mmu_to_ptf(flags);

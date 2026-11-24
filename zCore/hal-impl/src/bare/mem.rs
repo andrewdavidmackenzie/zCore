@@ -13,12 +13,14 @@ hal_fn_impl! {
             // addresses properly via PTE_ADDR_MASK, but this prevents
             // non-canonical address faults if they don't.
             #[cfg(target_arch = "x86_64")]
-            let paddr = paddr & 0x000F_FFFF_FFFF_FFFF;
+            let paddr = paddr.0 & 0x000F_FFFF_FFFF_FFFF;
+            #[cfg(not(target_arch = "x86_64"))]
+            let paddr = paddr.0;
             KCONFIG.phys_to_virt_offset + paddr
         }
 
         fn virt_to_phys(vaddr: VirtAddr) -> PhysAddr {
-            vaddr - KCONFIG.phys_to_virt_offset
+            PhysAddr::new(vaddr - KCONFIG.phys_to_virt_offset)
         }
 
         fn free_pmem_regions() -> Vec<Range<PhysAddr>> {

@@ -76,7 +76,7 @@ impl VMObjectTrait for VMObjectSlice {
         }
     }
 
-    fn commit_page(&self, page_idx: usize, flags: MMUFlags) -> ZxResult<usize> {
+    fn commit_page(&self, page_idx: usize, flags: MMUFlags) -> ZxResult<PhysAddr> {
         self.parent
             .commit_page(page_idx + self.offset / PAGE_SIZE, flags)
     }

@@ -255,7 +255,7 @@ impl GenericPTE for Rv64PTE {
     }
 
     fn set_addr(&mut self, paddr: PhysAddr) {
-        self.0 = (self.0 & !PHYS_ADDR_MASK) | ((paddr as u64 >> 2) & PHYS_ADDR_MASK);
+        self.0 = (self.0 & !PHYS_ADDR_MASK) | ((paddr.0 as u64 >> 2) & PHYS_ADDR_MASK);
     }
     fn set_flags(&mut self, flags: MMUFlags, _is_huge: bool) {
         let flags = PTF::from(flags) | PTF::ACCESSED | PTF::DIRTY;

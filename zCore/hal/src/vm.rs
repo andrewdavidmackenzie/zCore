@@ -128,12 +128,12 @@ pub trait GenericPageTable: Sync + Send {
                 let remains = end_vaddr - vaddr;
                 let page_size = if remains >= PageSize::Size1G as usize
                     && PageSize::Size1G.is_aligned(vaddr)
-                    && PageSize::Size1G.is_aligned(paddr)
+                    && PageSize::Size1G.is_aligned(paddr.0)
                 {
                     PageSize::Size1G
                 } else if remains >= PageSize::Size2M as usize
                     && PageSize::Size2M.is_aligned(vaddr)
-                    && PageSize::Size2M.is_aligned(paddr)
+                    && PageSize::Size2M.is_aligned(paddr.0)
                 {
                     PageSize::Size2M
                 } else {

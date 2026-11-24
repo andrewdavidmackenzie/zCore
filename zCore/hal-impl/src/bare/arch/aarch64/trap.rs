@@ -1,3 +1,4 @@
+use crate::PhysAddr;
 use crate::{Info, Kind, MMUFlags, Source};
 #[cfg(feature = "gic-400")]
 use ::drivers::irq::gic_400::get_irq_num;
@@ -45,8 +46,8 @@ pub fn trap_reason_from(esr: usize) -> TrapReason {
             use crate::hal_fn::mem::phys_to_virt;
             let gic_base = super::gic_base();
             let (gicc, gicd) = (
-                phys_to_virt(gic_base + super::drivers::GIC_GICC_OFFSET),
-                phys_to_virt(gic_base + super::drivers::GIC_GICD_OFFSET),
+                phys_to_virt(PhysAddr::new(gic_base + super::drivers::GIC_GICC_OFFSET)),
+                phys_to_virt(PhysAddr::new(gic_base + super::drivers::GIC_GICD_OFFSET)),
             );
             get_irq_num(gicc, gicd)
         }),
@@ -69,8 +70,8 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
             use crate::hal_fn::mem::phys_to_virt;
             let gic_base = super::gic_base();
             let irq_num = get_irq_num(
-                phys_to_virt(gic_base + super::drivers::GIC_GICC_OFFSET),
-                phys_to_virt(gic_base + super::drivers::GIC_GICD_OFFSET),
+                phys_to_virt(PhysAddr::new(gic_base + super::drivers::GIC_GICC_OFFSET)),
+                phys_to_virt(PhysAddr::new(gic_base + super::drivers::GIC_GICD_OFFSET)),
             );
             crate::interrupt::handle_irq(irq_num);
             // Timer IRQ: expire deadline wakeups and preempt the executor,

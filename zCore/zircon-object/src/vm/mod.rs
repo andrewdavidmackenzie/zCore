@@ -55,7 +55,7 @@ pub fn kernel_allocate_physical(
     mmu_flags: MMUFlags,
     cache_policy: CachePolicy,
 ) -> ZxResult<VirtAddr> {
-    if !page_aligned(paddr) {
+    if !page_aligned(paddr.0) {
         return Err(ZxError::INVALID_ARGS);
     }
     let size = roundup_pages(size);

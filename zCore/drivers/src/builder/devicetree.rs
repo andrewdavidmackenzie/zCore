@@ -216,7 +216,7 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
         let interrupts_extended = node.effective_interrupts(props);
         let base_vaddr = node
             .reg
-            .map(|(addr, size)| self.mmap(addr as _, size as _))
+            .map(|(addr, size)| self.mmap(PhysAddr::from(addr as usize), size as usize))
             .transpose();
         use crate::irq::*;
         let dev = Device::Irq(match () {
@@ -256,7 +256,7 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
 
         let interrupts_extended = node.effective_interrupts(props);
         let (addr, size) = node.reg.ok_or(DeviceError::InvalidParam)?;
-        let base_vaddr = self.mmap(addr as _, size as _)?;
+        let base_vaddr = self.mmap(PhysAddr::from(addr as usize), size as usize)?;
 
         let header =
             NonNull::new(base_vaddr as *mut VirtIOHeader).ok_or(DeviceError::InvalidParam)?;
@@ -284,7 +284,7 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
     fn parse_uart(&self, node: &NodeInfo, props: &InheritProps) -> DeviceResult<DevWithInterrupt> {
         let interrupts_extended = node.effective_interrupts(props);
         let (addr, size) = node.reg.ok_or(DeviceError::InvalidParam)?;
-        let base_vaddr = self.mmap(addr as _, size as _)?;
+        let base_vaddr = self.mmap(PhysAddr::from(addr as usize), size as usize)?;
 
         let dev = Device::Uart(match () {
             #[cfg(feature = "uart-16550")]

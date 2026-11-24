@@ -25,7 +25,7 @@ impl VMObjectPhysical {
     /// Create a new VMO representing a piece of contiguous physical memory.
     /// You must ensure nobody has the ownership of this piece of memory yet.
     pub fn new(paddr: PhysAddr, pages: usize) -> Arc<Self> {
-        assert!(page_aligned(paddr));
+        assert!(page_aligned(paddr.0));
         Arc::new(VMObjectPhysical {
             paddr,
             pages,

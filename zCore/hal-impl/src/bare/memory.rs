@@ -79,7 +79,7 @@ mod buddy {
             .for_each(|region| unsafe {
                 heap.transfer(
                     NonNull::new_unchecked(phys_to_virt(region.start) as *mut u8),
-                    region.len(),
+                    region.end.0 - region.start.0,
                 );
             });
     }

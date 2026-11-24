@@ -88,7 +88,10 @@ pub fn cmdline() -> String {
 
 pub fn init_ram_disk() -> Option<&'static mut [u8]> {
     INITRD_REGION.as_ref().map(|range| unsafe {
-        core::slice::from_raw_parts_mut(phys_to_virt(range.start) as *mut u8, range.len())
+        core::slice::from_raw_parts_mut(
+            phys_to_virt(range.start) as *mut u8,
+            range.end.0 - range.start.0,
+        )
     })
 }
 
@@ -107,7 +110,7 @@ pub fn primary_init_early() {
         let start = KCONFIG.initrd_start as usize;
         let end = start + KCONFIG.initrd_size as usize;
         log::info!("Initrd from boot info: {:#x}..{:#x}", start, end);
-        INITRD_REGION.init_once_by(Some(start..end));
+        INITRD_REGION.init_once_by(Some(PhysAddr::new(start)..PhysAddr::new(end)));
     }
 
     drivers::init_early();
@@ -136,7 +139,7 @@ pub fn gic_base() -> usize {
 fn parse_dtb(dtb_paddr: usize) {
     use ::drivers::utils::devicetree::Devicetree;
 
-    let dtb_vaddr = phys_to_virt(dtb_paddr);
+    let dtb_vaddr = phys_to_virt(PhysAddr::new(dtb_paddr));
     let dt = match Devicetree::from(dtb_vaddr) {
         Ok(dt) => dt,
         Err(e) => {
@@ -210,7 +213,7 @@ fn parse_dtb(dtb_paddr: usize) {
                 }
                 ekernel as *const () as usize & config::PHYS_ADDR_MASK
             };
-            let capped_end = end.min(kernel_end + 1024 * 1024 * 1024);
+            let capped_end = end.0.min(kernel_end + 1024 * 1024 * 1024);
             log::info!(
                 "DTB memory: {:#x}..{:#x}, usable end capped to {:#x}",
                 base,

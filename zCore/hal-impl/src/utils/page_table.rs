@@ -56,7 +56,7 @@ pub struct PageTableImpl<L: PageTableLevel, PTE: GenericPTE> {
 impl<L: PageTableLevel, PTE: GenericPTE> Drop for PageTableImpl<L, PTE> {
     fn drop(&mut self) {
         let table_phys = self.root.paddr();
-        if table_phys != 0 {
+        if table_phys.0 != 0 {
             crate::common::vm::wait_for_page_table_release(table_phys);
         }
         // Fields (root, intrm_tables) are dropped after this,
@@ -229,7 +229,7 @@ impl<L: PageTableLevel, PTE: GenericPTE> GenericPageTable for PageTableImpl<L, P
         if !entry.is_unused() {
             return Err(PagingError::AlreadyMapped);
         }
-        entry.set_addr(page.size.align_down(paddr));
+        entry.set_addr(PhysAddr::new(page.size.align_down(paddr.0)));
         entry.set_flags(flags, page.size.is_huge());
         crate::vm::flush_tlb(Some(page.vaddr));
         trace!(

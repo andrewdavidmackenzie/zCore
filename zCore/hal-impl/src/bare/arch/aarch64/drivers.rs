@@ -2,6 +2,7 @@
 // not by the GIC IRQ handler. The GIC handler is a no-op.
 #[cfg(not(feature = "board-jollac2"))]
 use crate::hal_fn::mem::phys_to_virt;
+use crate::PhysAddr;
 #[cfg(not(feature = "board-jollac2"))]
 use ::drivers::irq::gic_400;
 #[cfg(not(feature = "board-jollac2"))]
@@ -91,22 +92,22 @@ pub fn init_early() {
     // hang if the PL011 BUSY flag stays set after disable (ARM TRM:
     // BUSY reflects transmitter state, undefined after CR disable).
     #[cfg(feature = "board-raspi400")]
-    let uart = Arc::new(Pl011Uart::new_crlf(phys_to_virt(uart_base)));
+    let uart = Arc::new(Pl011Uart::new_crlf(phys_to_virt(PhysAddr::new(uart_base))));
     #[cfg(not(feature = "board-raspi400"))]
-    let uart = Arc::new(Pl011Uart::new(phys_to_virt(uart_base)));
+    let uart = Arc::new(Pl011Uart::new(phys_to_virt(PhysAddr::new(uart_base))));
 
     log::info!("PL011 UART initialized");
 
     // Pi 400: use non-secure Group 1 config (firmware leaves IRQs in Group 0)
     #[cfg(feature = "board-raspi400")]
     let gic = gic_400::init_nonsecure(
-        phys_to_virt(gic_base + GIC_GICC_OFFSET),
-        phys_to_virt(gic_base + GIC_GICD_OFFSET),
+        phys_to_virt(PhysAddr::new(gic_base + GIC_GICC_OFFSET)),
+        phys_to_virt(PhysAddr::new(gic_base + GIC_GICD_OFFSET)),
     );
     #[cfg(not(feature = "board-raspi400"))]
     let gic = gic_400::init(
-        phys_to_virt(gic_base + GIC_GICC_OFFSET),
-        phys_to_virt(gic_base + GIC_GICD_OFFSET),
+        phys_to_virt(PhysAddr::new(gic_base + GIC_GICC_OFFSET)),
+        phys_to_virt(PhysAddr::new(gic_base + GIC_GICD_OFFSET)),
     );
     log::info!("GIC-400 initialized");
     gic.irq_enable(TIMER_IRQ);
@@ -195,7 +196,7 @@ pub fn init_secondary_gic() {
 #[cfg(not(feature = "board-jollac2"))]
 pub fn init_secondary_gic() {
     let gic_base = super::gic_base();
-    let gicc_base = phys_to_virt(gic_base + GIC_GICC_OFFSET);
+    let gicc_base = phys_to_virt(PhysAddr::new(gic_base + GIC_GICC_OFFSET));
     unsafe {
         // Enable Group 1 interrupts
         core::ptr::write_volatile(gicc_base as *mut u32, 0x1);

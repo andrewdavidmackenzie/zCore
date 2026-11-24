@@ -18,8 +18,8 @@ pub type InterruptsProp = Vec<u32>;
 pub struct Devicetree {
     bootargs: Option<String>,
     timebase_frequency: Option<u32>,
-    initrd_start: Option<usize>,
-    initrd_end: Option<usize>,
+    initrd_start: Option<PhysAddr>,
+    initrd_end: Option<PhysAddr>,
     memory_regions: Vec<Range<PhysAddr>>,
     cpu_count: usize,
     /// Device addresses keyed by compatible string (first match wins).
@@ -344,7 +344,9 @@ impl Devicetree {
                 let ctx_name = &current_node[..current_node_len];
                 if ctx_name.starts_with(b"memory") {
                     for range in reg {
-                        result.memory_regions.push(range);
+                        result
+                            .memory_regions
+                            .push(PhysAddr::from(range.start)..PhysAddr::from(range.end));
                     }
                 }
                 StepOver
@@ -372,9 +374,9 @@ impl Devicetree {
                             result.bootargs = Some(s.trim_end_matches('\0').into());
                         }
                     } else if name == Str::from("linux,initrd-start") {
-                        result.initrd_start = parse_u64(value);
+                        result.initrd_start = parse_u64(value).map(PhysAddr::from);
                     } else if name == Str::from("linux,initrd-end") {
-                        result.initrd_end = parse_u64(value);
+                        result.initrd_end = parse_u64(value).map(PhysAddr::from);
                     }
                 } else if ctx_name == b"cpus" && name == Str::from("timebase-frequency") {
                     result.timebase_frequency = parse_u32(value);
