@@ -102,12 +102,6 @@ impl Futex {
             );
             #[cfg(feature = "invariant-checks")]
             let queued = inner.waiter_queue.len();
-            #[cfg(feature = "invariant-checks")]
-            let departing_queued = inner
-                .waiter_queue
-                .iter()
-                .filter(|w| w.inner.lock().departing)
-                .count();
             let mut collected = alloc::vec::Vec::new();
             let mut remaining = wake_count;
             while remaining > 0 {
@@ -139,15 +133,17 @@ impl Futex {
                 queued
             );
             // INV-FUTEX-2: departing waiters never consume a wake
-            // slot — exactly min(wake_count, non-departing queued)
-            // (#862/#875).
+            // slot — the loop runs until the budget is spent or the
+            // queue is exhausted (#862/#875). Race-free form: a
+            // waiter's `departing` flag is set under WaiterInner only,
+            // so any exact non-departing count races with concurrent
+            // drops (review finding on #891).
             inv!(
-                collected.len() == wake_count.min(queued - departing_queued),
-                "INV-FUTEX-2: wake({}) returned {} with {} queued ({} departing)",
+                collected.len() == wake_count || inner.waiter_queue.is_empty(),
+                "INV-FUTEX-2: wake({}) returned {} with {} still queued",
                 wake_count,
                 collected.len(),
-                queued,
-                departing_queued
+                queued
             );
             inv!(inner.owner.is_none(), "INV-FUTEX-3: owner set during wake");
             collected
@@ -468,6 +464,20 @@ impl Futex {
             };
             let owner = popped.as_ref().and_then(|w| w.thread.clone());
             inner.set_owner(owner.clone());
+            // INV-FUTEX-4: the owner is the woken waiter's thread, or
+            // none when no waiter was popped / the waiter is
+            // threadless (zx_futex_wake_single_owner).
+            inv!(
+                match (&popped, &inner.owner) {
+                    (Some(w), Some(t)) => {
+                        w.thread.as_ref().is_some_and(|wt| Arc::ptr_eq(wt, t))
+                    }
+                    (None, None) => true,
+                    (Some(w), None) => w.thread.is_none(),
+                    (None, Some(_)) => false,
+                },
+                "INV-FUTEX-4: owner does not match the woken waiter's thread"
+            );
             (popped, owner)
         };
         if let Some(waiter) = waiter_to_wake {
@@ -581,9 +591,22 @@ impl Futex {
         // (which searches the SOURCE queue), consuming future wakes.
         let mut waiters_to_requeue: alloc::vec::Vec<_> = alloc::vec::Vec::new();
         let mut remaining = requeue_count;
+        // Departing waiters are popped and discarded (they belong to a
+        // dropping future) — they enter neither the woken nor the
+        // requeued set, so conservation must count them explicitly
+        // (review finding on #891). The counter is only read by the
+        // INV-FUTEX-5 assert, so it exists only in feature builds.
+        #[cfg(feature = "invariant-checks")]
+        let mut discarded_departing = 0usize;
         while remaining > 0 {
             match inner.waiter_queue.pop_front() {
-                Some(w) if w.inner.lock().departing => continue,
+                Some(w) if w.inner.lock().departing => {
+                    #[cfg(feature = "invariant-checks")]
+                    {
+                        discarded_departing += 1;
+                    }
+                    continue;
+                }
                 Some(w) => {
                     waiters_to_requeue.push(w);
                     remaining -= 1;
@@ -591,6 +614,20 @@ impl Futex {
                 None => break,
             }
         }
+        // INV-FUTEX-5: requeue conserves waiters — every waiter is
+        // woken, requeued, discarded (departing), or still on the
+        // source queue. Asserted under both continuously held locks.
+        inv!(
+            woken + waiters_to_requeue.len() + discarded_departing
+                + inner.waiter_queue.len()
+                == inv_pre.1,
+            "INV-FUTEX-5: requeue lost or duplicated waiters (woken {} + requeued {} + discarded {} + remaining {} != {})",
+            woken,
+            waiters_to_requeue.len(),
+            discarded_departing,
+            inner.waiter_queue.len(),
+            inv_pre.1
+        );
         // set owner
         inner.set_owner(None);
         new_inner.set_owner(new_requeue_owner.clone());

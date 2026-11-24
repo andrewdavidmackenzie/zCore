@@ -1429,19 +1429,22 @@ impl ProcessInner {
             "INV-PROCESS-3: handle key {:#x} already present",
             key
         );
-        #[cfg(feature = "invariant-checks")]
-        let count_before = handle.object.handle_count();
         handle.object.inc_handle_count();
         self.handles.insert(key, (handle, Vec::new()));
         // INV-PROCESS-4: the object's handle count is incremented
-        // exactly when the handle enters the table.
+        // when the handle enters the table. Race-free form only: the
+        // count is a global atomic shared across processes, so a
+        // before/after snapshot can false-positive under concurrent
+        // handle operations from other processes (review finding on
+        // #891). The checkable local property: an object with a
+        // handle in a table has a positive count (this handle's
+        // reference guarantees at least one).
         #[cfg(feature = "invariant-checks")]
         {
             let stored = &self.handles.get(&key).unwrap().0;
-            assert_eq!(
-                stored.object.handle_count(),
-                count_before + 1,
-                "INV-PROCESS-4: handle_count not paired with table insert"
+            assert!(
+                stored.object.handle_count() >= 1,
+                "INV-PROCESS-4: handle in table but count is zero"
             );
         }
         key
@@ -1459,19 +1462,16 @@ impl ProcessInner {
             .handles
             .remove(&handle_value)
             .ok_or(ZxError::BAD_HANDLE)?;
-        #[cfg(feature = "invariant-checks")]
-        let count_before = handle.object.handle_count();
+        // INV-PROCESS-4: the count is decremented exactly when the
+        // handle leaves the table. Race-free form: this handle's
+        // existence holds one reference, so the count must be
+        // positive before the decrement — a zero here means an
+        // unpaired decrement (review finding on #891).
+        inv!(
+            handle.object.handle_count() >= 1,
+            "INV-PROCESS-4: dec_handle_count on a zero count"
+        );
         handle.object.dec_handle_count();
-        // INV-PROCESS-4: the object's handle count is decremented
-        // exactly when the handle leaves the table.
-        #[cfg(feature = "invariant-checks")]
-        {
-            assert_eq!(
-                handle.object.handle_count() + 1,
-                count_before,
-                "INV-PROCESS-4: handle_count not paired with table removal"
-            );
-        }
         for sender in queue {
             let _ = sender.send(());
         }
