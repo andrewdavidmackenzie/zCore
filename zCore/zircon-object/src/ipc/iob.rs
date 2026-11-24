@@ -20,6 +20,7 @@ pub const IOB_MAX_REGIONS: usize = 64;
 pub const IOB_DISCIPLINE_NONE: u32 = 0;
 /// ID allocator discipline: thread-safe atomic ID assignment.
 pub const IOB_DISCIPLINE_ID_ALLOCATOR: u32 = 1;
+pub const IOB_DISCIPLINE_MEDIATED_WRITE_RING_BUFFER: u32 = 2;
 
 /// Per-region ID allocator state.
 struct IdAllocator {
@@ -80,6 +81,28 @@ impl IoBufferRegion {
             access,
             discipline: IOB_DISCIPLINE_ID_ALLOCATOR,
             id_allocator: Some(Arc::new(KernelMutex::new(IdAllocator::new()))),
+        }
+    }
+
+    /// Create a new IOBuffer region with an explicit discipline type
+    /// (e.g. `ZX_IOB_DISCIPLINE_TYPE_MEDIATED_WRITE_RING_BUFFER`).
+    ///
+    /// The mediated ring-buffer discipline is accepted at creation
+    /// time; its kernel-mediated operations are not yet implemented —
+    /// mapped read/write access works, mediated writes return
+    /// NOT_SUPPORTED.
+    pub fn new_with_discipline(
+        vmo: Arc<VmObject>,
+        size: usize,
+        access: u64,
+        discipline: u64,
+    ) -> Self {
+        Self {
+            vmo,
+            size,
+            access,
+            discipline: discipline as u32,
+            id_allocator: None,
         }
     }
 

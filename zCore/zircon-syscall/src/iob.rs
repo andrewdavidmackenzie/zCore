@@ -1,5 +1,5 @@
 use super::*;
-use zircon_object::ipc::{IoBuffer, IoBufferRegion, IOB_MAX_REGIONS};
+use zircon_object::ipc::{IoBuffer, IoBufferRegion, IoBufferSharedRegion, IOB_MAX_REGIONS};
 use zircon_object::vm::{pages, VmObject};
 
 impl Syscall<'_> {
@@ -8,9 +8,19 @@ impl Syscall<'_> {
     /// IOBuffers are shared-memory IPC primitives with configurable
     /// per-region access control. Returns handles to both endpoints.
     ///
-    /// `options` must be 0.
-    /// `regions_ptr` points to an array of region descriptors.
-    /// `region_count` is the number of regions (max 64).
+    /// `options` must be 0. `regions_ptr` points to an array of region
+    /// descriptors. `region_count` is the number of regions (max 64).
+    ///
+    /// Region descriptor: `zx_iob_region_t`
+    /// (zircon/syscalls/iob.h + syscalls-next.h), repr(C), 120 bytes:
+    /// ```text
+    ///   0:  type       (u32) — 0 = PRIVATE, 1 = SHARED
+    ///   4:  access     (u32) — ZX_IOB_ACCESS_* bitfield (8 bits)
+    ///   8:  size       (u64) — PRIVATE: region size; SHARED: ignored
+    ///  16:  discipline (72 bytes: type u64 + 64 reserved)
+    ///  88:  extension  (32 bytes; SHARED: options u32, handle u32,
+    ///                  padding u64[3])
+    /// ```
     pub fn sys_iob_create(
         &self,
         options: u64,
@@ -34,52 +44,70 @@ impl Syscall<'_> {
         }
 
         // Read region descriptors from userspace as raw bytes.
-        // Each descriptor is 64 bytes. We parse fields manually to
-        // avoid unsafe reinterpret casts (crate denies unsafe).
-        let desc_size = 64usize;
-        let total_bytes = region_count * desc_size;
-        let raw = regions_ptr.read_array(total_bytes)?;
+        // We parse fields manually to avoid unsafe reinterpret casts
+        // (crate denies unsafe).
+        const DESC_SIZE: usize = 120; // sizeof(zx_iob_region_t)
+        const ZX_IOB_REGION_TYPE_PRIVATE: u32 = 0;
+        const ZX_IOB_REGION_TYPE_SHARED: u32 = 1;
+        const ZX_IOB_DISCIPLINE_TYPE_NONE: u64 = 0;
+        const ZX_IOB_DISCIPLINE_TYPE_ID_ALLOCATOR: u64 = 1;
+        const ZX_IOB_DISCIPLINE_TYPE_MEDIATED_WRITE_RING_BUFFER: u64 = 2;
 
+        let raw = regions_ptr.read_array(region_count * DESC_SIZE)?;
+
+        let proc = self.thread.proc();
         let mut regions = alloc::vec::Vec::with_capacity(region_count);
         for i in 0..region_count {
-            let b = i * desc_size;
-            // IobRegionDesc field offsets (repr(C)):
-            // 0: region_type (u32), 8: access (u64), 16: size (u64)
+            let b = i * DESC_SIZE;
             let region_type = u32::from_ne_bytes([raw[b], raw[b + 1], raw[b + 2], raw[b + 3]]);
-            let access = u64::from_ne_bytes([
-                raw[b + 8],
-                raw[b + 9],
-                raw[b + 10],
-                raw[b + 11],
-                raw[b + 12],
-                raw[b + 13],
-                raw[b + 14],
-                raw[b + 15],
-            ]);
-            let size = u64::from_ne_bytes([
-                raw[b + 16],
-                raw[b + 17],
-                raw[b + 18],
-                raw[b + 19],
-                raw[b + 20],
-                raw[b + 21],
-                raw[b + 22],
-                raw[b + 23],
-            ]);
+            let access =
+                u32::from_ne_bytes([raw[b + 4], raw[b + 5], raw[b + 6], raw[b + 7]]) as u64;
+            let size = u64::from_le_bytes(raw[b + 8..b + 16].try_into().unwrap());
+            let discipline_type = u64::from_le_bytes(raw[b + 16..b + 24].try_into().unwrap());
 
-            if region_type != 0 {
+            if access & !0xff != 0 {
                 return Err(ZxError::INVALID_ARGS);
             }
-            if size == 0 {
-                return Err(ZxError::INVALID_ARGS);
+            match discipline_type {
+                ZX_IOB_DISCIPLINE_TYPE_NONE
+                | ZX_IOB_DISCIPLINE_TYPE_ID_ALLOCATOR
+                | ZX_IOB_DISCIPLINE_TYPE_MEDIATED_WRITE_RING_BUFFER => {}
+                _ => return Err(ZxError::NOT_SUPPORTED),
             }
-            let num_pages = pages(size as usize);
-            let vmo = VmObject::new_paged(num_pages);
-            regions.push(IoBufferRegion::new(vmo, size as usize, access));
+
+            let (vmo, region_size) = match region_type {
+                ZX_IOB_REGION_TYPE_PRIVATE => {
+                    if size == 0 {
+                        return Err(ZxError::INVALID_ARGS);
+                    }
+                    let num_pages = pages(size as usize);
+                    (VmObject::new_paged(num_pages), size as usize)
+                }
+                ZX_IOB_REGION_TYPE_SHARED => {
+                    // The region references an existing shared region
+                    // (created via zx_iob_create_shared_region) by
+                    // handle, carried in the extension:
+                    // zx_iob_region_shared_t at offset 88:
+                    // options u32, shared_region handle u32, padding.
+                    let handle_value =
+                        u32::from_le_bytes(raw[b + 92..b + 96].try_into().unwrap()) as HandleValue;
+                    let shared = proc
+                        .get_object_with_rights::<IoBufferSharedRegion>(handle_value, Rights::READ)
+                        .map_err(|_| ZxError::INVALID_ARGS)?;
+                    (shared.vmo().clone(), shared.size())
+                }
+                _ => return Err(ZxError::INVALID_ARGS),
+            };
+
+            let region = if discipline_type == ZX_IOB_DISCIPLINE_TYPE_ID_ALLOCATOR {
+                IoBufferRegion::new_with_id_allocator(vmo, region_size, access)
+            } else {
+                IoBufferRegion::new_with_discipline(vmo, region_size, access, discipline_type)
+            };
+            regions.push(region);
         }
 
         let (ep0, ep1) = IoBuffer::create(regions)?;
-        let proc = self.thread.proc();
         let handle0 = proc.add_handle(Handle::new(ep0, Rights::DEFAULT_IOB));
         let handle1 = proc.add_handle(Handle::new(ep1, Rights::DEFAULT_IOB));
 

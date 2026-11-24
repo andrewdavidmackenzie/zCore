@@ -1489,8 +1489,9 @@ impl Syscall<'_> {
                 a2 as _,
                 a3 as _,
                 a4 as _,
-                a5 as _,
-                a6.into(),
+                a5 as u64,
+                a6 as _,
+                a7.into(),
             ),
             Sys::PAGER_QUERY_DIRTY_RANGES => self.sys_pager_query_dirty_ranges(
                 a0 as _,
