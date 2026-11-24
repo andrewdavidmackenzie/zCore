@@ -325,6 +325,19 @@ extern "C" fn ap_entry() -> ! {
         use x86_64::registers::control::{Cr0, Cr0Flags};
         Cr0::update(|f| f.remove(Cr0Flags::EMULATE_COPROCESSOR));
     }
+    // Enable the local APIC on this AP *before* any APIC access.
+    //
+    // The x2apic crate upgrades the APIC to x2APIC (MSR) mode when
+    // CPUID advertises it — under KVM's `-cpu host` the BSP did so,
+    // and the shared LOCAL_APIC static records that mode. x2APIC is
+    // PER-CPU: this AP still runs in xAPIC (MMIO) mode until it
+    // enables x2APIC on itself, and touching x2APIC MSRs (0x800-0x8FF)
+    // before that raises #GP on real hardware/KVM. (QEMU's TCG with
+    // the qemu64 model never advertises x2APIC, so this only
+    // manifests under KVM/pass-through — found via the panic frame:
+    // "Unhandled kernel trap" at ap_entry's rdmsr.)
+    ::drivers::irq::x86::Apic::init_local_apic_ap();
+
     // Disable the APIC timer immediately to prevent stale UEFI
     // timer configs from firing before timer_init() runs. With
     // one-shot timers, a stale timer could fire during AP startup
