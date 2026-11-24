@@ -78,6 +78,114 @@ pub(super) fn super_timer() {
     crate::timer::timer_tick();
 }
 
+/// Attempt recovery from a kernel-mode #GP by skipping the faulting
+/// instruction when it is an MSR access (`rdmsr` = `0F 32`,
+/// `wrmsr` = `0F 30`).
+///
+/// #GP from these two instructions means the MSR does not exist on
+/// this CPU — e.g. x2APIC MSRs touched before enabling x2APIC mode,
+/// or model-specific registers absent under a particular
+/// virtualization configuration. Both instructions are fixed 2-byte
+/// encodings, so the recovery is well-defined: advance RIP past the
+/// instruction and, for reads, zero the result registers (the MSR
+/// "reads as zero"). The system keeps running (with an error logged)
+/// instead of parking the CPU in a panic loop.
+///
+/// This is deliberately narrow: only MSR accesses are skipped, only
+/// in kernel mode. Any other #GP is still fatal — skipping an
+/// arbitrary faulting instruction is unsafe.
+///
+/// Returns `true` if recovered (`tf` updated; the caller returns and
+/// the trap.S restore path resumes past the instruction).
+fn try_recover_kernel_gp(tf: &mut TrapFrame) -> bool {
+    if tf.trap_num != 0x0d {
+        return false;
+    }
+    // The instruction bytes at the faulting RIP. Kernel text is
+    // always mapped — a code-fetch fault would be a #PF, not #GP —
+    // so this read is safe.
+    let code = unsafe { core::slice::from_raw_parts(tf.rip as *const u8, 2) };
+    let cpu = super::cpu::cpu_id();
+    match code {
+        [0x0f, 0x32] => {
+            // rdmsr: ECX holds the MSR index at fault time; the
+            // result registers are undefined on #GP — zero them.
+            error!(
+                "rdmsr({:#x}) #GP at rip={:#x} on CPU{}: MSR not present — \
+                 skipping instruction, result zeroed",
+                tf.rcx, tf.rip, cpu
+            );
+            tf.rax = 0;
+            tf.rdx = 0;
+            tf.rip += 2;
+            true
+        }
+        [0x0f, 0x30] => {
+            // wrmsr: the write simply did not happen.
+            error!(
+                "wrmsr({:#x}) #GP at rip={:#x} on CPU{}: MSR not present — \
+                 skipping instruction (write dropped)",
+                tf.rcx, tf.rip, cpu
+            );
+            tf.rip += 2;
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Print a complete trap-frame dump through the early console, then
+/// park this CPU with a short panic.
+///
+/// Kernel-mode traps that reach here are unrecoverable kernel bugs —
+/// resuming would re-execute the faulting instruction forever. But
+/// the diagnosis must not be lost: the dump goes through the direct
+/// early-console path (no log filtering, no console-lock contention)
+/// BEFORE the panic machinery, which is where messages were lost
+/// historically (the KVM x2APIC #GP: 7 CPUs parked with no output).
+fn kernel_trap_fatal(reason: &str, tf: &TrapFrame) -> ! {
+    // Instruction bytes at the faulting RIP — the single most useful
+    // diagnostic (identifies the faulting instruction). Kernel text
+    // is always mapped (a code-fetch fault would be #PF, not #GP), so
+    // a plain 8-byte read is safe.
+    let mut code = [0u8; 8];
+    unsafe { core::ptr::copy_nonoverlapping(tf.rip as *const u8, code.as_mut_ptr(), 8) };
+    crate::console::console_write_fmt(format_args!(
+        "\n[ktrap] CPU{} {}: trap_num={:#x} error_code={:#x}\n\
+         [ktrap] rip={:#x} cs={:#x} rflags={:#x} rsp={:#x}\n\
+         [ktrap] rax={:#x} rbx={:#x} rcx={:#x} rdx={:#x}\n\
+         [ktrap] rsi={:#x} rdi={:#x} rbp={:#x} r8={:#x}\n\
+         [ktrap] r9={:#x} r10={:#x} r11={:#x} r12={:#x}\n\
+         [ktrap] r13={:#x} r14={:#x} r15={:#x}\n\
+         [ktrap] code@rip: {:02x?}\n",
+        super::cpu::cpu_id(),
+        reason,
+        tf.trap_num,
+        tf.error_code,
+        tf.rip,
+        tf.cs,
+        tf.rflags,
+        tf.rsp,
+        tf.rax,
+        tf.rbx,
+        tf.rcx,
+        tf.rdx,
+        tf.rsi,
+        tf.rdi,
+        tf.rbp,
+        tf.r8,
+        tf.r9,
+        tf.r10,
+        tf.r11,
+        tf.r12,
+        tf.r13,
+        tf.r14,
+        tf.r15,
+        &code,
+    ));
+    panic!("kernel trap: {} (trap_num={:#x})", reason, tf.trap_num);
+}
+
 #[no_mangle]
 pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
     trace!(
@@ -119,14 +227,20 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
                 executor::handle_timeout();
             }
         }
-        other => {
+        _other => {
             // If the trap came from user mode (RPL=3 in CS), forward
             // it to the kernel handler for Zircon exception delivery.
-            // Only panic for kernel-mode traps.
+            // Only treat kernel-mode traps as fatal.
             if tf.cs & 3 == 3 {
                 crate::KHANDLER.handle_user_trap(tf.trap_num, tf.error_code);
             } else {
-                panic!("Unhandled kernel trap {:x?} {:#x?}", other, tf);
+                // Kernel mode: attempt bounded recovery (skipping MSR
+                // accesses that faulted because the MSR doesn't exist
+                // on this CPU) before declaring the trap fatal.
+                if try_recover_kernel_gp(tf) {
+                    return; // tf updated; trap.S resumes past the instruction
+                }
+                kernel_trap_fatal("unhandled kernel trap", tf);
             }
         }
     }

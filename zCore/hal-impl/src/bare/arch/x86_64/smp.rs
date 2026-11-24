@@ -336,6 +336,10 @@ extern "C" fn ap_entry() -> ! {
     // the qemu64 model never advertises x2APIC, so this only
     // manifests under KVM/pass-through — found via the panic frame:
     // "Unhandled kernel trap" at ap_entry's rdmsr.)
+    //
+    // try_recover_kernel_gp in trap.rs also covers this class of
+    // fault defensively (skip + zero), so a missed ordering cannot
+    // take down the CPU.
     ::drivers::irq::x86::Apic::init_local_apic_ap();
 
     // Disable the APIC timer immediately to prevent stale UEFI
