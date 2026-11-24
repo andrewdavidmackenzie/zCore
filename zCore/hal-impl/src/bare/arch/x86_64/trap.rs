@@ -70,8 +70,10 @@ pub(super) const _X86_ISA_IRQ_CMOSRTC: usize = 8;
 pub(super) const _X86_ISA_IRQ_MOUSE: usize = 12;
 pub(super) const _X86_ISA_IRQ_IDE: usize = 14;
 
-fn breakpoint() {
-    panic!("\nEXCEPTION: Breakpoint");
+/// Handle a kernel-mode breakpoint trap: fatal with a full dump
+/// (routed through the same no-panic path as other kernel traps).
+fn breakpoint(tf: &TrapFrame) -> ! {
+    kernel_trap_fatal("kernel-mode breakpoint", tf)
 }
 
 pub(super) fn super_timer() {
@@ -134,22 +136,29 @@ fn try_recover_kernel_gp(tf: &mut TrapFrame) -> bool {
     }
 }
 
-/// Print a complete trap-frame dump through the early console, then
-/// park this CPU with a short panic.
+/// Handle an unrecoverable kernel-mode trap: dump the complete frame
+/// through the early console, kill the current thread, and halt this
+/// CPU.
 ///
-/// Kernel-mode traps that reach here are unrecoverable kernel bugs —
-/// resuming would re-execute the faulting instruction forever. But
-/// the diagnosis must not be lost: the dump goes through the direct
+/// The kernel never panics here. The dump goes through the direct
 /// early-console path (no log filtering, no console-lock contention)
-/// BEFORE the panic machinery, which is where messages were lost
+/// BEFORE anything else — that is where messages were lost
 /// historically (the KVM x2APIC #GP: 7 CPUs parked with no output).
-fn kernel_trap_fatal(reason: &str, tf: &TrapFrame) -> ! {
+///
+/// After the dump, [`KernelHandler::handle_kernel_trap_fatal`] lets
+/// the kernel kill the current thread so the rest of the system
+/// observes the death (waiters woken, crashsvc runs). Then this CPU
+/// halts: there is no safe way to unwind a kernel-mode fault through
+/// possibly-held locks, and returning would re-execute the faulting
+/// instruction forever. Every other CPU keeps running.
+fn kernel_trap_fatal(reason: &'static str, tf: &TrapFrame) -> ! {
     // Instruction bytes at the faulting RIP — the single most useful
     // diagnostic (identifies the faulting instruction). Kernel text
     // is always mapped (a code-fetch fault would be #PF, not #GP), so
     // a plain 8-byte read is safe.
     let mut code = [0u8; 8];
     unsafe { core::ptr::copy_nonoverlapping(tf.rip as *const u8, code.as_mut_ptr(), 8) };
+    let cpu = super::cpu::cpu_id();
     crate::console::console_write_fmt(format_args!(
         "\n[ktrap] CPU{} {}: trap_num={:#x} error_code={:#x}\n\
          [ktrap] rip={:#x} cs={:#x} rflags={:#x} rsp={:#x}\n\
@@ -158,7 +167,7 @@ fn kernel_trap_fatal(reason: &str, tf: &TrapFrame) -> ! {
          [ktrap] r9={:#x} r10={:#x} r11={:#x} r12={:#x}\n\
          [ktrap] r13={:#x} r14={:#x} r15={:#x}\n\
          [ktrap] code@rip: {:02x?}\n",
-        super::cpu::cpu_id(),
+        cpu,
         reason,
         tf.trap_num,
         tf.error_code,
@@ -183,7 +192,24 @@ fn kernel_trap_fatal(reason: &str, tf: &TrapFrame) -> ! {
         tf.r15,
         &code,
     ));
-    panic!("kernel trap: {} (trap_num={:#x})", reason, tf.trap_num);
+    // Let the kernel kill the current thread (if any) so the rest of
+    // the system observes the death. Must not unwind; the handler is
+    // advisory.
+    use hal::kernel_handler::KernelTrapInfo;
+    crate::KHANDLER.handle_kernel_trap_fatal(&KernelTrapInfo {
+        trap_num: tf.trap_num,
+        error_code: tf.error_code,
+        rip: tf.rip,
+        rsp: tf.rsp,
+        cpu: cpu as usize,
+        reason,
+    });
+    // Terminal state for THIS CPU only: interrupts off, sleep forever.
+    // Other CPUs keep running (and can reap the killed thread).
+    crate::interrupt::intr_off();
+    loop {
+        unsafe { core::arch::asm!("hlt") };
+    }
 }
 
 #[no_mangle]
@@ -195,7 +221,7 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
     );
 
     match trap_reason_from(tf.trap_num, tf.error_code) {
-        TrapReason::HardwareBreakpoint | TrapReason::SoftwareBreakpoint => breakpoint(),
+        TrapReason::HardwareBreakpoint | TrapReason::SoftwareBreakpoint => breakpoint(tf),
         TrapReason::PageFault(vaddr, flags) => {
             // On x86, the PRESENT bit in the error code distinguishes
             // unmapped pages (bit 0 = 0) from permission violations

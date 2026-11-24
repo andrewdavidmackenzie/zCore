@@ -1,5 +1,6 @@
-use hal_impl::{KernelHandler, MMUFlags, PhysAddr};
+use hal_impl::{KernelHandler, KernelTrapInfo, MMUFlags, PhysAddr};
 use zircon_object::object::KernelObject;
+use zircon_object::task::Task;
 use zircon_object::task::Thread;
 
 pub struct ZcoreKernelHandler;
