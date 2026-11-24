@@ -318,6 +318,20 @@ extern "C" fn ap_entry() -> ! {
             f.insert(Cr4Flags::OSFXSR);
             f.insert(Cr4Flags::OSXMMEXCPT_ENABLE);
         });
+        // Enable AVX for user-space on this AP (see the BSP's
+        // primary_init for the rationale: VEX-encoded instructions
+        // #UD without OSXSAVE + XCR0.AVX — the virtual-console.cm
+        // crash). CPUID-gated.
+        {
+            let features = raw_cpuid::CpuId::new().get_feature_info();
+            let has_xsave = features.as_ref().is_some_and(|f| f.has_xsave());
+            let has_avx = features.as_ref().is_some_and(|f| f.has_avx());
+            if has_xsave && has_avx {
+                use x86_64::registers::xcontrol::{XCr0, XCr0Flags};
+                Cr4::update(|f| f.insert(Cr4Flags::OSXSAVE));
+                XCr0::write(XCr0Flags::X87 | XCr0Flags::SSE | XCr0Flags::AVX);
+            }
+        }
         // Enable SMAP on APs if the BSP detected support.
         crate::user::init_smap();
 

@@ -107,6 +107,30 @@ pub fn primary_init() {
             f.insert(Cr4Flags::OSXMMEXCPT_ENABLE); // enable SSE exceptions
         });
 
+        // Enable AVX for user-space: VEX-encoded instructions (vmovups
+        // etc.) raise #UD unless CR4.OSXSAVE is set and XCR0 enables
+        // the AVX state. auto-vectorized Rust code (carnelian's
+        // message/pixel paths in virtual-console) uses them — the
+        // virtual-console.cm #UD crash (#523). Gated on CPUID: XSAVE
+        // (leaf 1, ECX bit 26) and AVX (leaf 1, ECX bit 28).
+        //
+        // NOTE: the user-context switch uses FXSAVE/FXRSTOR, which
+        // covers only the x87/SSE (XMM) state; the YMM upper halves
+        // are not preserved across context switches. Correct AVX
+        // context switching needs XSAVE/XRSTOR with a variable-size
+        // area — future work; single-threaded AVX users work today.
+        {
+            let features = raw_cpuid::CpuId::new().get_feature_info();
+            let has_xsave = features.as_ref().is_some_and(|f| f.has_xsave());
+            let has_avx = features.as_ref().is_some_and(|f| f.has_avx());
+            if has_xsave && has_avx {
+                use x86_64::registers::control::Cr4;
+                use x86_64::registers::xcontrol::{XCr0, XCr0Flags};
+                Cr4::update(|f| f.insert(Cr4Flags::OSXSAVE));
+                XCr0::write(XCr0Flags::X87 | XCr0Flags::SSE | XCr0Flags::AVX);
+            }
+        }
+
         // Detect SMAP support and enable it if available.
         // copy_from_user/copy_to_user APIs bracket user memory access
         // with stac/clac when SMAP is active.
