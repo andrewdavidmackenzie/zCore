@@ -73,7 +73,35 @@ impl Future for SleepFuture {
         }
         if self.deadline.as_nanos() < i64::MAX as u128 {
             let waker = cx.waker().clone();
-            timer::timer_set(self.deadline, Box::new(move |_| waker.wake_by_ref()));
+            let waker2 = cx.waker().clone();
+            // #523/#829: `Timer::expire` calls this callback and then
+            // DROPS its box while the NAIVE_TIMER IrqLock is held with
+            // interrupts disabled. `wake_by_ref` itself is lock-free
+            // (an atomic notification) and safe there — but the box's
+            // captured Waker may be the LAST reference to a completed
+            // task's waker machinery, and dropping it cascades into
+            // task/future teardown (`CurrentThread::drop →
+            // Process::terminate → VMAR locks`): KernelMutex work that
+            // cannot yield under the timer spinlock — the residual
+            // mutex.rs nested-spin panic during crash teardowns
+            // (caught live via the lock_anomaly_detected breakpoint).
+            // So: wake inline (no added latency), but defer the
+            // potentially-heavy drop to the drain task.
+            timer::timer_set(
+                self.deadline,
+                Box::new(move |now| {
+                    waker.wake_by_ref();
+                    crate::timer::defer_timer_callback(
+                        // The closure owns waker2; it drops when the
+                        // drain task drops this Arc — never inside the
+                        // timer spinlock.
+                        Arc::new(move |_| {
+                            let _keep_alive = &waker2;
+                        }),
+                        now,
+                    );
+                }),
+            );
             // Re-check after registering the timer. For very short
             // deadlines (e.g., 1 usec), the deadline may have passed
             // during the timer_set call. Without this check, we'd
@@ -142,8 +170,26 @@ impl Future for DisplayFlushFuture {
             self.display.flush().ok();
             let frame_time = self.frame_time;
             self.next_flush_time += frame_time;
+            // Same #523/#829 pattern as SleepFuture: wake inline
+            // (lock-free), defer the Waker drop out of the timer
+            // spinlock — it may be the task's last reference.
             let waker = cx.waker().clone();
-            timer::timer_set(self.next_flush_time, Box::new(move |_| waker.wake_by_ref()));
+            let waker2 = cx.waker().clone();
+            timer::timer_set(
+                self.next_flush_time,
+                Box::new(move |now| {
+                    waker.wake_by_ref();
+                    crate::timer::defer_timer_callback(
+                        // The closure owns waker2; it drops when the
+                        // drain task drops this Arc — never inside the
+                        // timer spinlock.
+                        Arc::new(move |_| {
+                            let _keep_alive = &waker2;
+                        }),
+                        now,
+                    );
+                }),
+            );
         }
         Poll::Pending
     }

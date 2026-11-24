@@ -824,6 +824,32 @@ async fn handler_user_trap(
 ) -> Result<(), ExceptionInfo> {
     let reason = ctx.trap_reason();
 
+    // #862 fix: IDT entries are interrupt gates (IF cleared on trap
+    // entry), and the `__from_user` path resumes this coroutine
+    // WITHOUT restoring IF — everything from here until the first
+    // await runs with interrupts disabled. The synchronous work below
+    // (page-fault handling, the deferred kill) contends KernelMutexes;
+    // with IF=0 a contended lock cannot yield and escalates to the
+    // mutex.rs nested-spin panic (the historical crash-cascade
+    // multi-CPU panics). Re-enable interrupts for everything except
+    // IRQ dispatch, which must stay non-nesting.
+    if !matches!(reason, TrapReason::Interrupt(_)) {
+        hal_impl::interrupt::intr_on();
+    }
+
+    // A thread killed while executing in user mode exits here instead
+    // of processing the trap: Zircon threads die at their next kernel
+    // entry after zx_task_kill, and a killed thread must not execute
+    // further syscalls. This is task context, so the terminal-state
+    // machinery (exception dispatch, teardown) runs with full lock and
+    // yield freedom.
+    if thread.state() == ThreadState::Dying || thread.state() == ThreadState::Dead {
+        return Err(ExceptionInfo {
+            type_: ExceptionType::ThreadExiting,
+            synth_code: 0,
+        });
+    }
+
     if let TrapReason::Syscall = reason {
         let num = syscall_num(&ctx);
         let args = syscall_args(&ctx);

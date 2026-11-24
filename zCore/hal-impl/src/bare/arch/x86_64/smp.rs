@@ -379,6 +379,7 @@ pub fn boot_application_processors() {
         warn!("No ACPI RSDP -- cannot enumerate APs, skipping SMP boot");
         super::cpu::set_num_cpus(1);
         init_executor_runtimes(bsp_id, &[]);
+        gs_slot_online();
         return;
     }
 
@@ -388,6 +389,7 @@ pub fn boot_application_processors() {
         info!("No application processors found");
         super::cpu::set_num_cpus(1);
         init_executor_runtimes(bsp_id, &[]);
+        gs_slot_online();
         return;
     }
     // Set the canonical CPU count: BSP + APs.
@@ -531,6 +533,13 @@ pub fn boot_application_processors() {
             );
         }
     }
+
+    // The BSP's per-CPU IrqLock-depth slot has been valid since
+    // replace_bsp_tss_with_iopb; mark it now (not earlier — num_cpus()
+    // must be final). If every launched AP has finished
+    // init_ap_gdt_idt this call completes the count and enables the
+    // gs fast path; otherwise the last AP to finish does.
+    gs_slot_online();
 }
 
 /// Offset of the GDT within the trampoline page (after TrampolineData).
@@ -849,6 +858,30 @@ pub fn replace_bsp_tss_with_iopb() {
         use x86_64::registers::model_specific::GsBase;
         #[allow(const_item_mutation)]
         GsBase::MSR.write(&ext.tss as *const _ as u64);
+        // NOTE: do not enable the per-CPU IrqLock-depth slot
+        // (lock::set_gs_depth_ready) here — num_cpus() is still 1 at
+        // this point and the flag is global. The BSP marks itself via
+        // gs_slot_online() at the end of
+        // boot_application_processors; see there for the protocol.
+    }
+}
+
+/// Number of CPUs whose per-CPU IrqLock-depth slot (TSS.rsp2, set as
+/// the kernel GS base) is valid. The LAST CPU to come online enables
+/// the lock crate's gs-based fast path globally — a single global flag
+/// is safe only when every online CPU's GS base points at its TSS,
+/// because push_off/pop_off on any CPU would otherwise write through a
+/// garbage GS base (the AP-entry path takes the shared-APIC lock
+/// before init_ap_gdt_idt — found the hard way: every AP page-faulted
+/// in `lock inc qword ptr gs:[0x14]`).
+static GS_READY_CPUS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Mark this CPU's per-CPU IrqLock-depth slot as valid; the CPU that
+/// brings the count to num_cpus() enables the global fast path.
+fn gs_slot_online() {
+    let n = GS_READY_CPUS.fetch_add(1, core::sync::atomic::Ordering::SeqCst) + 1;
+    if n >= crate::cpu::num_cpus() {
+        lock::set_gs_depth_ready();
     }
 }
 
@@ -912,6 +945,9 @@ pub fn init_ap_gdt_idt() {
         // Set GS_BASE to this AP's TSS (per-CPU).
         #[allow(const_item_mutation)]
         GsBase::MSR.write(&ext.tss as *const _ as u64);
+        // Per-CPU IrqLock-depth slot (TSS.rsp2, gs:0x14) is valid on
+        // this CPU from here on. See gs_slot_online for the protocol.
+        gs_slot_online();
 
         // Write STAR MSR (same selectors as BSP).
         let eax = star_val as u32;

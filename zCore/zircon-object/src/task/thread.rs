@@ -11,7 +11,7 @@ use bitflags::bitflags;
 use cfg_if::cfg_if;
 use futures::{channel::oneshot::*, future::FutureExt, pin_mut, select_biased};
 use hal_impl::context::UserContext;
-use lock::{IrqLock, KernelMutex};
+use lock::KernelMutex;
 
 use self::thread_state::ContextAccessState;
 use super::{exception::*, Process, Task};
@@ -1698,21 +1698,29 @@ pub struct ThreadInfo {
 
 struct ThreadSwitchFuture {
     thread: Arc<Thread>,
-    future: IrqLock<ThreadFuturePinned>,
+    // #523/#829: this was an `IrqLock`, whose guard `poll` held across
+    // the ENTIRE poll — every syscall, page fault, exception dispatch
+    // and teardown executed inside an interrupt-disabling critical
+    // section (per-CPU IrqLock depth +1 for the whole thread
+    // execution). Any KernelMutex contended in that state escalated
+    // to the mutex.rs nested-spin panic — the residual crash-teardown
+    // panics, caught live via the lock_anomaly_detected breakpoint
+    // (push site thread.rs:1732 on every anomalous CPU). The lock had
+    // exactly one accessor (this poll), so it provided no mutual
+    // exclusion at all — only the IF=0. Removed; the future is a
+    // Pin<Box> and needs no external locking.
+    future: ThreadFuturePinned,
 }
 
 impl ThreadSwitchFuture {
     pub fn new(thread: Arc<Thread>, future: ThreadFuturePinned) -> Self {
-        Self {
-            future: IrqLock::new(future),
-            thread,
-        }
+        Self { future, thread }
     }
 }
 
 impl Future for ThreadSwitchFuture {
     type Output = ();
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let proc = self.thread.proc.clone();
 
         let table_phys = proc.vmar().table_phys();
@@ -1733,7 +1741,7 @@ impl Future for ThreadSwitchFuture {
             }
         }
         hal_impl::thread::set_current_thread(Some(self.thread.clone()));
-        let ret = self.future.lock().as_mut().poll(cx);
+        let ret = self.future.as_mut().poll(cx);
         hal_impl::thread::set_current_thread(None);
         // Switch back to the kernel page table and clear tracking.
         // This ensures that when we drop(proc), if the page table

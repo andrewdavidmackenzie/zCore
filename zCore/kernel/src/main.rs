@@ -50,6 +50,34 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
 
     #[cfg(not(feature = "baremetal-test"))]
     {
+        // Kernel-trap reaper (#523): completes staged thread deaths in
+        // task context after executor::abandon_current_poll redirected
+        // a faulted CPU. Must be spawned after the executor runtimes
+        // exist (primary_init → smp::boot_application_processors).
+        handler::spawn_reaper();
+        // Deferred-timer drain task (#523/#829): timer callbacks may
+        // only do lock-free work (they run under the NAIVE_TIMER
+        // spinlock with interrupts disabled); the heavy part — signal
+        // delivery, waiter wakeups, KernelMutex work — is deferred and
+        // drained here in task context where locks can be taken and
+        // yields are safe.
+        hal_impl::thread::spawn(async {
+            loop {
+                let ran = hal_impl::timer::drain_deferred_timer_callbacks();
+                if ran > 0 {
+                    // More may have arrived while we ran: yield for
+                    // fairness, then keep going.
+                    hal_impl::thread::yield_now().await;
+                } else {
+                    // Idle: sleep briefly — bounded signal latency
+                    // (~200µs) without busy-spinning.
+                    hal_impl::thread::sleep_until(
+                        hal_impl::timer::timer_now() + core::time::Duration::from_micros(200),
+                    )
+                    .await;
+                }
+            }
+        });
         let options = boot_options();
         info!("Boot options: {:#?}", options);
         let fuchsia_userboot = options.fuchsia_userboot;

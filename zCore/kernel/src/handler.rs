@@ -1,7 +1,9 @@
-use hal_impl::{KernelHandler, KernelTrapInfo, MMUFlags, PhysAddr};
+use alloc::sync::Arc;
+use core::sync::atomic::{AtomicUsize, Ordering};
+use core::time::Duration;
+use hal_impl::{KernelHandler, KernelTrapInfo, KernelTrapOutcome, MMUFlags, PhysAddr};
 use zircon_object::object::KernelObject;
-use zircon_object::task::Task;
-use zircon_object::task::Thread;
+use zircon_object::task::{Process, Task, Thread, TASK_RETCODE_EXCEPTION_KILL};
 
 pub struct ZcoreKernelHandler;
 
@@ -97,4 +99,75 @@ impl KernelHandler for ZcoreKernelHandler {
             false
         }
     }
+}
+
+// ── Kernel-trap reaper (#523) ──────────────────────────────────────
+
+/// Lock-free staging slots for threads killed by kernel-mode traps.
+///
+/// The trap handler (interrupt context, interrupts disabled) cannot
+/// take KernelMutexes (#829/#862), so it parks the doomed thread's
+/// `Arc` here and the reaper task picks it up. Each slot holds the
+/// `Arc::into_raw` pointer (0 = empty). Producers claim a slot with a
+/// CAS; the reaper drains with a swap. Interrupt-safe: no locks, no
+/// allocation.
+static REAP_SLOTS: [AtomicUsize; 16] = [const { AtomicUsize::new(0) }; 16];
+
+/// Queue a thread for task-context teardown. Interrupt-safe.
+fn queue_reap(thread: Arc<Thread>) {
+    let ptr = Arc::into_raw(thread) as usize;
+    for slot in &REAP_SLOTS {
+        if slot
+            .compare_exchange(0, ptr, Ordering::SeqCst, Ordering::Relaxed)
+            .is_ok()
+        {
+            return;
+        }
+    }
+    // Queue full: leak the Arc rather than blocking or dropping from
+    // interrupt context. Bounded by the slot count; the reaper drains
+    // within one poll interval.
+    error!("[ktrap-reaper] reap queue full — leaking thread handle");
+    unsafe { drop(Arc::from_raw(ptr as *const Thread)) };
+}
+
+/// The reaper task: completes staged thread deaths in task context.
+///
+/// For each queued thread, performs the full teardown a userspace
+/// crash would get: `thread.kill()` (terminal state, waiters wake) and
+/// `Process::exit(TASK_RETCODE_EXCEPTION_KILL)` (process signals fire,
+/// component_manager observes the crash and tears down the component).
+/// The thread's own future was orphaned by
+/// `executor::abandon_current_poll` — it never runs its exit path — so
+/// the reaper drives the observable effects from outside.
+async fn reaper_loop() {
+    loop {
+        for slot in &REAP_SLOTS {
+            let ptr = slot.swap(0, Ordering::SeqCst);
+            if ptr == 0 {
+                continue;
+            }
+            let thread = unsafe { Arc::from_raw(ptr as *const Thread) };
+            let proc = thread.proc();
+            error!(
+                "[ktrap-reaper] completing staged death of thread {} ('{}') in process {} ('{}')",
+                thread.id(),
+                thread.name(),
+                proc.id(),
+                proc.name()
+            );
+            thread.kill();
+            Process::exit(&proc, TASK_RETCODE_EXCEPTION_KILL);
+        }
+        // Poll interval: kernel faults are rare; 50ms is instant on
+        // the scale of a crash teardown cascade.
+        hal_impl::thread::sleep_until(hal_impl::timer::timer_now() + Duration::from_millis(50))
+            .await;
+    }
+}
+
+/// Spawn the kernel-trap reaper task. Call once during kernel init,
+/// after the executor runtimes exist.
+pub fn spawn_reaper() {
+    hal_impl::thread::spawn(reaper_loop());
 }

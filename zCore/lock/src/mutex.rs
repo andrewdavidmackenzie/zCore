@@ -119,7 +119,7 @@ impl<T: ?Sized> KernelMutex<T> {
     /// 3. Yield to let the lock holder run, then retry.
     ///
     /// Does NOT disable interrupts.
-    #[track_caller]
+    #[cfg_attr(target_os = "none", track_caller)]
     pub fn lock(&self) -> KernelMutexGuard<'_, T> {
         // #862/#829: acquiring a KernelMutex while holding an
         // interrupt-disabling spinlock is a lock-ordering violation.
@@ -145,38 +145,95 @@ impl<T: ?Sized> KernelMutex<T> {
 
             #[cfg(target_os = "none")]
             {
-                // Contended while a spinlock is held (interrupts off):
-                // do_yield cannot switch tasks here. Bounded spin for a
-                // cross-CPU holder, then panic — a same-CPU parked
-                // holder can never release while we monopolize this
-                // CPU, and silent spinning would hang the system (#862).
+                // Contended with interrupts disabled. Two very
+                // different situations share this state (#862/#523):
+                //
+                // 1. An IrqLock critical section is held by THIS CPU
+                //    (spinlock → KernelMutex nesting): yielding would
+                //    abandon the critical section and permanently leak
+                //    its guard. Must fail loudly.
+                //
+                // 2. Task-context kernel code running inside a trap
+                //    frame: the hardware interrupt gate cleared IF on
+                //    trap entry (every IDT entry is an interrupt
+                //    gate) and nothing re-enables it until the iretq.
+                //    No IrqLock is held — enabling interrupts and
+                //    yielding is safe: the coroutine switch suspends
+                //    the whole trap frame and resumes it later
+                //    (exactly like timer preemption), and the final
+                //    iretq restores the interrupted rflags. Before
+                //    this case was handled, every contended
+                //    KernelMutex in it panicked — the multi-CPU panic
+                //    cascade during process-crash teardown.
+                //
+                // The global IrqLock-depth counter distinguishes them:
+                // with IF=0 this CPU cannot be preempted, so the
+                // check is atomic with respect to ourselves. If the
+                // counter is nonzero it is either a transient lock on
+                // ANOTHER CPU (releases within microseconds — the
+                // heap/console/timer locks are held briefly) or a
+                // genuine critical section on this CPU (can never
+                // release while we spin — the holder is us). Wait
+                // bounded for it to clear, then yield; if it never
+                // clears, fail loudly.
                 if !crate::interrupt::intr_get() {
+                    // #523 RCA: this exact state — contended + IF=0 +
+                    // THIS CPU holding an IrqLock — is always fatal
+                    // (the holder can never release while we spin
+                    // here with interrupts disabled). Breakpoint
+                    // target for live call-hierarchy inspection: gdb
+                    // stops at `lock_anomaly_detected` with the full
+                    // live stack, rdi = mutex address, rsi = caller
+                    // Location.
+                    if crate::interrupt::irq_lock_held_on_this_cpu() {
+                        lock_anomaly_detected(
+                            core::ptr::addr_of!(self.locked) as *const (),
+                            core::panic::Location::caller() as *const _ as *const (),
+                        );
+                    }
                     let mut nested_spins = 0u32;
-                    loop {
-                        if self
-                            .locked
-                            .compare_exchange_weak(
-                                false,
-                                true,
-                                Ordering::Acquire,
-                                Ordering::Relaxed,
-                            )
-                            .is_ok()
-                        {
-                            return KernelMutexGuard { mutex: self };
-                        }
+                    while crate::interrupt::irq_lock_held_on_this_cpu() {
                         nested_spins += 1;
                         if nested_spins >= NESTED_SPIN_MAX_ITERS {
+                            // #523 diagnostics: report WHERE the contended
+                            // acquisition comes from. The mutex address and
+                            // the caller identify which lock; the raw stack
+                            // words above rsp are mostly return addresses
+                            // for offline symbolization against the kernel
+                            // ELF.
+                            let mutex_addr = core::ptr::addr_of!(self.locked) as usize;
+                            let caller = core::panic::Location::caller();
+                            let rsp: usize;
+                            unsafe { core::arch::asm!("mov {}, rsp", out(reg) rsp) };
+                            let stack =
+                                unsafe { core::slice::from_raw_parts(rsp as *const usize, 40) };
                             panic!(
+<<<<<<< HEAD
                                 "KernelMutex contended while interrupts disabled \
                                  (InterruptSpinLock held?) — spinlock→KernelMutex \
                                  nesting with a non-releasing holder (#829/#862) \
                                  at {}",
                                 core::panic::Location::caller()
+=======
+                                "KernelMutex @{:#x} contended while interrupts disabled \
+                                 and IrqLock(s) held — spinlock→KernelMutex nesting with \
+                                 a non-releasing holder (#829/#862) \
+                                 [caller {}:{}:{}] stack={:#x?}",
+                                mutex_addr,
+                                caller.file(),
+                                caller.line(),
+                                caller.column(),
+                                stack,
+>>>>>>> 4ae748aa (Fix the multi-CPU KernelMutex panic cascade during crash teardown (#523))
                             );
                         }
                         core::hint::spin_loop();
                     }
+                    // Counter is zero: no IrqLock is held anywhere —
+                    // in particular not by this CPU. The IF=0 came
+                    // from the trap gate: take the normal spin/yield
+                    // path below with interrupts re-enabled.
+                    crate::interrupt::intr_on();
                 }
             }
 
@@ -264,5 +321,21 @@ impl<T: Default> Default for KernelMutex<T> {
 impl<T> From<T> for KernelMutex<T> {
     fn from(data: T) -> Self {
         Self::new(data)
+    }
+}
+
+/// #523 RCA breakpoint target: called when a KernelMutex is contended
+/// while this CPU holds an IrqLock — the genuine #829 anomaly. A gdb
+/// breakpoint at its entry stops the system with the live call
+/// hierarchy intact. Arguments (SysV ABI): rdi = mutex address,
+/// rsi = `core::panic::Location` of the acquiring caller. The volatile
+/// reads keep LTO from eliminating the (otherwise empty) body.
+#[cfg(target_os = "none")]
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn lock_anomaly_detected(mutex: *const (), caller: *const ()) {
+    unsafe {
+        core::ptr::read_volatile(&mutex);
+        core::ptr::read_volatile(&caller);
     }
 }

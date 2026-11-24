@@ -67,6 +67,7 @@ impl<T> TicketMutex<T> {
 }
 
 impl<T: ?Sized> TicketMutex<T> {
+    #[track_caller]
     pub fn lock(&self) -> InterruptSpinLockGuard<'_, T> {
         let irq_was_enabled = push_off();
         let ticket = self.next_ticket.fetch_add(1, Ordering::Relaxed);

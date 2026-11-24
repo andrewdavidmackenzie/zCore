@@ -5,6 +5,9 @@
 # Save current registers in old. Load from new.
 # Same as bare-metal switch.S but without CR3 save/restore,
 # which is a privileged operation not available in user mode.
+# RFLAGS is saved/restored to keep the ContextData layout compatible
+# with the bare-metal switch (harmless on the host: it just preserves
+# the host thread's flags across the switch).
 
     .text
     .globl switch
@@ -21,10 +24,13 @@ switch:
         push r15
         // Skip CR3 — push a dummy value to keep stack layout compatible
         push 0
+        pushfq
 
         mov [rdi], rsp      // rdi = from_rsp
         mov rsp, [rsi]      // rsi = to_rsp
 
+        // Restore flags
+        popfq
         // Pop callee-save registers
         // Skip CR3 dummy
         add rsp, 8

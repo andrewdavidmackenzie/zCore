@@ -137,8 +137,9 @@ fn try_recover_kernel_gp(tf: &mut TrapFrame) -> bool {
 }
 
 /// Handle an unrecoverable kernel-mode trap: dump the complete frame
-/// through the early console, kill the current thread, and halt this
-/// CPU.
+/// through the early console, stage the current thread's death, and
+/// either redirect the excursion coroutine to the thread-exit path or
+/// halt this CPU.
 ///
 /// The kernel never panics here. The dump goes through the direct
 /// early-console path (no log filtering, no console-lock contention)
@@ -146,11 +147,14 @@ fn try_recover_kernel_gp(tf: &mut TrapFrame) -> bool {
 /// historically (the KVM x2APIC #GP: 7 CPUs parked with no output).
 ///
 /// After the dump, [`KernelHandler::handle_kernel_trap_fatal`] lets
-/// the kernel kill the current thread so the rest of the system
-/// observes the death (waiters woken, crashsvc runs). Then this CPU
-/// halts: there is no safe way to unwind a kernel-mode fault through
-/// possibly-held locks, and returning would re-execute the faulting
-/// instruction forever. Every other CPU keeps running.
+/// the kernel stage the current thread's death so the rest of the
+/// system observes it (waiters woken, crashsvc runs). If the thread's
+/// user excursion is active, the coroutine is resumed at its
+/// `syscall_return` marker so the thread exits through the loader's
+/// task-context path and this CPU keeps scheduling work. Otherwise
+/// this CPU halts: there is no safe way to unwind a kernel-mode fault
+/// through possibly-held locks, and returning would re-execute the
+/// faulting instruction forever. Every other CPU keeps running.
 fn kernel_trap_fatal(reason: &'static str, tf: &TrapFrame) -> ! {
     // Instruction bytes at the faulting RIP — the single most useful
     // diagnostic (identifies the faulting instruction). Kernel text
@@ -192,11 +196,11 @@ fn kernel_trap_fatal(reason: &'static str, tf: &TrapFrame) -> ! {
         tf.r15,
         code,
     ));
-    // Let the kernel kill the current thread (if any) so the rest of
-    // the system observes the death. Must not unwind; the handler is
-    // advisory.
-    use hal::kernel_handler::KernelTrapInfo;
-    crate::KHANDLER.handle_kernel_trap_fatal(&KernelTrapInfo {
+    // Let the kernel stage the current thread's death (lock-free —
+    // see KernelHandler::handle_kernel_trap_fatal). Must not unwind;
+    // the handler is advisory.
+    use hal::kernel_handler::{KernelTrapInfo, KernelTrapOutcome};
+    let outcome = crate::KHANDLER.handle_kernel_trap_fatal(&KernelTrapInfo {
         trap_num: tf.trap_num,
         error_code: tf.error_code,
         rip: tf.rip,
@@ -204,9 +208,35 @@ fn kernel_trap_fatal(reason: &'static str, tf: &TrapFrame) -> ! {
         cpu: cpu as usize,
         reason,
     });
-    // Terminal state for THIS CPU only: interrupts off, sleep forever.
-    // Other CPUs keep running (and can reap the killed thread).
-    crate::interrupt::intr_off();
+    if matches!(outcome, KernelTrapOutcome::Redirect) {
+        // A thread's death was staged and the executor is mid-poll on
+        // this CPU. Abandon the faulted poll: switch to the runtime
+        // idle context WITHOUT saving the faulted context (it must
+        // never be resumed — the demoted-weak-executor machinery would
+        // otherwise re-enter the fault forever). The faulted task is
+        // orphaned (its Arc<Thread> leaks — bounded by the number of
+        // kernel faults) and the executor stack is reused by
+        // subsequent polls. The reaper task completes the staged death
+        // in task context. Never returns on success.
+        //
+        // abandon_current_poll requires interrupts disabled (the
+        // runtime-lock discipline — it must not race the timer's
+        // sched_yield); trap entry had IF=0 but this handler may have
+        // re-enabled it (see trap_handler).
+        crate::interrupt::intr_off();
+        if executor::abandon_current_poll() {
+            unreachable!()
+        }
+        // Could not abandon (runtime lock held by the faulted code, no
+        // running poll, ...) — fall through to halt.
+        crate::console::console_write_fmt(format_args!(
+            "[ktrap] abandon_current_poll failed — halting this CPU\n"
+        ));
+    }
+    // Terminal state for THIS CPU only: interrupts on (it can still
+    // service IPIs), sleep forever. Other CPUs keep running (and the
+    // reaper completes the staged death).
+    crate::interrupt::intr_on();
     loop {
         unsafe { core::arch::asm!("hlt") };
     }
@@ -219,6 +249,35 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
         tf.trap_num,
         super::cpu::cpu_id()
     );
+
+    // #862 fix: every IDT entry is a 64-bit *interrupt gate* (trapframe
+    // sets `EntryOptions::minimal()` = type 0xE), so ALL traps — not
+    // just IRQs — enter with IF=0. Kernel-mode fault handling
+    // (`handle_page_fault` → VMAR inner KernelMutexes, the fatal path)
+    // may contend those locks; with IF=0 a contended `KernelMutex`
+    // cannot yield and escalates to the mutex.rs nested-spin panic —
+    // the historical multi-CPU panic cascade during process-crash
+    // teardown. The trap frame is fully saved by `__alltraps` before
+    // this point, so re-enabling interrupts here is safe.
+    //
+    // IRQs keep IF=0: interrupt handlers must not nest, and the
+    // interrupted rflags are restored by `iretq` on return.
+    //
+    // Faults that interrupted code already running with IF=0 (an IRQ
+    // handler holding an IrqLock) also keep IF=0: enabling interrupts
+    // there would let the fault handler yield and suspend the lock
+    // holder mid-critical-section (the observed residual
+    // lock_order.rs:135 panics — the suspended handler's slot stays
+    // nonzero while parked). Restoring the interrupted context's own
+    // IF state is exactly the right semantics.
+    if tf.rflags & 0x200 != 0
+        && !matches!(
+            trap_reason_from(tf.trap_num, tf.error_code),
+            TrapReason::Interrupt(_)
+        )
+    {
+        crate::interrupt::intr_on();
+    }
 
     match trap_reason_from(tf.trap_num, tf.error_code) {
         TrapReason::HardwareBreakpoint | TrapReason::SoftwareBreakpoint => breakpoint(tf),

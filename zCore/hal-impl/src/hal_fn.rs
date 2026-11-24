@@ -195,6 +195,24 @@ hal_fn_def! {
         /// Set the first time interrupt
         pub fn timer_enable();
 
+        /// Defer heavy work from a timer callback (#523/#829).
+        ///
+        /// `Timer::expire` runs callbacks inline under the timer
+        /// spinlock with interrupts disabled; kernel-object work
+        /// (signals, waiters) must not run there. The bare-metal
+        /// implementation enqueues the closure into a deferred queue
+        /// drained after the timer lock is released. Default (libos,
+        /// no interrupt-context constraint): run inline.
+        pub fn defer_timer_callback(f: alloc::sync::Arc<dyn Fn(core::time::Duration) + Send + Sync>, now: core::time::Duration) {
+            f(now)
+        }
+
+        /// Run the deferred timer callbacks. Must be called from task
+        /// context (a dedicated drain task). Returns the number run.
+        pub fn drain_deferred_timer_callbacks() -> usize {
+            0
+        }
+
         /// Get monotonic time (duration since boot).
         ///
         /// This is the CLOCK_MONOTONIC source. It never goes backwards

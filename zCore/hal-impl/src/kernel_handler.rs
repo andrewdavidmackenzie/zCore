@@ -3,7 +3,7 @@
 use crate::utils::init_once::InitOnce;
 
 // Re-export the KernelHandler trait from the hal crate.
-pub use hal::kernel_handler::KernelTrapInfo;
+pub use hal::kernel_handler::{KernelTrapInfo, KernelTrapOutcome};
 pub use hal::KernelHandler;
 
 #[allow(dead_code)]

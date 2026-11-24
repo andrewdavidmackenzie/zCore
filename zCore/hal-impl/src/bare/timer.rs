@@ -18,6 +18,8 @@
 //! acquired from timer callbacks.
 
 use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::time::Duration;
 
 use lock::IrqLock;
@@ -30,6 +32,49 @@ use naive_timer::Timer;
 const MAX_TIMER_INTERVAL: Duration = Duration::from_millis(10);
 
 static NAIVE_TIMER: spin::Lazy<IrqLock<Timer>> = spin::Lazy::new(|| IrqLock::new(Timer::default()));
+
+/// Deferred timer callbacks (#523/#829 fix).
+///
+/// `Timer::expire` runs callbacks INLINE while the `NAIVE_TIMER`
+/// IrqLock is held with interrupts disabled. The Zircon timer object's
+/// callback (`TimerSignal::touch`) fires a signal and wakes waiters —
+/// kernel-object work that acquires `KernelMutex`es (ports, thread
+/// state, signal handlers) — a genuine spinlock→KernelMutex nesting
+/// violation that escalates to the mutex.rs nested-spin panic whenever
+/// the wakeup contends with another CPU (constant during
+/// process-crash teardown: every CPU's timer fires into the cascade).
+///
+/// Fix, matching Fuchsia's timer-DPC design: timer callbacks may only
+/// do interrupt-safe, lock-free work — deferring the heavy part here.
+/// The callback (running under the timer lock) enqueues an `Arc`'d
+/// closure into this queue (a nested but briefly-held IrqLock, no
+/// allocation); the queue is drained AFTER the timer lock is released,
+/// where kernel-object locks may be taken and yielding is possible.
+/// The type of deferred timer callbacks: heavy work moved out of the
+/// timer interrupt context (see below).
+pub type DeferredCallback = Arc<dyn Fn(Duration) + Send + Sync>;
+
+static DEFERRED_CALLBACKS: IrqLock<Vec<(DeferredCallback, Duration)>> = IrqLock::new(Vec::new());
+
+/// Enqueue heavy work from a timer callback. Interrupt-safe,
+/// allocation-free; must be called while `NAIVE_TIMER` is held (or any
+/// interrupt context).
+pub fn enqueue_deferred_timer_callback(f: Arc<dyn Fn(Duration) + Send + Sync>, now: Duration) {
+    DEFERRED_CALLBACKS.lock().push((f, now));
+}
+
+/// Drain deferred timer callbacks. MUST run in task context: the
+/// callbacks perform kernel-object work (signals, waiters) that may
+/// contend KernelMutexes and yield. Returns the number of callbacks
+/// executed (callers use it to choose between yield and sleep).
+fn drain_deferred_callbacks() -> usize {
+    let batch = core::mem::take(&mut *DEFERRED_CALLBACKS.lock());
+    let n = batch.len();
+    for (f, now) in batch {
+        f(now);
+    }
+    n
+}
 
 /// #862 diagnostics: timer activity counters.
 static TICK_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
@@ -66,6 +111,14 @@ hal_fn_impl! {
 
         fn timer_now() -> Duration {
             super::arch::timer::timer_now()
+        }
+
+        fn defer_timer_callback(f: DeferredCallback, now: Duration) {
+            enqueue_deferred_timer_callback(f, now)
+        }
+
+        fn drain_deferred_timer_callbacks() -> usize {
+            drain_deferred_callbacks()
         }
 
         fn timer_set(deadline: Duration, callback: Box<dyn FnOnce(Duration) + Send + Sync>) {
@@ -108,6 +161,11 @@ hal_fn_impl! {
                 // Re-arm to the next deadline under the lock.
                 update_platform_timer_locked(&timer);
             }
+            // NOTE: deferred callbacks are NOT drained here — running
+            // kernel-object work from IRQ context re-introduces the
+            // #862 hazard and nests IRQs (found the hard way: early
+            // boot hung). A dedicated task-context drain task owns
+            // them; see drain_deferred_timer_callbacks.
             // #862 diagnostics: report OUTSIDE the NAIVE_TIMER lock —
             // the logger allocates and may contend the heap lock, and
             // logging under the timer lock can deadlock against

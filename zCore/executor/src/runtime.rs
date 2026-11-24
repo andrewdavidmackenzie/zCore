@@ -474,6 +474,18 @@ pub fn handle_timeout() {
     super::run_with_intr_saved_off! {
         sched_yield()
     }
+    // #862: after the preemption switch returns, the preempted task
+    // resumes here — still inside the timer IRQ frame (the iretq that
+    // ends the interrupt is further up the stack) — and continues its
+    // kernel work below that frame. Re-enable interrupts for the
+    // remainder of that execution: the EOI was already sent by
+    // handle_irq (the APIC driver sends it before dispatching), so no
+    // in-service IRQ is pending; nested interrupts push below the
+    // current rsp and return normally; and the final iretq restores
+    // the interrupted task's own rflags (the context switch now
+    // saves/restores rflags, so the suspended context resumes with
+    // its own interrupt state).
+    crate::arch::intr_on();
 }
 
 /// Run executor.run()
@@ -506,9 +518,86 @@ pub fn sched_yield() {
     }
 }
 
+/// Abandon the current poll and switch to the runtime idle context
+/// WITHOUT saving the faulted context. Never returns on success.
+///
+/// For the kernel-trap fatal path (#523): a kernel-mode fault inside a
+/// task's poll can neither be resumed (the faulting instruction would
+/// re-execute forever) nor unwound (locks may be held). Halting the
+/// CPU loses it entirely; `sched_yield` would save the faulted context
+/// and the demoted-weak-executor machinery would resume it later,
+/// re-faulting in an infinite loop. Instead: discard the context. The
+/// faulted task is orphaned — its future is never re-polled, so the
+/// `Arc<Thread>` it holds leaks (an accepted graceful-degradation
+/// tradeoff, bounded by the number of kernel faults) — and the
+/// executor's stack is reused by subsequent polls, clobbering the
+/// abandoned frames.
+///
+/// The abandoned executor is left mid-poll (`task_id != 0`), so when
+/// the runtime next returns from `switch` it takes the existing
+/// preemption path: demotes it to a weak executor and later resumes it
+/// at its last legitimate suspension point (saved by a prior
+/// `sched_yield`), after which the normal weak-executor completion
+/// path (WEAK → KILLED → dropped → stack freed) reclaims it.
+///
+/// # Safety
+///
+/// Must be called from interrupt context with interrupts disabled
+/// (the runtime-lock discipline — see `run_until_idle`). Returns
+/// `false` without switching when the runtime lock is held by the
+/// interrupted (faulted) code, when no executor is running a poll, or
+/// on architectures without the no-save switch; the caller must halt
+/// the CPU in that case.
+pub fn abandon_current_poll() -> bool {
+    // Lock discipline: the runtime lock is only ever held with
+    // interrupts disabled. We are in interrupt context, so any
+    // contention means the lock is held either by another CPU (about
+    // to release — but we cannot yield to wait) or, worse, by the
+    // interrupted task on this CPU (which can never release it — its
+    // poll is about to be abandoned). try_lock, never spin.
+    if crate::arch::intr_get() {
+        return false; // must run with interrupts disabled
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        let Some(runtime) = get_runtime(crate::arch::cpu_id()).try_lock() else {
+            return false;
+        };
+        // Borrow through the guard instead of cloning: a clone would
+        // leak (this function never returns past the switch) and keep
+        // the executor's Arc refcount elevated, breaking
+        // `Arc::get_mut_unchecked`'s uniqueness assumption in
+        // `downgrade_strong_executor` and leaking the 512 KiB stack.
+        let running = runtime
+            .current_executor
+            .as_ref()
+            .is_some_and(|executor| executor.is_running_future());
+        if !running {
+            return false; // not mid-poll — nothing to abandon
+        }
+        let runtime_cx = runtime.get_context();
+        drop(runtime);
+        switch_no_save(runtime_cx as _);
+        unreachable!()
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        false
+    }
+}
+
 pub(crate) fn switch(from_ctx: usize, to_ctx: usize) {
     unsafe {
         crate::arch::switch(from_ctx as _, to_ctx as _);
+    }
+}
+
+/// Load the context at `to_ctx` and resume it, discarding the current
+/// context. x86_64 only (declared in arch/x86_64/mod.rs).
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn switch_no_save(to_ctx: usize) {
+    unsafe {
+        crate::arch::switch_no_save(to_ctx as _);
     }
 }
 

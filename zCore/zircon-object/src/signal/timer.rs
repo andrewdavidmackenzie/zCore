@@ -93,10 +93,19 @@ impl Timer {
             self.base.signal_set(Signal::SIGNALED);
         } else {
             self.base.signal_clear(Signal::SIGNALED);
-            let me = Arc::downgrade(self);
+            let weak = Arc::downgrade(self);
+            // #523/#829: `Timer::expire` runs callbacks INLINE under the
+            // NAIVE_TIMER IrqLock with interrupts disabled. `touch` fires
+            // the signal and wakes waiters — KernelMutex work that cannot
+            // yield there (the mutex.rs nested-spin panic during crash
+            // teardowns). Defer it: the (allocation-free) enqueue runs
+            // under the timer lock; the touch itself runs from
+            // `drain_deferred_callbacks` after the lock is released.
+            let deferred: Arc<dyn Fn(core::time::Duration) + Send + Sync> =
+                Arc::new(move |now| weak.upgrade().map(|timer| timer.touch(now)).unwrap_or(()));
             hal_impl::timer::timer_set(
                 deadline,
-                Box::new(move |now| me.upgrade().map(|timer| timer.touch(now)).unwrap_or(())),
+                Box::new(move |now| hal_impl::timer::defer_timer_callback(deferred, now)),
             );
         }
     }

@@ -258,6 +258,7 @@ impl<T, L> Locked<T, L> {
     /// level `M`; it (and the guard) keep the original context
     /// mutably borrowed, so only the new context — restricted to
     /// locks downstream of `M` — can be used while this one is held.
+    #[allow(clippy::type_complexity)]
     pub fn lock_and<M>(&mut self) -> (<T::Target as LockFor<M>>::Guard<'_>, Locked<&T::Target, M>)
     where
         T: Deref,
