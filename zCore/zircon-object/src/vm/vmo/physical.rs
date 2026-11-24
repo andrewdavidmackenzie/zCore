@@ -126,13 +126,24 @@ impl VMObjectTrait for VMObjectPhysical {
 }
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod tests {
     use super::*;
     use hal::CachePolicy;
 
     #[test]
     fn read_write() {
-        let vmo = VmObject::new_physical(PAGE_SIZE, 2);
+        // Allocate the physical window from the frame allocator so
+        // this test owns it exclusively. The previous hardcoded paddr
+        // (PAGE_SIZE = the allocator's frame 1) aliased every paged
+        // VMO that held that frame: this test's writes clobbered
+        // their pages and theirs clobbered this test's reads — the
+        // cross-test data corruption behind #880/#890 (caught by
+        // watching the victim's frame: a 4-byte pmem_write from this
+        // test landed on the victim's page 0).
+        let paddr = hal_impl::mem::frame_alloc_contiguous(2, 0)
+            .expect("failed to allocate contiguous frames");
+        let vmo = VmObject::new_physical(paddr, 2);
         assert_eq!(vmo.cache_policy(), CachePolicy::Uncached);
         super::super::tests::read_write(&vmo);
     }

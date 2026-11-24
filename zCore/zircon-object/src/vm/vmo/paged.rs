@@ -2622,17 +2622,23 @@ fn new_owner_id() -> u64 {
 const VM_PAGE_OBJECT_MAX_PIN_COUNT: u8 = 31;
 
 #[cfg(test)]
-#[serial_test::parallel]
+// NOTE: no module-level marker — it would wrap the #[serial] trio
+// (zero_page_write, disjoint_clones_attribution,
+// resize_child_data_isolation) in an OUTER parallel/shared lock,
+// letting every parallel-marked test run through their exclusive
+// windows (#880). Each test is marked individually below.
 mod tests {
     use super::*;
 
     #[test]
+    #[serial_test::parallel]
     fn read_write() {
         let vmo = VmObject::new_paged(2);
         super::super::tests::read_write(&vmo);
     }
 
     #[test]
+    #[serial_test::parallel]
     fn create_child() {
         let vmo = VmObject::new_paged(1);
         let child_vmo = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
@@ -2688,6 +2694,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn overflow() {
         let vmo0 = VmObject::new_paged(2);
         vmo0.test_write(0, 1);
@@ -2817,6 +2824,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn offset_test() {
         // Mimics VmoClone2TestCase.Offset
         let vmo = VmObject::new_paged(3);
@@ -2889,6 +2897,7 @@ mod tests {
     /// issue #880 (not yet quarantined: it passes in most runs and
     /// the failure carries diagnostic value for #880).
     #[test]
+    #[serial_test::parallel]
     #[cfg_attr(target_os = "macos", ignore)]
     fn many_clones() {
         const N: usize = 4;
@@ -2961,6 +2970,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn set_size() {
         let vmo = VmObject::new_paged_with_resizable(true, 2);
         assert_eq!(vmo.len(), 2 * PAGE_SIZE);
@@ -2979,6 +2989,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn zero_range() {
         let vmo = VmObject::new_paged(1);
         // Write data

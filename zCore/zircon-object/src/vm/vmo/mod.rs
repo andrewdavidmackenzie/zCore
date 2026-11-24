@@ -3064,6 +3064,7 @@ pub(super) enum RangeChangeOp {
 }
 
 #[cfg(test)]
+#[serial_test::parallel]
 mod tests {
     use super::*;
 
@@ -3075,6 +3076,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::parallel]
     fn create_contiguous() {
         // Create a 2-page contiguous VMO
         let vmo = VmObject::new_contiguous(2, PAGE_SIZE_LOG2).unwrap();
