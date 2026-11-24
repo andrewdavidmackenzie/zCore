@@ -1,5 +1,6 @@
-use hal_impl::{KernelHandler, MMUFlags};
+use hal_impl::{KernelHandler, KernelTrapInfo, MMUFlags};
 use zircon_object::object::KernelObject;
+use zircon_object::task::Task;
 use zircon_object::task::Thread;
 
 pub struct ZcoreKernelHandler;
@@ -33,6 +34,42 @@ impl KernelHandler for ZcoreKernelHandler {
                 trap_num, error_code
             );
         }
+    }
+
+    fn handle_kernel_trap_fatal(&self, info: &KernelTrapInfo) {
+        // Kill the current thread so the rest of the system observes
+        // the death: waiters wake with the thread's terminal signals,
+        // the process's death signals fire, and crashsvc (if running)
+        // can process the exception. The calling CPU halts afterwards
+        // (no safe unwind through possibly-held locks), but every
+        // other CPU keeps running and reaps the thread.
+        //
+        // Called from interrupt context with interrupts disabled —
+        // Thread::kill takes the thread's inner lock, which is safe
+        // here: it is a short critical section and uncontended in
+        // practice (the thread being killed is the current one).
+        if let Some(thread) = hal_impl::thread::get_current_thread() {
+            if let Ok(thread) = thread.downcast::<Thread>() {
+                error!(
+                    "kernel trap on CPU{} ({}: trap_num={:#x} rip={:#x}): \
+                     killing thread '{}' (tid={})",
+                    info.cpu,
+                    info.reason,
+                    info.trap_num,
+                    info.rip,
+                    thread.name(),
+                    thread.id()
+                );
+                thread.kill();
+                return;
+            }
+        }
+        // No current thread (pure interrupt context) — nothing to kill.
+        error!(
+            "kernel trap on CPU{} ({}: trap_num={:#x} rip={:#x}): \
+             no current thread; halting this CPU",
+            info.cpu, info.reason, info.trap_num, info.rip
+        );
     }
 
     fn frame_alloc_contiguous(&self, frame_count: usize, align_log2: usize) -> Option<usize> {
