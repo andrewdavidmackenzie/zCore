@@ -599,22 +599,24 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn commit(&self, offset: usize, len: usize) -> ZxResult {
         let (_guard, inner) = self.get_inner_mut();
-        // INV-VMO-2: commit ranges stay within the VMO (zx_vmo_op_range
-        // returns OUT_OF_RANGE for invalid ranges; internal callers
-        // validate or clamp — Fuchsia's CommitRangeInternal trims).
-        // Firing here means a caller commits beyond the current size
-        // (e.g. a mapping outliving a shrink).
-        inv!(
-            offset.saturating_add(len) <= inner.size,
-            "INV-VMO-2: commit({:#x}, {}) beyond size {}",
-            offset,
-            len,
-            inner.size
-        );
+        // Trim the range to the current size, matching Fuchsia's
+        // CommitRangeInternal TrimRange: the syscall layer validates
+        // against the size it observes, but a concurrent shrink can
+        // land between that check and this commit — the remainder
+        // within the (new) size is committed and the rest is a no-op
+        // (review finding on #893).
+        let end = offset.saturating_add(len).min(inner.size);
+        if end <= offset {
+            return Ok(());
+        }
+        // INV-VMO-2: the committed range stays within the VMO
+        // (zx_vmo_op_range: OUT_OF_RANGE for invalid ranges; the trim
+        // above enforces it against the current size).
+        inv!(end <= inner.size);
         let start_page = offset / PAGE_SIZE;
         // Use div_ceil to commit partial pages — a sub-page write
         // still needs the containing page committed.
-        let end_page = (offset + len).div_ceil(PAGE_SIZE);
+        let end_page = end.div_ceil(PAGE_SIZE);
         for page in start_page..end_page {
             inner.commit_page(page, MMUFlags::WRITE)?;
         }

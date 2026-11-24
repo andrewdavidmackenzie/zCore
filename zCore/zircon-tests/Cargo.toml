@@ -14,6 +14,9 @@ host = [
     "zircon-object/aspace-separate",
     "hal-impl/libos",
 ]
+## Forward zircon-object's invariant asserts (#888/#893): test code
+## gates its check_invariants sweep calls on this.
+invariant-checks = ["zircon-object/invariant-checks"]
 
 
 [dependencies]

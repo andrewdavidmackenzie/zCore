@@ -185,18 +185,24 @@ impl Futex {
     /// never itself a waiter on this futex ("The owner of a futex may
     /// never simultaneously be a waiter for the same futex").
     ///
-    /// Uses the owner's tracked blocking address — the same signal
-    /// `is_valid_new_owner` checks on the wait path. Called by tests
-    /// at quiet points (enable the `invariant-checks` feature;
-    /// compiled out otherwise).
+    /// A waiter is a thread currently in the queue, so the check scans
+    /// the queue for the owner by identity — exact and race-free under
+    /// the futex lock. (The owner's tracked blocking address is NOT a
+    /// valid proxy: after `wake_single_owner` it still points at this
+    /// futex until the woken FutexFuture drops and clears it — review
+    /// finding on #893.) Called by the futex tests at quiet points
+    /// (enable the `invariant-checks` feature; compiled out otherwise).
     #[cfg(feature = "invariant-checks")]
     pub fn check_owner_invariant(&self) {
         let inner = self.inner.lock();
         if let Some(owner) = &inner.owner {
-            assert_ne!(
-                owner.blocking_futex_addr(),
-                self.user_addr,
-                "INV-FUTEX-7: futex {:#x} owner {} is waiting on it",
+            let owner_is_waiter = inner
+                .waiter_queue
+                .iter()
+                .any(|w| w.thread.as_ref().is_some_and(|t| Arc::ptr_eq(t, owner)));
+            assert!(
+                !owner_is_waiter,
+                "INV-FUTEX-7: futex {:#x} owner {} is queued on it",
                 self.user_addr,
                 owner.id()
             );

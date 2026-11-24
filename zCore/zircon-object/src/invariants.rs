@@ -28,7 +28,7 @@
 //! | INV-FUTEX-4 | `wake_single_owner`: the owner is the woken waiter's thread, or none if no waiter/thread | [zx_futex_wake_single_owner](https://fuchsia.dev/fuchsia-src/reference/syscalls/futex_wake_single_owner) | inline in `wake_single_owner` |
 //! | INV-FUTEX-5 | Requeue conserves waiters: `woken + requeued + discarded-departing + remaining == initial` (departing waiters are popped and discarded by the requeue loop) | [zx_futex_requeue](https://fuchsia.dev/fuchsia-src/reference/syscalls/futex_requeue) | inline in `requeue` (source side, under both locks) |
 //! | INV-FUTEX-6 | Requeue failure is atomic: on `Err`, neither futex's queue or owner changed | [zx_futex_requeue](https://fuchsia.dev/fuchsia-src/reference/syscalls/futex_requeue) | inline in `requeue` error paths |
-//! | INV-FUTEX-7 | The owner of a futex is never simultaneously a waiter on it | [futex docs](https://fuchsia.dev/fuchsia-src/reference/kernel_objects/futex) | `check_owner_invariant` sweep (Batch 3) |
+//! | INV-FUTEX-7 | The owner of a futex is never simultaneously a waiter on it | [futex docs](https://fuchsia.dev/fuchsia-src/reference/kernel_objects/futex) | `check_owner_invariant` sweep (queue scan under the futex lock; wired into the futex core-tests) |
 //! | INV-FUTEX-8 | `wait` value mismatch returns `BAD_STATE` without queueing | [futex docs](https://fuchsia.dev/fuchsia-src/reference/kernel_objects/futex) | inline in `FutexFuture::poll`'s BAD_STATE branch, under the futex lock (Batch 3) |
 //!
 //! The target-side requeue conservation is deliberately NOT asserted
