@@ -56,6 +56,16 @@ pub type DeferredCallback = Arc<dyn Fn(Duration) + Send + Sync>;
 
 static DEFERRED_CALLBACKS: IrqLock<Vec<(DeferredCallback, Duration)>> = IrqLock::new(Vec::new());
 
+/// Persistent drain buffer (#523 review): keeps the batch's
+/// allocation across drains. `mem::take` on the queue alone handed it
+/// a zero-capacity Vec every drain, so the first enqueue after EVERY
+/// drain reallocated while the queue lock was held with interrupts
+/// disabled. The buffer ping-pongs between this slot and the queue
+/// and is never freed. Taking it out releases the lock before the
+/// callbacks run (they may yield — an IrqLock must never be held
+/// across that).
+static DRAIN_BATCH: IrqLock<Option<Vec<(DeferredCallback, Duration)>>> = IrqLock::new(None);
+
 /// Enqueue heavy work from a timer callback. Interrupt-safe,
 /// allocation-free; must be called while `NAIVE_TIMER` is held (or any
 /// interrupt context).
@@ -68,11 +78,19 @@ pub fn enqueue_deferred_timer_callback(f: Arc<dyn Fn(Duration) + Send + Sync>, n
 /// contend KernelMutexes and yield. Returns the number of callbacks
 /// executed (callers use it to choose between yield and sleep).
 fn drain_deferred_callbacks() -> usize {
-    let batch = core::mem::take(&mut *DEFERRED_CALLBACKS.lock());
+    // Take the persistent batch buffer out (the drain task is the
+    // only taker; a concurrent taker just gets a fresh Vec).
+    let mut batch = DRAIN_BATCH.lock().take().unwrap_or_default();
+    // Swap: the queue receives the batch's empty (capacity-retaining)
+    // buffer; the batch receives the pending items.
+    core::mem::swap(&mut batch, &mut *DEFERRED_CALLBACKS.lock());
     let n = batch.len();
-    for (f, now) in batch {
+    // Run the callbacks with no locks held.
+    for (f, now) in batch.drain(..) {
         f(now);
     }
+    // Stash the buffer — still holding its capacity — for the next drain.
+    *DRAIN_BATCH.lock() = Some(batch);
     n
 }
 

@@ -80,8 +80,7 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
         handler::spawn_reaper();
         let options = boot_options();
         info!("Boot options: {:#?}", options);
-        let fuchsia_userboot = options.fuchsia_userboot;
-        let proc = boot_init(options);
+        let (proc, fuchsia_userboot) = boot_init(options);
         STARTED.store(true, Ordering::SeqCst);
         wait_for_exit(Some(proc), fuchsia_userboot)
     }
@@ -94,7 +93,9 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
 /// - Anything else → Linux process (if `linux` feature compiled in)
 /// - Falls back to Zircon userboot if no rootfs is available
 #[cfg(not(feature = "baremetal-test"))]
-fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Process> {
+fn boot_init(
+    options: BootOptions,
+) -> (alloc::sync::Arc<zircon_object::task::Process>, bool) {
     // Register the Zircon spawn config globally so cross-flavour
     // exec can spawn Zircon processes from Linux context.
     zircon_object::task::spawn::set_spawn_config(zircon_loader::zircon::zircon_spawn_config());
@@ -159,15 +160,22 @@ fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Proc
                                 }
                             }
                         }
-                        return zircon_loader::zircon::run_from_rootfs(
-                            rootfs, init_path, extra_args,
-                        );
+                        // Rootfs-launched init: wait for the process
+                        // itself, NOT the root job — the flag may be
+                        // set for the Fuchsia image while this path
+                        // runs a plain Zircon init from rootfs, and
+                        // an init that exits leaving children (the
+                        // core-tests runner) must still reset the
+                        // kernel (#523 review).
+                        let proc =
+                            zircon_loader::zircon::run_from_rootfs(rootfs, init_path, extra_args);
+                        return (proc, false);
                     }
                     #[cfg(feature = "linux")]
                     zircon_object::task::Flavour::Linux => {
                         let args = options.root_proc.split('?').map(Into::into).collect();
                         let envs = alloc::vec!["PATH=/usr/sbin:/usr/bin:/sbin:/bin".into()];
-                        return linux_loader::linux::run(args, envs, rootfs);
+                        return (linux_loader::linux::run(args, envs, rootfs), false);
                     }
                     #[cfg(not(feature = "linux"))]
                     zircon_object::task::Flavour::Linux => {
@@ -190,7 +198,12 @@ fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Proc
     // No rootfs or binary not found — fall back to embedded ZBI.
     info!("No rootfs or init binary not found, using embedded ZBI");
     let zbi = load_zbi();
-    zircon_loader::zircon::run_userboot_or_fuchsia(zbi, &options.cmdline, options.fuchsia_userboot)
+    let proc = zircon_loader::zircon::run_userboot_or_fuchsia(
+        zbi,
+        &options.cmdline,
+        options.fuchsia_userboot,
+    );
+    (proc, options.fuchsia_userboot)
 }
 
 /// Load the petal ZBI (Zircon Boot Image) for userboot fallback.
@@ -246,7 +259,11 @@ fn wait_for_exit(proc: Option<Arc<Process>>, fuchsia_userboot: bool) -> ! {
                 // the first process to exit.
                 let job: Arc<dyn KernelObject> = zircon_object::task::Job::root();
                 job.wait_signal(Signal::JOB_NO_CHILDREN).await;
-                0
+                // Report userboot's own exit status: after a normal
+                // handoff it exited 0 long ago; a nonzero code means
+                // it died before starting a successor (review: the
+                // old code reported 0 unconditionally).
+                proc.exit_code().unwrap_or(0) as i32
             } else {
                 let object: Arc<dyn KernelObject> = proc.clone();
                 // Wait for either termination signal — Linux processes use

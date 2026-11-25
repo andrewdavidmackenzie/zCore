@@ -316,15 +316,14 @@ impl TaskCollection {
                 let full_key = slab_key | (priority << PRIORITY_SHIFT);
                 let page_idx = slab_key >> PAGE_INDEX_SHIFT;
                 let subpage = slab_key & 63;
-                let (n, d, b, owner, wc) = match inner.pages.get(page_idx) {
+                let (n, d, b, wc) = match inner.pages.get(page_idx) {
                     Some(p) => (
                         (p.peek_notified() >> subpage) & 1,
                         (p.peek_dropped() >> subpage) & 1,
                         (p.peek_borrowed() >> subpage) & 1,
-                        p.owner_cpu(),
                         p.wake_count(subpage),
                     ),
-                    None => (0, 0, 0, 0xff, 0),
+                    None => (0, 0, 0, 0),
                 };
                 let ti = task.inner.lock();
                 let wt = task.waker_target.lock();

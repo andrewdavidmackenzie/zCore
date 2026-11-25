@@ -195,6 +195,17 @@ pub fn resolve_vdso_symbols(
     let mut ld_strtab = 0u64;
     let mut ld_syment = 24u64;
     let mut ld_relent = 16u64;
+    // DT_RELA family: an x86-64 interpreter can carry GLOB_DAT
+    // entries in .rela.dyn (Elf64_Rela, 24 bytes) instead of
+    // .rel.dyn — both must be resolved (#523 review).
+    let mut ld_rela = 0u64;
+    let mut ld_relasz = 0u64;
+    let mut ld_relaent = 24u64;
+    // DT_PLTREL: whether DT_JMPREL entries are Elf64_Rel (DT_REL=17,
+    // 16 bytes) or Elf64_Rela (DT_RELA=7, 24 bytes). x86_64 PLTs are
+    // usually RELA; defaulting JMPREL to DT_RELENT mis-strides the
+    // table on those binaries (#523 review).
+    let mut ld_pltrel = 0u64;
 
     for ph in elf.program_iter() {
         if ph.get_type().unwrap_or(xmas_elf::program::Type::Null)
@@ -214,10 +225,14 @@ pub fn resolve_vdso_symbols(
                     2 => ld_pltrelsz = val, // DT_PLTRELSZ
                     5 => ld_strtab = val,   // DT_STRTAB
                     6 => ld_symtab = val,   // DT_SYMTAB
+                    7 => ld_rela = val,     // DT_RELA
+                    8 => ld_relasz = val,   // DT_RELASZ
+                    9 => ld_relaent = val,  // DT_RELAENT
                     11 => ld_syment = val,  // DT_SYMENT
                     17 => ld_rel = val,     // DT_REL
                     18 => ld_relsz = val,   // DT_RELSZ
                     19 => ld_relent = val,  // DT_RELENT
+                    20 => ld_pltrel = val,  // DT_PLTREL (DT_REL or DT_RELA)
                     23 => ld_jmprel = val,  // DT_JMPREL
                     _ => {}
                 }
@@ -254,6 +269,7 @@ pub fn resolve_vdso_symbols(
     let translate = |vaddr: u64| -> usize { vaddr_to_offset(vaddr).unwrap_or(vaddr as usize) };
     let ld_jmprel_off = translate(ld_jmprel);
     let ld_rel_off = translate(ld_rel);
+    let ld_rela_off = translate(ld_rela);
     let ld_symtab_off = translate(ld_symtab);
     let ld_strtab_off = translate(ld_strtab);
 
@@ -264,13 +280,25 @@ pub fn resolve_vdso_symbols(
     // Relocation types: x86_64 GLOB_DAT=6 / JUMP_SLOT=7;
     // aarch64 GLOB_DAT=1025 / JUMP_SLOT=1026.
     let mut resolved = 0usize;
-    let mut resolve_section = |rel_off: usize, rel_sz: u64| {
-        if rel_off == 0 || rel_sz == 0 {
+    // JMPREL entry size per DT_PLTREL: Elf64_Rela when the PLT
+    // relocations are RELA (x86_64 default), Elf64_Rel otherwise.
+    // Falls back to DT_RELENT when DT_PLTREL is absent (previous
+    // behavior). r_offset/r_info occupy the first 16 bytes of both
+    // layouts, so one parser serves both.
+    let jmprel_ent = if ld_pltrel == 7 {
+        ld_relaent
+    } else if ld_pltrel == 17 {
+        ld_relent
+    } else {
+        ld_relent
+    };
+    let mut resolve_section = |rel_off: usize, rel_sz: u64, ent_size: u64| {
+        if rel_off == 0 || rel_sz == 0 || ent_size == 0 {
             return;
         }
-        let count = rel_sz as usize / ld_relent as usize;
+        let count = rel_sz as usize / ent_size as usize;
         for i in 0..count {
-            let off = rel_off + i * ld_relent as usize;
+            let off = rel_off + i * ent_size as usize;
             if off + 16 > elf_data.len() {
                 break;
             }
@@ -353,9 +381,18 @@ pub fn resolve_vdso_symbols(
                 {
                     resolved += 1;
                 }
-            } else if binding == 2 {
-                // Weak symbol not provided by the vDSO: NULL.
+            } else if binding == 2 && st_shndx == 0 {
+                // Weak UNDEFINED and not provided by the vDSO: NULL.
                 if vmar.write_memory(got_addr, &0u64.to_ne_bytes()).is_ok() {
+                    resolved += 1;
+                }
+            } else if binding == 2 {
+                // Weak but DEFINED in this image and not shadowed by
+                // the vDSO: keep the image's own definition (load
+                // bias + st_value). Zeroing here would corrupt a
+                // real definition (#523 review).
+                let addr = elf_base + st_value as usize;
+                if vmar.write_memory(got_addr, &addr.to_ne_bytes()).is_ok() {
                     resolved += 1;
                 }
             } else {
@@ -366,8 +403,9 @@ pub fn resolve_vdso_symbols(
             }
         }
     };
-    resolve_section(ld_rel_off, ld_relsz);
-    resolve_section(ld_jmprel_off, ld_pltrelsz);
+    resolve_section(ld_rel_off, ld_relsz, ld_relent);
+    resolve_section(ld_rela_off, ld_relasz, ld_relaent);
+    resolve_section(ld_jmprel_off, ld_pltrelsz, jmprel_ent);
     info!(
         "resolve_vdso_symbols: resolved {} vDSO GOT entries (GLOB_DAT + JUMP_SLOT)",
         resolved

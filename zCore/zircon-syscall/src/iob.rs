@@ -36,6 +36,7 @@ impl Syscall<'_> {
         if options != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.enforce_basic_policy(PolicyCondition::NewIOB)?;
         if region_count > IOB_MAX_REGIONS {
             return Err(ZxError::OUT_OF_RANGE);
         }
@@ -267,6 +268,7 @@ impl Syscall<'_> {
         if options != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.enforce_basic_policy(PolicyCondition::NewIOB)?;
         let region = zircon_object::ipc::IoBufferSharedRegion::create(size as usize)?;
         let proc = self.thread.proc();
         let handle = proc.add_handle(Handle::new(region, Rights::DEFAULT_VMO));

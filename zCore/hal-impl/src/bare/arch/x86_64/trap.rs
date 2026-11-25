@@ -105,8 +105,14 @@ fn try_recover_kernel_gp(tf: &mut TrapFrame) -> bool {
     }
     // The instruction bytes at the faulting RIP. Kernel text is
     // always mapped — a code-fetch fault would be a #PF, not #GP —
-    // so this read is safe.
-    let code = unsafe { core::slice::from_raw_parts(tf.rip as *const u8, 2) };
+    // but clamp the read to the page boundary anyway: the second
+    // byte of an instruction at page end may be unmapped (#523
+    // review). rdmsr/wrmsr are 2-byte instructions; a 1-byte tail
+    // simply fails both matches.
+    let avail = (4096 - (tf.rip & 0xfff)).min(2) as usize;
+    let mut code_buf = [0u8; 2];
+    unsafe { core::ptr::copy_nonoverlapping(tf.rip as *const u8, code_buf.as_mut_ptr(), avail) };
+    let code = &code_buf[..avail];
     let cpu = super::cpu::cpu_id();
     match code {
         [0x0f, 0x32] => {
@@ -158,12 +164,28 @@ fn try_recover_kernel_gp(tf: &mut TrapFrame) -> bool {
 fn kernel_trap_fatal(reason: &'static str, tf: &TrapFrame) -> ! {
     // Instruction bytes at the faulting RIP — the single most useful
     // diagnostic (identifies the faulting instruction). Kernel text
-    // is always mapped (a code-fetch fault would be #PF, not #GP), so
-    // a plain 8-byte read is safe.
+    // is always mapped (a code-fetch fault would be #PF, not #GP),
+    // but an instruction at the very end of a mapped page may be
+    // followed by an unmapped one — clamp the read to the page
+    // boundary instead of assuming 8 readable bytes (#523 review).
+    let page_avail = 4096 - (tf.rip & 0xfff);
+    let n = page_avail.min(8) as usize;
     let mut code = [0u8; 8];
-    unsafe { core::ptr::copy_nonoverlapping(tf.rip as *const u8, code.as_mut_ptr(), 8) };
+    unsafe { core::ptr::copy_nonoverlapping(tf.rip as *const u8, code.as_mut_ptr(), n) };
     let cpu = super::cpu::cpu_id();
-    crate::console::console_write_fmt(format_args!(
+    // #523 review: do NOT go through `console_write_fmt` — it takes
+    // CONSOLE_WRITER, and if the trap interrupted the context holding
+    // that lock, the dump would spin forever and never print. Write
+    // via the lock-free early console (same as the panic handler).
+    struct FatalWriter;
+    impl core::fmt::Write for FatalWriter {
+        fn write_str(&mut self, s: &str) -> core::fmt::Result {
+            crate::hal_fn::console::console_write_early(s);
+            Ok(())
+        }
+    }
+    use core::fmt::Write as _;
+    let _ = FatalWriter.write_fmt(format_args!(
         "\n[ktrap] CPU{} {}: trap_num={:#x} error_code={:#x}\n\
          [ktrap] rip={:#x} cs={:#x} rflags={:#x} rsp={:#x}\n\
          [ktrap] rax={:#x} rbx={:#x} rcx={:#x} rdx={:#x}\n\
@@ -270,16 +292,17 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
     // lock_order.rs:135 panics — the suspended handler's slot stays
     // nonzero while parked). Restoring the interrupted context's own
     // IF state is exactly the right semantics.
-    if tf.rflags & 0x200 != 0
-        && !matches!(
-            trap_reason_from(tf.trap_num, tf.error_code),
-            TrapReason::Interrupt(_)
-        )
-    {
+    // Compute the reason ONCE, before re-enabling interrupts: a
+    // page-fault address is read from CR2, and a timer IRQ landing in
+    // the gap below could page-fault and overwrite CR2, making the
+    // match dispatch a different fault than the guard checked
+    // (#523 review).
+    let reason = trap_reason_from(tf.trap_num, tf.error_code);
+    if tf.rflags & 0x200 != 0 && !matches!(reason, TrapReason::Interrupt(_)) {
         crate::interrupt::intr_on();
     }
 
-    match trap_reason_from(tf.trap_num, tf.error_code) {
+    match reason {
         TrapReason::HardwareBreakpoint | TrapReason::SoftwareBreakpoint => breakpoint(tf),
         TrapReason::PageFault(vaddr, flags) => {
             // On x86, the PRESENT bit in the error code distinguishes

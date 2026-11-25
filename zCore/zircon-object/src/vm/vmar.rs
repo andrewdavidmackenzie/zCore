@@ -2143,11 +2143,23 @@ impl VmMapping {
         // for its levels (5E-1); the page table is taken downstream of
         // the mapping lock (Mapping → PageTable — the declared edge).
         let mut locked = lock::lockgraph::Locked::new(self);
-        let inner = locked.lock_and::<super::lock_order::VmMappingInnerLock>().0;
-        // TODO inner.vmo_offset unused?
+        let mut inner = locked.lock_and::<super::lock_order::VmMappingInnerLock>().0;
+        // Retire the mapping BEFORE the range becomes reusable: a
+        // caller may hold an Arc from find_mapping(), delaying Drop
+        // past the VMAR's destruction — and past a new mapping
+        // allocating the same range. Zeroing addr/size makes the
+        // eventual Drop's unmap a true no-op instead of clearing the
+        // NEW mapping's page table entries (#523 review).
+        let addr = inner.addr;
+        let size = inner.size;
+        inner.addr = 0;
+        inner.size = 0;
+        if size == 0 {
+            return;
+        }
         self.page_table
             .lock()
-            .unmap_cont(inner.addr, inner.size)
+            .unmap_cont(addr, size)
             .expect("failed to unmap")
     }
 

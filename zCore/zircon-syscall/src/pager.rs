@@ -10,6 +10,7 @@ impl Syscall<'_> {
         if options != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.enforce_basic_policy(PolicyCondition::NewPager)?;
         let pager = Pager::new();
         let proc = self.thread.proc();
         // ZX_DEFAULT_PAGER_RIGHTS = INSPECT | TRANSFER | RESIZE | ATTACH_VMO | MANAGE_VMO

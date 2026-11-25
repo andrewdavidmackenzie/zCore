@@ -58,18 +58,31 @@ impl KernelHandler for ZcoreKernelHandler {
         // where locks can be taken and yields are safe.
         if let Some(thread) = hal_impl::thread::get_current_thread() {
             if let Ok(thread) = thread.downcast::<Thread>() {
+                // #829/#862 review: do NOT call thread.name() here —
+                // it takes KObjectBase.inner (a KernelMutex) and
+                // clones a String (heap allocation). If the trap
+                // interrupted code holding either lock, this line
+                // would deadlock or run drop glue in interrupt
+                // context. `id` is a plain field — safe to read. The
+                // reaper logs the thread's name in task context.
                 error!(
                     "kernel trap on CPU{} ({}: trap_num={:#x} rip={:#x}): \
-                     killing thread '{}' (tid={})",
+                     killing thread tid={}",
                     info.cpu,
                     info.reason,
                     info.trap_num,
                     info.rip,
-                    thread.name(),
                     thread.id()
                 );
-                queue_reap(thread);
-                return KernelTrapOutcome::Redirect;
+                if queue_reap(thread) {
+                    return KernelTrapOutcome::Redirect;
+                }
+                // Reap queue full — the death cannot be staged; halt
+                // this CPU instead of redirecting into a staging that
+                // never completes (the abandoned poll would spin in
+                // the runtime loop forever).
+                error!("[ktrap-reaper] reap queue full; halting CPU{}", info.cpu);
+                return KernelTrapOutcome::Halt;
             }
         }
         // No current thread (pure interrupt context) — nothing to kill.
@@ -159,21 +172,27 @@ static REAP_SLOTS: [AtomicUsize; 16] = [const { AtomicUsize::new(0) }; 16];
 
 /// Queue a thread for task-context teardown. Interrupt-safe.
 #[cfg_attr(feature = "baremetal-test", allow(dead_code))]
-fn queue_reap(thread: Arc<Thread>) {
+/// Queue a thread for reaping. Returns false when every slot is
+/// full — the caller must then choose a fallback (halt) instead of
+/// redirecting, because the staged death would never complete.
+fn queue_reap(thread: Arc<Thread>) -> bool {
     let ptr = Arc::into_raw(thread) as usize;
     for slot in &REAP_SLOTS {
         if slot
             .compare_exchange(0, ptr, Ordering::SeqCst, Ordering::Relaxed)
             .is_ok()
         {
-            return;
+            return true;
         }
     }
-    // Queue full: leak the Arc rather than blocking or dropping from
-    // interrupt context. Bounded by the slot count; the reaper drains
-    // within one poll interval.
+    // Queue full: LEAK the reference (do not resurrect-and-drop).
+    // Dropping from interrupt context would run the Thread drop glue
+    // — kernel locks, signal delivery — exactly what the slot queue
+    // exists to avoid. The leak is bounded by the slot count and
+    // only occurs under a crash storm.
     error!("[ktrap-reaper] reap queue full — leaking thread handle");
-    unsafe { drop(Arc::from_raw(ptr as *const Thread)) };
+    core::mem::forget(unsafe { Arc::from_raw(ptr as *const Thread) });
+    false
 }
 
 /// The reaper task: completes staged thread deaths in task context.

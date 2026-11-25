@@ -135,4 +135,3 @@ fuchsia_qemu_args() {
         FUCHSIA_QEMU_ARGS+=(-cpu Skylake-Client,-check)
     fi
 }
-// trigger

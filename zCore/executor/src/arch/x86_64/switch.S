@@ -63,7 +63,12 @@ switch:
     .globl switch_no_save
     .balign 4
 switch_no_save:
-        mov rsp, [rsi]      // rsi = to_rsp
+        // One argument: `new` arrives in rdi per the System V ABI
+        // (not rsi — that is the second argument of the two-arg
+        // `switch` above). Reading [rsi] here only worked when the
+        // caller's register allocation happened to leave `new` in
+        // rsi as well.
+        mov rsp, [rdi]      // rdi = to_rsp
 
         // Restore interrupt state first (see above)
         popfq

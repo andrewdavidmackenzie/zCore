@@ -496,16 +496,70 @@ pub fn run_fuchsia_userboot(zbi: impl AsRef<[u8]>, _cmdline: &str) -> Arc<Proces
             PAGE_SIZE,
         )
         .expect("failed to allocate userboot image VMAR");
-    let code_flags = MMUFlags::READ | MMUFlags::WRITE | MMUFlags::EXECUTE | MMUFlags::USER;
-    let load_base = image_vmar
-        .map(
-            None,
-            code_vmo.clone(),
-            0,
-            code_pages * PAGE_SIZE,
-            code_flags,
-        )
-        .expect("failed to map userboot image");
+    // Map each PT_LOAD with its DECLARED permissions (PF_R/W/X)
+    // instead of one RWX blob (#523 review): an RX text page must
+    // not be writable and an RW data page must not be executable.
+    // Segments that share a page (no -z separate-code) get the union
+    // of their flags, like Fuchsia's ELF loader. Self-relocation
+    // (rcrt1) only writes the writable segments, so RX text stays
+    // valid. The image base is the VMAR start (userboot is a
+    // static-PIE linked from vaddr 0).
+    let load_base = image_vmar.addr();
+    {
+        // Collect page-aligned (start, end, flags) runs, merging
+        // overlapping segments.
+        let mut runs: alloc::vec::Vec<(usize, usize, MMUFlags)> = alloc::vec::Vec::new();
+        for ph in elf.program_iter() {
+            if ph.get_type().unwrap_or(xmas_elf::program::Type::Null)
+                != xmas_elf::program::Type::Load
+            {
+                continue;
+            }
+            let mut flags = MMUFlags::USER;
+            let pf = ph.flags();
+            if pf.is_read() {
+                flags |= MMUFlags::READ;
+            }
+            if pf.is_write() {
+                flags |= MMUFlags::WRITE;
+            }
+            if pf.is_execute() {
+                flags |= MMUFlags::EXECUTE;
+            }
+            let start = (ph.virtual_addr() as usize) & !(PAGE_SIZE - 1);
+            let end = ((ph.virtual_addr() as usize)
+                + ph.mem_size() as usize
+                + PAGE_SIZE
+                - 1)
+                & !(PAGE_SIZE - 1);
+            if end <= start {
+                continue;
+            }
+            match runs
+                .iter_mut()
+                .find(|(s, e, _)| start < *e && end > *s)
+            {
+                Some((s, e, f)) => {
+                    // Overlapping run: extend and union the flags.
+                    *s = (*s).min(start);
+                    *e = (*e).max(end);
+                    *f |= flags;
+                }
+                None => runs.push((start, end, flags)),
+            }
+        }
+        for (start, end, flags) in runs {
+            image_vmar
+                .map(
+                    Some(load_base + start),
+                    code_vmo.clone(),
+                    start,
+                    end - start,
+                    flags,
+                )
+                .expect("failed to map userboot segment");
+        }
+    }
     let entry = load_base + elf.header.pt2.entry_point() as usize;
     info!(
         "userboot: loaded ELF ({} bytes, base={:#x}, entry={:#x})",
