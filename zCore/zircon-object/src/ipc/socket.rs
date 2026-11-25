@@ -1,10 +1,11 @@
 use {
     crate::object::*,
-    alloc::collections::VecDeque,
     alloc::sync::{Arc, Weak},
     bitflags::bitflags,
     lock::KernelMutex,
 };
+
+use super::mbuf::MBufChain;
 
 /// Bidirectional streaming IPC transport.
 ///
@@ -23,8 +24,8 @@ pub struct Socket {
 
 #[derive(Default)]
 struct SocketInner {
-    data: VecDeque<u8>,
-    datagram_len: VecDeque<usize>,
+    /// Buffered payload: a chain of fixed-size mbuf nodes (#901).
+    data: MBufChain,
     read_threshold: usize,
     write_threshold: usize,
     read_disabled: bool,
@@ -236,15 +237,14 @@ impl Socket {
         }
         let mut inner = self.inner.lock();
         let actual_count = data.len();
-        inner.data.extend(data);
-        inner.datagram_len.push_back(actual_count);
+        inner.data.write_datagram(data);
         // INV-SOCKET-1: datagrams are all-or-nothing — the write
         // either fully lands or fails (checked by the caller), and
         // the datagram-length accounting always matches the buffered
         // bytes.
         #[cfg(feature = "invariant-checks")]
         {
-            let accounted: usize = inner.datagram_len.iter().sum();
+            let accounted = inner.data.datagram_bytes_accounted();
             assert_eq!(
                 accounted,
                 inner.data.len(),
@@ -253,7 +253,7 @@ impl Socket {
                 inner.data.len()
             );
             assert_eq!(
-                *inner.datagram_len.back().unwrap(),
+                inner.data.last_datagram_len().unwrap(),
                 actual_count,
                 "INV-SOCKET-1: partial datagram queued"
             );
@@ -264,7 +264,7 @@ impl Socket {
     fn write_stream(&self, data: &[u8]) -> ZxResult<usize> {
         let actual_count = data.len();
         let mut inner = self.inner.lock();
-        inner.data.extend(data);
+        inner.data.write_stream(data);
         Ok(actual_count)
     }
 
@@ -343,37 +343,12 @@ impl Socket {
             return Ok(0);
         }
         let mut inner = self.inner.lock();
-        let datagram_len = if peek {
-            *inner.datagram_len.front().unwrap()
-        } else {
-            inner.datagram_len.pop_front().unwrap()
-        };
-        let read_size = data.len().min(datagram_len);
-        if peek {
-            for (i, x) in inner.data.iter().take(read_size).enumerate() {
-                data[i] = *x;
-            }
-        } else {
-            for (i, x) in inner.data.drain(..datagram_len).take(read_size).enumerate() {
-                data[i] = x;
-            }
-        };
-        Ok(read_size)
+        Ok(inner.data.read_datagram(data, !peek))
     }
 
     fn read_stream(&self, data: &mut [u8], peek: bool) -> ZxResult<usize> {
         let mut inner = self.inner.lock();
-        let read_size = data.len().min(inner.data.len());
-        if peek {
-            for (i, x) in inner.data.iter().take(read_size).enumerate() {
-                data[i] = *x;
-            }
-        } else {
-            for (i, x) in inner.data.drain(..read_size).enumerate() {
-                data[i] = x;
-            }
-        };
-        Ok(read_size)
+        Ok(inner.data.read_stream(data, !peek))
     }
 
     /// Get information of the socket.
@@ -384,7 +359,7 @@ impl Socket {
             let (inner, peer_inner) = Socket::lock_endpoint_pair(self, &peer);
             let self_size = inner.data.len();
             let rx_buf_available = if self.flags.contains(SocketFlags::DATAGRAM) {
-                *inner.datagram_len.front().unwrap_or(&0)
+                inner.data.front_datagram_len().unwrap_or(0)
             } else {
                 self_size
             };
@@ -401,7 +376,7 @@ impl Socket {
             let inner = self.inner.lock();
             let self_size = inner.data.len();
             let rx_buf_available = if self.flags.contains(SocketFlags::DATAGRAM) {
-                *inner.datagram_len.front().unwrap_or(&0)
+                inner.data.front_datagram_len().unwrap_or(0)
             } else {
                 self_size
             };
