@@ -9,7 +9,7 @@
 //! 3. No two Rust tests point to the same C++ test (no duplicates).
 //! 4. The total counts match.
 //!
-//! It also reports counts for `#[ignore]` tests and C++ skip-list entries.
+//! It also reports counts for `#[ignore]` tests.
 
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
@@ -167,19 +167,6 @@ fn load_cpp_tests(path: &Path) -> BTreeSet<String> {
         .collect()
 }
 
-/// Load the skip list (lines starting with `#` are comments, blank lines ignored).
-fn load_skip_list(path: &Path) -> BTreeSet<String> {
-    let content = match fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(_) => return BTreeSet::new(),
-    };
-    content
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .collect()
-}
-
 /// Result of the audit.
 pub struct AuditResult {
     pub cpp_count: usize,
@@ -191,10 +178,9 @@ pub struct AuditResult {
     pub undocumented: Vec<(String, String)>,    // (file, fn_name) — no C++ doc comment
     pub rust_ignored: usize,
     pub rust_stubs: usize,
-    pub cpp_skipped: usize,
     // Skip/ignore correspondence
     pub stubs: Vec<(String, String, String)>, // (file, fn_name, cpp_ref) — unimplemented!() tests
-    pub ignored_not_skipped: Vec<(String, String, String)>, // #[ignore] but NOT in skip list
+    pub ignored_not_skipped: Vec<(String, String, String)>, // #[ignore] tests
     pub petal_ported: usize,                  // Tests ported to petal user-mode binary
     pub unported: Vec<String>, // C++ tests intentionally not ported (see tests/core-tests-unported.txt)
     pub unported_with_rust: Vec<String>, // unported-list entries that DO have a Rust counterpart (inconsistent)
@@ -204,7 +190,6 @@ pub struct AuditResult {
 /// is fundamentally wrong (files not found, etc.).
 pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
     let cpp_path = project_dir.join("tests/fuchsia-core-tests-from-binary.txt");
-    let skip_path = project_dir.join("tests/core-tests-skip.txt");
     let core_tests_dir = project_dir.join("zCore/zircon-tests/src/core_tests");
 
     if !cpp_path.exists() {
@@ -218,7 +203,6 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
     }
 
     let cpp_tests = load_cpp_tests(&cpp_path);
-    let skip_list = load_skip_list(&skip_path);
 
     // Parse all Rust test files
     let mut all_rust_tests: Vec<RustTest> = Vec::new();
@@ -336,12 +320,10 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
         })
         .collect();
 
-    // #[ignore] but NOT in skip list
+    // #[ignore] tests
     let ignored_not_skipped: Vec<(String, String, String)> = all_rust_tests
         .iter()
-        .filter(|t| {
-            t.is_ignored && !t.is_stub && t.cpp_ref.as_ref().is_some_and(|r| !skip_list.contains(r))
-        })
+        .filter(|t| t.is_ignored && !t.is_stub)
         .map(|t| {
             (
                 t.file.clone(),
@@ -361,7 +343,6 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
         undocumented,
         rust_ignored,
         rust_stubs,
-        cpp_skipped: skip_list.len(),
         stubs,
         ignored_not_skipped,
         petal_ported: petal_ported.len(),
@@ -380,7 +361,6 @@ pub fn print_and_check(result: &AuditResult) -> bool {
     println!("  Matched 1:1:             {}", result.matched);
     println!("  Rust #[ignore]:          {}", result.rust_ignored);
     println!("  Rust stubs:              {}", result.rust_stubs);
-    println!("  C++ skip-list entries:   {}", result.cpp_skipped);
 
     let petal_count = result.petal_ported;
     let unported_count = result.unported.len();
@@ -480,16 +460,16 @@ pub fn print_and_check(result: &AuditResult) -> bool {
         ok = false;
     }
 
-    // #[ignore] must correspond to skip list
+    // #[ignore] audit
     if !result.ignored_not_skipped.is_empty() {
         println!(
-            "  FAIL: {} Rust tests are #[ignore] but NOT in the C++ skip list:",
+            "  FAIL: {} Rust tests are #[ignore]:",
             result.ignored_not_skipped.len()
         );
         for (file, fn_name, cpp_ref) in &result.ignored_not_skipped {
             println!("    {file} fn {fn_name} -> {cpp_ref}");
         }
-        println!("    (either un-ignore the Rust test or add to tests/core-tests-skip.txt)");
+        println!("    (un-ignore the Rust test or remove it)");
         ok = false;
     }
 

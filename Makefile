@@ -425,17 +425,8 @@ zircon-rootfs-test:
 # Override with: make core-tests CORE_TESTS_TIMEOUT=900
 CORE_TESTS_TIMEOUT ?= 0
 CORE_TESTS_LOG ?= /tmp/qemu-core-tests.log
-CORE_TESTS_SKIP_FILE ?= tests/core-tests-skip.txt
-
-# Build the skip filter from the skip-list file unless the caller
-# supplied an explicit CORE_TESTS_FILTER.  The file uses one gtest
-# pattern per line; comments (#) and blank lines are ignored.
-ifndef CORE_TESTS_FILTER
-  ifneq ($(wildcard $(CORE_TESTS_SKIP_FILE)),)
-    CORE_TESTS_FILTER := $(shell sed '/^[[:space:]]*\#/d; /^[[:space:]]*$$/d' $(CORE_TESTS_SKIP_FILE) \
-                            | paste -s -d ':' - | sed 's/^/-/')
-  endif
-endif
+# Optional gtest filter (e.g. CORE_TESTS_FILTER='PortTest.*' to run
+# one suite). No default: the full suite runs as-is.
 CORE_TESTS_FILTER ?=
 
 # ── Core-tests build pipeline ────────────────────────────────────────
@@ -610,9 +601,7 @@ core-tests: core-tests-build
 	F=$$(grep -c '\[  FAILED  \]' $$CLEAN || true); \
 	R=$$(grep '\[==========\]' $$CLEAN | tail -1 | sed -n 's/.*\] \([0-9]*\) test.*/\1/p'); \
 	if [ -z "$$R" ]; then R=$$(($$P + $$F)); PARTIAL=" (no summary — partial run)"; else PARTIAL=""; fi; \
-	S=$$(sed '/^[[:space:]]*\#/d; /^[[:space:]]*$$/d' $(CORE_TESTS_SKIP_FILE) 2>/dev/null | wc -l | tr -d ' '); \
-	T=$$(($$R + $$S)); \
-	echo "Passed: $$P  Failed: $$F  Ran: $$R/$$T  Skipped: $$S$$PARTIAL"; \
+	echo "Passed: $$P  Failed: $$F  Ran: $$R$$PARTIAL"; \
 	grep '\[  FAILED  \]' $$CLEAN || true; \
 	HUNG=$$(grep '\[ RUN      \]' $$CLEAN | tail -1 | sed 's/.*\] //'); \
 	LAST_OK=$$(grep '\[       OK \]' $$CLEAN | tail -1 | sed 's/.*\] //' | sed 's/ (.*//'); \
