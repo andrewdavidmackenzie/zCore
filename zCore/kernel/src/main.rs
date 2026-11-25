@@ -42,6 +42,29 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
     hal_impl::memory::insert_regions(&hal_impl::mem::free_pmem_regions());
     hal_impl::primary_init();
 
+    // Deferred-timer drain task (#523/#829): timer callbacks may only
+    // do lock-free work (they run under the NAIVE_TIMER spinlock with
+    // interrupts disabled); the heavy part — signal delivery, waiter
+    // wakeups, KernelMutex work — is deferred and drained here in
+    // task context where locks can be taken and yields are safe.
+    //
+    // Spawned in BOTH configurations: baremetal-test needs it too —
+    // SleepFuture wakes are deferred since the timer-IRQ ABBA fix,
+    // so without a drainer every timed test hangs (the rust-tests
+    // channel_call_mutex freeze).
+    hal_impl::thread::spawn(async {
+        loop {
+            // NOTE: this task must NOT sleep via SleepFuture: its
+            // wake would be deferred into the very queue this task
+            // drains (timer callbacks never wake directly, #523) —
+            // a self-deadlock. Yield-poll instead: the deferred
+            // callbacks (timer signal touches, sleeper wakes) run
+            // with ~scheduler-round-trip latency.
+            let _ran = hal_impl::timer::drain_deferred_timer_callbacks();
+            hal_impl::thread::yield_now().await;
+        }
+    });
+
     #[cfg(feature = "baremetal-test")]
     {
         STARTED.store(true, Ordering::SeqCst);
@@ -55,24 +78,6 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
         // a faulted CPU. Must be spawned after the executor runtimes
         // exist (primary_init → smp::boot_application_processors).
         handler::spawn_reaper();
-        // Deferred-timer drain task (#523/#829): timer callbacks may
-        // only do lock-free work (they run under the NAIVE_TIMER
-        // spinlock with interrupts disabled); the heavy part — signal
-        // delivery, waiter wakeups, KernelMutex work — is deferred and
-        // drained here in task context where locks can be taken and
-        // yields are safe.
-        hal_impl::thread::spawn(async {
-            loop {
-                // NOTE: this task must NOT sleep via SleepFuture: its
-                // wake would be deferred into the very queue this task
-                // drains (timer callbacks never wake directly, #523) —
-                // a self-deadlock. Yield-poll instead: the deferred
-                // callbacks (timer signal touches, sleeper wakes) run
-                // with ~scheduler-round-trip latency.
-                let _ran = hal_impl::timer::drain_deferred_timer_callbacks();
-                hal_impl::thread::yield_now().await;
-            }
-        });
         let options = boot_options();
         info!("Boot options: {:#?}", options);
         let fuchsia_userboot = options.fuchsia_userboot;

@@ -38,6 +38,49 @@ impl KernelHandler for ZcoreKernelHandler {
         }
     }
 
+    fn handle_kernel_trap_fatal(&self, info: &KernelTrapInfo) -> KernelTrapOutcome {
+        // Stage the current thread's death so the rest of the system
+        // observes it: the process's death signals fire, waiters wake,
+        // and component_manager sees the crash and tears down the
+        // component — the same observable behavior as a userspace
+        // crash.
+        //
+        // #829/#862 lock discipline: this runs in interrupt context
+        // with interrupts disabled (x86 interrupt gates clear IF on
+        // entry). We must NOT acquire a KernelMutex here — a contended
+        // acquisition cannot yield from interrupt context and would
+        // escalate to the mutex.rs nested-spin panic (the historical
+        // multi-CPU panic cascade during process-crash teardown, where
+        // every CPU faulting into a teardown path contended the dying
+        // process's inner locks). Instead the thread is queued in a
+        // lock-free slot array; the reaper task (spawned at boot, see
+        // `spawn_reaper`) performs the real teardown in task context
+        // where locks can be taken and yields are safe.
+        if let Some(thread) = hal_impl::thread::get_current_thread() {
+            if let Ok(thread) = thread.downcast::<Thread>() {
+                error!(
+                    "kernel trap on CPU{} ({}: trap_num={:#x} rip={:#x}): \
+                     killing thread '{}' (tid={})",
+                    info.cpu,
+                    info.reason,
+                    info.trap_num,
+                    info.rip,
+                    thread.name(),
+                    thread.id()
+                );
+                queue_reap(thread);
+                return KernelTrapOutcome::Redirect;
+            }
+        }
+        // No current thread (pure interrupt context) — nothing to kill.
+        error!(
+            "kernel trap on CPU{} ({}: trap_num={:#x} rip={:#x}): \
+             no current thread; halting this CPU",
+            info.cpu, info.reason, info.trap_num, info.rip
+        );
+        KernelTrapOutcome::Halt
+    }
+
     fn frame_alloc_contiguous(&self, frame_count: usize, align_log2: usize) -> Option<PhysAddr> {
         hal_impl::memory::frame_alloc(frame_count, align_log2)
     }
