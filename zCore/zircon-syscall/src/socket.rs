@@ -45,7 +45,12 @@ impl Syscall<'_> {
                 .thread
                 .proc()
                 .get_object_with_rights::<Socket>(handle_value, Rights::WRITE)?;
-            let actual_count = socket.write(&user_bytes.read_array(count)?)?;
+            // Zircon: bound the kernel buffer at what the socket can
+            // accept — stream writes cap at the buffer size (short
+            // write), datagram writes larger than the buffer are
+            // rejected with OUT_OF_RANGE before any allocation (#471).
+            let read_len = socket.bound_write_len(count)?;
+            let actual_count = socket.write(&user_bytes.read_array(read_len)?)?;
             actual_count_ptr.write_if_not_null(actual_count)?;
             Ok(())
         } else {
@@ -78,10 +83,14 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let socket = proc.get_object_with_rights::<Socket>(handle_value, Rights::READ)?;
+        // Zircon: the socket can never hold more than SOCKET_SIZE bytes,
+        // so a larger read buffer is wasted allocation (#471).
+        let bounded_count = socket.bound_read_len(count);
         let mut data = {
             let mut v = alloc::vec::Vec::new();
-            v.try_reserve(count).map_err(|_| ZxError::INVALID_ARGS)?;
-            v.resize(count, 0u8);
+            v.try_reserve(bounded_count)
+                .map_err(|_| ZxError::INVALID_ARGS)?;
+            v.resize(bounded_count, 0u8);
             v
         };
         let peek = options.contains(SocketFlags::SOCKET_PEEK);
