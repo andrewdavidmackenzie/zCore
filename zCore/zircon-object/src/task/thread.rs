@@ -1351,13 +1351,31 @@ impl CurrentThread {
         F: Future<Output = FT> + Unpin,
         FT: IntoResult<T>,
     {
-        let (old_state, killed) = {
+        let (old_state, killed, suspended) = {
             let mut inner = self.inner.lock();
             if inner.state() == ThreadState::Dying {
                 return Err(ZxError::STOP);
             }
+            // #903: if the thread is ALREADY suspended (suspend()
+            // fired before this wait registered), don't park —
+            // return immediately so the run loop observes the
+            // suspension and the syscall retries on resume
+            // (Fuchsia's interruptible-wait semantics).
+            if inner.suspend_count > 0 && inner.context.is_some() {
+                return Err(ZxError::INTERNAL_INTR_RETRY);
+            }
             let (sender, receiver) = channel();
             inner.killer = Some(sender);
+            // #903: register the suspend interrupt so suspend()
+            // aborts this wait. Without it, a thread suspended
+            // mid-syscall stays parked inside the select below until
+            // the wait completes naturally — the handshake stall
+            // behind DebugRegistersWatchpointSyscallPanicRepro (both
+            // test threads parked, no state transitions). Fuchsia
+            // aborts interruptible waits on suspension and returns
+            // ZX_ERR_INTERNAL_INTR_RETRY to userspace.
+            let (suspend_tx, suspend_rx) = channel();
+            inner.suspend_interrupt = Some(suspend_tx);
             // State may already be set by set_blocking_state().
             // Record old state for restoration on completion.
             let old_state = if inner.state == state {
@@ -1367,24 +1385,27 @@ impl CurrentThread {
                 inner.change_state(state, &self.base);
                 old
             };
-            (old_state, receiver)
+            (old_state, receiver, suspend_rx)
         };
         let ret = if let Some(cancel_token) = cancel_token {
             select_biased! {
                 ret = future.fuse() => ret.into_result(),
                 _ = killed.fuse() => Err(ZxError::STOP),
                 _ = cancel_token.fuse() => Err(ZxError::CANCELED),
+                _ = suspended.fuse() => Err(ZxError::INTERNAL_INTR_RETRY),
                 _ = hal_impl::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
             }
         } else {
             select_biased! {
                 ret = future.fuse() => ret.into_result(),
                 _ = killed.fuse() => Err(ZxError::STOP),
+                _ = suspended.fuse() => Err(ZxError::INTERNAL_INTR_RETRY),
                 _ = hal_impl::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
             }
         };
         let mut inner = self.inner.lock();
         inner.killer = None;
+        inner.suspend_interrupt = None;
         // Clear suspended_from_blocked: the syscall that set it has
         // now completed. Without this, a later write_state could
         // incorrectly set debugger_return_override for a finished
