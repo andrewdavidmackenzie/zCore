@@ -102,6 +102,20 @@ impl_kobject!(Thread
 );
 define_count_helper!(Thread);
 
+/// The kind of wait registered in `ThreadInner::suspend_interrupt`.
+enum SuspendWait {
+    /// A blocking syscall (channel read/write, port, object wait,
+    /// futex, nanosleep). Suspension aborts it: the saved context's
+    /// return register is set to ZX_ERR_INTERNAL_INTR_RETRY (-6) and
+    /// the wait returns the same error, so userspace retries after
+    /// resume (Fuchsia's interruptible-wait semantics).
+    Syscall(Sender<()>),
+    /// A pager/usercopy fault wait. Suspension aborts it (the fault
+    /// re-executes after resume) but the saved context is NOT
+    /// touched — its registers hold live user data.
+    Pager(Sender<()>),
+}
+
 #[derive(Default)]
 pub struct ThreadInner {
     /// Thread context
@@ -127,11 +141,18 @@ pub struct ThreadInner {
     waker: Option<Waker>,
     /// A token used to kill blocking thread
     killer: Option<Sender<()>>,
-    /// A token used to interrupt suspendable blocking waits (e.g., pager waits).
-    /// When a thread is suspended during a suspendable blocking_run, this
-    /// channel fires to interrupt the wait so the run loop can process the
-    /// suspend and go Pending in wait_for_run.
-    suspend_interrupt: Option<Sender<()>>,
+    /// A token used to interrupt suspendable blocking waits. When a
+    /// thread is suspended during an escapable blocking_run, this
+    /// channel fires to abort the wait so the run loop can process
+    /// the suspend and go Pending in wait_for_run.
+    ///
+    /// The KIND decides the suspension policy — it is a property of
+    /// the wait, not the thread state (both channel reads and
+    /// channel_call waits are BlockedChannel, but only the former may
+    /// be escaped). Waits that must SURVIVE suspension (exception
+    /// handling, zx_channel_call's reply wait) register nothing: only
+    /// kill() escapes those, via the killer channel.
+    suspend_interrupt: Option<SuspendWait>,
     /// Thread state
     ///
     /// NOTE: This variable will never be `Suspended`. On suspended, the
@@ -1125,8 +1146,12 @@ impl Thread {
             }
             // Also fire the suspend interrupt and killer to unblock any
             // blocking_run_suspendable or blocking_run that may be
-            // holding the run_user future.
-            if let Some(sender) = inner.suspend_interrupt.take() {
+            // holding the run_user future. Kill escapes EVERY wait
+            // kind (including ones suspension cannot touch).
+            if let Some(wait) = inner.suspend_interrupt.take() {
+                let sender = match wait {
+                    SuspendWait::Syscall(s) | SuspendWait::Pager(s) => s,
+                };
                 let _ = sender.send(());
             }
             if let Some(killer) = inner.killer.take() {
@@ -1163,42 +1188,42 @@ impl Task for Thread {
         let mut inner = self.inner.lock();
         inner.suspend_count += 1;
         let state = inner.state;
-        // When suspending a thread that is in a blocking syscall,
-        // set the return register to ZX_ERR_INTERNAL_INTR_RETRY (-6).
-        // This tells the debugger "the syscall was interrupted; if you
-        // resume without modifying rax, the kernel will retry it."
-        // Do NOT set this for BlockedPager — the thread is in a page
-        // fault handler, not a syscall. The return register holds
-        // user data, and overwriting it with -6 corrupts user state,
-        // causing a crash when the thread resumes and re-executes the
-        // faulting instruction with rax = 0xfffffffffffffffa.
-        // BlockedException is excluded for the same reason AND
-        // because Fuchsia suspensions do not escape exception
-        // handling (Threads.SuspendMultiple: "suspends don't escape
-        // out of exception handling, unlike blocking syscalls where
-        // suspend will escape out of them"): the thread stays in the
-        // exception wait, the user context is restored verbatim when
-        // the exception resumes user mode, and the suspension takes
-        // effect when the run loop parks after the exception
-        // resolves.
-        let escapable_wait = state.is_blocked()
-            && state != ThreadState::BlockedPager
-            && state != ThreadState::BlockedException;
-        if inner.context.is_some() && escapable_wait {
-            if let Some(ref mut ctx) = inner.context {
-                use hal_impl::context::UserContextField;
-                ctx.set_field(UserContextField::ReturnValue, (-6i64) as usize);
-            }
-            inner.suspended_from_blocked = true;
-        }
-        inner.change_state(state, &self.base);
-        // Interrupt any suspendable blocking wait (blocking syscalls
-        // and pager waits). Exception waits are exempt — see above.
-        if state != ThreadState::BlockedException {
-            if let Some(sender) = inner.suspend_interrupt.take() {
+        // Abort escapable waits. The registered wait KIND decides the
+        // context policy (see SuspendWait):
+        // - Syscall waits: set the return register to
+        //   ZX_ERR_INTERNAL_INTR_RETRY (-6) — it tells the debugger
+        //   "the syscall was interrupted; if you resume without
+        //   modifying rax, the kernel will retry it" — and abort the
+        //   wait with the same error.
+        // - Pager waits: abort only. The thread is in a page fault
+        //   handler, not a syscall; the return register holds live
+        //   user data, and overwriting it with -6 corrupts user
+        //   state, crashing the re-executed faulting instruction.
+        // - Waits that must survive suspension register nothing:
+        //   Fuchsia suspensions do not escape exception handling
+        //   (Threads.SuspendMultiple: "suspends don't escape out of
+        //   exception handling, unlike blocking syscalls where
+        //   suspend will escape out of them"), and a suspended
+        //   zx_channel_call stays pending and completes after resume
+        //   (ChannelTest.CallSuspendedThreadResumesAndSucceeds). Only
+        //   kill() escapes those, via the killer channel.
+        match inner.suspend_interrupt.take() {
+            Some(SuspendWait::Syscall(sender)) => {
+                if inner.context.is_some() {
+                    if let Some(ref mut ctx) = inner.context {
+                        use hal_impl::context::UserContextField;
+                        ctx.set_field(UserContextField::ReturnValue, (-6i64) as usize);
+                    }
+                    inner.suspended_from_blocked = true;
+                }
                 let _ = sender.send(());
             }
+            Some(SuspendWait::Pager(sender)) => {
+                let _ = sender.send(());
+            }
+            None => {}
         }
+        inner.change_state(state, &self.base);
     }
 
     fn resume(self: &Arc<Self>) {
@@ -1375,13 +1400,9 @@ impl CurrentThread {
             // fired before this wait registered), don't park —
             // return immediately so the run loop observes the
             // suspension and the syscall retries on resume
-            // (Fuchsia's interruptible-wait semantics).
-            // Exception waits are exempt: Fuchsia suspensions do NOT
-            // escape exception handling — the wait runs to
-            // resolution and the suspension applies when the run
-            // loop parks afterward.
-            let suspend_escapes = state != ThreadState::BlockedException;
-            if suspend_escapes && inner.suspend_count > 0 && inner.context.is_some() {
+            // (Fuchsia's interruptible-wait semantics). Waits that
+            // must survive suspension use blocking_run_uninterruptible.
+            if inner.suspend_count > 0 && inner.context.is_some() {
                 return Err(ZxError::INTERNAL_INTR_RETRY);
             }
             let (sender, receiver) = channel();
@@ -1395,7 +1416,7 @@ impl CurrentThread {
             // aborts interruptible waits on suspension and returns
             // ZX_ERR_INTERNAL_INTR_RETRY to userspace.
             let (suspend_tx, suspend_rx) = channel();
-            inner.suspend_interrupt = Some(suspend_tx);
+            inner.suspend_interrupt = Some(SuspendWait::Syscall(suspend_tx));
             // State may already be set by set_blocking_state().
             // Record old state for restoration on completion.
             let old_state = if inner.state == state {
@@ -1431,6 +1452,76 @@ impl CurrentThread {
         // incorrectly set debugger_return_override for a finished
         // syscall.
         inner.suspended_from_blocked = false;
+        if inner.state() == ThreadState::Dying {
+            return ret;
+        }
+        assert_eq!(inner.state, state);
+        inner.change_state(old_state, &self.base);
+        ret
+    }
+
+    /// Run a future while blocking — interruptible by kill, deadline
+    /// and cancel, but NOT by suspension.
+    ///
+    /// For waits that must survive a suspend (Fuchsia semantics):
+    ///
+    /// - Exception handling: "suspends don't escape out of exception
+    ///   handling, unlike blocking syscalls where suspend will escape
+    ///   out of them" (Threads.SuspendMultiple). The wait runs to
+    ///   resolution; the suspension takes effect when the run loop
+    ///   parks afterward. The saved context is restored verbatim on
+    ///   exception resume, so no return-register marking either.
+    /// - `zx_channel_call`'s reply wait: the call transaction stays
+    ///   pending and the call completes after resume
+    ///   (ChannelTest.CallSuspendedThreadResumesAndSucceeds).
+    ///
+    /// No `suspend_interrupt` is registered — `suspend()` cannot
+    /// abort this wait. `kill()` still escapes it via the killer
+    /// channel, and the deadline/cancel paths behave as in
+    /// [`blocking_run`].
+    pub async fn blocking_run_uninterruptible<F, T, FT>(
+        &self,
+        future: F,
+        state: ThreadState,
+        deadline: Duration,
+        cancel_token: Option<Receiver<()>>,
+    ) -> ZxResult<T>
+    where
+        F: Future<Output = FT> + Unpin,
+        FT: IntoResult<T>,
+    {
+        let (old_state, killed) = {
+            let mut inner = self.inner.lock();
+            if inner.state() == ThreadState::Dying {
+                return Err(ZxError::STOP);
+            }
+            let (sender, receiver) = channel();
+            inner.killer = Some(sender);
+            let old_state = if inner.state == state {
+                ThreadState::Running
+            } else {
+                let old = inner.state;
+                inner.change_state(state, &self.base);
+                old
+            };
+            (old_state, receiver)
+        };
+        let ret = if let Some(cancel_token) = cancel_token {
+            select_biased! {
+                ret = future.fuse() => ret.into_result(),
+                _ = killed.fuse() => Err(ZxError::STOP),
+                _ = cancel_token.fuse() => Err(ZxError::CANCELED),
+                _ = hal_impl::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
+            }
+        } else {
+            select_biased! {
+                ret = future.fuse() => ret.into_result(),
+                _ = killed.fuse() => Err(ZxError::STOP),
+                _ = hal_impl::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
+            }
+        };
+        let mut inner = self.inner.lock();
+        inner.killer = None;
         if inner.state() == ThreadState::Dying {
             return ret;
         }
@@ -1475,7 +1566,7 @@ impl CurrentThread {
             let (kill_tx, kill_rx) = channel();
             inner.killer = Some(kill_tx);
             let (suspend_tx, suspend_rx) = channel();
-            inner.suspend_interrupt = Some(suspend_tx);
+            inner.suspend_interrupt = Some(SuspendWait::Pager(suspend_tx));
             let old_state = if inner.state == state {
                 ThreadState::Running
             } else {
@@ -1603,7 +1694,11 @@ impl CurrentThread {
         } else {
             let future = exception.handle();
             pin_mut!(future);
-            self.blocking_run(
+            // Uninterruptible by suspension: Fuchsia suspends do not
+            // escape exception handling — the wait runs to resolution
+            // and the suspension applies when the run loop parks
+            // afterward (Threads.SuspendMultiple).
+            self.blocking_run_uninterruptible(
                 future,
                 ThreadState::BlockedException,
                 Duration::from_nanos(u64::MAX),

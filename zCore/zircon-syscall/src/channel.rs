@@ -262,7 +262,7 @@ impl Syscall<'_> {
         self.thread.set_blocking_state(ThreadState::BlockedChannel);
         let rd_msg: MessagePacket = self
             .thread
-            .blocking_run(
+            .blocking_run_uninterruptible(
                 future,
                 ThreadState::BlockedChannel,
                 deadline.into(),
@@ -503,7 +503,7 @@ impl Syscall<'_> {
         self.thread.set_blocking_state(ThreadState::BlockedChannel);
         let rd_msg: MessagePacket = self
             .thread
-            .blocking_run(
+            .blocking_run_uninterruptible(
                 future,
                 ThreadState::BlockedChannel,
                 deadline.into(),
