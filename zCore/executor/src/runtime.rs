@@ -462,30 +462,35 @@ pub fn change_task_priority(cpu_id: u8, key: Key, new_priority: usize) {
     }
 }
 
-/// check whether the running coroutine of current cpu time out, if yes, we will
-/// switch to currrent cpu runtime that would create a new executor to run other
-/// coroutines.
+/// Timer tick bookkeeping.
+///
+/// #523: this must NOT context-switch away from the interrupted
+/// coroutine. Since the ThreadSwitchFuture IrqLock removal made
+/// polls run with interrupts enabled, the timer IRQ can land
+/// mid-poll — and a mid-poll `sched_yield` suspends the task at an
+/// ARBITRARY point, possibly while it holds a non-IRQ-safe lock
+/// (e.g. `WakerTarget::inner`, a `spin::Mutex` taken by the wake
+/// path). The IRQ-side wake then spins on that lock forever — with
+/// `manager_lapic` held — and every other CPU piles up behind it:
+/// the core-tests system freeze (all 8 CPUs in `Apic::handle_irq`,
+/// observed live via gdb).
+///
+/// Preemption still happens at the documented safe points, where no
+/// task-context lock can be held:
+///  - syscall return: trap.rs already calls `set_preempt_pending()`
+///    before this, and the loader's run loop checks it via
+///    `take_preempt_pending()` → `preempt_yield()`;
+///  - await parks: the poll returns, dropping all guards first.
+///
+/// This matches Zircon's invariant that context switches only happen
+/// at defined points under the scheduler lock, never by suspending
+/// arbitrary kernel-side execution.
 pub fn handle_timeout() {
     debug!("handle kernel timeout");
     let cpu = crate::arch::cpu_id() as usize;
     crate::cpu_stats(cpu)
         .reschedules
         .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-    super::run_with_intr_saved_off! {
-        sched_yield()
-    }
-    // #862: after the preemption switch returns, the preempted task
-    // resumes here — still inside the timer IRQ frame (the iretq that
-    // ends the interrupt is further up the stack) — and continues its
-    // kernel work below that frame. Re-enable interrupts for the
-    // remainder of that execution: the EOI was already sent by
-    // handle_irq (the APIC driver sends it before dispatching), so no
-    // in-service IRQ is pending; nested interrupts push below the
-    // current rsp and return normally; and the final iretq restores
-    // the interrupted task's own rflags (the context switch now
-    // saves/restores rflags, so the suspended context resumes with
-    // its own interrupt state).
-    crate::arch::intr_on();
 }
 
 /// Run executor.run()

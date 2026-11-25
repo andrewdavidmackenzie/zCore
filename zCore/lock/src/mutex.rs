@@ -148,12 +148,7 @@ impl<T: ?Sized> KernelMutex<T> {
                 // Contended with interrupts disabled. Two very
                 // different situations share this state (#862/#523):
                 //
-                // 1. An IrqLock critical section is held by THIS CPU
-                //    (spinlock → KernelMutex nesting): yielding would
-                //    abandon the critical section and permanently leak
-                //    its guard. Must fail loudly.
-                //
-                // 2. Task-context kernel code running inside a trap
+                // 1. Task-context kernel code running inside a trap
                 //    frame: the hardware interrupt gate cleared IF on
                 //    trap entry (every IDT entry is an interrupt
                 //    gate) and nothing re-enables it until the iretq.
@@ -166,33 +161,52 @@ impl<T: ?Sized> KernelMutex<T> {
                 //    KernelMutex in it panicked — the multi-CPU panic
                 //    cascade during process-crash teardown.
                 //
-                // The global IrqLock-depth counter distinguishes them:
-                // with IF=0 this CPU cannot be preempted, so the
-                // check is atomic with respect to ourselves. If the
-                // counter is nonzero it is either a transient lock on
-                // ANOTHER CPU (releases within microseconds — the
-                // heap/console/timer locks are held briefly) or a
-                // genuine critical section on this CPU (can never
-                // release while we spin — the holder is us). Wait
-                // bounded for it to clear, then yield; if it never
-                // clears, fail loudly.
-                if !crate::interrupt::intr_get() {
-                    // #523 RCA: this exact state — contended + IF=0 +
-                    // THIS CPU holding an IrqLock — is always fatal
-                    // (the holder can never release while we spin
-                    // here with interrupts disabled). Breakpoint
-                    // target for live call-hierarchy inspection: gdb
-                    // stops at `lock_anomaly_detected` with the full
-                    // live stack, rdi = mutex address, rsi = caller
-                    // Location.
-                    if crate::interrupt::irq_lock_held_on_this_cpu() {
-                        lock_anomaly_detected(
-                            core::ptr::addr_of!(self.locked) as *const (),
-                            core::panic::Location::caller() as *const _ as *const (),
-                        );
-                    }
+                //    Distinguished by the per-CPU IrqLock depth
+                //    (TSS.rsp2): zero here means no critical section
+                //    is held on this CPU.
+                //
+                // 2. An IrqLock critical section is held by THIS
+                //    call chain (spinlock → KernelMutex nesting).
+                //    Yielding would abandon the critical section, so
+                //    retry the acquisition in a bounded spin — the
+                //    KernelMutex holder is typically on ANOTHER CPU
+                //    and releases within microseconds (this nesting
+                //    is legitimate and common: e.g. the futex
+                //    priority-inheritance path holds the FutexInner
+                //    IrqLock across boost_priority's ThreadInner
+                //    KernelMutex). Only if the lock cannot be
+                //    acquired at all — a holder parked on THIS CPU,
+                //    which can never be scheduled while we spin —
+                //    fail loudly.
+                //
+                //    NOTE: do NOT wait for the depth to clear here —
+                //    the IrqLock holder is the current call chain
+                //    itself; the depth can never reach zero while we
+                //    spin, and waiting on it turns every legitimate
+                //    cross-CPU contention into a guaranteed panic
+                //    (the core-tests C11MutexTest hang: futex_wait's
+                //    PI boost under FutexInner, #523).
+                if !crate::interrupt::intr_get() && !crate::interrupt::irq_lock_held_on_this_cpu() {
+                    // Gate context (case 1): take the normal
+                    // spin/yield path below with interrupts
+                    // re-enabled.
+                    crate::interrupt::intr_on();
+                } else if !crate::interrupt::intr_get() {
+                    // Case 2: bounded retry of the acquisition.
                     let mut nested_spins = 0u32;
-                    while crate::interrupt::irq_lock_held_on_this_cpu() {
+                    loop {
+                        if self
+                            .locked
+                            .compare_exchange_weak(
+                                false,
+                                true,
+                                Ordering::Acquire,
+                                Ordering::Relaxed,
+                            )
+                            .is_ok()
+                        {
+                            return KernelMutexGuard { mutex: self };
+                        }
                         nested_spins += 1;
                         if nested_spins >= NESTED_SPIN_MAX_ITERS {
                             // #523 diagnostics: report WHERE the contended
@@ -239,11 +253,6 @@ impl<T: ?Sized> KernelMutex<T> {
                         }
                         core::hint::spin_loop();
                     }
-                    // Counter is zero: no IrqLock is held anywhere —
-                    // in particular not by this CPU. The IF=0 came
-                    // from the trap gate: take the normal spin/yield
-                    // path below with interrupts re-enabled.
-                    crate::interrupt::intr_on();
                 }
             }
 

@@ -63,19 +63,14 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
         // yields are safe.
         hal_impl::thread::spawn(async {
             loop {
-                let ran = hal_impl::timer::drain_deferred_timer_callbacks();
-                if ran > 0 {
-                    // More may have arrived while we ran: yield for
-                    // fairness, then keep going.
-                    hal_impl::thread::yield_now().await;
-                } else {
-                    // Idle: sleep briefly — bounded signal latency
-                    // (~200µs) without busy-spinning.
-                    hal_impl::thread::sleep_until(
-                        hal_impl::timer::timer_now() + core::time::Duration::from_micros(200),
-                    )
-                    .await;
-                }
+                // NOTE: this task must NOT sleep via SleepFuture: its
+                // wake would be deferred into the very queue this task
+                // drains (timer callbacks never wake directly, #523) —
+                // a self-deadlock. Yield-poll instead: the deferred
+                // callbacks (timer signal touches, sleeper wakes) run
+                // with ~scheduler-round-trip latency.
+                let _ran = hal_impl::timer::drain_deferred_timer_callbacks();
+                hal_impl::thread::yield_now().await;
             }
         });
         let options = boot_options();
