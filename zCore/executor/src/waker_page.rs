@@ -183,6 +183,14 @@ impl WakerPage {
         self.dropped.load()
     }
 
+    /// #862 diagnostics: peek borrowed (mid-poll) bits without
+    /// consuming. A notification on a borrowed slot is deferred by
+    /// `take_notified` until the poll finishes — it persists
+    /// legitimately while a poll runs.
+    pub fn peek_borrowed(&self) -> u64 {
+        self.borrowed.load()
+    }
+
     pub fn take_dropped(&self) -> u64 {
         self.dropped.swap(0)
     }
