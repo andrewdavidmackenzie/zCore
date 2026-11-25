@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use bit_iter::BitIter;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use slab::Slab;
 use spin::{Mutex, MutexGuard};
 use {
@@ -191,6 +191,18 @@ pub struct TaskCollection {
     pub sched_state: Mutex<crate::sched::SchedState>,
     /// Key of a task that yielded voluntarily, pending re-queue.
     pending_yield: Mutex<Option<Key>>,
+    /// #862: this collection's scan count. The previous global
+    /// counter interleaved all CPUs' scans, so a single hung CPU
+    /// sampled its own state only every ~10k*ncpus scans — too
+    /// rarely to catch a CI hang.
+    scan_count: AtomicU64,
+    /// #862: consecutive diagnostic snapshots with zero actionable
+    /// bits while tasks are parked in this collection — the silent
+    /// lost-wakeup (variant B) trigger.
+    idle_snapshots: AtomicU64,
+    /// #862: this collection's previous snapshot's notified bits,
+    /// for the persisted-bits (variant A) check.
+    prev_notified_bits: AtomicU64,
 }
 
 impl TaskCollection {
@@ -201,6 +213,9 @@ impl TaskCollection {
             task_num: AtomicUsize::new(0),
             sched_state: Mutex::new(crate::sched::new(cpu_id)),
             pending_yield: Mutex::new(None),
+            scan_count: AtomicU64::new(0),
+            idle_snapshots: AtomicU64::new(0),
+            prev_notified_bits: AtomicU64::new(0),
         });
         let tc = Arc::get_mut(&mut task_collection).expect("Arc just created, must be unique");
         for priority in 0..MAX_PRIORITY {
@@ -314,9 +329,12 @@ impl TaskCollection {
     /// Feeds notified tasks into the scheduler and removes dropped ones.
     fn scan_notifications(&self) {
         use core::sync::atomic::{AtomicU64, Ordering as AtOrd};
-        static SCAN_COUNT: AtomicU64 = AtomicU64::new(0);
         static FOUND_COUNT: AtomicU64 = AtomicU64::new(0);
-        let scan_num = SCAN_COUNT.fetch_add(1, AtOrd::Relaxed);
+        // #862: per-collection scan count. A global counter
+        // interleaves all CPUs' scans, so a hung CPU sampled its own
+        // state only every ~10k*ncpus of ITS scans — far too rarely
+        // to catch a CI hang within the job timeout.
+        let scan_num = self.scan_count.fetch_add(1, AtOrd::Relaxed);
         // Diagnostic cadence (#829 CI-stability hunt): every 10k scans
         // so hang-time state (remaining tasks + notified_bits) is
         // captured within a short hang. notified_bits != 0 while a
@@ -348,18 +366,28 @@ impl TaskCollection {
                 // never dispatched. A single nonzero snapshot can be
                 // normal wake traffic caught mid-scan, so require the
                 // previous snapshot to have seen bits too (rate-limited).
-                static PREV_NOTIFIED: core::sync::atomic::AtomicU64 =
-                    core::sync::atomic::AtomicU64::new(0);
-                let prev = PREV_NOTIFIED.swap(notified_bits, AtOrd::Relaxed);
+                let prev = self.prev_notified_bits.swap(notified_bits, AtOrd::Relaxed);
                 let persisted = notified_bits != 0 && prev != 0;
                 if persisted && scan_num >= 50_000 {
                     self.dump_stuck_state();
                 }
                 // #862 variant B: long idle WHILE tasks are parked in
                 // this collection (no notified bits — the wake never
-                // arrived at all). Dump after ~30M idle scans.
-                if notified_bits == 0 && task_num > 0 && scan_num >= 30_000_000 {
-                    self.dump_stuck_state();
+                // arrived at all). The old trigger required 30M scans,
+                // which a halted idle CPU reaches only after ~40 hours
+                // (~200 scans/sec between 10ms timer ticks) — it could
+                // never fire inside a CI timeout. Instead count
+                // consecutive all-idle snapshots: 3 samples = 30k of
+                // this CPU's scans ≈ 2.5 minutes of no wakes at all
+                // while tasks are parked — the silent lost-wakeup
+                // signature.
+                if notified_bits == 0 && task_num > 0 {
+                    let idle = self.idle_snapshots.fetch_add(1, AtOrd::Relaxed);
+                    if idle >= 3 {
+                        self.dump_stuck_state();
+                    }
+                } else {
+                    self.idle_snapshots.store(0, AtOrd::Relaxed);
                 }
             }
         }
