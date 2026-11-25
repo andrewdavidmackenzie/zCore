@@ -337,7 +337,28 @@ extern "C" fn ap_entry() -> ! {
 
         // Clear CR0.EM for SSE
         use x86_64::registers::control::{Cr0, Cr0Flags};
-        Cr0::update(|f| f.remove(Cr0Flags::EMULATE_COPROCESSOR));
+        // Normalize CR0 to the BSP's post-firmware state. The AP
+        // trampoline only ORs PG into the firmware's SIPI-state CR0,
+        // which on OVMF/QEMU is 0x6000_0010: NO write protect, NO
+        // numeric-error, caches marked disabled (CD|NW). Two of those
+        // are correctness bugs on every AP:
+        //
+        // - WP=0 lets supervisor-mode writes bypass read-only PTEs —
+        //   kernel usercopy permission checks silently pass (the
+        //   ChannelTest.*ReadOnly*Disposition failures: write_etc's
+        //   result write-back into a read-only mapping succeeded on
+        //   APs while passing on the WP-inheriting BSP).
+        // - NE=0 routes x87 errors to the legacy IRQ13 path instead
+        //   of exception 16.
+        // - CD|NW: QEMU ignores the performance effect, but real
+        //   hardware would crawl and risk coherency surprises.
+        Cr0::update(|f| {
+            f.remove(Cr0Flags::EMULATE_COPROCESSOR);
+            f.insert(Cr0Flags::WRITE_PROTECT);
+            f.insert(Cr0Flags::NUMERIC_ERROR);
+            f.remove(Cr0Flags::CACHE_DISABLE);
+            f.remove(Cr0Flags::NOT_WRITE_THROUGH);
+        });
     }
     // Enable the local APIC on this AP *before* any APIC access.
     //
