@@ -232,13 +232,6 @@ impl<T: ?Sized> KernelMutex<T> {
                             #[cfg(not(target_arch = "x86_64"))]
                             let stack: &[usize] = &[];
                             panic!(
-<<<<<<< HEAD
-                                "KernelMutex contended while interrupts disabled \
-                                 (InterruptSpinLock held?) — spinlock→KernelMutex \
-                                 nesting with a non-releasing holder (#829/#862) \
-                                 at {}",
-                                core::panic::Location::caller()
-=======
                                 "KernelMutex @{:#x} contended while interrupts disabled \
                                  and IrqLock(s) held — spinlock→KernelMutex nesting with \
                                  a non-releasing holder (#829/#862) \
@@ -248,7 +241,6 @@ impl<T: ?Sized> KernelMutex<T> {
                                 caller.line(),
                                 caller.column(),
                                 stack,
->>>>>>> 4ae748aa (Fix the multi-CPU KernelMutex panic cascade during crash teardown (#523))
                             );
                         }
                         core::hint::spin_loop();
