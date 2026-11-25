@@ -369,9 +369,6 @@ tail -5 /tmp/qemu-core-tests.log | sed 's/\x1b\[[0-9;]*m//g'
 - Issue #471 tracks the user-buffer copy architecture gap.
 - Issue #21 has a master list of all 1776 tests with pass/fail/hang
   status and a categorized root cause analysis of all failures.
-- VmoClone2/VmoCloneResize tests hang on `populated_bytes` polling
-  because COW page attribution doesn't implement fractional scaling.
-  Use gtest_filter to skip these suites when running the full suite.
 - All 1776 tests have been extracted to /tmp/all_tests.txt via
   `--gtest_list_tests`. Individual suites can be tested with
   `--gtest_filter=SuiteName.*` for fast iteration.
