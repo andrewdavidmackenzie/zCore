@@ -109,7 +109,7 @@ fn try_recover_kernel_gp(tf: &mut TrapFrame) -> bool {
     // byte of an instruction at page end may be unmapped (#523
     // review). rdmsr/wrmsr are 2-byte instructions; a 1-byte tail
     // simply fails both matches.
-    let avail = (4096 - (tf.rip & 0xfff)).min(2) as usize;
+    let avail = (4096 - (tf.rip & 0xfff)).min(2);
     let mut code_buf = [0u8; 2];
     unsafe { core::ptr::copy_nonoverlapping(tf.rip as *const u8, code_buf.as_mut_ptr(), avail) };
     let code = &code_buf[..avail];
@@ -169,7 +169,7 @@ fn kernel_trap_fatal(reason: &'static str, tf: &TrapFrame) -> ! {
     // followed by an unmapped one — clamp the read to the page
     // boundary instead of assuming 8 readable bytes (#523 review).
     let page_avail = 4096 - (tf.rip & 0xfff);
-    let n = page_avail.min(8) as usize;
+    let n = page_avail.min(8);
     let mut code = [0u8; 8];
     unsafe { core::ptr::copy_nonoverlapping(tf.rip as *const u8, code.as_mut_ptr(), n) };
     let cpu = super::cpu::cpu_id();
