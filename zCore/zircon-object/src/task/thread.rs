@@ -1172,7 +1172,19 @@ impl Task for Thread {
         // user data, and overwriting it with -6 corrupts user state,
         // causing a crash when the thread resumes and re-executes the
         // faulting instruction with rax = 0xfffffffffffffffa.
-        if inner.context.is_some() && state.is_blocked() && state != ThreadState::BlockedPager {
+        // BlockedException is excluded for the same reason AND
+        // because Fuchsia suspensions do not escape exception
+        // handling (Threads.SuspendMultiple: "suspends don't escape
+        // out of exception handling, unlike blocking syscalls where
+        // suspend will escape out of them"): the thread stays in the
+        // exception wait, the user context is restored verbatim when
+        // the exception resumes user mode, and the suspension takes
+        // effect when the run loop parks after the exception
+        // resolves.
+        let escapable_wait = state.is_blocked()
+            && state != ThreadState::BlockedPager
+            && state != ThreadState::BlockedException;
+        if inner.context.is_some() && escapable_wait {
             if let Some(ref mut ctx) = inner.context {
                 use hal_impl::context::UserContextField;
                 ctx.set_field(UserContextField::ReturnValue, (-6i64) as usize);
@@ -1180,9 +1192,12 @@ impl Task for Thread {
             inner.suspended_from_blocked = true;
         }
         inner.change_state(state, &self.base);
-        // Interrupt any suspendable blocking wait (e.g., pager wait).
-        if let Some(sender) = inner.suspend_interrupt.take() {
-            let _ = sender.send(());
+        // Interrupt any suspendable blocking wait (blocking syscalls
+        // and pager waits). Exception waits are exempt — see above.
+        if state != ThreadState::BlockedException {
+            if let Some(sender) = inner.suspend_interrupt.take() {
+                let _ = sender.send(());
+            }
         }
     }
 
@@ -1361,7 +1376,12 @@ impl CurrentThread {
             // return immediately so the run loop observes the
             // suspension and the syscall retries on resume
             // (Fuchsia's interruptible-wait semantics).
-            if inner.suspend_count > 0 && inner.context.is_some() {
+            // Exception waits are exempt: Fuchsia suspensions do NOT
+            // escape exception handling — the wait runs to
+            // resolution and the suspension applies when the run
+            // loop parks afterward.
+            let suspend_escapes = state != ThreadState::BlockedException;
+            if suspend_escapes && inner.suspend_count > 0 && inner.context.is_some() {
                 return Err(ZxError::INTERNAL_INTR_RETRY);
             }
             let (sender, receiver) = channel();
