@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use bit_iter::BitIter;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use slab::Slab;
 use spin::{Mutex, MutexGuard};
 use {
@@ -191,6 +191,30 @@ pub struct TaskCollection {
     pub sched_state: Mutex<crate::sched::SchedState>,
     /// Key of a task that yielded voluntarily, pending re-queue.
     pending_yield: Mutex<Option<Key>>,
+    /// #862: this collection's scan count. The previous global
+    /// counter interleaved all CPUs' scans, so a single hung CPU
+    /// sampled its own state only every ~10k*ncpus scans — too
+    /// rarely to catch a CI hang.
+    scan_count: AtomicU64,
+    /// #862: consecutive samples with zero system-wide wake
+    /// progress (FOUND_COUNT frozen) while tasks are parked in
+    /// this collection — the quiescent lost-wakeup trigger.
+    quiescent_samples: AtomicU64,
+    /// #862: consecutive samples with the same notified bits set,
+    /// including at least one actionable (non-borrowed) bit — a
+    /// wake storm re-firing a slot faster than tasks progress, or
+    /// a set bit the scanner never dispatches.
+    storm_samples: AtomicU64,
+    /// #862: FOUND_COUNT at this collection's previous sample.
+    last_found: AtomicU64,
+    /// #862: this collection's previous snapshot's notified bits.
+    prev_notified_bits: AtomicU64,
+    /// #862: scan# of this collection's last stuck-state dump.
+    /// Dumps are rate-limited to one per 30k scans (~3 samples)
+    /// instead of a fixed count: churn-time false positives (the
+    /// syscall-yield "storm", test-boundary lulls) exhausted the old
+    /// fixed budget before a real hang could dump anything.
+    last_dump_scan: AtomicU64,
 }
 
 impl TaskCollection {
@@ -201,6 +225,12 @@ impl TaskCollection {
             task_num: AtomicUsize::new(0),
             sched_state: Mutex::new(crate::sched::new(cpu_id)),
             pending_yield: Mutex::new(None),
+            scan_count: AtomicU64::new(0),
+            quiescent_samples: AtomicU64::new(0),
+            storm_samples: AtomicU64::new(0),
+            last_found: AtomicU64::new(0),
+            prev_notified_bits: AtomicU64::new(0),
+            last_dump_scan: AtomicU64::new(0),
         });
         let tc = Arc::get_mut(&mut task_collection).expect("Arc just created, must be unique");
         for priority in 0..MAX_PRIORITY {
@@ -260,15 +290,19 @@ impl TaskCollection {
     }
 
     /// #862/#829 diagnostics: dump every task slot in this collection
-    /// and the scheduler queues. Triggered when notified bits persist
-    /// across many scans (a marked wake the scheduler never dispatched).
-    /// Rate-limited to a few dumps per process.
+    /// and the scheduler queues. Triggered by the quiescent or storm
+    /// detectors in `scan_notifications`. Rate-limited to one dump
+    /// per 30k of this collection's scans (~3 samples): churn-time
+    /// false positives can no longer starve a real hang's dump, and
+    /// a minutes-long hang always has budget.
     fn dump_stuck_state(&self) {
         use core::sync::atomic::Ordering;
-        static DUMPS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
-        if DUMPS.fetch_add(1, Ordering::Relaxed) >= 4 {
+        let now = self.scan_count.load(Ordering::Relaxed);
+        let last = self.last_dump_scan.load(Ordering::Relaxed);
+        if now.saturating_sub(last) < 30_000 {
             return;
         }
+        self.last_dump_scan.store(now, Ordering::Relaxed);
         error!(
             "[stuck] cpu={} task_num={} force_wakes={} sched: {}",
             self.cpu_id,
@@ -282,26 +316,28 @@ impl TaskCollection {
                 let full_key = slab_key | (priority << PRIORITY_SHIFT);
                 let page_idx = slab_key >> PAGE_INDEX_SHIFT;
                 let subpage = slab_key & 63;
-                let (n, d, owner, wc) = match inner.pages.get(page_idx) {
+                let (n, d, b, owner, wc) = match inner.pages.get(page_idx) {
                     Some(p) => (
                         (p.peek_notified() >> subpage) & 1,
                         (p.peek_dropped() >> subpage) & 1,
+                        (p.peek_borrowed() >> subpage) & 1,
                         p.owner_cpu(),
                         p.wake_count(subpage),
                     ),
-                    None => (0, 0, 0xff, 0),
+                    None => (0, 0, 0, 0xff, 0),
                 };
                 let ti = task.inner.lock();
                 let wt = task.waker_target.lock();
                 let target = wt.as_ref().map(|t| t.debug_target());
                 error!(
-                    "[stuck] key={:#x} id={} state={:?} prio={} notified={} dropped={} wake_count={} finish={} waker_target={:?}",
+                    "[stuck] key={:#x} id={} state={:?} prio={} notified={} dropped={} borrowed={} wake_count={} finish={} waker_target={:?}",
                     full_key,
                     task.id,
                     ti.state,
                     ti.priority,
                     n,
                     d,
+                    b,
                     wc,
                     task.finish.load(Ordering::Relaxed),
                     target
@@ -314,9 +350,12 @@ impl TaskCollection {
     /// Feeds notified tasks into the scheduler and removes dropped ones.
     fn scan_notifications(&self) {
         use core::sync::atomic::{AtomicU64, Ordering as AtOrd};
-        static SCAN_COUNT: AtomicU64 = AtomicU64::new(0);
         static FOUND_COUNT: AtomicU64 = AtomicU64::new(0);
-        let scan_num = SCAN_COUNT.fetch_add(1, AtOrd::Relaxed);
+        // #862: per-collection scan count. A global counter
+        // interleaves all CPUs' scans, so a hung CPU sampled its own
+        // state only every ~10k*ncpus of ITS scans — far too rarely
+        // to catch a CI hang within the job timeout.
+        let scan_num = self.scan_count.fetch_add(1, AtOrd::Relaxed);
         // Diagnostic cadence (#829 CI-stability hunt): every 10k scans
         // so hang-time state (remaining tasks + notified_bits) is
         // captured within a short hang. notified_bits != 0 while a
@@ -329,38 +368,67 @@ impl TaskCollection {
             if task_num > 0 {
                 // Dump waker page state for this CPU
                 let mut notified_bits = 0u64;
+                let mut borrowed_bits = 0u64;
                 let mut total_pages = 0usize;
                 for priority in 0..MAX_PRIORITY {
                     let inner = self.get_mut_inner(priority);
                     for page_idx in 0..inner.pages.len() {
                         total_pages += 1;
                         let page = &inner.pages[page_idx];
-                        let n = page.peek_notified();
-                        notified_bits |= n;
+                        notified_bits |= page.peek_notified();
+                        borrowed_bits |= page.peek_borrowed();
                     }
                 }
                 warn!(
-                    "scan: cpu={} scan#{} found={} tasks={} pages={} notified_bits={:#x}",
-                    self.cpu_id, scan_num, found, task_num, total_pages, notified_bits
+                    "scan: cpu={} scan#{} found={} tasks={} pages={} notified_bits={:#x} borrowed_bits={:#x}",
+                    self.cpu_id, scan_num, found, task_num, total_pages, notified_bits, borrowed_bits
                 );
-                // #862: notified bits persisting across consecutive
-                // diagnostic snapshots = a marked wake the scheduler
-                // never dispatched. A single nonzero snapshot can be
-                // normal wake traffic caught mid-scan, so require the
-                // previous snapshot to have seen bits too (rate-limited).
-                static PREV_NOTIFIED: core::sync::atomic::AtomicU64 =
-                    core::sync::atomic::AtomicU64::new(0);
-                let prev = PREV_NOTIFIED.swap(notified_bits, AtOrd::Relaxed);
-                let persisted = notified_bits != 0 && prev != 0;
-                if persisted && scan_num >= 50_000 {
-                    self.dump_stuck_state();
+                // #862 quiescent mode: zero system-wide wake progress
+                // while tasks are parked. During normal operation
+                // FOUND_COUNT always increases (wakes are found and
+                // dispatched); CI hangs show it FROZEN for the whole
+                // hang. found frozen across consecutive samples is the
+                // silent lost-wakeup signature. (The old trigger —
+                // notified_bits == 0 at this CPU only — fired on
+                // busy-churn lulls where other CPUs kept making
+                // progress, exhausting the dump budget at boot.)
+                let found_prev = self.last_found.swap(found, AtOrd::Relaxed);
+                if found == found_prev {
+                    let q = self.quiescent_samples.fetch_add(1, AtOrd::Relaxed);
+                    if q >= 2 {
+                        self.dump_stuck_state();
+                    }
+                } else {
+                    self.quiescent_samples.store(0, AtOrd::Relaxed);
                 }
-                // #862 variant B: long idle WHILE tasks are parked in
-                // this collection (no notified bits — the wake never
-                // arrived at all). Dump after ~30M idle scans.
-                if notified_bits == 0 && task_num > 0 && scan_num >= 30_000_000 {
-                    self.dump_stuck_state();
+                // #862 storm mode: the same notified bits set at every
+                // sample, with at least one actionable (non-borrowed)
+                // bit — either a wake storm re-firing a slot faster
+                // than tasks make progress (repro: hang with `found`
+                // racing at ~60k wakes/sec and a bit set at every
+                // peek), or a set bit the scanner never dispatches.
+                // Bits deferred for a borrowed (mid-poll) slot are
+                // excluded: they persist legitimately while a poll
+                // runs, and were the main false-positive source.
+                let prev = self.prev_notified_bits.swap(notified_bits, AtOrd::Relaxed);
+                let same_bits = notified_bits != 0 && notified_bits == prev;
+                if same_bits && (notified_bits & !borrowed_bits) != 0 {
+                    let s = self.storm_samples.fetch_add(1, AtOrd::Relaxed);
+                    if s >= 4 {
+                        self.dump_stuck_state();
+                    }
+                } else {
+                    self.storm_samples.store(0, AtOrd::Relaxed);
                 }
+            } else {
+                // #862 (review): reset the detectors while the
+                // collection is empty — otherwise stale counts from a
+                // previous occupancy would fire a dump after the next
+                // task parks, on fewer than the intended consecutive
+                // samples.
+                self.quiescent_samples.store(0, AtOrd::Relaxed);
+                self.storm_samples.store(0, AtOrd::Relaxed);
+                self.last_found.store(found, AtOrd::Relaxed);
             }
         }
         // 5G-2: graph-checked sched_state acquisition. The fc loop

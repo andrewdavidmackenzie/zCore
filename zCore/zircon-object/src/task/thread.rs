@@ -746,6 +746,7 @@ impl Thread {
         }
         inner.change_state(ThreadState::Dying, &self.base);
         if let Some(waker) = inner.waker.take() {
+            crate::wake_diag::log_wake_fire();
             waker.wake_by_ref();
         }
         // For blocking thread, use the killer
@@ -1119,6 +1120,7 @@ impl Thread {
             // forever, accumulating over time and slowing down the
             // executor's scan_notifications.
             if let Some(waker) = inner.waker.take() {
+                crate::wake_diag::log_wake_fire();
                 waker.wake();
             }
             // Also fire the suspend interrupt and killer to unblock any
@@ -1193,6 +1195,7 @@ impl Task for Thread {
             let state = inner.state;
             inner.change_state(state, &self.base);
             if let Some(waker) = inner.waker.take() {
+                crate::wake_diag::log_wake_fire();
                 waker.wake_by_ref();
             }
         }

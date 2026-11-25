@@ -621,6 +621,8 @@ core-tests: core-tests-build
 	tail -5 $$CLEAN; \
 	echo "=== Kernel diagnostics ([excp]/[ud]/scan) ==="; \
 	grep -E '\[excp\]|\[ud\]|scan: cpu=' $$CLEAN | tail -30 || echo "(none)"; \
+	echo "=== Stuck-task dumps (#862) ==="; \
+	grep '\[stuck\]' $$CLEAN | head -80 || echo "(none)"; \
 	if [ "$$F" -gt 0 ] 2>/dev/null; then echo "FAIL: $$F test(s) failed"; exit 1; fi; \
 	if [ -z "$$R" ] || [ "$$R" -eq 0 ] 2>/dev/null; then echo "FAIL: no tests ran"; exit 1; fi; \
 	if [ -n "$$PARTIAL" ]; then \
