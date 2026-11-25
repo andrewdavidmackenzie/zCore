@@ -166,13 +166,6 @@ impl Fifo {
     fn capacity(&self) -> usize {
         self.elem_size * self.elem_count
     }
-
-    /// Total byte capacity (elem_size * elem_count) — the maximum
-    /// useful write size. Used by the syscall layer to bound kernel
-    /// allocations (#471).
-    pub fn total_byte_capacity(&self) -> usize {
-        self.elem_size * self.elem_count
-    }
 }
 
 impl Drop for Fifo {

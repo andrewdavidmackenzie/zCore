@@ -144,6 +144,36 @@ impl Socket {
         }
     }
 
+    /// Bound a write request per Zircon's `MBufChain` semantics (#471).
+    ///
+    /// Returns the number of bytes the caller should read from user
+    /// memory for a write of `len` bytes, or an error if the request
+    /// can never succeed:
+    ///
+    /// - Stream: capped at `SOCKET_SIZE` — a larger write is a *short
+    ///   write*, never an error (`MBufChain::write_stream`'s
+    ///   `len = min(MAX_SIZE - size, len)`).
+    /// - Datagram: `OUT_OF_RANGE` before any data is read — a datagram
+    ///   larger than the buffer can never fit
+    ///   (`MBufChain::write_datagram`'s `len > MAX_SIZE` check).
+    pub fn bound_write_len(&self, len: usize) -> ZxResult<usize> {
+        if self.flags.contains(SocketFlags::DATAGRAM) {
+            if len > SOCKET_SIZE {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+            Ok(len)
+        } else {
+            Ok(len.min(SOCKET_SIZE))
+        }
+    }
+
+    /// Bound a read request: the socket can never hold more than
+    /// `SOCKET_SIZE` bytes, so a larger read buffer is wasted
+    /// allocation (#471).
+    pub fn bound_read_len(&self, len: usize) -> usize {
+        len.min(SOCKET_SIZE)
+    }
+
     pub fn write(&self, data: &[u8]) -> ZxResult<usize> {
         if self.base.signal().contains(Signal::SOCKET_WRITE_DISABLED) {
             return Err(ZxError::BAD_STATE);
