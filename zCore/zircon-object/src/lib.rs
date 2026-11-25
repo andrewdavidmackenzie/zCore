@@ -31,5 +31,6 @@ pub mod signal;
 pub mod task;
 pub mod util;
 pub mod vm;
+pub mod wake_diag;
 
 pub use self::error::*;

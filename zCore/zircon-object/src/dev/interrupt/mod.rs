@@ -258,7 +258,10 @@ impl Future for WaitEventFuture<'_> {
                         Observe::No
                     }
                 },
-                move |_| waker.wake_by_ref(),
+                move |_| {
+                    crate::wake_diag::log_wake_fire();
+                    waker.wake_by_ref()
+                },
             ));
             self.registered = true;
         }

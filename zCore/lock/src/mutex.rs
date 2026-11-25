@@ -119,6 +119,7 @@ impl<T: ?Sized> KernelMutex<T> {
     /// 3. Yield to let the lock holder run, then retry.
     ///
     /// Does NOT disable interrupts.
+    #[track_caller]
     pub fn lock(&self) -> KernelMutexGuard<'_, T> {
         // #862/#829: acquiring a KernelMutex while holding an
         // interrupt-disabling spinlock is a lock-ordering violation.
@@ -169,7 +170,9 @@ impl<T: ?Sized> KernelMutex<T> {
                             panic!(
                                 "KernelMutex contended while interrupts disabled \
                                  (InterruptSpinLock held?) — spinlock→KernelMutex \
-                                 nesting with a non-releasing holder (#829/#862)"
+                                 nesting with a non-releasing holder (#829/#862) \
+                                 at {}",
+                                core::panic::Location::caller()
                             );
                         }
                         core::hint::spin_loop();

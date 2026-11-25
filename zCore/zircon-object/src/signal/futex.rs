@@ -877,6 +877,7 @@ impl Waiter {
         // and storing the waker). In that case, woken=true is enough
         // — the next poll will see it and return Ready.
         if let Some(waker) = inner.waker.as_ref() {
+            crate::wake_diag::log_wake_fire();
             waker.wake_by_ref();
         }
     }

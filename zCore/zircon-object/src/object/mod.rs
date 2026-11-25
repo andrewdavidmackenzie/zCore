@@ -529,7 +529,10 @@ impl dyn KernelObject {
                             Observe::Yes
                         }
                     },
-                    move |_| waker.wake_by_ref(),
+                    move |_| {
+                        crate::wake_diag::log_wake_fire();
+                        waker.wake_by_ref()
+                    },
                 ));
                 Poll::Pending
             }
@@ -745,7 +748,10 @@ pub fn wait_signal_many(
                             Observe::Yes
                         }
                     },
-                    move |_| waker.wake_by_ref(),
+                    move |_| {
+                        crate::wake_diag::log_wake_fire();
+                        waker.wake_by_ref()
+                    },
                 ));
             }
             Poll::Pending

@@ -133,10 +133,11 @@ impl WakerPage {
         self.wake_counts[idx].load()
     }
 
-    pub fn notify(&self, offset: usize) {
+    pub fn notify(&self, offset: usize) -> u64 {
         debug_assert!(offset < 64);
-        self.wake_counts[offset].fetch_add(1);
+        let count = self.wake_counts[offset].fetch_add(1) + 1;
         self.notified.fetch_or(1 << offset);
+        count
     }
 
     pub fn mark_borrowed(&self, offset: usize, borrowed: bool) {
@@ -301,9 +302,24 @@ impl WakerTarget {
     }
 
     /// Notify the current target page and send IPI to its CPU.
+    #[track_caller]
     fn notify(&self) {
         let inner = self.inner.lock();
-        inner.page.notify(inner.idx);
+        let count = inner.page.notify(inner.idx);
+        // #862 wake-storm diagnostics: a slot receiving tens of
+        // thousands of wakes per second (the pre-hang storm observed
+        // in repros — 58k wakes/sec) means some event source is
+        // re-firing a task that never progresses. Log the caller
+        // every 50k wakes on a slot so the storm's wake source is
+        // named in the serial log.
+        if count > 0 && count.is_multiple_of(50_000) {
+            error!(
+                "[wake-storm] slot={} wake_count={} last source: {}",
+                inner.idx,
+                count,
+                core::panic::Location::caller()
+            );
+        }
         crate::ipi_wakeup(inner.page.owner_cpu());
     }
 

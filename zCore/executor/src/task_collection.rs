@@ -209,10 +209,12 @@ pub struct TaskCollection {
     last_found: AtomicU64,
     /// #862: this collection's previous snapshot's notified bits.
     prev_notified_bits: AtomicU64,
-    /// #862: dump budget per collection. A global budget was
-    /// exhausted by busy-churn false positives on one CPU before
-    /// a real hang on another CPU could dump anything.
-    dump_budget: AtomicUsize,
+    /// #862: scan# of this collection's last stuck-state dump.
+    /// Dumps are rate-limited to one per 30k scans (~3 samples)
+    /// instead of a fixed count: churn-time false positives (the
+    /// syscall-yield "storm", test-boundary lulls) exhausted the old
+    /// fixed budget before a real hang could dump anything.
+    last_dump_scan: AtomicU64,
 }
 
 impl TaskCollection {
@@ -228,7 +230,7 @@ impl TaskCollection {
             storm_samples: AtomicU64::new(0),
             last_found: AtomicU64::new(0),
             prev_notified_bits: AtomicU64::new(0),
-            dump_budget: AtomicUsize::new(4),
+            last_dump_scan: AtomicU64::new(0),
         });
         let tc = Arc::get_mut(&mut task_collection).expect("Arc just created, must be unique");
         for priority in 0..MAX_PRIORITY {
@@ -289,14 +291,18 @@ impl TaskCollection {
 
     /// #862/#829 diagnostics: dump every task slot in this collection
     /// and the scheduler queues. Triggered by the quiescent or storm
-    /// detectors in `scan_notifications`. Rate-limited per collection
-    /// (a global budget was exhausted by busy-churn false positives
-    /// on one CPU before a real hang on another could dump).
+    /// detectors in `scan_notifications`. Rate-limited to one dump
+    /// per 30k of this collection's scans (~3 samples): churn-time
+    /// false positives can no longer starve a real hang's dump, and
+    /// a minutes-long hang always has budget.
     fn dump_stuck_state(&self) {
         use core::sync::atomic::Ordering;
-        if self.dump_budget.fetch_add(1, Ordering::Relaxed) >= 4 {
+        let now = self.scan_count.load(Ordering::Relaxed);
+        let last = self.last_dump_scan.load(Ordering::Relaxed);
+        if now.saturating_sub(last) < 30_000 {
             return;
         }
+        self.last_dump_scan.store(now, Ordering::Relaxed);
         error!(
             "[stuck] cpu={} task_num={} force_wakes={} sched: {}",
             self.cpu_id,
@@ -414,6 +420,15 @@ impl TaskCollection {
                 } else {
                     self.storm_samples.store(0, AtOrd::Relaxed);
                 }
+            } else {
+                // #862 (review): reset the detectors while the
+                // collection is empty — otherwise stale counts from a
+                // previous occupancy would fire a dump after the next
+                // task parks, on fewer than the intended consecutive
+                // samples.
+                self.quiescent_samples.store(0, AtOrd::Relaxed);
+                self.storm_samples.store(0, AtOrd::Relaxed);
+                self.last_found.store(found, AtOrd::Relaxed);
             }
         }
         // 5G-2: graph-checked sched_state acquisition. The fc loop
