@@ -93,9 +93,7 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
 /// - Anything else → Linux process (if `linux` feature compiled in)
 /// - Falls back to Zircon userboot if no rootfs is available
 #[cfg(not(feature = "baremetal-test"))]
-fn boot_init(
-    options: BootOptions,
-) -> (alloc::sync::Arc<zircon_object::task::Process>, bool) {
+fn boot_init(options: BootOptions) -> (alloc::sync::Arc<zircon_object::task::Process>, bool) {
     // Register the Zircon spawn config globally so cross-flavour
     // exec can spawn Zircon processes from Linux context.
     zircon_object::task::spawn::set_spawn_config(zircon_loader::zircon::zircon_spawn_config());

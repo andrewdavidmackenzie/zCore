@@ -527,18 +527,12 @@ pub fn run_fuchsia_userboot(zbi: impl AsRef<[u8]>, _cmdline: &str) -> Arc<Proces
                 flags |= MMUFlags::EXECUTE;
             }
             let start = (ph.virtual_addr() as usize) & !(PAGE_SIZE - 1);
-            let end = ((ph.virtual_addr() as usize)
-                + ph.mem_size() as usize
-                + PAGE_SIZE
-                - 1)
+            let end = ((ph.virtual_addr() as usize) + ph.mem_size() as usize + PAGE_SIZE - 1)
                 & !(PAGE_SIZE - 1);
             if end <= start {
                 continue;
             }
-            match runs
-                .iter_mut()
-                .find(|(s, e, _)| start < *e && end > *s)
-            {
+            match runs.iter_mut().find(|(s, e, _)| start < *e && end > *s) {
                 Some((s, e, f)) => {
                     // Overlapping run: extend and union the flags.
                     *s = (*s).min(start);
