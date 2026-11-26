@@ -398,7 +398,7 @@ impl Socket {
             return Err(ZxError::SHOULD_WAIT);
         }
         let was_full = curr_size == SOCKET_SIZE;
-        let (actual_count, fault) = if self.flags.contains(SocketFlags::DATAGRAM) {
+        let (actual_count, consumed, fault) = if self.flags.contains(SocketFlags::DATAGRAM) {
             if len == 0 {
                 return Ok(0);
             }
@@ -412,7 +412,12 @@ impl Socket {
                 .data
                 .read_stream_with(len, |src| dst.write_bytes(src), !peek)
         };
-        self.post_read_signals(was_full, peek, actual_count);
+        // Signal updates guard on the CONSUMED count: a faulted
+        // datagram read discards the whole datagram with
+        // actual_count == 0, but the socket state changed — READABLE
+        // must clear on empty and the peer's WRITABLE must reflect
+        // the freed space (CodeRabbit review on #910).
+        self.post_read_signals(was_full, peek, consumed);
         if fault.is_some() {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -420,8 +425,11 @@ impl Socket {
     }
 
     /// Post-read signal updates — shared by `read` and `read_to_user`.
-    fn post_read_signals(&self, was_full: bool, peek: bool, actual_count: usize) {
-        if !peek && actual_count > 0 {
+    /// `count` is the number of bytes that left the socket (for
+    /// `read`, the copied count — equal to what left it on every
+    /// non-fault path; for `read_to_user`, the consumed count).
+    fn post_read_signals(&self, was_full: bool, peek: bool, count: usize) {
+        if !peek && count > 0 {
             if let Some(peer) = self.peer.upgrade() {
                 // Hold both endpoint locks in a consistent order (see
                 // lock_endpoint_pair) — the peer's write-threshold

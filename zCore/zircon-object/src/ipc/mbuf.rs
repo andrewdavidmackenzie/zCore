@@ -296,17 +296,19 @@ impl MBufChain {
     ///
     /// With `consume`, successfully-copied regions are removed from
     /// the chain even if a later region fails (Zircon's read
-    /// semantics: the copied prefix is committed). Returns the total
-    /// copied and the fault, if any — the Socket layer needs BOTH to
-    /// keep its signal state consistent with the actual consumption
-    /// before propagating the error. With `!consume` (peek), the
-    /// chain is never modified.
+    /// semantics: the copied prefix is committed). Returns
+    /// `(copied, consumed, fault)`: `copied` reached the destination,
+    /// `consumed` left the chain (equal for streams — a peek consumes
+    /// nothing), and the fault if any. The Socket layer needs all
+    /// three: userspace gets `copied`, the signal updates guard on
+    /// `consumed` (a faulted datagram read discards the whole
+    /// datagram with `copied == 0` — the signals must still update).
     pub(super) fn read_stream_with<E>(
         &mut self,
         len: usize,
         mut sink: impl FnMut(&[u8]) -> core::result::Result<(), E>,
         consume: bool,
-    ) -> (usize, Option<E>) {
+    ) -> (usize, usize, Option<E>) {
         let want = len.min(self.size);
         let mut filled = 0usize;
         if !consume {
@@ -318,11 +320,11 @@ impl MBufChain {
                 let n = (want - filled).min(node.len);
                 let start = node.off;
                 if let Err(e) = sink(&node.data[start..start + n]) {
-                    return (filled, Some(e));
+                    return (filled, 0, Some(e));
                 }
                 filled += n;
             }
-            return (filled, None);
+            return (filled, 0, None);
         }
         while filled < want {
             let Some(node) = self.nodes.front_mut() else {
@@ -331,7 +333,7 @@ impl MBufChain {
             let n = (want - filled).min(node.len);
             let start = node.off;
             if let Err(e) = sink(&node.data[start..start + n]) {
-                return (filled, Some(e));
+                return (filled, filled, Some(e));
             }
             node.off += n;
             node.len -= n;
@@ -341,7 +343,7 @@ impl MBufChain {
                 self.nodes.pop_front();
             }
         }
-        (filled, None)
+        (filled, filled, None)
     }
 
     /// Copy up to `len` bytes of the front datagram to `sink`.
@@ -350,16 +352,18 @@ impl MBufChain {
     /// copy fails partway (Zircon: "If an error occurs while copying
     /// a datagram to dst, the datagram is dropped"); the copied
     /// prefix is still delivered to the sink. With `!consume`, the
-    /// chain is untouched. Returns (copied, fault) — see
-    /// `read_stream_with` for why the count survives faults.
+    /// chain is untouched. Returns `(copied, consumed, fault)` — see
+    /// `read_stream_with`; for a consuming datagram read `consumed`
+    /// is the full datagram length even when `copied` is 0 (fault),
+    /// so the caller's signal updates are not skipped.
     pub(super) fn read_datagram_with<E>(
         &mut self,
         len: usize,
         mut sink: impl FnMut(&[u8]) -> core::result::Result<(), E>,
         consume: bool,
-    ) -> (usize, Option<E>) {
+    ) -> (usize, usize, Option<E>) {
         let Some(&datagram_len) = self.datagram_len.front() else {
-            return (0, None);
+            return (0, 0, None);
         };
         let want = len.min(datagram_len);
         // Copy (peek-style walk), tracking progress.
@@ -379,12 +383,15 @@ impl MBufChain {
             filled += n;
             node_idx += 1;
         }
-        if consume {
+        let consumed = if consume {
             // The datagram is consumed regardless of the copy result.
             self.discard_front(datagram_len);
             self.datagram_len.pop_front();
-        }
-        (filled, fault)
+            datagram_len
+        } else {
+            0
+        };
+        (filled, consumed, fault)
     }
 
     /// Discard `n` bytes from the chain front without copying.
@@ -574,7 +581,7 @@ mod tests {
         chain.write_stream(&data);
 
         let mut sink_calls = 0;
-        let (copied, fault) = chain.read_stream_with(
+        let (copied, consumed, fault) = chain.read_stream_with(
             usize::MAX,
             |src| {
                 sink_calls += 1;
@@ -590,6 +597,7 @@ mod tests {
         );
         assert!(fault.is_some());
         assert_eq!(copied, MBUF_PAYLOAD, "the first region was copied");
+        assert_eq!(consumed, MBUF_PAYLOAD, "stream consumed == copied");
         assert_eq!(chain.len(), 10, "the faulting region is not consumed");
     }
 
@@ -599,9 +607,12 @@ mod tests {
         let mut chain = MBufChain::new();
         chain.write_datagram(&[1, 2, 3]);
         chain.write_datagram(&[7, 8]);
-        let (copied, fault) = chain.read_datagram_with(3, |_| Err(()), true);
+        let (copied, consumed, fault) = chain.read_datagram_with(3, |_| Err(()), true);
         assert!(fault.is_some());
         assert_eq!(copied, 0);
+        // The signal-consistency contract (#910 review): consumed
+        // carries the discarded datagram's length even on fault.
+        assert_eq!(consumed, 3, "the discarded datagram is accounted");
         assert_eq!(chain.len(), 2, "the whole datagram is discarded");
         assert_eq!(chain.front_datagram_len(), Some(2));
     }
@@ -610,9 +621,10 @@ mod tests {
     fn peek_read_with_fault_consumes_nothing() {
         let mut chain = MBufChain::new();
         chain.write_stream(&[1, 2, 3]);
-        let (copied, fault) = chain.read_stream_with(3, |_| Err(()), false);
+        let (copied, consumed, fault) = chain.read_stream_with(3, |_| Err(()), false);
         assert!(fault.is_some());
         assert_eq!(copied, 0);
+        assert_eq!(consumed, 0, "peek never consumes");
         assert_eq!(chain.len(), 3, "peek never consumes");
     }
 }
