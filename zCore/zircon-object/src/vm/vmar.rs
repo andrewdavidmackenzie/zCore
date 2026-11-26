@@ -2461,8 +2461,24 @@ impl VmMapping {
     /// this requires either changing the lock ordering or implementing
     /// a deferred retry mechanism. See #711.
     pub(super) fn range_change(&self, offset: usize, len: usize, op: RangeChangeOp) {
-        let inner = self.inner.try_lock();
-        if let Some(inner) = inner {
+        // The mapping inner lock cannot be acquired blocking here:
+        // range_change is called from commit_page_internal DURING
+        // VmMapping::map's commit callback, which itself holds the
+        // mapping inner lock — a blocking or retrying acquisition
+        // self-deadlocks (the aarch64 rust-tests freeze: cpu 0 spun
+        // in a retry loop waiting for its own caller). It also runs
+        // under the VMO lock from the resize path, and the eager-map
+        // commit callback holds mapping.inner UNDER that VMO lock.
+        //
+        // try_lock-and-skip it is: when the lock is held, the holder
+        // is either our own callback (the invalidation is not needed
+        // — the callback maps the page under the very permissions
+        // being computed) or another CPU's fault path (the range op
+        // is re-derived by that fault on re-entry).
+        let Some(inner) = self.inner.try_lock() else {
+            return;
+        };
+        {
             // offset and len are in page units; convert vmo_offset (bytes) to pages
             let vmo_offset_pages = inner.vmo_offset / PAGE_SIZE;
             let start = offset.max(vmo_offset_pages);

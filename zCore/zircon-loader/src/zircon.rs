@@ -950,6 +950,24 @@ async fn handler_user_trap(
         // (baremetal-test) calls the Syscall interface directly,
         // bypassing this trap handler, and passes kernel addresses.
         hal_impl::thread::user_syscall_enter();
+        // #903: park at the syscall boundary while suspended. Syscall
+        // returns go straight back to user mode through the trap
+        // frame — they do not pass through run_user's wait_for_run —
+        // so without this, a thread whose blocking syscall was
+        // interrupted with ZX_ERR_INTERNAL_INTR_RETRY would spin in
+        // userspace retrying (each retry hits blocking_run's
+        // already-suspended early return, another -6, back to
+        // userspace...) without ever parking: THREAD_SUSPENDED never
+        // asserted and the process-suspend handshake hung
+        // (ProcessTest.SuspendWithDyingThread). Fuchsia stops a
+        // suspended thread at the syscall boundary; on resume the
+        // syscall executes once, with its trap-frame arguments.
+        thread.put_context(ctx);
+        let ctx = thread.wait_for_run().await;
+        if matches!(thread.state(), ThreadState::Dying | ThreadState::Dead) {
+            hal_impl::thread::user_syscall_leave();
+            return Ok(());
+        }
         let result = run_syscall(thread, thread_fn, ctx, num, args).await;
         hal_impl::thread::user_syscall_leave();
         return result;

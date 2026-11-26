@@ -146,7 +146,8 @@ pub fn take_preempt_pending() -> bool {
 
 pub use runtime::{
     abandon_current_poll, change_task_priority, force_wake_task, handle_timeout, init_runtimes,
-    request_shutdown, run_until_idle, sched_yield, shutdown_requested, spawn, spawn_with_priority,
+    request_shutdown, run_until_idle, sched_yield, set_deferred_drain_fn, shutdown_requested,
+    spawn, spawn_with_priority,
 };
 
 /// Save the kernel page table address for executor context creation.

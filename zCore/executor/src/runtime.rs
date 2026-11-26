@@ -462,6 +462,28 @@ pub fn change_task_priority(cpu_id: u8, key: Key, new_priority: usize) {
     }
 }
 
+/// Deferred-wake drain hook (#523/#829): a function registered by the
+/// HAL (hal-impl's timer module) that drains deferred timer-callback
+/// wakes in task context. Called once per executor-loop iteration —
+/// see `Executor::run`. 0 = not registered (e.g. libos).
+static DEFERRED_DRAIN_FN: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Register the HAL's deferred-wake drain function. Call once during
+/// kernel init, before the executor runtimes start.
+pub fn set_deferred_drain_fn(f: fn()) {
+    DEFERRED_DRAIN_FN.store(f as usize, core::sync::atomic::Ordering::Release);
+}
+
+#[inline]
+pub(crate) fn run_deferred_drain() {
+    let f = DEFERRED_DRAIN_FN.load(core::sync::atomic::Ordering::Acquire);
+    if f != 0 {
+        // SAFETY: the pointer was stored from a valid `fn()` that the
+        // HAL guarantees remains valid for the kernel's lifetime.
+        unsafe { core::mem::transmute::<usize, fn()>(f)() };
+    }
+}
+
 /// Timer tick bookkeeping.
 ///
 /// #523: this must NOT context-switch away from the interrupted

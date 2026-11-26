@@ -42,27 +42,19 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
     hal_impl::memory::insert_regions(&hal_impl::mem::free_pmem_regions());
     hal_impl::primary_init();
 
-    // Deferred-timer drain task (#523/#829): timer callbacks may only
+    // Deferred-timer wake drain (#523/#829): timer callbacks may only
     // do lock-free work (they run under the NAIVE_TIMER spinlock with
     // interrupts disabled); the heavy part — signal delivery, waiter
-    // wakeups, KernelMutex work — is deferred and drained here in
-    // task context where locks can be taken and yields are safe.
-    //
-    // Spawned in BOTH configurations: baremetal-test needs it too —
-    // SleepFuture wakes are deferred since the timer-IRQ ABBA fix,
-    // so without a drainer every timed test hangs (the rust-tests
-    // channel_call_mutex freeze).
-    hal_impl::thread::spawn(async {
-        loop {
-            // NOTE: this task must NOT sleep via SleepFuture: its
-            // wake would be deferred into the very queue this task
-            // drains (timer callbacks never wake directly, #523) —
-            // a self-deadlock. Yield-poll instead: the deferred
-            // callbacks (timer signal touches, sleeper wakes) run
-            // with ~scheduler-round-trip latency.
-            let _ran = hal_impl::timer::drain_deferred_timer_callbacks();
-            hal_impl::thread::yield_now().await;
-        }
+    // wakeups — is deferred and drained in task context where locks
+    // can be taken and yields are safe. The drain runs once per
+    // executor-loop iteration on every CPU (registered with the
+    // executor here): hot while tasks run, at timer-tick rate (~100Hz)
+    // while parked in WFI. This replaces the old dedicated yield-poll
+    // drain task, whose 190k wakes/sec storm exposed latent lost-wake
+    // races (ChannelTest.CallPending* hangs) and hung shutdown by
+    // keeping task_num > 0 forever.
+    executor::set_deferred_drain_fn(|| {
+        hal_impl::timer::drain_deferred_timer_callbacks();
     });
 
     #[cfg(feature = "baremetal-test")]

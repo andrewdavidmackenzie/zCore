@@ -287,8 +287,6 @@ pub fn resolve_vdso_symbols(
     // layouts, so one parser serves both.
     let jmprel_ent = if ld_pltrel == 7 {
         ld_relaent
-    } else if ld_pltrel == 17 {
-        ld_relent
     } else {
         ld_relent
     };

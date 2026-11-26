@@ -107,6 +107,29 @@ impl Executor {
 
     pub fn run(&mut self) {
         loop {
+            // Shutdown handoff: once a runner future has completed and
+            // requested shutdown, return control to the runtime so
+            // run_until_idle can observe it. Without this, an executor
+            // whose collection still holds parked tasks that never
+            // finish parks in WFI and shutdown hangs with the suite
+            // fully completed (the aarch64 rust-tests "freeze": every
+            // module ran, the exit code was never taken).
+            if crate::runtime::shutdown_requested() {
+                return;
+            }
+            // Deferred-wake drain (#523/#829): timer callbacks defer
+            // their wakes (they must never wake inline — the IRQ-context
+            // waker/IPI ABBA behind the core-tests system freeze). The
+            // HAL registers a drain function at init; running it here,
+            // once per loop iteration, drains in task context on every
+            // CPU — hot while tasks run, and at timer-tick rate (~100Hz)
+            // while idle in WFI (the tick wakes the loop). This replaces
+            // the old dedicated yield-poll drain task, whose 190k
+            // wakes/sec storm changed scheduler timing enough to expose
+            // latent lost-wake races (the ChannelTest.CallPending*
+            // hangs), and which kept task_num > 0 forever, hanging
+            // shutdown.
+            crate::runtime::run_deferred_drain();
             let task_info = self.task_collection.take_task();
             // Work stealing: idle CPUs steal tasks from busy CPUs.
             // Stolen tasks are re-inserted into the local task collection
