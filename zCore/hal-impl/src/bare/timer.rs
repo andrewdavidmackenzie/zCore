@@ -104,6 +104,7 @@ static EXPIRE_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU
 /// MUST be called with NAIVE_TIMER lock held and interrupts disabled.
 /// This matches Fuchsia's `UpdatePlatformTimerLocked` which asserts
 /// `arch_ints_disabled()` and runs under `timer_lock`.
+#[allow(dead_code)]
 fn update_platform_timer_locked(timer: &Timer) {
     let now = super::arch::timer::timer_now();
     let backstop = now + MAX_TIMER_INTERVAL;
@@ -161,8 +162,9 @@ hal_fn_impl! {
                 if deadline <= now {
                     timer.expire(now);
                 }
-                // Reprogram hardware under the lock with interrupts off.
-                update_platform_timer_locked(&timer);
+                // NOTE: no hardware arming here — the periodic tick
+                // (see timer_tick) fires deadlines within one period;
+                // cross-CPU one-shot arming was the frozen-idle bug.
             }
             if irq_was_on {
                 crate::interrupt::intr_on();
@@ -176,8 +178,19 @@ hal_fn_impl! {
             {
                 let mut timer = NAIVE_TIMER.lock();
                 timer.expire(now);
-                // Re-arm to the next deadline under the lock.
-                update_platform_timer_locked(&timer);
+                // #862/#523: PERIODIC re-arm of THIS CPU's timer only.
+                // The queue is global but the hardware is per-CPU:
+                // arming for the queue head from any CPU's handler
+                // lets one CPU consume another's deadline (the shared
+                // event expires under the first tick) leaving the
+                // other's CVAL stale and its WFI asleep forever — the
+                // frozen-idle hangs. With the periodic model each
+                // CPU's handler re-arms only itself at a fixed
+                // interval; timer_set never touches hardware;
+                // deadlines fire with ≤10ms latency at the next tick
+                // of whichever CPU ticks first. The interval matches
+                // the scheduler's quantum design.
+                super::arch::timer::set_oneshot_timer(now + MAX_TIMER_INTERVAL);
             }
             // NOTE: deferred callbacks are NOT drained here — running
             // kernel-object work from IRQ context re-introduces the

@@ -49,6 +49,15 @@ pub fn run_executor<F: Future<Output = i32> + Send + 'static>(future: F) -> i32 
 
     loop {
         executor::run_until_idle();
+        // Deferred-wake drain (#523/#829): timer callbacks defer their
+        // wakes; drain them here — this level iterates even when the
+        // system is fully idle (the Executor::run coroutine parks via
+        // sched_yield once every task is parked, so its in-loop drain
+        // stops; without this level's drain, deferred wakes waited for
+        // the next executor activation — sleep-poll loops like
+        // sys_debug_exec's degraded from ~1ms to executor-resume
+        // latency, and fully-idle systems crawled at timer-tick rate).
+        crate::timer::drain_deferred_timer_callbacks();
         if exited.load(Ordering::Acquire) {
             return EXIT_CODE.load(Ordering::Relaxed);
         }
