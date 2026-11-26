@@ -653,6 +653,27 @@ impl<T, P: Read> UserPtr<T, P> {
 }
 
 impl<P: Read> UserPtr<u8, P> {
+    /// Copy `dst.len()` bytes from user memory into the caller's
+    /// buffer, advancing this pointer by the copied length.
+    ///
+    /// No allocation — the caller provides the destination. This is
+    /// the Zircon `arch_copy_from_user` pattern: user pages copied
+    /// directly into the destination (e.g. an mbuf node payload).
+    /// Used for multi-chunk copies: each call continues from where
+    /// the previous one stopped.
+    pub fn read_into(&mut self, dst: &mut [u8]) -> Result<()> {
+        self.check()?;
+        let len = dst.len();
+        if len == 0 {
+            return Ok(());
+        }
+        unsafe {
+            copy_from_user(dst.as_mut_ptr(), self.0, len)?;
+            self.0 = self.0.add(len);
+        }
+        Ok(())
+    }
+
     // Forms a UTF-8 string slice of length `len` starting from the pointer.
     /// Forms an utf-8 string slice from a user pointer and a `len`.
     #[deprecated = "returns reference to user memory; use read_string() instead"]
@@ -822,6 +843,26 @@ impl<P: Read> UserPtr<u8, P> {
 }
 
 impl<P: Write> UserPtr<u8, P> {
+    /// Copy `src` to user memory at this pointer's current position,
+    /// advancing by the copied length.
+    ///
+    /// No allocation — the caller provides the source (e.g. an mbuf
+    /// node payload). The Zircon `arch_copy_to_user` pattern. Used
+    /// for multi-chunk copies: each call continues from where the
+    /// previous one stopped.
+    pub fn write_bytes(&mut self, src: &[u8]) -> Result<()> {
+        self.check()?;
+        let len = src.len();
+        if len == 0 {
+            return Ok(());
+        }
+        unsafe {
+            copy_to_user(self.0, src.as_ptr(), len)?;
+            self.0 = self.0.add(len);
+        }
+        Ok(())
+    }
+
     /// Copy data to user space in fixed-size chunks, calling `f` to fill each chunk.
     ///
     /// Never allocates more than `CHUNK_SIZE` bytes of kernel memory at a time.

@@ -6,6 +6,7 @@ use {
 };
 
 use super::mbuf::MBufChain;
+use hal_impl::user::{UserInPtr, UserOutPtr};
 
 /// Bidirectional streaming IPC transport.
 ///
@@ -181,9 +182,35 @@ impl Socket {
         }
         let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
         let actual_count = peer.write_data(data)?;
+        self.post_write_signals(&peer, actual_count);
+        Ok(actual_count)
+    }
+
+    /// Write `len` bytes from user memory directly into the socket's
+    /// buffer chain — no count-sized intermediate kernel allocation
+    /// (#901 step 2). `src` advances by the bytes actually copied.
+    ///
+    /// On a user-memory fault the chain is rolled back to its
+    /// pre-write state (zCore's contract, stricter than Zircon's
+    /// partial tail commit — see MBufChain::append_with) and
+    /// INVALID_ARGS is returned.
+    pub fn write_from_user(&self, mut src: UserInPtr<u8>, len: usize) -> ZxResult<usize> {
+        if self.base.signal().contains(Signal::SOCKET_WRITE_DISABLED) {
+            return Err(ZxError::BAD_STATE);
+        }
+        let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
+        let actual_count = peer.write_data_from_user(&mut src, len)?;
+        self.post_write_signals(&peer, actual_count);
+        Ok(actual_count)
+    }
+
+    /// Post-write signal updates on the writing endpoint — shared by
+    /// `write` and `write_from_user` so the signal logic lives in ONE
+    /// place (the lesson from the reverted first attempt at this).
+    fn post_write_signals(&self, peer: &Socket, actual_count: usize) {
         if actual_count > 0 {
             let mut clear = Signal::empty();
-            let (peer_inner, inner) = Socket::lock_endpoint_pair(&peer, self);
+            let (peer_inner, inner) = Socket::lock_endpoint_pair(peer, self);
             let peer_rest_size = SOCKET_SIZE - peer_inner.data.len();
             if peer_rest_size == 0 {
                 clear |= Signal::WRITABLE;
@@ -193,7 +220,6 @@ impl Socket {
             }
             self.base.signal_clear(clear);
         }
-        Ok(actual_count)
     }
 
     fn write_data(&self, data: &[u8]) -> ZxResult<usize> {
@@ -217,6 +243,53 @@ impl Socket {
             let write_size = data.len().min(rest_size);
             self.write_stream(&data[..write_size])?
         };
+        self.post_data_signals(was_empty, actual_count);
+        Ok(actual_count)
+    }
+
+    /// The user-memory variant of `write_data`: same checks, same
+    /// signal tail, the bytes come straight from user pages into the
+    /// mbuf nodes. On fault the chain rolls back (nothing written).
+    fn write_data_from_user(&self, src: &mut UserInPtr<u8>, len: usize) -> ZxResult<usize> {
+        let curr_size = self.inner.lock().data.len();
+        let was_empty = curr_size == 0;
+        let rest_size = SOCKET_SIZE - curr_size;
+        if rest_size == 0 {
+            return Err(ZxError::SHOULD_WAIT);
+        }
+        let actual_count = if self.flags.contains(SocketFlags::DATAGRAM) {
+            if len > SOCKET_SIZE {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+            // Datagrams are all-or-nothing (see write_data).
+            if len > rest_size {
+                return Err(ZxError::SHOULD_WAIT);
+            }
+            if len == 0 {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            let mut inner = self.inner.lock();
+            inner
+                .data
+                .write_datagram_with(len, |dst| src.read_into(dst))
+                .map_err(|_| ZxError::INVALID_ARGS)?;
+            len
+        } else {
+            let write_size = len.min(rest_size);
+            let mut inner = self.inner.lock();
+            inner
+                .data
+                .write_stream_with(write_size, |dst| src.read_into(dst))
+                .map_err(|_| ZxError::INVALID_ARGS)?;
+            write_size
+        };
+        self.post_data_signals(was_empty, actual_count);
+        Ok(actual_count)
+    }
+
+    /// Post-write signal updates on the receiving endpoint — shared
+    /// by `write_data` and `write_data_from_user`.
+    fn post_data_signals(&self, was_empty: bool, actual_count: usize) {
         if actual_count > 0 {
             let mut set = Signal::empty();
             if was_empty {
@@ -228,7 +301,6 @@ impl Socket {
             }
             self.base.signal_set(set);
         }
-        Ok(actual_count)
     }
 
     fn write_datagram(&self, data: &[u8]) -> ZxResult<usize> {
@@ -298,6 +370,57 @@ impl Socket {
         } else {
             self.read_stream(data, peek)?
         };
+        self.post_read_signals(was_full, peek, actual_count);
+        Ok(actual_count)
+    }
+
+    /// Read directly from the socket's buffer chain into user memory
+    /// — no count-sized intermediate kernel allocation (#901 step 2).
+    /// `dst` advances by the bytes actually copied.
+    ///
+    /// Fault semantics (Zircon): for stream reads the successfully
+    /// copied prefix is consumed; for datagram reads the whole
+    /// datagram is discarded even on fault. The signal updates run
+    /// on the ACTUAL consumed amount (keeping signals consistent —
+    /// what StreamReadToPartialBadBuffer asserts) before
+    /// INVALID_ARGS propagates.
+    pub fn read_to_user(&self, peek: bool, mut dst: UserOutPtr<u8>, len: usize) -> ZxResult<usize> {
+        let curr_size = self.inner.lock().data.len();
+        if curr_size == 0 {
+            let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
+            let inner = self.inner.lock();
+            if inner.read_disabled {
+                return Err(ZxError::BAD_STATE);
+            }
+            if peer.base.signal().contains(Signal::SOCKET_WRITE_DISABLED) {
+                return Err(ZxError::BAD_STATE);
+            }
+            return Err(ZxError::SHOULD_WAIT);
+        }
+        let was_full = curr_size == SOCKET_SIZE;
+        let (actual_count, fault) = if self.flags.contains(SocketFlags::DATAGRAM) {
+            if len == 0 {
+                return Ok(0);
+            }
+            let mut inner = self.inner.lock();
+            inner
+                .data
+                .read_datagram_with(len, |src| dst.write_bytes(src), !peek)
+        } else {
+            let mut inner = self.inner.lock();
+            inner
+                .data
+                .read_stream_with(len, |src| dst.write_bytes(src), !peek)
+        };
+        self.post_read_signals(was_full, peek, actual_count);
+        if fault.is_some() {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        Ok(actual_count)
+    }
+
+    /// Post-read signal updates — shared by `read` and `read_to_user`.
+    fn post_read_signals(&self, was_full: bool, peek: bool, actual_count: usize) {
         if !peek && actual_count > 0 {
             if let Some(peer) = self.peer.upgrade() {
                 // Hold both endpoint locks in a consistent order (see
@@ -335,7 +458,6 @@ impl Socket {
                 self.base.signal_clear(clear);
             }
         }
-        Ok(actual_count)
     }
 
     fn read_datagram(&self, data: &mut [u8], peek: bool) -> ZxResult<usize> {
