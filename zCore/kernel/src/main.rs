@@ -55,6 +55,10 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) -> ! {
     // keeping task_num > 0 forever.
     executor::set_deferred_drain_fn(|| {
         hal_impl::timer::drain_deferred_timer_callbacks();
+        // Deferred VMR invalidations (contended range_change): drain
+        // before task dispatch so userspace never observes stale
+        // mappings after a truncate/resize.
+        zircon_object::vm::drain_deferred_range_changes();
     });
 
     #[cfg(feature = "baremetal-test")]
