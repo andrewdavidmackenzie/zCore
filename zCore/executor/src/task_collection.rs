@@ -387,10 +387,10 @@ impl TaskCollection {
                 // slow wake storm anywhere keeps the GLOBAL found
                 // counter moving, so the CPUs holding the actually-hung
                 // tasks never dump. Dump every collection periodically
-                // instead — 100k scans is rare enough to keep the log
+                // instead — 1M scans is rare enough to keep the log
                 // readable while tests run, and a minutes-long hang
                 // always captures full per-CPU state.
-                if scan_num.is_multiple_of(100_000) && self.task_num() > 0 {
+                if scan_num.is_multiple_of(1_000_000) && self.task_num() > 0 {
                     self.dump_stuck_state();
                 }
                 // #862 quiescent mode: zero system-wide wake progress
@@ -609,6 +609,7 @@ impl TaskCollection {
     pub fn set_pending_yield(&self, key: Key) {
         *self.pending_yield.lock() = Some(key);
     }
+
 
     /// Force-set the notified bit for `key`'s waker slot and IPI this
     /// collection's CPU, after verifying the slot still holds

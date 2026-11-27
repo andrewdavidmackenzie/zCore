@@ -165,12 +165,19 @@ impl Executor {
                     return;
                 }
             } else {
+                // #523 lost-wake-safe halt dance: mark this CPU
+                // halted BEFORE the final pre-halt scan. A wake
+                // racing this window either sees halted=true and
+                // sends the IPI (breaking the hlt below), or its
+                // notified bit is found by the scan itself.
+                crate::set_cpu_halted(self.task_collection_cpu(), true);
                 // Before going idle, do one more take_task() to catch
                 // notifications that arrived during the previous task's
                 // poll (the generator's page scan may have passed the
                 // notified page before the notification arrived).
                 let retry = self.task_collection.take_task();
                 if retry.is_some() {
+                    crate::set_cpu_halted(self.task_collection_cpu(), false);
                     let (retry_key, task, waker_ref, droper) = retry.unwrap();
                     let waker_ref = Arc::new(waker_ref);
                     let waker = woke::waker_ref(&waker_ref);
@@ -220,9 +227,18 @@ impl Executor {
                         }
                     }
                     crate::arch::wait_for_interrupt();
+                    // Woke from hlt (interrupt or spurious): no
+                    // longer halted — wakes may IPI us again.
+                    crate::set_cpu_halted(self.task_collection_cpu(), false);
                 }
             }
         }
+    }
+
+    /// #523: the CPU id owning this executor's task collection (for
+    /// the halted-flag dance around WFI).
+    fn task_collection_cpu(&self) -> u8 {
+        crate::arch::cpu_id()
     }
 
     // Whether a future is currently running.

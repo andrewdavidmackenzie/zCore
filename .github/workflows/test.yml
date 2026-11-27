@@ -330,7 +330,15 @@ jobs:
   zircon-core-tests-x86:
     name: Zircon Core Tests (x86_64)
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    # #523: the suite's TCG runtime is bimodal — ~25 min when the
+    # runner is fast, up to ~75 min when the 8-vCPU guest is
+    # oversubscribed on a contended shared runner (the wake/dispatch
+    # latency per channel round-trip rises ~10x; slow tests like
+    # SchedulerProfileTest.DeadlinePiUtilizationPanicRepro degrade
+    # from ~400s to ~3000s). 4h covers the worst observed instance
+    # with margin; genuinely hung tests still fail at the QEMU
+    # timeout with full diagnostics.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
         with:
@@ -353,7 +361,7 @@ jobs:
         run: make core-tests-build
 
       - name: Run core-tests
-        run: make core-tests CORE_TESTS_TIMEOUT=3600
+        run: make core-tests CORE_TESTS_TIMEOUT=7200
 
   libc-test:
     name: Libc Test (aarch64, macOS)

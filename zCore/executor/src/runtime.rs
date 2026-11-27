@@ -255,6 +255,7 @@ pub(crate) fn local_task_collection() -> Option<&'static Arc<TaskCollection>> {
     let tc_map = CPU_TASK_COLLECTIONS.get()?;
     tc_map.get(&crate::arch::cpu_id())
 }
+
 // per-cpu scheduler.
 pub fn run_until_idle() -> bool {
     debug!("run_until_idle");

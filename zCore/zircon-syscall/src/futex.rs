@@ -5,12 +5,16 @@ impl Syscall<'_> {
     /// Returns `NOT_FOUND` if the address is unmapped, matching Fuchsia's
     /// behavior (preventing a kernel page fault in `Futex::load_user_value`).
     fn validate_futex_addr(&self, addr: usize) -> ZxResult {
-        match self.thread.proc().vmar().get_mapping_flags(addr) {
-            Ok(_) => Ok(()),
-            #[cfg(not(target_os = "none"))]
-            Err(ZxError::NOT_FOUND) => Ok(()),
-            Err(e) => Err(e),
-        }
+        // Fuchsia does not walk the VMAR on futex syscalls — probe the
+        // word with a fault-recovering guarded copy instead. The VMAR
+        // walk took VmarInner (a KernelMutex) + a linear mapping scan
+        // + the mapping lock on EVERY futex_wait/wake/requeue, which
+        // dominated the lock contention under futex churn
+        // (SchedulerProfileTest.DeadlinePiUtilizationPanicRepro).
+        UserInPtr::<i32>::from(addr)
+            .read()
+            .map_err(|_| ZxError::INVALID_ARGS)?;
+        Ok(())
     }
 
     /// Wait on a futex.

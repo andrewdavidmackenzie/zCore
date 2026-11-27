@@ -47,7 +47,7 @@ mod waker_page;
 
 // ── Per-CPU scheduler statistics ────────────────────────────────────
 
-use core::sync::atomic::AtomicU64;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Per-CPU scheduler statistics, updated atomically.
 pub struct CpuSchedStats {
@@ -91,6 +91,17 @@ pub fn cpu_stats(cpu_id: usize) -> &'static CpuSchedStats {
 /// consume the flag.
 ///
 /// Index by CPU ID (max 64 CPUs). On single-CPU systems, only [0] is used.
+/// #523 hang-hunt: wake→dispatch latency buckets (TSC-derived ns).
+pub static DISPATCH_FAST_10US: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
+pub static DISPATCH_FAST_100US: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
+pub static DISPATCH_SLOW_1MS: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
+pub static DISPATCH_SLOW_10MS: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
+pub static DISPATCH_SLOW_INF: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
 static YIELD_PENDING: [core::sync::atomic::AtomicBool; 64] = {
     const FALSE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
     [FALSE; 64]
@@ -168,6 +179,32 @@ type WakeupFn = fn(cpu_id: u8);
 /// Registered cross-CPU wakeup function. None until set by HAL init.
 static WAKEUP_FN: spin::Once<WakeupFn> = spin::Once::new();
 
+/// #523: per-CPU "in WFI/hlt" flags. Wakes skip the IPI when the
+/// target CPU is running — the executor loop picks the notified bit
+/// up at its next scan, and an IPI into a busy CPU saves nothing
+/// (dispatch happens at the next loop iteration either way). Under
+/// TCG each IPI costs a vCPU-thread kick + interrupt injection
+/// (~50-100µs); channel ping-pong workloads issue thousands per
+/// second.
+static CPU_HALTED: [core::sync::atomic::AtomicBool; 64] = {
+    const FALSE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+    [FALSE; 64]
+};
+
+/// Mark this CPU as entering WFI (called just BEFORE the final
+/// pre-halt task scan, so a wake racing the flag still sends the IPI
+/// or is found by that scan).
+pub fn set_cpu_halted(cpu: u8, halted: bool) {
+    if (cpu as usize) < 64 {
+        CPU_HALTED[cpu as usize].store(halted, Ordering::Release);
+    }
+}
+
+/// Whether the given CPU is currently halted in WFI.
+pub fn is_cpu_halted(cpu: u8) -> bool {
+    ((cpu as usize) < 64) && CPU_HALTED[cpu as usize].load(Ordering::Acquire)
+}
+
 /// Register the cross-CPU wakeup function. Called once during HAL
 /// initialization after the IPI infrastructure is ready.
 pub fn set_ipi_wakeup(f: WakeupFn) {
@@ -180,7 +217,13 @@ pub(crate) fn ipi_wakeup(target_cpu: u8) {
     let current = arch::cpu_id();
     if current != target_cpu {
         if let Some(f) = WAKEUP_FN.get() {
-            f(target_cpu);
+            // #523: only IPI a halted CPU. A running CPU finds the
+            // notified bit at its next scan; the IPI would only add
+            // an interrupt injection (~50-100µs under TCG) to a CPU
+            // that cannot act on it any sooner.
+            if is_cpu_halted(target_cpu) {
+                f(target_cpu);
+            }
         }
     }
 }
