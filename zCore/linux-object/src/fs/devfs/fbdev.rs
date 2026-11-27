@@ -279,6 +279,12 @@ impl FbDev {
 }
 
 impl INode for FbDev {
+    fn fs(&self) -> Arc<dyn FileSystem> {
+        // #538: pseudo-device node — belongs to no persistent
+        // filesystem; the shared PseudoFs is the honest answer.
+        Arc::new(PseudoFs)
+    }
+
     #[allow(unsafe_code)]
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize> {
         info!(

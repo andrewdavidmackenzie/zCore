@@ -62,8 +62,9 @@ impl VMObjectTrait for VMObjectPhysical {
     }
 
     fn set_len(&self, _len: usize) -> ZxResult {
-        // TODO: physical VMOs cannot be resized; return NOT_SUPPORTED or INVALID_ARGS
-        unimplemented!()
+        // #538: physical VMOs cannot be resized (user-reachable via
+        // zx_vmo_set_size) — NOT_SUPPORTED, not a crash.
+        Err(ZxError::NOT_SUPPORTED)
     }
 
     fn commit_page(&self, page_idx: usize, _flags: MMUFlags) -> ZxResult<PhysAddr> {

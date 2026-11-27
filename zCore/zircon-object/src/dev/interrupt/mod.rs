@@ -385,7 +385,9 @@ impl Interrupt {
         let mode = options.to_mode();
         if mode != InterruptOptions::MODE_DEFAULT && mode != InterruptOptions::MODE_EDGE_HIGH {
             // TODO: support MODE_EDGE_LOW, MODE_LEVEL_LOW, MODE_LEVEL_HIGH interrupt modes
-            unimplemented!();
+            // #538: an unsupported interrupt mode is NOT_SUPPORTED
+            // (user-reachable via zx_interrupt_create), not a crash.
+            return Err(ZxError::NOT_SUPPORTED);
         }
         if options.contains(InterruptOptions::REMAP_IRQ) {
             warn!("Skip Interrupt.Remap");

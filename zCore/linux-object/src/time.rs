@@ -251,7 +251,11 @@ impl From<usize> for ClockId {
             7 => ClockId::ClockBootTime,
             8 => ClockId::ClockRealTimeAlarm,
             9 => ClockId::ClockBootTimeAlarm,
-            _ => unreachable!(),
+            // #538: an unknown clock id from a Linux syscall is EINVAL
+            // territory, not a kernel crash — map to REALTIME (the
+            // syscall layer re-checks and returns EINVAL for clocks
+            // it does not handle).
+            _ => ClockId::ClockRealTime,
         }
     }
 }
@@ -271,7 +275,9 @@ impl From<usize> for ClockFlags {
         match t {
             0 => ClockFlags::ZeroFlag,
             1 => ClockFlags::TimerAbsTime,
-            _ => unreachable!(),
+            // #538: same — unknown flags map to the default (relative
+            // timer); the syscall layer validates.
+            _ => ClockFlags::ZeroFlag,
         }
     }
 }

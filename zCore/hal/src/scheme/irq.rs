@@ -5,7 +5,7 @@ use alloc::sync::Arc;
 use core::ops::Range;
 
 use super::Scheme;
-use crate::DeviceResult;
+use crate::{DeviceError, DeviceResult};
 
 /// A type alias for interrupt handler closures.
 pub type IrqHandler = Box<dyn Fn() + Send + Sync>;
@@ -42,7 +42,9 @@ pub trait IrqScheme: Scheme {
     /// Configure the specified interrupt vector. If it is invoked, it must be
     /// invoked prior to interrupt registration.
     fn configure(&self, _irq_num: usize, _tm: IrqTriggerMode, _pol: IrqPolarity) -> DeviceResult {
-        unimplemented!()
+        // #538: optional trait method — drivers without trigger-mode
+        // configuration return NotSupported instead of panicking.
+        Err(DeviceError::NotSupported)
     }
 
     /// Add an interrupt handler to an IRQ.
@@ -59,13 +61,15 @@ pub trait IrqScheme: Scheme {
     /// Method used for platform allocation of blocks of MSI and MSI-X compatible
     /// IRQ targets.
     fn msi_alloc_block(&self, _requested_irqs: usize) -> DeviceResult<Range<usize>> {
-        unimplemented!()
+        // #538: MSI is optional (e.g. legacy IO-APIC has none).
+        Err(DeviceError::NotSupported)
     }
 
     /// Method used to free a block of MSI IRQs previously allocated by msi_alloc_block().
     /// This does not unregister IRQ handlers.
     fn msi_free_block(&self, _block: Range<usize>) -> DeviceResult {
-        unimplemented!()
+        // #538: MSI is optional.
+        Err(DeviceError::NotSupported)
     }
 
     /// Register a handler function for a given msi_id within an msi_block_t. Passing a
@@ -77,12 +81,14 @@ pub trait IrqScheme: Scheme {
         _msi_id: usize,
         _handler: IrqHandler,
     ) -> DeviceResult {
-        unimplemented!()
+        // #538: MSI is optional.
+        Err(DeviceError::NotSupported)
     }
 
     /// Init irq for current cpu.
     /// Some IRQ hardware requires per-CPU initialization.
     fn init_hart(&self) {
-        unimplemented!()
+        // #538: per-CPU init is optional — most IRQ hardware needs
+        // nothing (only RISC-V PLIC overrides this).
     }
 }

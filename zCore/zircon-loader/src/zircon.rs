@@ -33,7 +33,7 @@ use zircon_object::task::{
 
 use zircon_object::util::elf_loader::ElfExt;
 use zircon_object::vm::{pages, VmObject};
-use zircon_object::ZxError;
+use zircon_object::{ZxError, ZxResult};
 
 /// Register the VMAR permission checker for libos user copies.
 ///
@@ -890,7 +890,14 @@ async fn handler_user_trap(
             type_: ExceptionType::General,
             synth_code: 0,
         }),
-        _ => unreachable!(),
+        // #538: Syscall/Interrupt/PageFault have dedicated paths
+        // before reaching here; if one leaks through, deliver a
+        // general exception (the thread crashes) rather than
+        // freezing the kernel.
+        _ => Err(ExceptionInfo {
+            type_: ExceptionType::General,
+            synth_code: 0,
+        }),
     }
 }
 
@@ -962,20 +969,30 @@ pub fn run_from_rootfs(
     rootfs: Arc<dyn zcore_fs::vfs::FileSystem>,
     init_path: &str,
     extra_args: alloc::vec::Vec<alloc::string::String>,
-) -> Arc<Process> {
+) -> ZxResult<Arc<Process>> {
     info!("Zircon rootfs boot: loading '{}'", init_path);
 
-    let inode = rootfs
-        .root_inode()
-        .lookup(init_path)
-        .unwrap_or_else(|e| panic!("failed to find '{}' in rootfs: {:?}", init_path, e));
-    let size = inode.metadata().unwrap().size;
+    // #538: a missing or unreadable init binary is a deployment
+    // error — return it to the caller (which falls back to the
+    // embedded ZBI) instead of panicking at boot.
+    let inode = rootfs.root_inode().lookup(init_path).map_err(|e| {
+        error!("failed to find '{}' in rootfs: {:?}", init_path, e);
+        ZxError::NOT_FOUND
+    })?;
+    let size = inode
+        .metadata()
+        .map_err(|e| {
+            error!("failed to stat '{}' in rootfs: {:?}", init_path, e);
+            ZxError::IO
+        })?
+        .size;
     let mut program_data = alloc::vec![0u8; size];
-    inode
-        .read_at(0, &mut program_data)
-        .unwrap_or_else(|e| panic!("failed to read '{}': {:?}", init_path, e));
+    inode.read_at(0, &mut program_data).map_err(|e| {
+        error!("failed to read '{}': {:?}", init_path, e);
+        ZxError::IO
+    })?;
 
-    run_from_data(&program_data, init_path, extra_args)
+    Ok(run_from_data(&program_data, init_path, extra_args))
 }
 
 /// Boot a Zircon process from pre-loaded program data.
@@ -1103,8 +1120,11 @@ fn apply_userstart_relocations(
             vmo.write(r_offset, &value.to_le_bytes()).unwrap();
             applied += 1;
         } else if r_type != 0 {
-            panic!(
-                "userstart: unsupported relocation type {} at offset {:#x}",
+            // #538: an unsupported reloc on the prebuilt userstart is
+            // a build mismatch — skip the entry (the process may
+            // crash if it uses it; the kernel must not).
+            error!(
+                "userstart: skipping unsupported relocation type {} at offset {:#x}",
                 r_type, r_offset
             );
         }

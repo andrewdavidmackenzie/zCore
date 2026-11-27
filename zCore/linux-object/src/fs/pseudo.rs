@@ -1,5 +1,6 @@
 //! Pseudo file system INode
 
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
 
@@ -22,6 +23,10 @@ impl Pseudo {
 }
 
 impl INode for Pseudo {
+    fn fs(&self) -> Arc<dyn FileSystem> {
+        // #538: pseudo node — no persistent filesystem.
+        Arc::new(PseudoFs)
+    }
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize> {
         if offset >= self.content.len() {
             return Ok(0);

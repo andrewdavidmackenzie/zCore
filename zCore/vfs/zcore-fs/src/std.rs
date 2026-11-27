@@ -50,7 +50,8 @@ impl From<std::fs::Metadata> for Metadata {
                 libc::S_IFREG => FileType::File,
                 libc::S_IFLNK => FileType::SymLink,
                 libc::S_IFSOCK => FileType::Socket,
-                _ => unimplemented!("unknown file type"),
+                // #538: an unrecognized host file type maps to File.
+                _ => FileType::File,
             },
             mode: m.mode() as u16 & 0o777,
             nlinks: m.nlink() as usize,

@@ -37,14 +37,18 @@ trait DeviceExt: Device {
         debug_assert!(offset + buf.len() <= BLKSIZE);
         match self.read_at(id * BLKSIZE + offset, buf) {
             Ok(len) if len == buf.len() => Ok(()),
-            _ => panic!("cannot read block {} offset {} from device", id, offset),
+            // #538: device I/O failure (short read) is an error, not
+            // a crash — return it to the filesystem caller.
+            _ => Err(FsError::DeviceError),
         }
     }
     fn write_block(&self, id: BlockId, offset: usize, buf: &[u8]) -> vfs::Result<()> {
         debug_assert!(offset + buf.len() <= BLKSIZE);
         match self.write_at(id * BLKSIZE + offset, buf) {
             Ok(len) if len == buf.len() => Ok(()),
-            _ => panic!("cannot write block {} offset {} to device", id, offset),
+            // #538: same — a failed device write must not crash the
+            // kernel.
+            _ => Err(FsError::DeviceError),
         }
     }
     /// Load struct `T` from given block in device
@@ -115,7 +119,10 @@ impl INodeImpl {
                 assert!(disk_block_id > 0);
                 Ok(disk_block_id as BlockId)
             }
-            _ => unimplemented!("triple indirect blocks is not supported"),
+            // #538: a file larger than the double-indirect capacity is
+            // "not supported" (FsError::NotSupported = E_UNIMP), not a
+            // crash.
+            _ => Err(FsError::NotSupported),
         }
     }
     fn set_disk_block_id(&self, file_block_id: BlockId, disk_block_id: BlockId) -> vfs::Result<()> {
@@ -152,7 +159,7 @@ impl INodeImpl {
                 )?;
                 Ok(())
             }
-            _ => unimplemented!("triple indirect blocks is not supported"),
+            _ => Err(FsError::NotSupported),
         }
     }
     /// Only for Dir
@@ -450,18 +457,26 @@ impl vfs::INode for INodeImpl {
     /// the size returned here is logical size(entry num for directory), not the disk space used.
     fn metadata(&self) -> vfs::Result<vfs::Metadata> {
         let disk_inode = self.disk_inode.read();
+        // #538: an invalid on-disk type is corruption
+        // (FsError::WrongFs = "content on disk is wrong"), not a
+        // crash. The vfs type is computed in the same match so the
+        // conversion never sees an unvalidated value.
+        let (size, type_) = match disk_inode.type_ {
+            FileType::File | FileType::SymLink => (
+                disk_inode.size as usize,
+                vfs::FileType::from(disk_inode.type_),
+            ),
+            FileType::Dir => (disk_inode.size as usize, vfs::FileType::Dir),
+            FileType::CharDevice => (0, vfs::FileType::CharDevice),
+            FileType::BlockDevice => (0, vfs::FileType::BlockDevice),
+            FileType::Invalid => return Err(FsError::WrongFs),
+        };
         Ok(vfs::Metadata {
             dev: 0,
             inode: self.id,
-            size: match disk_inode.type_ {
-                FileType::File | FileType::SymLink => disk_inode.size as usize,
-                FileType::Dir => disk_inode.size as usize,
-                FileType::CharDevice => 0,
-                FileType::BlockDevice => 0,
-                _ => panic!("Unknown file type"),
-            },
+            size,
             mode: 0o777,
-            type_: vfs::FileType::from(disk_inode.type_),
+            type_,
             blocks: disk_inode.blocks as usize,
             atime: disk_inode.atime,
             mtime: disk_inode.mtime,
@@ -852,10 +867,10 @@ impl SimpleFileSystem {
             }
             super_block.unused_blocks -= 1; // will not underflow
             trace!("alloc block {:#x}", block_id);
-        } else {
-            let super_block = self.super_block.read();
-            panic!("{:?}", super_block)
         }
+        // #538: no free block in the map = the filesystem is full.
+        // The function already returns Option<usize> — None is the
+        // contract, not a crash.
         id
     }
     /// Free a block
@@ -1037,7 +1052,10 @@ impl From<FileType> for vfs::FileType {
             FileType::Dir => vfs::FileType::Dir,
             FileType::CharDevice => vfs::FileType::CharDevice,
             FileType::BlockDevice => vfs::FileType::BlockDevice,
-            _ => panic!("unknown file type"),
+            // #538: never a valid on-disk state — metadata()
+            // rejects it with WrongFs before this conversion runs;
+            // map defensively rather than crash.
+            FileType::Invalid => vfs::FileType::File,
         }
     }
 }

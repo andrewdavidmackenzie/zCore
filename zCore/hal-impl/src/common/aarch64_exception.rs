@@ -22,7 +22,18 @@ impl Kind {
             x if x == Kind::Irq as usize => Kind::Irq,
             x if x == Kind::Fiq as usize => Kind::Fiq,
             x if x == Kind::SError as usize => Kind::SError,
-            _ => panic!("bad kind"),
+            // #538: this parses the trap-entry vector slot — a value
+            // outside 0-3 means a corrupted trap frame, not a reason
+            // to crash the exception handler itself. Route to the
+            // general (Synchronous) handler: worst case a mis-routed
+            // IRQ is caught on the next timer tick.
+            _ => {
+                error!(
+                    "[aarch64] exception Kind::from({:#x}) — routing as Synchronous",
+                    x
+                );
+                Kind::Synchronous
+            }
         }
     }
 }
@@ -43,7 +54,15 @@ impl Source {
             x if x == Source::CurrentSpElx as usize => Source::CurrentSpElx,
             x if x == Source::LowerAArch64 as usize => Source::LowerAArch64,
             x if x == Source::LowerAArch32 as usize => Source::LowerAArch32,
-            _ => panic!("bad kind"),
+            // #538: same — assume the common case (user-origin) for
+            // a corrupted frame rather than crashing the handler.
+            _ => {
+                error!(
+                    "[aarch64] exception Source::from({:#x}) — assuming LowerAArch64",
+                    x
+                );
+                Source::LowerAArch64
+            }
         }
     }
 }

@@ -448,7 +448,12 @@ fn apply_rela_entries(
                 let sym = &dynsym[entry.get_symbol_table_index() as usize];
                 let symval = if sym.shndx() == 0 {
                     let name = sym.get_name(elf)?;
-                    panic!("need to find symbol: {:?}", name);
+                    // #538: an unresolvable symbol fails the load
+                    // (the caller returns an error to the spawning
+                    // syscall) — not a kernel crash. The symbol name
+                    // is logged for diagnosis.
+                    error!("[elf] unresolved symbol: {:?}", name);
+                    return Err("unresolved symbol");
                 } else {
                     base + sym.value() as usize
                 };

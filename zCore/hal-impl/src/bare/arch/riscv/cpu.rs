@@ -25,7 +25,11 @@ hal_fn_impl! {
         fn reset() -> ! {
             info!("shutdown...");
             sbi_rt::system_reset(sbi_rt::Shutdown, sbi_rt::NoReason);
-            unreachable!()
+            // #538: if the SBI reset request fails, halt this CPU —
+            // spinning is quieter than a panic on the shutdown path.
+            loop {
+                unsafe { core::arch::asm!("wfi") };
+            }
         }
     }
 }

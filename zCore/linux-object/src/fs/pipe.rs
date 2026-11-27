@@ -91,6 +91,12 @@ impl Pipe {
 }
 
 impl INode for Pipe {
+    fn fs(&self) -> Arc<dyn FileSystem> {
+        // #538: pseudo-device node — belongs to no persistent
+        // filesystem; the shared PseudoFs is the honest answer.
+        Arc::new(PseudoFs)
+    }
+
     /// read from pipe
     fn read_at(&self, _offset: usize, buf: &mut [u8]) -> Result<usize> {
         if buf.is_empty() {

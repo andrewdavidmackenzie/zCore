@@ -96,7 +96,10 @@ pub fn obj_type(object: &Arc<dyn KernelObject>) -> u32 {
         "Counter" => 34,
         "IoBufferSharedRegion" => 35,
         "MsiAllocation" => 36,
-        _ => unimplemented!("unknown type"),
+        // #538: a kobject type missing from this diagnostic table
+        // maps to 0 (unknown) — adding a type without updating the
+        // table degrades diagnostics, not the kernel.
+        _ => 0,
     }
 }
 
@@ -116,10 +119,11 @@ mod tests {
     use super::*;
 
     #[test]
-    #[should_panic(expected = "unknown type")]
     fn test_ojb_type_unknown() {
+        // #538: unknown kobject types map to 0 (diagnostic
+        // degradation) instead of panicking.
         let obj: Arc<dyn KernelObject> = DummyObject::new();
-        assert_eq!(1, obj_type(&obj));
+        assert_eq!(0, obj_type(&obj));
     }
 
     #[test]

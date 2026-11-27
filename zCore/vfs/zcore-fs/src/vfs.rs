@@ -110,10 +110,11 @@ pub trait INode: Any + Sync + Send {
         Err(FsError::NotSupported)
     }
 
-    /// Get the file system of the INode
-    fn fs(&self) -> Arc<dyn FileSystem> {
-        unimplemented!();
-    }
+    /// Get the file system of the INode. Required: every INode
+    /// lives in (or was created by) a filesystem and must be able
+    /// to name it (#538 — the former panicking default let gaps
+    /// compile silently).
+    fn fs(&self) -> Arc<dyn FileSystem>;
 
     /// This is used to implement dynamics cast.
     /// Simply return self in the implement of the function.
@@ -357,4 +358,113 @@ pub trait FileSystem: Sync + Send {
 
 pub fn make_rdev(major: usize, minor: usize) -> usize {
     ((major & 0xfff) << 8) | (minor & 0xff)
+}
+
+/// A filesystem for anonymous / pseudo inodes that don't belong to
+/// any persistent filesystem — pipes, device nodes created
+/// standalone (Linux personality), etc. Returned by their `fs()`
+/// so the required trait method always has an honest answer
+/// (#538: the former panicking default let these gaps compile).
+pub struct PseudoFs;
+
+impl FileSystem for PseudoFs {
+    fn sync(&self) -> Result<()> {
+        Ok(())
+    }
+    fn root_inode(&self) -> Arc<dyn INode> {
+        PseudoRoot::new()
+    }
+    fn info(&self) -> FsInfo {
+        FsInfo {
+            bsize: 0,
+            frsize: 0,
+            blocks: 0,
+            bfree: 0,
+            bavail: 0,
+            files: 0,
+            ffree: 0,
+            namemax: 0,
+        }
+    }
+}
+
+/// The root of [`PseudoFs`] — an inode that errors on every
+/// operation. Pseudo inodes are never directories, so path
+/// resolution (which is the only consumer of `root_inode`) rejects
+/// them with `NotDir` before ever reaching this.
+struct PseudoRoot;
+
+impl PseudoRoot {
+    fn new() -> Arc<dyn INode> {
+        Arc::new(Self)
+    }
+}
+
+impl INode for PseudoRoot {
+    fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize> {
+        Err(FsError::NotSupported)
+    }
+    fn write_at(&self, _offset: usize, _buf: &[u8]) -> Result<usize> {
+        Err(FsError::NotSupported)
+    }
+    fn poll(&self) -> Result<PollStatus> {
+        Ok(PollStatus::default())
+    }
+    fn metadata(&self) -> Result<Metadata> {
+        Ok(Metadata {
+            dev: 0,
+            inode: 0,
+            size: 0,
+            mode: 0,
+            type_: FileType::File,
+            blocks: 0,
+            atime: Timespec { sec: 0, nsec: 0 },
+            mtime: Timespec { sec: 0, nsec: 0 },
+            ctime: Timespec { sec: 0, nsec: 0 },
+            nlinks: 1,
+            uid: 0,
+            gid: 0,
+            rdev: 0,
+            blk_size: 0,
+        })
+    }
+    fn set_metadata(&self, _metadata: &Metadata) -> Result<()> {
+        Err(FsError::NotSupported)
+    }
+    fn sync_all(&self) -> Result<()> {
+        Ok(())
+    }
+    fn sync_data(&self) -> Result<()> {
+        Ok(())
+    }
+    fn resize(&self, _len: usize) -> Result<()> {
+        Err(FsError::NotSupported)
+    }
+    fn create(&self, _name: &str, _type_: FileType, _mode: u32) -> Result<Arc<dyn INode>> {
+        Err(FsError::NotDir)
+    }
+    fn unlink(&self, _name: &str) -> Result<()> {
+        Err(FsError::NotDir)
+    }
+    fn link(&self, _name: &str, _other: &Arc<dyn INode>) -> Result<()> {
+        Err(FsError::NotDir)
+    }
+    fn move_(&self, _old_name: &str, _target: &Arc<dyn INode>, _new_name: &str) -> Result<()> {
+        Err(FsError::NotDir)
+    }
+    fn find(&self, _name: &str) -> Result<Arc<dyn INode>> {
+        Err(FsError::NotDir)
+    }
+    fn get_entry(&self, _id: usize) -> Result<String> {
+        Err(FsError::NotDir)
+    }
+    fn io_control(&self, _cmd: u32, _data: usize) -> Result<usize> {
+        Err(FsError::NotSupported)
+    }
+    fn fs(&self) -> Arc<dyn FileSystem> {
+        Arc::new(PseudoFs)
+    }
+    fn as_any_ref(&self) -> &dyn Any {
+        self
+    }
 }
