@@ -101,18 +101,44 @@ pub fn primary_init() {
         use x86_64::registers::control::{Cr0, Cr0Flags};
         Cr0::update(|f| f.remove(Cr0Flags::EMULATE_COPROCESSOR));
 
+        // #907: when the CPU supports XSAVE and AVX, enable OSXSAVE
+        // and XCR0 so the user-context switch (enter_uspace) can
+        // preserve the YMM upper halves via XSAVE/XRSTOR. FXSAVE
+        // loses them: two AVX-using threads on one CPU corrupt each
+        // other's state, and residual YMM contents leak across
+        // address spaces.
+        let feature_info = raw_cpuid::CpuId::new().get_feature_info();
+        let xsave_with_avx = feature_info.is_some_and(|fi| fi.has_xsave() && fi.has_avx());
+
         Cr4::update(|f| {
             f.insert(Cr4Flags::PAGE_GLOBAL);
             f.insert(Cr4Flags::OSFXSR); // enable FXSAVE/FXRSTOR
             f.insert(Cr4Flags::OSXMMEXCPT_ENABLE); // enable SSE exceptions
+            if xsave_with_avx {
+                f.insert(Cr4Flags::OSXSAVE); // enable XSAVE/XRSTOR + XCR0
+            }
         });
+
+        if xsave_with_avx {
+            // XCR0 = x87 (bit 0) | SSE (bit 1) | AVX (bit 2). xsetbv
+            // requires OSXSAVE (set above) and runs at IPL0 only.
+            const XCR0_X87_SSE_AVX: u64 = 0b111;
+            core::arch::asm!(
+                "xsetbv",
+                in("ecx") 0u32,
+                in("eax") XCR0_X87_SSE_AVX as u32,
+                in("edx") (XCR0_X87_SSE_AVX >> 32) as u32,
+            );
+            crate::context::set_xsave_supported();
+        }
 
         // Detect SMAP support and enable it if available.
         // copy_from_user/copy_to_user APIs bracket user memory access
         // with stac/clac when SMAP is active.
         crate::user::init_smap();
     }
-    // FPU/SSE state is saved/restored via FXSAVE/FXRSTOR in
+    // FPU/SSE state is saved/restored via XSAVE/XRSTOR (or the
+    // FXSAVE/FXRSTOR fallback on CPUs without AVX) in
     // UserContext::enter_uspace() (hal-impl/src/common/context.rs).
 
     // Boot application processors (SMP)

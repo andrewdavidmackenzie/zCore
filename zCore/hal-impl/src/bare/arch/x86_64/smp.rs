@@ -311,13 +311,31 @@ extern "C" fn ap_entry() -> ! {
 
         // Enable SSE and FSGSBASE (if CPU supports it) on this AP
         use x86_64::registers::control::{Cr4, Cr4Flags};
+        // #907: mirror the BSP's XSAVE/AVX decision — CR4 and XCR0
+        // are per-CPU. The BSP's feature detection (CPUID is
+        // package-uniform for these leaf-1 bits) applies here too.
+        let feature_info = raw_cpuid::CpuId::new().get_feature_info();
+        let xsave_with_avx = feature_info.is_some_and(|fi| fi.has_xsave() && fi.has_avx());
         Cr4::update(|f| {
             if trapframe::has_fsgsbase() {
                 f.insert(Cr4Flags::FSGSBASE);
             }
             f.insert(Cr4Flags::OSFXSR);
             f.insert(Cr4Flags::OSXMMEXCPT_ENABLE);
+            if xsave_with_avx {
+                f.insert(Cr4Flags::OSXSAVE);
+            }
         });
+        if xsave_with_avx {
+            // XCR0 = x87 | SSE | AVX (per-CPU; the BSP sets its own).
+            const XCR0_X87_SSE_AVX: u64 = 0b111;
+            core::arch::asm!(
+                "xsetbv",
+                in("ecx") 0u32,
+                in("eax") XCR0_X87_SSE_AVX as u32,
+                in("edx") (XCR0_X87_SSE_AVX >> 32) as u32,
+            );
+        }
         // Enable SMAP on APs if the BSP detected support.
         crate::user::init_smap();
 
