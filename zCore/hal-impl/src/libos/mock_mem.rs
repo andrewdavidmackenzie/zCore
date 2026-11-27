@@ -404,31 +404,43 @@ impl MockMemory {
             // On aarch64 macOS, W^X is enforced -- use RX only.
             #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
             {
-                unsafe {
+                let ok = unsafe {
                     mman::mprotect(
                         aligned_vaddr as _,
                         aligned_len,
                         ProtFlags::PROT_READ | ProtFlags::PROT_EXEC,
                     )
                 }
-                .unwrap_or_else(|err| {
-                    panic!(
+                .inspect_err(|err| {
+                    // #538 (a): the host refusing a protection change
+                    // (e.g. macOS W^X) is an error to propagate, not a
+                    // reason to kill the host process.
+                    error!(
                         "mprotect RX failed: vaddr={:#x}, len={:#x}: {:?}",
                         aligned_vaddr, aligned_len, err
-                    )
-                });
+                    );
+                })
+                .is_ok();
+                if !ok {
+                    return false;
+                }
             }
             #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
             {
                 let p = mmu_flags_to_prot(prot);
-                unsafe { mman::mprotect(aligned_vaddr as _, aligned_len, p) }.unwrap_or_else(
-                    |err| {
-                        panic!(
+                // #538 (a): propagate the failure (logged) instead of
+                // panicking the host process.
+                let ok = unsafe { mman::mprotect(aligned_vaddr as _, aligned_len, p) }
+                    .inspect_err(|err| {
+                        error!(
                             "mprotect failed: vaddr={:#x}, len={:#x}: {:?}",
                             aligned_vaddr, aligned_len, err
-                        )
-                    },
-                );
+                        );
+                    })
+                    .is_ok();
+                if !ok {
+                    return false;
+                }
             }
         }
         // For non-executable pages: apply the requested protection.
@@ -560,7 +572,9 @@ impl MockMemory {
         }
     }
 
-    pub fn mprotect(&self, vaddr: VirtAddr, len: usize, prot: MMUFlags) {
+    /// Returns false (with an error! log) if the host refused the
+    /// protection change — e.g. macOS W^X rejecting RWX (#538 (a)).
+    pub fn mprotect(&self, vaddr: VirtAddr, len: usize, prot: MMUFlags) -> bool {
         let hps = host_page_size();
         let aligned_vaddr = vaddr & !(hps - 1);
         let aligned_len = ((vaddr + len + hps - 1) & !(hps - 1)) - aligned_vaddr;
@@ -575,12 +589,15 @@ impl MockMemory {
         };
 
         unsafe { mman::mprotect(aligned_vaddr as _, aligned_len, mmu_flags_to_prot(prot)) }
-            .unwrap_or_else(|err| {
-                panic!(
+            .inspect_err(|err| {
+                // #538 (a): propagate the failure (logged) instead of
+                // panicking the host process.
+                error!(
                     "mprotect failed: vaddr={:#x}, len={:#x}, prot={:?}: {:?}",
                     aligned_vaddr, aligned_len, prot, err
-                )
-            });
+                );
+            })
+            .is_ok()
     }
 
     /// Clear all user-space mapping state (host_pages + anon tracking).

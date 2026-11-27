@@ -282,7 +282,10 @@ impl PTF {
         match idx {
             0 => MemType::Device,
             1 => MemType::Normal,
-            _ => panic!("Invalid memory attribute index"),
+            // #538: a corrupt PTE attribute maps to Device (the
+            // conservative, uncached choice) rather than crashing
+            // the page-table walker.
+            _ => MemType::Device,
         }
     }
 }

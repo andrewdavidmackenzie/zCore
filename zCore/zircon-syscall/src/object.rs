@@ -853,7 +853,9 @@ impl Syscall<'_> {
                     Topic::ProcessThreads => proc
                         .get_object_with_rights::<Process>(handle, Rights::ENUMERATE)?
                         .thread_ids(),
-                    _ => unreachable!(),
+                    // #538: a known topic routed here without a
+                    // process handler — INVALID_ARGS, not a crash.
+                    _ => return Err(ZxError::INVALID_ARGS),
                 };
                 let count = (buffer_size / core::mem::size_of::<KoID>()).min(ids.len());
                 UserOutPtr::<KoID>::from(buffer).write_array(&ids[..count])?;

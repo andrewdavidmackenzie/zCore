@@ -9,7 +9,10 @@ use crate::{MMUFlags, PhysAddr, VirtAddr};
 pub trait KernelHandler: Send + Sync + 'static {
     /// Allocate contiguous physical frames.
     fn frame_alloc_contiguous(&self, _frame_count: usize, _align_log2: usize) -> Option<PhysAddr> {
-        unimplemented!()
+        // #538: an implementation that doesn't override frame
+        // allocation reports "no memory" — callers propagate the
+        // allocation failure — instead of crashing on first use.
+        None
     }
 
     /// Allocate one physical frame (convenience wrapper).
@@ -19,7 +22,8 @@ pub trait KernelHandler: Send + Sync + 'static {
 
     /// Deallocate a physical frame.
     fn frame_dealloc(&self, _paddr: PhysAddr) {
-        unimplemented!()
+        // #538: no-op default — leaking one frame on an
+        // unoverridden dealloc is degraded but alive.
     }
 
     /// Handle kernel mode page fault.

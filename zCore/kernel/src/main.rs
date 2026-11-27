@@ -96,10 +96,13 @@ fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Proc
                 let mut header = [0u8; 8];
                 let n = inode.read_at(0, &mut header).unwrap_or(0);
                 if n < 8 {
-                    panic!(
-                        "Init binary '{}' too small ({} bytes) — not a valid ELF",
+                    // #538: degrade to the embedded-ZBI fallback
+                    // instead of freezing the machine at boot.
+                    error!(
+                        "Init binary '{}' too small ({} bytes) — not a valid ELF, falling back to embedded ZBI",
                         init_path, n
                     );
+                    return zircon_loader::zircon::run_userboot(load_zbi(), &options.cmdline);
                 }
                 let flavour = zircon_object::task::Flavour::from_elf(&header);
                 info!("Detected init flavour: {:?}", flavour);
@@ -130,9 +133,21 @@ fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Proc
                                 }
                             }
                         }
-                        return zircon_loader::zircon::run_from_rootfs(
+                        // #538: on a rootfs failure (missing/unreadable
+                        // init), fall back to the embedded ZBI rather
+                        // than panicking at boot.
+                        return match zircon_loader::zircon::run_from_rootfs(
                             rootfs, init_path, extra_args,
-                        );
+                        ) {
+                            Ok(proc) => proc,
+                            Err(e) => {
+                                error!(
+                                    "rootfs boot failed ({:?}), falling back to embedded ZBI",
+                                    e
+                                );
+                                zircon_loader::zircon::run_userboot(load_zbi(), &options.cmdline)
+                            }
+                        };
                     }
                     #[cfg(feature = "linux")]
                     zircon_object::task::Flavour::Linux => {
@@ -142,16 +157,21 @@ fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Proc
                     }
                     #[cfg(not(feature = "linux"))]
                     zircon_object::task::Flavour::Linux => {
-                        panic!(
-                            "Init binary '{}' is a Linux ELF but the linux feature is not compiled in",
+                        // #538: a deployment mismatch should not
+                        // freeze the machine — log and fall back.
+                        error!(
+                            "Init binary '{}' is a Linux ELF but the linux feature is not compiled in — falling back to embedded ZBI",
                             init_path
                         );
+                        return zircon_loader::zircon::run_userboot(load_zbi(), &options.cmdline);
                     }
                     zircon_object::task::Flavour::Wasi => {
-                        panic!(
-                            "Init binary '{}' is a WASM file — cannot use as init process",
+                        // #538: same — degrade to the fallback.
+                        error!(
+                            "Init binary '{}' is a WASM file — cannot use as init process, falling back to embedded ZBI",
                             init_path
                         );
+                        return zircon_loader::zircon::run_userboot(load_zbi(), &options.cmdline);
                     }
                 }
             }

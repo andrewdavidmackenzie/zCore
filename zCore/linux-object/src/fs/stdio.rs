@@ -55,6 +55,11 @@ impl Stdin {
 pub struct Stdout;
 
 impl INode for Stdin {
+    fn fs(&self) -> Arc<dyn FileSystem> {
+        // #538: stdio node — no persistent filesystem.
+        Arc::new(PseudoFs)
+    }
+
     fn read_at(&self, _offset: usize, buf: &mut [u8]) -> Result<usize> {
         // Try the internal buffer first (for any previously pushed chars).
         if self.can_read() {
@@ -139,6 +144,11 @@ impl INode for Stdin {
 }
 
 impl INode for Stdout {
+    fn fs(&self) -> Arc<dyn FileSystem> {
+        // #538: stdio node — no persistent filesystem.
+        Arc::new(PseudoFs)
+    }
+
     fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize> {
         Err(FsError::NotSupported)
     }

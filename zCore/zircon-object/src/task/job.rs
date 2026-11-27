@@ -596,11 +596,15 @@ impl Task for Job {
     }
 
     fn suspend(self: &Arc<Self>) {
-        panic!("job do not support suspend");
+        // #538: jobs have no execution state of their own; the
+        // syscall layer rejects job handles with WRONG_TYPE before
+        // dispatch. No-op defensively rather than crash.
+        error!("[job] suspend called on a job — no-op");
     }
 
     fn resume(self: &Arc<Self>) {
-        panic!("job do not support resume");
+        // #538: same.
+        error!("[job] resume called on a job — no-op");
     }
 
     fn exceptionate(&self) -> Arc<Exceptionate> {

@@ -110,14 +110,6 @@ pub fn init_early() {
         phys_to_virt(PhysAddr::new(gic_base + GIC_GICD_OFFSET)),
     );
     log::info!("GIC-400 initialized");
-    gic.irq_enable(TIMER_IRQ);
-    gic.irq_enable(UART_IRQ);
-    gic.register_handler(UART_IRQ as usize, Box::new(handle_uart_irq))
-        .ok();
-    // Timer re-arming is handled by timer_tick() in the trap handler.
-    gic.register_handler(TIMER_IRQ as usize, Box::new(|| {}))
-        .ok();
-    crate::device_registry::add_device(Device::Irq(Arc::new(gic)));
     // Wire UART received bytes to the shared console input buffer.
     let u = uart.clone();
     uart.subscribe(
@@ -129,7 +121,20 @@ pub fn init_early() {
         }),
         false,
     );
+    // Register devices BEFORE enabling their IRQs / registering their
+    // handlers (#538): handle_uart_irq looks the UART up in the
+    // registry from interrupt context, so the device must be present
+    // by the time the handler can fire — an invariant held locally
+    // here, not by CPU-level DAIF masking elsewhere in the boot path.
     crate::device_registry::add_device(Device::Uart(uart));
+    gic.irq_enable(TIMER_IRQ);
+    gic.irq_enable(UART_IRQ);
+    gic.register_handler(UART_IRQ as usize, Box::new(handle_uart_irq))
+        .ok();
+    // Timer re-arming is handled by timer_tick() in the trap handler.
+    gic.register_handler(TIMER_IRQ as usize, Box::new(|| {}))
+        .ok();
+    crate::device_registry::add_device(Device::Irq(Arc::new(gic)));
 }
 
 #[cfg(feature = "board-jollac2")]
