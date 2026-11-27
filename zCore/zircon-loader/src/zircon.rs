@@ -828,6 +828,21 @@ async fn run_syscall(
     // as invalid syscall numbers instead of being truncated to
     // a valid 32-bit syscall number.
     let ret = syscall.syscall(num, args).await as usize;
+    // A thread that died during the syscall (zx_thread_exit, or a
+    // kill that landed mid-syscall) must never execute another user
+    // instruction: Fuchsia kills at the kernel entry, and the vDSO's
+    // exit wrappers trap with ud2 after a returned zx_thread_exit
+    // (observed as the ThreadSampler.HighFrequency process kill —
+    // tid hit the vDSO pad after syscall 165 returned). Route the
+    // exit through the run loop's ThreadExiting path, which completes
+    // the normal teardown (exiting exception, CurrentThread::drop,
+    // remove_thread) instead of returning to user mode.
+    if matches!(thread.state(), ThreadState::Dying | ThreadState::Dead) {
+        return Err(ExceptionInfo {
+            type_: ExceptionType::ThreadExiting,
+            synth_code: 0,
+        });
+    }
     // When a blocked syscall is interrupted by suspend + debugger
     // write_state, the debugger may have modified rax (the return
     // value register). Check if the return value register in the
