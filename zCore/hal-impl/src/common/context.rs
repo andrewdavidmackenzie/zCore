@@ -162,13 +162,25 @@ impl UserContext {
                 use crate::imp::aarch64_macos_fncall::UserContextFnCall;
                 self.inner.run_fncall_macos()
             } else if #[cfg(target_arch = "x86_64")] {
-                // Restore user FPU/SSE state before entering user mode
+                // Restore user FPU/SSE state before entering user mode.
+                // With XSAVE available, XRSTOR also restores the AVX
+                // YMM high halves — FXRSTOR loses them (#907).
                 unsafe {
-                    core::arch::asm!(
-                        "fxrstor [{}]",
-                        in(reg) &self.vector_regs as *const VectorRegs,
-                        options(nostack),
-                    );
+                    if XSAVE_SUPPORTED.load(Ordering::Acquire) {
+                        core::arch::asm!(
+                            "xrstor64 [{}]",
+                            in(reg) &self.vector_regs as *const VectorRegs,
+                            in("eax") XCR0_X87_SSE_AVX,
+                            in("edx") 0u32,
+                            options(nostack),
+                        );
+                    } else {
+                        core::arch::asm!(
+                            "fxrstor [{}]",
+                            in(reg) &self.vector_regs as *const VectorRegs,
+                            options(nostack),
+                        );
+                    }
                 }
                 // Zero x86_64 segment selectors (ds, es) before returning
                 // to user mode. Fuchsia's kernel clears ds/es/fs/gs on
@@ -262,13 +274,25 @@ impl UserContext {
                         );
                     }
                 }
-                // Save user FPU/SSE state after returning from user mode
+                // Save user FPU/SSE state after returning from user
+                // mode. With XSAVE available, XSAVE also saves the
+                // AVX YMM high halves — FXSAVE loses them (#907).
                 unsafe {
-                    core::arch::asm!(
-                        "fxsave [{}]",
-                        in(reg) &mut self.vector_regs as *mut VectorRegs,
-                        options(nostack),
-                    );
+                    if XSAVE_SUPPORTED.load(Ordering::Acquire) {
+                        core::arch::asm!(
+                            "xsave64 [{}]",
+                            in(reg) &mut self.vector_regs as *mut VectorRegs,
+                            in("eax") XCR0_X87_SSE_AVX,
+                            in("edx") 0u32,
+                            options(nostack),
+                        );
+                    } else {
+                        core::arch::asm!(
+                            "fxsave [{}]",
+                            in(reg) &mut self.vector_regs as *mut VectorRegs,
+                            options(nostack),
+                        );
+                    }
                 }
             } else {
                 self.inner.run()
@@ -408,8 +432,46 @@ impl fmt::Debug for UserContext {
 
 cfg_if! {
     if #[cfg(target_arch = "x86_64")] {
+        use core::sync::atomic::{AtomicBool, Ordering};
+
+        /// XCR0 feature bits enabled at boot: x87 (bit 0) | SSE
+        /// (bit 1) | AVX (bit 2) — the state components the
+        /// XSAVE/XRSTOR user-context switch covers (#907).
+        pub const XCR0_X87_SSE_AVX: u32 = 0b111;
+
+        /// Whether XSAVE/XRSTOR (with AVX enabled in XCR0) is
+        /// available on this CPU. Set once during boot after the
+        /// CPUID check; when false, the FXSAVE/FXRSTOR fallback is
+        /// used (#907).
+        static XSAVE_SUPPORTED: AtomicBool = AtomicBool::new(false);
+
+        /// Arm the user-context switch to use XSAVE/XRSTOR. Called
+        /// once from x86_64 boot after OSXSAVE + XCR0 are set.
+        pub(crate) fn set_xsave_supported() {
+            XSAVE_SUPPORTED.store(true, Ordering::Release);
+        }
+
+        /// Whether the BSP armed XSAVE/XRSTOR. APs consult this to
+        /// keep their per-CPU CR4/XCR0 decision consistent with the
+        /// BSP's (the context-switch flag is global; a heterogeneous
+        /// AP must not diverge — CodeRabbit review on #911).
+        pub(crate) fn xsave_supported() -> bool {
+            XSAVE_SUPPORTED.load(Ordering::Acquire)
+        }
+
         /// X86 vector registers.
-        #[repr(C, align(16))]
+        ///
+        /// Layout: the FXSAVE legacy region (512 bytes, identical
+        /// layout) followed by the XSAVE header (64 bytes) and the
+        /// AVX YMM high halves (256 bytes) — the standard XSAVE area
+        /// for x87+SSE+AVX, 832 bytes total, 64-byte aligned as
+        /// XSAVE requires (#907).
+        ///
+        /// The first 512 bytes are layout-compatible with FXSAVE, so
+        /// the syscall-visible conversions (thread_state.rs) and the
+        /// FXSAVE fallback path operate on the legacy region
+        /// unchanged.
+        #[repr(C, align(64))]
         #[derive(Debug, Copy, Clone)]
         pub struct VectorRegs {
             pub fcw: u16,
@@ -431,16 +493,28 @@ cfg_if! {
             pub xmm: [U128; 16],
             pub reserved: [U128; 3],
             pub available: [U128; 3],
+
+            /// XSAVE header: `xstate_bv` (u64) at offset 512,
+            /// `xcomp_bv` (u64) at 520, reserved beyond.
+            pub xsave_header: [U128; 4],
+            /// AVX YMM high halves (XSAVE state component 2, offset
+            /// 576). The low halves are the upper halves of `xmm`.
+            pub ymm: [U128; 16],
         }
 
         // https://xem.github.io/minix86/manual/intel-x86-and-64-manual-vol1/o_7281d5ea06a5b67a-274.html
         impl Default for VectorRegs {
             fn default() -> Self {
-                VectorRegs {
-                    fcw: 0x37f,
-                    mxcsr: 0x1f80,
-                    ..unsafe { core::mem::zeroed() }
-                }
+                let mut regs: VectorRegs = unsafe { core::mem::zeroed() };
+                regs.fcw = 0x37f;
+                regs.mxcsr = 0x1f80;
+                // XSAVE (#907): claim x87+SSE+AVX in xstate_bv so
+                // XRSTOR restores the legacy region (and zeroes YMM)
+                // from this struct rather than initializing the
+                // components — debugger-written register state must
+                // take effect.
+                regs.xsave_header[0].0[0] = XCR0_X87_SSE_AVX as u64;
+                regs
             }
         }
 

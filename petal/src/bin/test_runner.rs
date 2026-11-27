@@ -40,6 +40,7 @@ const TESTS: &[&str] = &[
     "channel-internal-test",
     "channel-test",
     "clock-ops-test",
+    "avx-test",
     "clock-test",
     "counter-test",
     "cprng-test",
