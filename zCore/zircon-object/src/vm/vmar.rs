@@ -1795,7 +1795,16 @@ impl VmAddressRegion {
             // temporarily mprotect it to RW so the write doesn't SIGBUS.
             let needs_unlock = !is_writable || is_exec;
             if needs_unlock {
-                hal_impl::mem::pmem_mprotect(vaddr, actual_size, MMUFlags::READ | MMUFlags::WRITE);
+                // #538 (a): if the host refused the unlock, the raw
+                // writes below would SIGBUS — abort the write instead
+                // of killing the host process.
+                if !hal_impl::mem::pmem_mprotect(
+                    vaddr,
+                    actual_size,
+                    MMUFlags::READ | MMUFlags::WRITE,
+                ) {
+                    return Err(ZxError::INTERNAL);
+                }
             }
             for (i, &byte) in buf[..actual_size].iter().enumerate() {
                 unsafe {
@@ -1809,7 +1818,12 @@ impl VmAddressRegion {
                 } else {
                     current_flags
                 };
-                hal_impl::mem::pmem_mprotect(vaddr, actual_size, restore);
+                // #538 (a): a failed restore after a successful write
+                // leaves the page writable (logged) — degraded, but
+                // the write itself succeeded so report success.
+                if !hal_impl::mem::pmem_mprotect(vaddr, actual_size, restore) {
+                    error!("[vmar] write_memory: failed to restore page protection");
+                }
                 #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
                 if is_exec {
                     unsafe {

@@ -273,10 +273,12 @@ mod event_interrupt;
 mod virtual_interrupt;
 
 trait InterruptTrait: Sync + Send {
-    /// Mask the interrupt.
-    fn mask(&self);
-    /// Unmask the interrupt.
-    fn unmask(&self);
+    /// Mask the interrupt. Errors propagate to the syscall boundary
+    /// (#538 (b)): a hardware mask failure is a kernel-internal error,
+    /// not a reason to panic.
+    fn mask(&self) -> ZxResult;
+    /// Unmask the interrupt. Same error contract as [`mask`].
+    fn unmask(&self) -> ZxResult;
     /// Register the interrupt to the given handler.
     fn register_handler(&self, handler: Box<dyn Fn() + Send + Sync>) -> ZxResult;
     /// Unregister the interrupt to the given handler.
@@ -405,7 +407,7 @@ impl Interrupt {
         interrupt
             .trait_
             .register_handler(Box::new(move || interrupt_clone.handle_interrupt()))?;
-        interrupt.trait_.unmask();
+        interrupt.trait_.unmask()?;
         Ok(interrupt)
     }
 
@@ -505,7 +507,7 @@ impl Interrupt {
         if let Some(port) = &inner.port {
             inner.packet_id = port.push_interrupt(timestamp, inner.key);
             if self.flags.contains(InterruptFlags::MASK_POSTWAIT) {
-                self.trait_.mask();
+                self.trait_.mask()?;
             }
             inner.timestamp = 0;
             inner.state = InterruptState::NeedAck;
@@ -556,7 +558,7 @@ impl Interrupt {
 
             // Packet was consumed — safe to proceed with side effects.
             if self.flags.contains(InterruptFlags::UNMASK_PREWAIT) {
-                self.trait_.unmask();
+                self.trait_.unmask()?;
             } else if self.flags.contains(InterruptFlags::UNMASK_PREWAIT_UNLOCKED) {
                 inner.defer_unmask = true;
             }
@@ -568,7 +570,7 @@ impl Interrupt {
                     .unwrap()
                     .push_interrupt(inner.timestamp, inner.key);
                 if self.flags.contains(InterruptFlags::MASK_POSTWAIT) {
-                    self.trait_.mask();
+                    self.trait_.mask()?;
                 }
                 inner.timestamp = 0;
                 // Assert UNTRIGGERED then immediately clear it (strobe).
@@ -588,7 +590,7 @@ impl Interrupt {
             }
         }
         if inner.defer_unmask {
-            self.trait_.unmask();
+            self.trait_.unmask()?;
         }
         Ok(re_triggered)
     }
@@ -598,7 +600,7 @@ impl Interrupt {
     /// Asserts UNTRIGGERED signal for virtual interrupts so that waiters
     /// are not stuck waiting on a destroyed interrupt.
     pub fn destroy(&self) -> ZxResult {
-        self.trait_.mask();
+        self.trait_.mask()?;
         self.trait_.unregister_handler()?;
         let mut inner = self.inner.lock();
         let result = if let Some(port) = &inner.port {
@@ -684,7 +686,7 @@ impl Interrupt {
                             wake_source_acked(self.id(), now);
                         }
                         if self.flags.contains(InterruptFlags::UNMASK_PREWAIT) {
-                            self.trait_.unmask();
+                            self.trait_.unmask()?;
                         } else if self.flags.contains(InterruptFlags::UNMASK_PREWAIT_UNLOCKED) {
                             defer_unmask = true;
                         }
@@ -702,7 +704,7 @@ impl Interrupt {
                 self.wait_event.signal_clear(Signal::SIGNALED);
             }
             if defer_unmask {
-                self.trait_.unmask();
+                self.trait_.unmask()?;
             }
             // Block on the internal wait_event, not the base signals.
             WaitEventFuture::new(&self.wait_event).await;
@@ -712,7 +714,11 @@ impl Interrupt {
     fn handle_interrupt(&self) {
         let mut inner = self.inner.lock();
         if self.flags.contains(InterruptFlags::MASK_POSTWAIT) {
-            self.trait_.mask();
+            // #538: IRQ-context callback — no syscall boundary to
+            // return an error to; log and continue.
+            if let Err(e) = self.trait_.mask() {
+                error!("[interrupt] mask failed in IRQ context: {:?}", e);
+            }
         }
         if inner.timestamp == 0 {
             // Not sure ZX_CLOCK_MONOTONIC or ZX_CLOCK_UTC
@@ -726,7 +732,9 @@ impl Interrupt {
                 if inner.state != InterruptState::NeedAck {
                     inner.packet_id = port.as_ref().push_interrupt(inner.timestamp, inner.key);
                     if self.flags.contains(InterruptFlags::MASK_POSTWAIT) {
-                        self.trait_.mask();
+                        if let Err(e) = self.trait_.mask() {
+                            error!("[interrupt] mask failed in IRQ context: {:?}", e);
+                        }
                     }
                     inner.timestamp = 0;
 
