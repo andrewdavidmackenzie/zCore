@@ -238,24 +238,27 @@ pub enum ClockId {
     ClockBootTimeAlarm = 9,
 }
 
-impl From<usize> for ClockId {
-    fn from(t: usize) -> ClockId {
+impl TryFrom<usize> for ClockId {
+    type Error = ();
+
+    fn try_from(t: usize) -> core::result::Result<ClockId, ()> {
         match t {
-            0 => ClockId::ClockRealTime,
-            1 => ClockId::ClockMonotonic,
-            2 => ClockId::ClockProcessCpuTimeId,
-            3 => ClockId::ClockThreadCpuTimeId,
-            4 => ClockId::ClockMonotonicRaw,
-            5 => ClockId::ClockRealTimeCoarse,
-            6 => ClockId::ClockMonotonicCoarse,
-            7 => ClockId::ClockBootTime,
-            8 => ClockId::ClockRealTimeAlarm,
-            9 => ClockId::ClockBootTimeAlarm,
-            // #538: an unknown clock id from a Linux syscall is EINVAL
-            // territory, not a kernel crash — map to REALTIME (the
-            // syscall layer re-checks and returns EINVAL for clocks
-            // it does not handle).
-            _ => ClockId::ClockRealTime,
+            0 => Ok(ClockId::ClockRealTime),
+            1 => Ok(ClockId::ClockMonotonic),
+            2 => Ok(ClockId::ClockProcessCpuTimeId),
+            3 => Ok(ClockId::ClockThreadCpuTimeId),
+            4 => Ok(ClockId::ClockMonotonicRaw),
+            5 => Ok(ClockId::ClockRealTimeCoarse),
+            6 => Ok(ClockId::ClockMonotonicCoarse),
+            7 => Ok(ClockId::ClockBootTime),
+            8 => Ok(ClockId::ClockRealTimeAlarm),
+            9 => Ok(ClockId::ClockBootTimeAlarm),
+            // #538 + review: an unknown clock id is EINVAL per the
+            // Linux ABI. Mapping it to REALTIME made the syscall
+            // layer's own EINVAL check unreachable (it saw the
+            // converted enum, not the raw id) and returned success
+            // with realtime data for e.g. clock_gettime(12345, ...).
+            _ => Err(()),
         }
     }
 }
@@ -272,12 +275,15 @@ pub enum ClockFlags {
 
 impl From<usize> for ClockFlags {
     fn from(t: usize) -> ClockFlags {
-        match t {
-            0 => ClockFlags::ZeroFlag,
-            1 => ClockFlags::TimerAbsTime,
-            // #538: same — unknown flags map to the default (relative
-            // timer); the syscall layer validates.
-            _ => ClockFlags::ZeroFlag,
+        // #538 + review: Linux selects absolute mode with
+        // `flags & TIMER_ABSTIME` (posix-timers.c) — a bit test, not
+        // an exact match — so mask the bit rather than mapping
+        // unknown values to the default: flags=3 still means an
+        // absolute sleep.
+        if t & 1 == 1 {
+            ClockFlags::TimerAbsTime
+        } else {
+            ClockFlags::ZeroFlag
         }
     }
 }

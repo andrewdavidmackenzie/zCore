@@ -1861,6 +1861,24 @@ impl VMObjectPagedInner {
                 return Err(ZxError::INVALID_ARGS);
             }
         }
+        // #538 + review: validate parent membership BEFORE constructing
+        // the child/hidden VMOs and before moving frames/zero_markers
+        // out of self. Returning an error after construction would drop
+        // the temporaries, whose Drop re-acquires this tree's
+        // already-held, non-reentrant lock — a self-deadlock instead of
+        // BAD_STATE — and self's page state would already be moved out.
+        if let Some(parent) = self.parent.as_ref() {
+            let parent_inner = parent.borrow_inner_mut();
+            if let VMOType::Hidden { left, right, .. } = &parent_inner.type_ {
+                if !left.ptr_eq(&self.self_ref) && !right.ptr_eq(&self.self_ref) {
+                    // The parent does not list this VMO as a child —
+                    // the COW tree is already inconsistent.
+                    return Err(ZxError::BAD_STATE);
+                }
+            }
+            // Non-hidden parents (e.g. pager roots with unidirectional
+            // children) don't track children via left/right — allowed.
+        }
         // Track whether this clone tree is pager-backed.
         let is_pager_tree = self.pager_backed || self.in_pager_tree;
         // create child VMO
@@ -1921,10 +1939,13 @@ impl VMObjectPagedInner {
                 } else if right.ptr_eq(&self.self_ref) {
                     *right = Arc::downgrade(&hidden);
                 } else {
-                    // #538: the parent does not list this VMO as a
-                    // child — the COW tree is already inconsistent.
-                    // Abort with an error rather than freeze.
-                    return Err(ZxError::BAD_STATE);
+                    // Unreachable after the upfront membership
+                    // validation above — kept as a logged skip rather
+                    // than an error return: returning here would drop
+                    // the hidden/child temporaries while the tree lock
+                    // is held (self-deadlock). The stale Weak fails to
+                    // upgrade later, degrading instead of freezing.
+                    error!("[vmo] create_child: parent does not list the child after validation");
                 }
             }
             // Non-hidden parents (e.g., pager root for unidirectional

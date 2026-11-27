@@ -222,6 +222,21 @@ impl INodeImpl {
         Ok(())
     }
     /// Resize content size, no matter what type it is.
+    /// Allocate a block and zero it before any reference to it is
+    /// published (#538 review): a recycled block keeps its previous
+    /// owner's contents, so referencing it unzeroed can expose data
+    /// from previously deleted files if a later initialization step
+    /// fails. Both failure modes propagate as errors: a full
+    /// filesystem is `NoDeviceSpace`, a failed zeroing write is
+    /// `DeviceError` (the block stays allocated but unreferenced —
+    /// leaked, degraded but safe).
+    fn alloc_zeroed_block(&self) -> vfs::Result<usize> {
+        let id = self.fs.alloc_block().ok_or(FsError::NoDeviceSpace)?;
+        static ZEROS: [u8; BLKSIZE] = [0; BLKSIZE];
+        self.fs.device.write_block(id, 0, &ZEROS)?;
+        Ok(id)
+    }
+
     fn _resize(&self, len: usize) -> vfs::Result<()> {
         if len > MAX_FILE_SIZE {
             return Err(FsError::InvalidParam);
@@ -237,16 +252,24 @@ impl INodeImpl {
                 self.disk_inode.write().size = len as u32;
             }
             Ordering::Greater => {
+                // #538 + review: every newly allocated block (indirect
+                // maps and data) is zeroed BEFORE its reference is
+                // published, and the enlarged size is published only
+                // after the whole new region is mapped — previously a
+                // device error after publishing left the enlarged file
+                // readable with the stale contents of recycled blocks
+                // (data from previously deleted files).
                 let mut disk_inode = self.disk_inode.write();
                 disk_inode.blocks = blocks;
                 // allocate indirect block if needed
                 if old_blocks < MAX_NBLOCK_DIRECT as u32 && blocks >= MAX_NBLOCK_DIRECT as u32 {
-                    disk_inode.indirect = self.fs.alloc_block().expect("no space") as u32;
+                    disk_inode.indirect = self.alloc_zeroed_block()? as u32;
                 }
                 // allocate double indirect block if needed
                 if blocks >= MAX_NBLOCK_INDIRECT as u32 {
                     if disk_inode.db_indirect == 0 {
-                        disk_inode.db_indirect = self.fs.alloc_block().expect("no space") as u32;
+                        disk_inode.db_indirect =
+                            self.alloc_zeroed_block().expect("no space") as u32;
                     }
                     let indirect_begin = {
                         if (old_blocks as usize) < MAX_NBLOCK_INDIRECT {
@@ -257,7 +280,7 @@ impl INodeImpl {
                     };
                     let indirect_end = (blocks as usize - MAX_NBLOCK_INDIRECT) / BLK_NENTRY + 1;
                     for i in indirect_begin..indirect_end {
-                        let indirect = self.fs.alloc_block().expect("no space") as u32;
+                        let indirect = self.alloc_zeroed_block()? as u32;
                         self.fs.device.write_block(
                             disk_inode.db_indirect as usize,
                             ENTRY_SIZE * i,
@@ -268,7 +291,7 @@ impl INodeImpl {
                 drop(disk_inode);
                 // allocate extra blocks
                 for i in old_blocks..blocks {
-                    let disk_block_id = self.fs.alloc_block().expect("no space");
+                    let disk_block_id = self.alloc_zeroed_block()?;
                     self.set_disk_block_id(i as usize, disk_block_id)?;
                 }
                 // clean up
@@ -279,9 +302,16 @@ impl INodeImpl {
                 self._clean_at(old_size, len)?;
             }
             Ordering::Less => {
-                // free extra blocks
-                for i in blocks..old_blocks {
-                    let disk_block_id = self.get_disk_block_id(i as usize)?;
+                // #538 + review: resolve every block reference BEFORE
+                // freeing anything — a failed indirect-map read
+                // mid-loop previously exited with some blocks already
+                // freed but still referenced by the inode (a retry
+                // then tripped free_block's double-free assert, and a
+                // concurrent allocation could reuse the freed blocks).
+                let ids = (blocks..old_blocks)
+                    .map(|i| self.get_disk_block_id(i as usize))
+                    .collect::<vfs::Result<Vec<_>>>()?;
+                for disk_block_id in ids {
                     self.fs.free_block(disk_block_id);
                 }
                 let mut disk_inode = self.disk_inode.write();

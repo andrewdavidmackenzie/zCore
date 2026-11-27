@@ -38,7 +38,9 @@ impl Syscall<'_> {
         if buf.is_null() {
             return Err(LxError::EINVAL);
         }
-        let clock_id = ClockId::from(clock);
+        // #538 + review: unknown clock ids are rejected with EINVAL
+        // here, at the conversion boundary (see ClockId::try_from).
+        let clock_id = ClockId::try_from(clock).map_err(|_| LxError::EINVAL)?;
         let duration = match clock_id {
             ClockId::ClockRealTime | ClockId::ClockRealTimeCoarse => {
                 hal_impl::timer::timer_clock_realtime()
@@ -350,7 +352,8 @@ impl Syscall<'_> {
         use hal_impl::timer;
         use linux_object::thread::Interruptible;
         let duration: Duration = req.read()?.into();
-        let clockid = ClockId::from(clockid);
+        // #538 + review: same — reject unknown clock ids with EINVAL.
+        let clockid = ClockId::try_from(clockid).map_err(|_| LxError::EINVAL)?;
         let flags = ClockFlags::from(flags);
         debug!("clockid={:?}, flags={:?}", clockid, flags,);
         // Get the current time for the requested clock domain.

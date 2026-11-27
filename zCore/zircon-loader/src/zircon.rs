@@ -992,7 +992,7 @@ pub fn run_from_rootfs(
         ZxError::IO
     })?;
 
-    Ok(run_from_data(&program_data, init_path, extra_args))
+    run_from_data(&program_data, init_path, extra_args)
 }
 
 /// Boot a Zircon process from pre-loaded program data.
@@ -1004,7 +1004,7 @@ pub fn run_from_data(
     program_data: &[u8],
     init_path: &str,
     extra_args: alloc::vec::Vec<alloc::string::String>,
-) -> Arc<Process> {
+) -> ZxResult<Arc<Process>> {
     info!("Loaded '{}' ({} bytes)", init_path, program_data.len());
 
     let job = Job::root();
@@ -1012,8 +1012,12 @@ pub fn run_from_data(
     config.extra_args = extra_args;
     // argv[0] = the program path as invoked (Fuchsia semantics).
     config.argv0 = init_path.into();
+    // #538 + review: a malformed init executable (e.g. a truncated
+    // ELF that keeps its magic and passes the flavour check) is a
+    // spawn error — propagate it so run_from_rootfs callers can
+    // fall back to the embedded ZBI. The expect() here panicked
+    // before that fallback could run.
     zircon_object::task::spawn::spawn_process(&job, "init", program_data, &config)
-        .expect("failed to spawn init process")
 }
 
 /// Apply ELF relocations for the userstart binary.
