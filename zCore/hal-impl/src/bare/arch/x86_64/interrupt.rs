@@ -55,7 +55,14 @@ hal_fn_impl! {
         }
 
         fn handle_irq(vector: usize) {
-            all_irq().first_unwrap().handle_irq(vector);
+            // #538: no registered IRQ controller means no further
+            // interrupt delivery either — drop the vector and log
+            // rather than panicking in interrupt context.
+            if let Some(ctl) = all_irq().first() {
+                ctl.handle_irq(vector);
+            } else {
+                error!("no IRQ controller registered — dropping vector {}", vector);
+            }
         }
 
         fn msi_alloc_block(requested_irqs: usize) -> DeviceResult<Range<usize>> {

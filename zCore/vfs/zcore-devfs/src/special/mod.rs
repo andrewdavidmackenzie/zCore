@@ -41,7 +41,13 @@ macro_rules! impl_inode {
             Err(FsError::NotSupported)
         }
         fn fs(&self) -> Arc<dyn FileSystem> {
-            unimplemented!()
+            // #538: devfs special nodes (/dev/null, /dev/zero) are
+            // pseudo devices with no backing filesystem — the shared
+            // PseudoFs is the honest answer. (Missed when the
+            // panicking trait default was removed: this macro body
+            // satisfied the required method with a stub, so the
+            // compiler never flagged it.)
+            Arc::new(PseudoFs)
         }
         fn as_any_ref(&self) -> &dyn Any {
             self
