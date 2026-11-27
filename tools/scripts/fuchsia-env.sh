@@ -135,3 +135,5 @@ fuchsia_qemu_args() {
         FUCHSIA_QEMU_ARGS+=(-cpu Skylake-Client,-check)
     fi
 }
+
+# CI trigger marker (runs did not start for c36ce499)
