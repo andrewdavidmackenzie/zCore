@@ -499,12 +499,33 @@ impl dyn KernelObject {
         struct SignalFuture {
             object: Arc<dyn KernelObject>,
             signal: Signal,
+            /// Signal state latched at assert time (0 = not latched).
+            ///
+            /// Fuchsia's `zx_object_wait_one` latches the wake: the
+            /// `WaitSignalObserver` signals the wait `Event` the moment
+            /// the signal is asserted, and the thread stays woken even
+            /// if the signal is deasserted before it runs. Re-checking
+            /// the CURRENT state at poll time (the previous behavior)
+            /// instead loses the wake whenever a signaler toggles the
+            /// signal faster than the waiter's wake latency: each poll
+            /// sees the deasserted state and re-parks, forever — the
+            /// PortStressTest.WaitSignalCancel livelock (a concurrent
+            /// signaler doing set + ~15ns + clear in a tight loop,
+            /// observed as a wake storm with the waiter never
+            /// returning to userspace).
+            latched: Arc<AtomicU32>,
         }
 
         impl Future for SignalFuture {
             type Output = Signal;
 
             fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+                // A fired callback latched the assert-time state:
+                // return it even if the signal has since been cleared.
+                let latched = self.latched.load(Ordering::Acquire);
+                if latched != 0 {
+                    return Poll::Ready(Signal::from_bits_truncate(latched));
+                }
                 let current_signal = self.object.signal();
                 if !(current_signal & self.signal).is_empty() {
                     return Poll::Ready(current_signal);
@@ -521,6 +542,7 @@ impl dyn KernelObject {
                 // immediately and isn't stored, so we get re-polled.
                 let signal = self.signal;
                 let waker = cx.waker().clone();
+                let latch = self.latched.clone();
                 self.object.add_signal_callback(SignalHandler::oneshot(
                     move |s| {
                         if (s & signal).is_empty() {
@@ -529,8 +551,14 @@ impl dyn KernelObject {
                             Observe::Yes
                         }
                     },
-                    move |_| {
+                    move |s| {
                         crate::wake_diag::log_wake_fire();
+                        // Latch the assert-time state (first fire wins)
+                        // before waking, so a deassert before the next
+                        // poll cannot lose the wake.
+                        latch
+                            .compare_exchange(0, s.bits(), Ordering::AcqRel, Ordering::Acquire)
+                            .ok();
                         waker.wake_by_ref()
                     },
                 ));
@@ -541,6 +569,7 @@ impl dyn KernelObject {
         SignalFuture {
             object: self.clone(),
             signal,
+            latched: Arc::new(AtomicU32::new(0)),
         }
     }
 
@@ -713,6 +742,9 @@ pub fn wait_signal_many(
     #[must_use = "wait_signal_many does nothing unless polled/`await`-ed"]
     struct SignalManyFuture {
         targets: Vec<(Arc<dyn KernelObject>, Signal)>,
+        /// Per-target assert-time latches (0 = not latched); see
+        /// `wait_signal` for why the wake must be latched.
+        latched: Vec<Arc<AtomicU32>>,
     }
 
     impl SignalManyFuture {
@@ -728,18 +760,35 @@ pub fn wait_signal_many(
         type Output = Vec<Signal>;
 
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-            let current_signals: Vec<_> =
-                self.targets.iter().map(|(obj, _)| obj.signal()).collect();
-            if self.happened(&current_signals) {
+            // A target whose callback fired reports its assert-time
+            // state even if the signal has since been cleared; the
+            // rest report their current state.
+            let mut any_latched = false;
+            let current_signals: Vec<Signal> = self
+                .targets
+                .iter()
+                .zip(self.latched.iter())
+                .map(|((obj, _), latch)| {
+                    let v = latch.load(Ordering::Acquire);
+                    if v != 0 {
+                        any_latched = true;
+                        Signal::from_bits_truncate(v)
+                    } else {
+                        obj.signal()
+                    }
+                })
+                .collect();
+            if any_latched || self.happened(&current_signals) {
                 return Poll::Ready(current_signals);
             }
             // Always re-register callbacks when returning Pending.
             // See SignalFuture::poll for rationale — a previous
             // callback may have been consumed by a signal that was
             // then cleared before we were re-polled.
-            for (object, signal) in self.targets.iter() {
+            for (i, (object, signal)) in self.targets.iter().enumerate() {
                 let signal = *signal;
                 let waker = cx.waker().clone();
+                let latch = self.latched[i].clone();
                 object.add_signal_callback(SignalHandler::oneshot(
                     move |s: Signal| {
                         if (s & signal).is_empty() {
@@ -748,8 +797,11 @@ pub fn wait_signal_many(
                             Observe::Yes
                         }
                     },
-                    move |_| {
+                    move |s| {
                         crate::wake_diag::log_wake_fire();
+                        latch
+                            .compare_exchange(0, s.bits(), Ordering::AcqRel, Ordering::Acquire)
+                            .ok();
                         waker.wake_by_ref()
                     },
                 ));
@@ -760,6 +812,10 @@ pub fn wait_signal_many(
 
     SignalManyFuture {
         targets: Vec::from(targets),
+        latched: targets
+            .iter()
+            .map(|_| Arc::new(AtomicU32::new(0)))
+            .collect(),
     }
 }
 
