@@ -406,12 +406,13 @@ impl Syscall<'_> {
         mut observed: UserOutPtr<Signal>,
     ) -> ZxResult {
         let signals = Signal::from_bits_truncate(signals);
-        info!(
-            "object.wait_one: handle={:#x?}, signals={:#x?}, deadline={:#x?}, observed={:#x?}",
-            handle, signals, deadline, observed
+        error!(
+            "[susp-dbg] wait_one enter handle={:#x?} signals={:#x?}",
+            handle, signals
         );
         let proc = self.thread.proc();
         let object = self.get_object_with_pseudo(handle, Rights::WAIT)?;
+        error!("[susp-dbg] wait_one object resolved");
         let cancel_token = proc.get_cancel_token(handle)?;
         let future = object.wait_signal(signals);
         self.thread.set_blocking_state(ThreadState::BlockedWaitOne);
@@ -1247,6 +1248,10 @@ impl Syscall<'_> {
         info!("{:?} allowed: {:?}", object, allowed_signals);
         let clear_signal = Signal::verify_user_signal(allowed_signals, clear_mask)?;
         let set_signal = Signal::verify_user_signal(allowed_signals, set_mask)?;
+        error!(
+            "[susp-dbg] signal_change clear={:?} set={:?}",
+            clear_signal, set_signal
+        );
         object.signal_change(clear_signal, set_signal);
         Ok(())
     }

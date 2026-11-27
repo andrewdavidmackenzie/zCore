@@ -1160,9 +1160,16 @@ impl Task for Thread {
     }
 
     fn suspend(self: &Arc<Self>) {
+        error!("[susp-dbg] suspend() thread={}", self.base.id);
         let mut inner = self.inner.lock();
         inner.suspend_count += 1;
         let state = inner.state;
+        error!(
+            "[susp-dbg] suspend() thread={} raw_state={:?} accessor={:?}",
+            self.base.id,
+            state,
+            inner.state()
+        );
         // When suspending a thread that is in a blocking syscall,
         // set the return register to ZX_ERR_INTERNAL_INTR_RETRY (-6).
         // This tells the debugger "the syscall was interrupted; if you
@@ -1187,6 +1194,7 @@ impl Task for Thread {
     }
 
     fn resume(self: &Arc<Self>) {
+        error!("[susp-dbg] resume() thread={}", self.base.id);
         let mut inner = self.inner.lock();
         assert_ne!(inner.suspend_count, 0);
         inner.suspend_count -= 1;

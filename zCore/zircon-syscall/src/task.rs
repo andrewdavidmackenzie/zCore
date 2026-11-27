@@ -172,10 +172,7 @@ impl Syscall<'_> {
         buffer_size: usize,
     ) -> ZxResult {
         let kind = ThreadStateKind::try_from(kind).map_err(|_| ZxError::INVALID_ARGS)?;
-        info!(
-            "thread.write_state: handle={:#x?}, kind={:#x?}, buf=({:#x?}; {:#x?})",
-            handle, kind, buffer, buffer_size,
-        );
+        error!("[susp-dbg] write_state enter kind={:?}", kind);
         self.thread
             .proc()
             .get_object_with_rights::<Thread>(handle, Rights::WRITE)?

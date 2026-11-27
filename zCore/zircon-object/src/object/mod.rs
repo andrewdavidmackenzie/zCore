@@ -530,10 +530,12 @@ impl dyn KernelObject {
                         }
                     },
                     move |_| {
+                        error!("[susp-dbg] signal callback fired, waking waiter");
                         crate::wake_diag::log_wake_fire();
                         waker.wake_by_ref()
                     },
                 ));
+                error!("[susp-dbg] signal callback registered (waiting)");
                 Poll::Pending
             }
         }
