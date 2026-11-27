@@ -1474,6 +1474,11 @@ impl CurrentThread {
     /// - `zx_channel_call`'s reply wait: the call transaction stays
     ///   pending and the call completes after resume
     ///   (ChannelTest.CallSuspendedThreadResumesAndSucceeds).
+    /// - `zx_interrupt_wait`: the wait stays armed across suspend and
+    ///   resume — the thread reports SUSPENDED while parked, then
+    ///   BLOCKED_INTERRUPT after resume, and only the interrupt
+    ///   trigger resolves the wait
+    ///   (InterruptTest.WaitThreadFunctionsAfterSuspendResume).
     ///
     /// No `suspend_interrupt` is registered — `suspend()` cannot
     /// abort this wait. `kill()` still escapes it via the killer
