@@ -18,7 +18,7 @@
 
 pub mod lockgraph;
 pub mod mutex;
-pub use mutex::{set_yield_fn, KernelMutex, KernelMutexGuard};
+pub use mutex::{set_cpu_id_fn, set_yield_fn, KernelMutex, KernelMutexGuard};
 
 #[cfg(all(target_os = "none", target_arch = "x86_64"))]
 pub use interrupt::set_gs_depth_ready;

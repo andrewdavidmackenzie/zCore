@@ -31,6 +31,29 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// Stored yield function pointer. 0 = not set (pure spin).
 static YIELD_FN: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
+/// Stored CPU-id function for KernelMutex holder diagnostics.
+/// 0 = not set (holder CPU reports as usize::MAX).
+static CPU_ID_FN: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Register the platform's CPU-id function (used by KernelMutex
+/// holder diagnostics). Call once during kernel init, after the
+/// per-CPU id is readable.
+pub fn set_cpu_id_fn(f: fn() -> usize) {
+    CPU_ID_FN.store(f as usize, Ordering::Release);
+}
+
+/// The current CPU id, or `usize::MAX` when not registered.
+#[inline]
+fn current_cpu() -> usize {
+    let ptr = CPU_ID_FN.load(Ordering::Acquire);
+    if ptr != 0 {
+        let f: fn() -> usize = unsafe { core::mem::transmute(ptr) };
+        f()
+    } else {
+        usize::MAX
+    }
+}
+
 /// Register the platform's yield function.
 ///
 /// This should be called once during kernel initialization, before
@@ -90,6 +113,16 @@ const SPIN_MAX_ITERS: u32 = 150_000;
 /// [`InterruptSpinLock`](crate::Mutex).
 pub struct KernelMutex<T: ?Sized> {
     locked: AtomicBool,
+    /// #862/#523 deadlock diagnostics: the holder's CPU and the
+    /// acquisition site (a `core::panic::Location` pointer, written
+    /// under `#[track_caller]`). Written on acquire, cleared on
+    /// release; read by spinners that have contended far too long
+    /// (see `lock`) to name the holder in the serial log.
+    holder_cpu: core::sync::atomic::AtomicUsize,
+    holder_loc: core::sync::atomic::AtomicUsize,
+    /// #862/#523 diagnostics: total do_yield() calls from contended
+    /// acquisitions on this mutex (drives the stuck-holder report).
+    stuck_yields: core::sync::atomic::AtomicUsize,
     data: UnsafeCell<T>,
 }
 
@@ -101,6 +134,9 @@ impl<T> KernelMutex<T> {
     pub const fn new(val: T) -> Self {
         Self {
             locked: AtomicBool::new(false),
+            holder_cpu: core::sync::atomic::AtomicUsize::new(0),
+            holder_loc: core::sync::atomic::AtomicUsize::new(0),
+            stuck_yields: core::sync::atomic::AtomicUsize::new(0),
             data: UnsafeCell::new(val),
         }
     }
@@ -112,6 +148,27 @@ impl<T> KernelMutex<T> {
 }
 
 impl<T: ?Sized> KernelMutex<T> {
+    /// Record the holder for deadlock diagnostics (see field docs).
+    /// `loc` is the caller's `Location::caller()` captured under
+    /// `#[track_caller]` at the acquisition site.
+    #[inline]
+    fn record_holder(&self, loc: &'static core::panic::Location<'static>) {
+        self.holder_cpu.store(current_cpu(), Ordering::Relaxed);
+        self.holder_loc.store(loc as *const _ as usize, Ordering::Relaxed);
+    }
+
+    /// Format the holder's acquisition site for the stuck-lock report.
+    fn holder_site(&self) -> (&'static str, u32, u32) {
+        let ptr = self.holder_loc.load(Ordering::Relaxed) as *const core::panic::Location;
+        if ptr.is_null() {
+            return ("<unknown>", 0, 0);
+        }
+        // SAFETY: the pointer was stored from a `Location::caller()`
+        // whose static lives for the program duration.
+        let loc = unsafe { &*ptr };
+        (loc.file(), loc.line(), loc.column())
+    }
+
     /// Acquire the mutex, blocking if necessary.
     ///
     /// 1. Fast CAS attempt for uncontended case.
@@ -140,6 +197,7 @@ impl<T: ?Sized> KernelMutex<T> {
                 .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
                 .is_ok()
             {
+                self.record_holder(core::panic::Location::caller());
                 return KernelMutexGuard { mutex: self };
             }
 
@@ -205,6 +263,7 @@ impl<T: ?Sized> KernelMutex<T> {
                             )
                             .is_ok()
                         {
+                            self.record_holder(core::panic::Location::caller());
                             return KernelMutexGuard { mutex: self };
                         }
                         nested_spins += 1;
@@ -258,6 +317,29 @@ impl<T: ?Sized> KernelMutex<T> {
                 spins += 1;
                 if spins >= SPIN_MAX_ITERS {
                     do_yield();
+                    // #862/#523 deadlock diagnostics: contended far too
+                    // long (each yield follows ~150µs of spinning).
+                    // Name the holder so the wedge is attributable from
+                    // the serial log alone. A healthy cross-CPU
+                    // contention resolves in µs–ms; ~750ms of yielding
+                    // means the holder is parked or deadlocked.
+                    let yields = self.stuck_yields.fetch_add(1, Ordering::Relaxed) + 1;
+                    if yields.is_multiple_of(5_000) && self.locked.load(Ordering::Relaxed) {
+                        let (file, line, col) = self.holder_site();
+                        log::error!(
+                            "[mutex-stuck] @{:#x} held by cpu={} acquired at {}:{}:{}; \
+                             contender at {}:{}:{} (yield #{})",
+                            core::ptr::addr_of!(self.locked) as usize,
+                            self.holder_cpu.load(Ordering::Relaxed),
+                            file,
+                            line,
+                            col,
+                            core::panic::Location::caller().file(),
+                            core::panic::Location::caller().line(),
+                            core::panic::Location::caller().column(),
+                            yields,
+                        );
+                    }
                     break;
                 }
             }
@@ -271,6 +353,7 @@ impl<T: ?Sized> KernelMutex<T> {
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_ok()
         {
+            self.record_holder(core::panic::Location::caller());
             Some(KernelMutexGuard { mutex: self })
         } else {
             None
@@ -310,6 +393,8 @@ impl<T: ?Sized> DerefMut for KernelMutexGuard<'_, T> {
 
 impl<T: ?Sized> Drop for KernelMutexGuard<'_, T> {
     fn drop(&mut self) {
+        self.mutex.holder_cpu.store(0, Ordering::Relaxed);
+        self.mutex.holder_loc.store(0, Ordering::Relaxed);
         self.mutex.locked.store(false, Ordering::Release);
     }
 }

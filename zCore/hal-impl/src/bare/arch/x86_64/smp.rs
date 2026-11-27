@@ -55,6 +55,9 @@ pub fn init_executor_runtimes(bsp_id: u8, ap_ids: &[u32]) {
     // function so contending tasks yield to the lock holder instead of
     // spinning (see #829). Must run after the runtimes exist.
     lock::set_yield_fn(executor::sched_yield);
+    // KernelMutex holder diagnostics (#862/#523 deadlock hunt): name
+    // the CPU that holds a stuck lock.
+    lock::set_cpu_id_fn(|| super::cpu::cpu_id() as usize);
     // Register cross-CPU wakeup via IPI so that waking a task on a
     // halted CPU immediately breaks it out of HLT instead of waiting
     // for the next timer tick (up to 10ms at 100 Hz).
