@@ -3376,13 +3376,17 @@ mod tests {
 /// until we return — deferring is the only correct move there.
 const DEFERRED_RANGE_CHANGE_SPINS: u32 = 10_000;
 
+/// A deferred range-change invalidation: the mapping (weak, so a
+/// dropped mapping does not keep the queue alive), the byte range,
+/// and the operation to apply.
+type DeferredRangeChange = (alloc::sync::Weak<VmMapping>, usize, usize, RangeChangeOp);
+
 /// Deferred range-change invalidations that could not acquire the
 /// mapping lock (contended by our own eager-map commit callback).
 /// Drained before any task dispatch (executor loop drain hook) —
 /// see `drain_deferred_range_changes`.
-static DEFERRED_RANGE_CHANGES: lock::IrqLock<
-    Vec<(alloc::sync::Weak<VmMapping>, usize, usize, RangeChangeOp)>,
-> = lock::IrqLock::new(Vec::new());
+static DEFERRED_RANGE_CHANGES: lock::IrqLock<Vec<DeferredRangeChange>> =
+    lock::IrqLock::new(Vec::new());
 
 fn defer_range_change(mapping: &Arc<VmMapping>, offset: usize, len: usize, op: RangeChangeOp) {
     DEFERRED_RANGE_CHANGES

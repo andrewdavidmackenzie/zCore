@@ -115,7 +115,9 @@ hal_fn_impl! {
                     }
                 }
             }
-            lapic.send_ipi(0xFE, dest);
+            // #523/#862: X86_INT_IPI_WAKEUP is deliberately below the
+            // timer's priority class — see its declaration in trap.rs.
+            lapic.send_ipi(super::trap::X86_INT_IPI_WAKEUP as u8, dest);
             Ok(())
         }
 

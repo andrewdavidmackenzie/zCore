@@ -10,6 +10,10 @@ static mut BSP_ID: Option<u8> = None;
 
 pub struct LocalApic {
     inner: LocalApicInner,
+    /// Kernel virtual address of the xAPIC MMIO register block.
+    /// Unused while x2APIC mode is active (all registers are MSRs
+    /// then); the mode is re-read from IA32_APIC_BASE on each access.
+    xapic_base_vaddr: usize,
 }
 
 impl LocalApic {
@@ -38,7 +42,38 @@ impl LocalApic {
         assert!(inner.is_bsp());
         unsafe {
             *core::ptr::addr_of_mut!(BSP_ID) = Some((inner.id() >> 24) as u8);
-            *core::ptr::addr_of_mut!(LOCAL_APIC) = Some(LocalApic { inner });
+            *core::ptr::addr_of_mut!(LOCAL_APIC) = Some(LocalApic {
+                inner,
+                xapic_base_vaddr: base_vaddr as usize,
+            });
+        }
+    }
+
+    /// Read one of this CPU's local APIC In-Service Register words.
+    /// `reg` is `0..=7`; word `i` covers vectors `32*i..32*(i+1)`.
+    ///
+    /// Used by the timer handler's wedge self-heal (#523/#862): a
+    /// wake IPI that was accepted but never EOI'd leaves its ISR bit
+    /// set, which blocks delivery of every same-or-lower-priority
+    /// interrupt on this CPU. Reading the APIC's own ISR is always
+    /// local — xAPIC MMIO and x2APIC MSRs both address the APIC of
+    /// the executing CPU.
+    pub fn isr_word(&mut self, reg: usize) -> u32 {
+        const IA32_APIC_BASE: u32 = 0x1B;
+        const X2APIC_ISR_BASE: u32 = 0x809; // ISR0..ISR7
+        let apic_base =
+            unsafe { x86_64::registers::model_specific::Msr::new(IA32_APIC_BASE).read() };
+        if apic_base & (1 << 10) != 0 {
+            // x2APIC mode: ISR0-7 are MSRs 0x809..=0x810.
+            unsafe {
+                x86_64::registers::model_specific::Msr::new(X2APIC_ISR_BASE + reg as u32).read()
+                    as u32
+            }
+        } else {
+            // xAPIC mode: memory-mapped at base + 0x100 + 0x10*reg.
+            unsafe {
+                core::ptr::read_volatile((self.xapic_base_vaddr + 0x100 + 0x10 * reg) as *const u32)
+            }
         }
     }
 

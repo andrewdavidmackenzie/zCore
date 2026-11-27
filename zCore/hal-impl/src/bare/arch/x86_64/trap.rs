@@ -57,6 +57,23 @@ pub(super) const _X86_INT_APIC_SPURIOUS: usize = X86_INT_LOCAL_APIC_BASE;
 pub(super) const X86_INT_APIC_TIMER: usize = X86_INT_LOCAL_APIC_BASE + 0x1;
 pub(super) const _X86_INT_APIC_ERROR: usize = X86_INT_LOCAL_APIC_BASE + 0x2;
 
+/// Cross-CPU wake-IPI vector (executor `ipi_wakeup`).
+///
+/// MUST stay in a strictly LOWER APIC priority class than the timer
+/// (`X86_INT_APIC_TIMER` = 0xF1, class 15). A wake IPI can end up
+/// accepted-but-never-EOI'd (observed identically under KVM and TCG;
+/// see the self-heal in `super_timer`): its ISR bit stays set, PPR
+/// rises to the vector's class, and the local APIC blocks delivery of
+/// every same-or-lower-class interrupt on that CPU. At the old vector
+/// 0xFE (class 15) that also blocked the timer — a halted CPU then
+/// slept forever, and any task spawned to it never ran (the
+/// ProcessTest.SuspendTwiceBeforeCreatingThreads +
+/// SuspendWithDyingThread pair hang, #523). At 0x80 (class 8) the
+/// pending timer always outranks the stuck bit, so the next tick
+/// wakes the executor loop and runs the self-heal below, which EOIs
+/// the wedged bit and restores normal delivery.
+pub(super) const X86_INT_IPI_WAKEUP: usize = 0x80;
+
 // ISA IRQ numbers
 pub(super) const _X86_ISA_IRQ_PIT: usize = 0;
 #[cfg(feature = "ps2-keyboard")]
@@ -78,6 +95,27 @@ fn breakpoint(tf: &TrapFrame) -> ! {
 
 pub(super) fn super_timer() {
     crate::timer::timer_tick();
+    // #523/#862 wedge self-heal: if a wake IPI was accepted but its
+    // handler never ran to the EOI (observed under both KVM and TCG;
+    // trigger still under investigation), its ISR bit stays set and
+    // blocks all same-or-lower-class interrupt delivery on this CPU.
+    // The timer vector outranks the wake IPI by design (class 15 vs
+    // 8 — see X86_INT_IPI_WAKEUP), so this handler still runs on a
+    // wedged CPU: detect the stuck bit and EOI it. One register read
+    // per tick; clearing cannot hit a legitimate in-service bit,
+    // because Apic::handle_irq already sent the timer's own EOI
+    // before dispatching here and IRQ handlers never nest (they run
+    // with IF=0).
+    let lapic = ::drivers::irq::x86::Apic::local_apic();
+    let word = lapic.isr_word(X86_INT_IPI_WAKEUP / 32);
+    if word & (1 << (X86_INT_IPI_WAKEUP % 32)) != 0 {
+        error!(
+            "[ipi-wedge] CPU{}: wake IPI #{:#x} in-service without EOI — clearing",
+            super::cpu::cpu_id(),
+            X86_INT_IPI_WAKEUP
+        );
+        lapic.eoi();
+    }
 }
 
 /// Attempt recovery from a kernel-mode #GP by skipping the faulting
