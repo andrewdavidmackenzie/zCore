@@ -451,6 +451,14 @@ cfg_if! {
             XSAVE_SUPPORTED.store(true, Ordering::Release);
         }
 
+        /// Whether the BSP armed XSAVE/XRSTOR. APs consult this to
+        /// keep their per-CPU CR4/XCR0 decision consistent with the
+        /// BSP's (the context-switch flag is global; a heterogeneous
+        /// AP must not diverge — CodeRabbit review on #911).
+        pub(crate) fn xsave_supported() -> bool {
+            XSAVE_SUPPORTED.load(Ordering::Acquire)
+        }
+
         /// X86 vector registers.
         ///
         /// Layout: the FXSAVE legacy region (512 bytes, identical

@@ -121,10 +121,36 @@ extern "C" fn avx_thread_entry(arg1: usize, _arg2: usize) {
     unsafe { zx_thread_exit() }
 }
 
+/// Whether this CPU advertises AVX (CPUID leaf 1, ECX bit 28).
+/// QEMU 6.2's TCG does not provide AVX even under `-cpu max`, so the
+/// test must skip rather than execute VEX bytes into a #UD
+/// (CodeRabbit review on #911).
+#[cfg(target_arch = "x86_64")]
+fn cpu_has_avx() -> bool {
+    let ecx: u32;
+    unsafe {
+        // rbx is reserved by LLVM — save/restore it around cpuid.
+        core::arch::asm!(
+            "push rbx",
+            "mov eax, 1",
+            "cpuid",
+            "pop rbx",
+            lateout("ecx") ecx,
+            out("eax") _,
+            out("edx") _,
+        );
+    }
+    ecx & (1 << 28) != 0
+}
+
 #[cfg(target_arch = "x86_64")]
 #[no_mangle]
 pub fn main() {
     zx::debug_write(b"avx_test: starting\n");
+    if !cpu_has_avx() {
+        zx::debug_write(b"avx_test: SKIPPED (no AVX on this CPU) PASS\n");
+        zx::Process::exit(0);
+    }
 
     let bootstrap = petal::Bootstrap::read().unwrap_or_else(|| {
         zx::debug_write(b"FAIL: avx_test - no bootstrap\n");
@@ -163,7 +189,11 @@ pub fn main() {
             zx::debug_write(b"FAIL: avx_test - thread create\n");
             zx::Process::exit(1);
         }
-        let stack_top = stack_addr + STACK_LEN * (i + 1);
+        // SysV ABI: at the thread entry, rsp must be 16-byte aligned
+        // minus 8 (the layout the entry expects as if called). The
+        // mapped region's top is 4096-aligned; subtract 8 to get the
+        // correct entry alignment (CodeRabbit review on #911).
+        let stack_top = stack_addr + STACK_LEN * (i + 1) - 8;
         let s = unsafe { zx_thread_start(thread_h, entry, stack_top, i, 0) };
         if s != 0 {
             zx::debug_write(b"FAIL: avx_test - thread start\n");
