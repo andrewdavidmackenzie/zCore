@@ -45,12 +45,14 @@ impl Syscall<'_> {
                 .thread
                 .proc()
                 .get_object_with_rights::<Socket>(handle_value, Rights::WRITE)?;
-            // Zircon: bound the kernel buffer at what the socket can
-            // accept — stream writes cap at the buffer size (short
-            // write), datagram writes larger than the buffer are
-            // rejected with OUT_OF_RANGE before any allocation (#471).
+            // Zircon: bound the write at what the socket can accept —
+            // stream writes cap at the buffer size (short write),
+            // datagram writes larger than the buffer are rejected with
+            // OUT_OF_RANGE before any copy (#471). The bytes go
+            // straight from user pages into the mbuf nodes — no
+            // intermediate kernel buffer (#901 step 2).
             let read_len = socket.bound_write_len(count)?;
-            let actual_count = socket.write(&user_bytes.read_array(read_len)?)?;
+            let actual_count = socket.write_from_user(user_bytes, read_len)?;
             actual_count_ptr.write_if_not_null(actual_count)?;
             Ok(())
         } else {
@@ -63,7 +65,7 @@ impl Syscall<'_> {
         &self,
         handle_value: HandleValue,
         options: u32,
-        mut user_bytes: UserOutPtr<u8>,
+        user_bytes: UserOutPtr<u8>,
         count: usize,
         mut actual_count_ptr: UserOutPtr<usize>,
     ) -> ZxResult {
@@ -84,27 +86,14 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let socket = proc.get_object_with_rights::<Socket>(handle_value, Rights::READ)?;
         // Zircon: the socket can never hold more than SOCKET_SIZE bytes,
-        // so a larger read buffer is wasted allocation (#471).
+        // so a larger read is pointless (#471). The bytes go straight
+        // from the mbuf nodes to user pages — no intermediate kernel
+        // buffer (#901 step 2). Fault semantics (datagram dropped,
+        // stream prefix consumed) are handled inside read_to_user,
+        // matching Fuchsia.
         let bounded_count = socket.bound_read_len(count);
-        let mut data = {
-            let mut v = alloc::vec::Vec::new();
-            v.try_reserve(bounded_count)
-                .map_err(|_| ZxError::INVALID_ARGS)?;
-            v.resize(bounded_count, 0u8);
-            v
-        };
         let peek = options.contains(SocketFlags::SOCKET_PEEK);
-        // For datagram sockets, Fuchsia consumes the datagram even if
-        // the copy to user fails (for consuming reads). Read into a
-        // kernel buffer first, then attempt the copy to user.
-        let actual_count = socket.read(peek, &mut data)?;
-        if let Err(_e) = user_bytes.write_array(&data[..actual_count]) {
-            // Copy to user failed. For consuming reads on datagram
-            // sockets, the datagram is already consumed — this matches
-            // Fuchsia's behavior where a faulting consuming read drops
-            // the datagram. Return INVALID_ARGS.
-            return Err(ZxError::INVALID_ARGS);
-        }
+        let actual_count = socket.read_to_user(peek, user_bytes, bounded_count)?;
         actual_count_ptr.write_if_not_null(actual_count)?;
         Ok(())
     }

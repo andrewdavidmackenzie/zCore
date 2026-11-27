@@ -3,6 +3,7 @@
 mod channel;
 mod fifo;
 mod iob;
+mod mbuf;
 mod socket;
 
 pub use self::{channel::*, fifo::*, iob::*, socket::*};

@@ -59,6 +59,14 @@ impl ContextAccessState for UserContext {
                     buf[zmm_off..zmm_off + 8].copy_from_slice(&xmm.0[0].to_ne_bytes());
                     buf[zmm_off + 8..zmm_off + 16].copy_from_slice(&xmm.0[1].to_ne_bytes());
                 }
+                // Copy YMM high halves (XSAVE state component 2) into
+                // zmm[0..15].v[2..3] — the full 256-bit YMM view
+                // (#907, CodeRabbit review on #911).
+                for (i, ymm) in vr.ymm.iter().enumerate() {
+                    let zmm_off = i * ZMM_SIZE;
+                    buf[zmm_off + 16..zmm_off + 24].copy_from_slice(&ymm.0[0].to_ne_bytes());
+                    buf[zmm_off + 24..zmm_off + 32].copy_from_slice(&ymm.0[1].to_ne_bytes());
+                }
                 // mxcsr is after zmm[32] + opmask[8]
                 let mxcsr_off = ZMM_COUNT * ZMM_SIZE + OPMASK_SIZE;
                 buf[mxcsr_off..mxcsr_off + 4].copy_from_slice(&vr.mxcsr.to_ne_bytes());
@@ -196,6 +204,20 @@ impl ContextAccessState for UserContext {
                     xmm.0[1] =
                         u64::from_ne_bytes(buf[zmm_off + 8..zmm_off + 16].try_into().unwrap());
                 }
+                // YMM high halves from zmm[0..15].v[2..3] (#907,
+                // CodeRabbit review on #911).
+                for (i, ymm) in vr.ymm.iter_mut().enumerate() {
+                    let zmm_off = i * ZMM_SIZE;
+                    ymm.0[0] =
+                        u64::from_ne_bytes(buf[zmm_off + 16..zmm_off + 24].try_into().unwrap());
+                    ymm.0[1] =
+                        u64::from_ne_bytes(buf[zmm_off + 24..zmm_off + 32].try_into().unwrap());
+                }
+                // XSAVE (#907): claim SSE+AVX in xstate_bv so the next
+                // XRSTOR restores the components the debugger wrote
+                // instead of initializing them (CodeRabbit review on
+                // #911 — a write without the bit set is silently lost).
+                vr.xsave_header[0].0[0] |= 0b111;
             }
             #[cfg(target_arch = "x86_64")]
             ThreadStateKind::FloatPoint => {
@@ -221,6 +243,11 @@ impl ContextAccessState for UserContext {
                     mm.0[0] = u64::from_ne_bytes(buf[off..off + 8].try_into().unwrap());
                     mm.0[1] = u64::from_ne_bytes(buf[off + 8..off + 16].try_into().unwrap());
                 }
+                // XSAVE (#907): claim x87 (and SSE — writing MXCSR via
+                // the FloatPoint ABI is not possible, but claiming it
+                // is harmless when the region holds valid data) so
+                // XRSTOR restores instead of initializing.
+                vr.xsave_header[0].0[0] |= 0b011;
             }
             ThreadStateKind::SingleStep => {
                 // zx_thread_state_single_step_t is a u32. Only 0 and 1 are valid.
