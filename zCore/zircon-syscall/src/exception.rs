@@ -14,14 +14,16 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let (task, rights) = self.get_object_and_rights_with_pseudo(task)?;
-        if !rights.contains(
-            Rights::INSPECT | Rights::DUPLICATE | Rights::TRANSFER | Rights::MANAGE_THREAD,
-        ) {
-            return Err(ZxError::ACCESS_DENIED);
-        }
         let option = ExceptionChannelOption::try_from(option).map_err(|_| ZxError::INVALID_ARGS)?;
+        // #913 compat: Fuchsia's typed task lookup returns WRONG_TYPE
+        // for non-task handles before any rights evaluation — dispatch
+        // on type first, then check rights per branch (a channel/event
+        // handle used to fail the combined rights check and return
+        // ACCESS_DENIED before reaching the WRONG_TYPE fallback).
+        let required =
+            Rights::INSPECT | Rights::DUPLICATE | Rights::TRANSFER | Rights::MANAGE_THREAD;
         let exceptionate = if let Ok(job) = task.clone().downcast_arc::<Job>() {
-            if !rights.contains(Rights::ENUMERATE) {
+            if !rights.contains(required | Rights::ENUMERATE) {
                 return Err(ZxError::ACCESS_DENIED);
             }
             match option {
@@ -29,7 +31,7 @@ impl Syscall<'_> {
                 ExceptionChannelOption::Debugger => job.debug_exceptionate(),
             }
         } else if let Ok(process) = task.clone().downcast_arc::<Process>() {
-            if !rights.contains(Rights::ENUMERATE) {
+            if !rights.contains(required | Rights::ENUMERATE) {
                 return Err(ZxError::ACCESS_DENIED);
             }
             match option {
@@ -37,6 +39,9 @@ impl Syscall<'_> {
                 ExceptionChannelOption::Debugger => process.debug_exceptionate(),
             }
         } else if let Ok(thread) = task.clone().downcast_arc::<Thread>() {
+            if !rights.contains(required) {
+                return Err(ZxError::ACCESS_DENIED);
+            }
             match option {
                 ExceptionChannelOption::None => thread.exceptionate(),
                 ExceptionChannelOption::Debugger => return Err(ZxError::INVALID_ARGS),

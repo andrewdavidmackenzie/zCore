@@ -306,13 +306,17 @@ impl Syscall<'_> {
     ) -> ZxResult {
         info!("task.suspend_token: handle={:?}, token={:?}", handle, token);
         let proc = self.thread.proc();
-        // Validate the handle exists before type dispatch.
-        // get_object returns BAD_HANDLE for invalid handles, which
-        // must be propagated instead of falling through to WRONG_TYPE.
-        let (object, rights) = proc.get_dyn_object_and_rights(handle)?;
-        if !rights.contains(Rights::WRITE) {
-            return Err(ZxError::ACCESS_DENIED);
-        }
+        // #913 compat: dispatch on type before rights, matching
+        // Fuchsia's get_dispatcher_with_rights order (type →
+        // WRONG_TYPE for non-task handles, then rights →
+        // ACCESS_DENIED). The previous upfront WRITE gate returned
+        // ACCESS_DENIED for wrong-type handles that lack WRITE (e.g.
+        // events) before the WRONG_TYPE fallback was reachable. The
+        // per-branch get_object_with_rights calls below enforce WRITE.
+        // The existence gate propagates BAD_HANDLE for invalid handle
+        // values — the type chain's WRONG_TYPE fallback must not
+        // swallow it (Fuchsia: invalid handle -> BAD_HANDLE).
+        let (object, _) = proc.get_dyn_object_and_rights(handle)?;
         drop(object);
         if let Ok(thread) = proc.get_object_with_rights::<Thread>(handle, Rights::WRITE) {
             if Arc::ptr_eq(&thread, self.thread) {
@@ -348,6 +352,12 @@ impl Syscall<'_> {
         info!("task.kill: handle={:?}", handle);
         let proc = self.thread.proc();
 
+        // #913 compat: propagate BAD_HANDLE for invalid handle values —
+        // the type chain's WRONG_TYPE fallback must not swallow it
+        // (Fuchsia: invalid handle -> BAD_HANDLE, wrong type ->
+        // WRONG_TYPE).
+        let (object, _) = proc.get_dyn_object_and_rights(handle)?;
+        drop(object);
         if let Ok(job) = proc.get_object_with_rights::<Job>(handle, Rights::DESTROY) {
             job.kill();
         } else if let Ok(process) = proc.get_object_with_rights::<Process>(handle, Rights::DESTROY)
