@@ -285,7 +285,9 @@ fn property_exception_strategy() {
 }
 
 ///
-/// Getting/setting an invalid property ID should return INVALID_ARGS.
+/// Getting an invalid property ID returns NOT_SUPPORTED and setting
+/// one returns INVALID_ARGS (Fuchsia's object_property.rs match
+/// defaults; verified in the #913 compatibility pass).
 fn property_invalid_property() {
     let ctx = TestContext::new();
     let event = zircon_object::signal::Event::new();
@@ -299,15 +301,15 @@ fn property_invalid_property() {
     let err = get_property(&ctx, event_h, 9999, &mut buf).unwrap_err();
     assert_eq!(
         err,
-        zircon_object::ZxError::INVALID_ARGS,
-        "invalid property should return INVALID_ARGS"
+        zircon_object::ZxError::NOT_SUPPORTED,
+        "unknown property get returns NOT_SUPPORTED (Fuchsia match default)"
     );
 
     let err = set_property(&ctx, event_h, 9999, &buf).unwrap_err();
     assert_eq!(
         err,
         zircon_object::ZxError::INVALID_ARGS,
-        "invalid property should return INVALID_ARGS"
+        "unknown property set returns INVALID_ARGS (Fuchsia match default)"
     );
 }
 
