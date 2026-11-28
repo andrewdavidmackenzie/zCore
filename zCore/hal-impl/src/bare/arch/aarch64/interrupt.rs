@@ -13,7 +13,97 @@ hal_fn_impl! {
         }
 
         fn handle_irq(vector: usize) {
-            crate::device_registry::all_irq().first_unwrap().handle_irq(vector);
+            // #538: no registered IRQ controller means no further
+            // interrupt delivery either — drop the vector and log
+            // rather than panicking in interrupt context.
+            if let Some(ctl) = crate::device_registry::all_irq().first() {
+                ctl.handle_irq(vector);
+            } else {
+                error!("no IRQ controller registered — dropping vector {}", vector);
+            }
+        }
+
+        // #538 (b): these were previously unimplemented on aarch64 —
+        // the hal_fn board-contract default panicked on first use, so
+        // the DDK interrupt syscalls (zx_interrupt_create and friends)
+        // crashed the kernel. The GIC-400 driver (a real IrqScheme
+        // implementation) sits registered in the device registry —
+        // dispatch through it like x86_64 does, degrading to
+        // DeviceError::NotReady if the registry is somehow empty.
+        fn is_valid_irq(vector: usize) -> bool {
+            crate::device_registry::all_irq()
+                .first()
+                .is_some_and(|ctl| ctl.is_valid_irq(vector))
+        }
+
+        fn mask_irq(vector: usize) -> DeviceResult {
+            crate::device_registry::all_irq()
+                .first()
+                .ok_or(hal::DeviceError::NotReady)?
+                .mask(vector)
+        }
+
+        fn unmask_irq(vector: usize) -> DeviceResult {
+            crate::device_registry::all_irq()
+                .first()
+                .ok_or(hal::DeviceError::NotReady)?
+                .unmask(vector)
+        }
+
+        fn configure_irq(
+            vector: usize,
+            tm: crate::device_registry::prelude::IrqTriggerMode,
+            pol: crate::device_registry::prelude::IrqPolarity,
+        ) -> DeviceResult {
+            crate::device_registry::all_irq()
+                .first()
+                .ok_or(hal::DeviceError::NotReady)?
+                .configure(vector, tm, pol)
+        }
+
+        fn register_irq_handler(
+            vector: usize,
+            handler: crate::device_registry::prelude::IrqHandler,
+        ) -> DeviceResult {
+            crate::device_registry::all_irq()
+                .first()
+                .ok_or(hal::DeviceError::NotReady)?
+                .register_handler(vector, handler)
+        }
+
+        fn unregister_irq_handler(vector: usize) -> DeviceResult {
+            crate::device_registry::all_irq()
+                .first()
+                .ok_or(hal::DeviceError::NotReady)?
+                .unregister(vector)
+        }
+
+        fn msi_alloc_block(requested_irqs: usize) -> DeviceResult<core::ops::Range<usize>> {
+            // No MSI controller driver on aarch64 — the IrqScheme
+            // default returns NOT_SUPPORTED, which the syscall layer
+            // degrades to a software-only allocation.
+            crate::device_registry::all_irq()
+                .first()
+                .ok_or(hal::DeviceError::NotReady)?
+                .msi_alloc_block(requested_irqs)
+        }
+
+        fn msi_free_block(block: core::ops::Range<usize>) -> DeviceResult {
+            crate::device_registry::all_irq()
+                .first()
+                .ok_or(hal::DeviceError::NotReady)?
+                .msi_free_block(block)
+        }
+
+        fn msi_register_handler(
+            block: core::ops::Range<usize>,
+            msi_id: usize,
+            handler: crate::device_registry::prelude::IrqHandler,
+        ) -> DeviceResult {
+            crate::device_registry::all_irq()
+                .first()
+                .ok_or(hal::DeviceError::NotReady)?
+                .msi_register_handler(block, msi_id, handler)
         }
 
         fn intr_off() {

@@ -103,7 +103,10 @@ impl ExecutorRuntime {
 
 impl Drop for ExecutorRuntime {
     fn drop(&mut self) {
-        panic!("drop executor runtime!!!!");
+        // #538: statics never drop in a no_std kernel; in libos mode
+        // a host teardown could conceivably reach here. Log loudly
+        // instead of crashing the host process.
+        error!("executor runtime dropped — this should never happen");
     }
 }
 

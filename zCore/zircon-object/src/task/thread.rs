@@ -1246,7 +1246,12 @@ impl Task for Thread {
     }
 
     fn debug_exceptionate(&self) -> Arc<Exceptionate> {
-        panic!("thread do not have debug exceptionate");
+        // #538: threads have no debug exceptionate of their own;
+        // thread-level debug exceptions route to the process's
+        // debugger (the same routing exception.rs uses). No current
+        // caller dispatches here, but if one ever does, delegating
+        // matches the semantics instead of crashing.
+        self.proc().debug_exceptionate()
     }
 }
 

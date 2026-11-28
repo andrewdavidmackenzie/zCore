@@ -22,18 +22,25 @@ impl EventInterrupt {
 }
 
 impl InterruptTrait for EventInterrupt {
-    fn mask(&self) {
+    fn mask(&self) -> ZxResult {
         let inner = self.inner.lock();
         if inner.register {
-            interrupt::mask_irq(self.vector).unwrap();
+            // #538 (b): hal mask failures propagate to the syscall
+            // boundary instead of unwrapping into a kernel panic.
+            // The vector was validated at registration, so a failure
+            // here is kernel-internal.
+            interrupt::mask_irq(self.vector).map_err(|_| ZxError::INTERNAL)?;
         }
+        Ok(())
     }
 
-    fn unmask(&self) {
+    fn unmask(&self) -> ZxResult {
         let inner = self.inner.lock();
         if inner.register {
-            interrupt::unmask_irq(self.vector).unwrap();
+            // #538 (b): same.
+            interrupt::unmask_irq(self.vector).map_err(|_| ZxError::INTERNAL)?;
         }
+        Ok(())
     }
 
     fn register_handler(&self, handle: Box<dyn Fn() + Send + Sync>) -> ZxResult {
@@ -41,11 +48,14 @@ impl InterruptTrait for EventInterrupt {
         if inner.register {
             return Err(ZxError::ALREADY_BOUND);
         }
+        // #538 (b): a vector the controller rejects is INVALID_ARGS
+        // (real Zircon rejects bad vectors at zx_interrupt_create)
+        // — the old ALREADY_BOUND mapping lied about the failure.
         if interrupt::register_irq_handler(self.vector, handle).is_ok() {
             inner.register = true;
             Ok(())
         } else {
-            Err(ZxError::ALREADY_BOUND)
+            Err(ZxError::INVALID_ARGS)
         }
     }
 

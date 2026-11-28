@@ -191,12 +191,29 @@ cfg_if::cfg_if! {
                 !DAIF.is_set(DAIF::I)
             }
         }
-    } else {
+    } else if #[cfg(not(target_os = "none"))] {
+        // Host builds (libos tests, clippy, docs): a host process
+        // cannot control its interrupts. Report "already disabled"
+        // so push_off/pop_off become inert no-ops that satisfy the
+        // LIFO debug assertion (pop_off's assert requires
+        // !was_enabled || !intr_get(); with intr_get() == false
+        // every guard sees was_enabled == false and pops nothing).
         mod interrupts {
-            pub(crate) fn intr_on() { unimplemented!(); }
-            pub(crate) fn intr_off() { unimplemented!(); }
-            pub(crate) fn intr_get() -> bool { unimplemented!(); }
+            pub(crate) fn intr_on() {}
+            pub(crate) fn intr_off() {}
+            pub(crate) fn intr_get() -> bool {
+                false
+            }
         }
+    } else {
+        // Unsupported bare-metal architecture — fail at compile
+        // time (#538): a runtime unimplemented!() here would only
+        // crash on first lock acquisition, after boot.
+        compile_error!(
+            "unsupported bare-metal target for zCore's lock crate: \
+             implement intr_on/intr_off/intr_get (see \
+             zCore/lock/src/interrupt.rs) for this architecture"
+        );
     }
 }
 

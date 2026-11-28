@@ -30,13 +30,22 @@ impl LocalApic {
 
     pub unsafe fn init_bsp(phys_to_virt: Phys2VirtFn) {
         let base_vaddr = phys_to_virt(PhysAddr::new(xapic_base() as usize));
-        let mut inner = LocalApicBuilder::new()
+        let inner = LocalApicBuilder::new()
             .timer_vector(consts::X86_INT_APIC_TIMER)
             .error_vector(consts::X86_INT_APIC_ERROR)
             .spurious_vector(consts::X86_INT_APIC_SPURIOUS)
             .set_xapic_base(base_vaddr as u64)
-            .build()
-            .unwrap_or_else(|err| panic!("{}", err));
+            .build();
+        let mut inner = match inner {
+            Ok(apic) => apic,
+            // #538: a failed local-APIC build logs and returns — the
+            // system runs without this CPU's APIC (degraded, alive)
+            // rather than crashing mid-boot.
+            Err(err) => {
+                error!("local APIC build failed: {} — skipping enable", err);
+                return;
+            }
+        };
         inner.enable();
 
         assert!(inner.is_bsp());

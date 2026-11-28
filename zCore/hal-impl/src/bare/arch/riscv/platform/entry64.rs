@@ -66,12 +66,15 @@ pub extern "C" fn primary_rust_main(hartid: usize, device_tree_paddr: usize) -> 
                 0,
             );
             if ret.is_err() {
-                panic!("start hart{} failed: {:?}", id, ret);
+                // #538: skip the failed hart.
+                error!("start hart{} failed: {:?} — skipping", id, ret);
             }
 
             let ret = sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(1 << id, 0));
             if ret.is_err() {
-                panic!("send ipi to hart{} failed: {:?}", id, ret);
+                // #538: a failed IPI to a skipped hart is logged and
+                // ignored — the hart was not started above.
+                error!("send ipi to hart{} failed: {:?}", id, ret);
             }
         } else {
             println!("hart{id} is the primary hart");

@@ -3,7 +3,10 @@ use core::any::Any;
 use hal::DeviceError;
 use hal::UartScheme;
 use zcore_devfs::DevFS;
-use zcore_fs::vfs::{make_rdev, FileType, FsError, INode, Metadata, PollStatus, Result, Timespec};
+use zcore_fs::vfs::{
+    make_rdev, FileSystem, FileType, FsError, INode, Metadata, PollStatus, PseudoFs, Result,
+    Timespec,
+};
 
 /// Uart device.
 pub struct UartDev {
@@ -23,6 +26,12 @@ impl UartDev {
 }
 
 impl INode for UartDev {
+    fn fs(&self) -> Arc<dyn FileSystem> {
+        // #538: pseudo-device node — belongs to no persistent
+        // filesystem; the shared PseudoFs is the honest answer.
+        Arc::new(PseudoFs)
+    }
+
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize> {
         info!(
             "uart read_at: offset={:#x} buf_len={:#x}",

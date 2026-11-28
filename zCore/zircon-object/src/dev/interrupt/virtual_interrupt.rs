@@ -10,8 +10,12 @@ impl VirtualInterrupt {
 }
 
 impl InterruptTrait for VirtualInterrupt {
-    fn mask(&self) {}
-    fn unmask(&self) {}
+    fn mask(&self) -> ZxResult {
+        Ok(())
+    }
+    fn unmask(&self) -> ZxResult {
+        Ok(())
+    }
     fn register_handler(&self, _handle: Box<dyn Fn() + Send + Sync>) -> ZxResult {
         Ok(())
     }

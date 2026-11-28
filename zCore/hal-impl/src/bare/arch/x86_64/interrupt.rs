@@ -4,7 +4,7 @@ use core::ops::Range;
 
 use crate::device_registry::all_irq;
 use crate::device_registry::prelude::{IrqHandler, IrqPolarity, IrqTriggerMode};
-use crate::DeviceResult;
+use crate::{DeviceError, DeviceResult};
 use alloc::vec::Vec;
 use x86_64::instructions::interrupts;
 
@@ -42,7 +42,8 @@ hal_fn_impl! {
         }
 
         fn is_valid_irq(gsi: usize) -> bool {
-            all_irq().first_unwrap().is_valid_irq(gsi)
+            // #538: no controller = no valid IRQs.
+            all_irq().first().is_some_and(|ctl| ctl.is_valid_irq(gsi))
         }
 
         fn intr_on() {
@@ -58,35 +59,57 @@ hal_fn_impl! {
         }
 
         fn mask_irq(gsi: usize) -> DeviceResult {
-            all_irq().first_unwrap().mask(gsi)
+            all_irq().first().ok_or(DeviceError::NotReady)?.mask(gsi)
         }
 
         fn unmask_irq(gsi: usize) -> DeviceResult {
-            all_irq().first_unwrap().unmask(gsi)
+            all_irq().first().ok_or(DeviceError::NotReady)?.unmask(gsi)
         }
 
         fn configure_irq(gsi: usize, tm: IrqTriggerMode, pol: IrqPolarity) -> DeviceResult {
-            all_irq().first_unwrap().configure(gsi, tm, pol)
+            all_irq()
+                .first()
+                .ok_or(DeviceError::NotReady)?
+                .configure(gsi, tm, pol)
         }
 
         fn register_irq_handler(gsi: usize, handler: IrqHandler) -> DeviceResult {
-            all_irq().first_unwrap().register_handler(gsi, handler)
+            all_irq()
+                .first()
+                .ok_or(DeviceError::NotReady)?
+                .register_handler(gsi, handler)
         }
 
         fn unregister_irq_handler(gsi: usize) -> DeviceResult {
-            all_irq().first_unwrap().unregister(gsi)
+            all_irq().first().ok_or(DeviceError::NotReady)?.unregister(gsi)
         }
 
         fn handle_irq(vector: usize) {
-            all_irq().first_unwrap().handle_irq(vector);
+            // #538: no registered IRQ controller means no further
+            // interrupt delivery either — drop the vector and log
+            // rather than panicking in interrupt context.
+            if let Some(ctl) = all_irq().first() {
+                ctl.handle_irq(vector);
+            } else {
+                // Review: still send the local APIC EOI — the vector
+                // was acknowledged by the CPU and must be released,
+                // or the local APIC blocks later interrupts at that
+                // priority. (The registered-controller path sends its
+                // EOI inside Apic::handle_irq.)
+                ::drivers::irq::x86::Apic::local_apic().eoi();
+                error!("no IRQ controller registered — dropping vector {}", vector);
+            }
         }
 
         fn msi_alloc_block(requested_irqs: usize) -> DeviceResult<Range<usize>> {
-            all_irq().first_unwrap().msi_alloc_block(requested_irqs)
+            all_irq()
+                .first()
+                .ok_or(DeviceError::NotReady)?
+                .msi_alloc_block(requested_irqs)
         }
 
         fn msi_free_block(block: Range<usize>) -> DeviceResult {
-            all_irq().first_unwrap().msi_free_block(block)
+            all_irq().first().ok_or(DeviceError::NotReady)?.msi_free_block(block)
         }
 
         fn msi_register_handler(
@@ -94,7 +117,10 @@ hal_fn_impl! {
             msi_id: usize,
             handler: IrqHandler,
         ) -> DeviceResult {
-            all_irq().first_unwrap().msi_register_handler(block, msi_id, handler)
+            all_irq()
+                .first()
+                .ok_or(DeviceError::NotReady)?
+                .msi_register_handler(block, msi_id, handler)
         }
 
         fn send_ipi(cpuid: usize, reason: usize) -> DeviceResult {

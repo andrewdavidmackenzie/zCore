@@ -37,14 +37,18 @@ trait DeviceExt: Device {
         debug_assert!(offset + buf.len() <= BLKSIZE);
         match self.read_at(id * BLKSIZE + offset, buf) {
             Ok(len) if len == buf.len() => Ok(()),
-            _ => panic!("cannot read block {} offset {} from device", id, offset),
+            // #538: device I/O failure (short read) is an error, not
+            // a crash — return it to the filesystem caller.
+            _ => Err(FsError::DeviceError),
         }
     }
     fn write_block(&self, id: BlockId, offset: usize, buf: &[u8]) -> vfs::Result<()> {
         debug_assert!(offset + buf.len() <= BLKSIZE);
         match self.write_at(id * BLKSIZE + offset, buf) {
             Ok(len) if len == buf.len() => Ok(()),
-            _ => panic!("cannot write block {} offset {} to device", id, offset),
+            // #538: same — a failed device write must not crash the
+            // kernel.
+            _ => Err(FsError::DeviceError),
         }
     }
     /// Load struct `T` from given block in device
@@ -78,6 +82,19 @@ impl Debug for INodeImpl {
             self.id, self.disk_inode
         )
     }
+}
+
+/// Freshly allocated (and zeroed) structures for a growth resize in
+/// [`INodeImpl::_resize`]. Nothing is published until phase 2 commits.
+struct GrowthAllocs {
+    /// The indirect map block, when the file first needs one.
+    indirect: Option<u32>,
+    /// The double-indirect map block, when the file first needs one.
+    db_indirect: Option<usize>,
+    /// Entry blocks inside the double-indirect map.
+    entries: Vec<usize>,
+    /// Data blocks for the grown range.
+    data: Vec<usize>,
 }
 
 impl INodeImpl {
@@ -115,7 +132,10 @@ impl INodeImpl {
                 assert!(disk_block_id > 0);
                 Ok(disk_block_id as BlockId)
             }
-            _ => unimplemented!("triple indirect blocks is not supported"),
+            // #538: a file larger than the double-indirect capacity is
+            // "not supported" (FsError::NotSupported = E_UNIMP), not a
+            // crash.
+            _ => Err(FsError::NotSupported),
         }
     }
     fn set_disk_block_id(&self, file_block_id: BlockId, disk_block_id: BlockId) -> vfs::Result<()> {
@@ -152,7 +172,7 @@ impl INodeImpl {
                 )?;
                 Ok(())
             }
-            _ => unimplemented!("triple indirect blocks is not supported"),
+            _ => Err(FsError::NotSupported),
         }
     }
     /// Only for Dir
@@ -215,6 +235,107 @@ impl INodeImpl {
         Ok(())
     }
     /// Resize content size, no matter what type it is.
+    /// Allocate a block and zero it before any reference to it is
+    /// published (#538 review): a recycled block keeps its previous
+    /// owner's contents, so referencing it unzeroed can expose data
+    /// from previously deleted files if a later initialization step
+    /// fails. A full filesystem is `NoDeviceSpace`; a failed zeroing
+    /// write releases the block back to the free map before
+    /// returning `DeviceError` — no reference was published, so
+    /// repeated transient failures must not exhaust free space.
+    fn alloc_zeroed_block(&self) -> vfs::Result<usize> {
+        let id = self.fs.alloc_block().ok_or(FsError::NoDeviceSpace)?;
+        static ZEROS: [u8; BLKSIZE] = [0; BLKSIZE];
+        if let Err(e) = self.fs.device.write_block(id, 0, &ZEROS) {
+            self.fs.free_block(id);
+            return Err(e);
+        }
+        Ok(id)
+    }
+
+    /// Phase 1 of growth in [`_resize`]: allocate and zero the
+    /// indirect map (when first needed), the double-indirect map and
+    /// its entry blocks, and the data blocks — publishing nothing.
+    /// Every allocation is recorded in `fresh` so the caller can free
+    /// them all on failure (no leak, untouched inode).
+    fn alloc_growth_blocks(
+        &self,
+        old_blocks: u32,
+        blocks: u32,
+        fresh: &mut Vec<usize>,
+    ) -> vfs::Result<GrowthAllocs> {
+        let indirect =
+            if old_blocks < MAX_NBLOCK_DIRECT as u32 && blocks >= MAX_NBLOCK_DIRECT as u32 {
+                let id = self.alloc_zeroed_block()?;
+                fresh.push(id);
+                Some(id as u32)
+            } else {
+                None
+            };
+        let mut db_indirect = None;
+        let mut entries = Vec::new();
+        if blocks >= MAX_NBLOCK_INDIRECT as u32 {
+            if self.disk_inode.read().db_indirect == 0 {
+                let id = self.alloc_zeroed_block()?;
+                fresh.push(id);
+                db_indirect = Some(id);
+            }
+            let indirect_begin = if (old_blocks as usize) < MAX_NBLOCK_INDIRECT {
+                0
+            } else {
+                (old_blocks as usize - MAX_NBLOCK_INDIRECT) / BLK_NENTRY + 1
+            };
+            let indirect_end = (blocks as usize - MAX_NBLOCK_INDIRECT) / BLK_NENTRY + 1;
+            for _ in indirect_begin..indirect_end {
+                let id = self.alloc_zeroed_block()?;
+                fresh.push(id);
+                entries.push(id);
+            }
+        }
+        let mut data = Vec::new();
+        for _ in old_blocks..blocks {
+            let id = self.alloc_zeroed_block()?;
+            fresh.push(id);
+            data.push(id);
+        }
+        Ok(GrowthAllocs {
+            indirect,
+            db_indirect,
+            entries,
+            data,
+        })
+    }
+
+    /// Phase 2 of growth in [`_resize`]: write the block references.
+    /// The block count and map fields are already published by the
+    /// caller; a failure here leaves them to be restored by it.
+    fn publish_growth_refs(
+        &self,
+        old_blocks: u32,
+        blocks: u32,
+        allocs: &GrowthAllocs,
+    ) -> vfs::Result<()> {
+        if blocks >= MAX_NBLOCK_INDIRECT as u32 {
+            let db_indirect = self.disk_inode.read().db_indirect as usize;
+            let indirect_begin = if (old_blocks as usize) < MAX_NBLOCK_INDIRECT {
+                0
+            } else {
+                (old_blocks as usize - MAX_NBLOCK_INDIRECT) / BLK_NENTRY + 1
+            };
+            for (i, id) in allocs.entries.iter().enumerate() {
+                self.fs.device.write_block(
+                    db_indirect,
+                    ENTRY_SIZE * (indirect_begin + i),
+                    (*id as u32).as_buf(),
+                )?;
+            }
+        }
+        for (i, id) in allocs.data.iter().enumerate() {
+            self.set_disk_block_id(old_blocks as usize + i, *id)?;
+        }
+        Ok(())
+    }
+
     fn _resize(&self, len: usize) -> vfs::Result<()> {
         if len > MAX_FILE_SIZE {
             return Err(FsError::InvalidParam);
@@ -230,41 +351,57 @@ impl INodeImpl {
                 self.disk_inode.write().size = len as u32;
             }
             Ordering::Greater => {
-                let mut disk_inode = self.disk_inode.write();
-                disk_inode.blocks = blocks;
-                // allocate indirect block if needed
-                if old_blocks < MAX_NBLOCK_DIRECT as u32 && blocks >= MAX_NBLOCK_DIRECT as u32 {
-                    disk_inode.indirect = self.fs.alloc_block().expect("no space") as u32;
-                }
-                // allocate double indirect block if needed
-                if blocks >= MAX_NBLOCK_INDIRECT as u32 {
-                    if disk_inode.db_indirect == 0 {
-                        disk_inode.db_indirect = self.fs.alloc_block().expect("no space") as u32;
-                    }
-                    let indirect_begin = {
-                        if (old_blocks as usize) < MAX_NBLOCK_INDIRECT {
-                            0
-                        } else {
-                            (old_blocks as usize - MAX_NBLOCK_INDIRECT) / BLK_NENTRY + 1
+                // #538 + review (2 rounds): growth is two-phase.
+                //
+                // Phase 1 allocates and zeroes every new structure
+                // while publishing NOTHING — on failure, every
+                // collected block is freed, so there is no leak and
+                // the inode is untouched.
+                //
+                // Phase 2 publishes the block count and writes the
+                // references. A mid-publish device failure restores
+                // the old block count so a retry recomputes Greater
+                // and re-allocates, instead of matching the stale
+                // published count and taking the Equal shortcut over
+                // the unmapped range.
+                let mut fresh: Vec<usize> = Vec::new();
+                let allocs = match self.alloc_growth_blocks(old_blocks, blocks, &mut fresh) {
+                    Ok(allocs) => allocs,
+                    Err(e) => {
+                        for id in &fresh {
+                            self.fs.free_block(*id);
                         }
-                    };
-                    let indirect_end = (blocks as usize - MAX_NBLOCK_INDIRECT) / BLK_NENTRY + 1;
-                    for i in indirect_begin..indirect_end {
-                        let indirect = self.fs.alloc_block().expect("no space") as u32;
-                        self.fs.device.write_block(
-                            disk_inode.db_indirect as usize,
-                            ENTRY_SIZE * i,
-                            indirect.as_buf(),
-                        )?;
+                        return Err(e);
+                    }
+                };
+                // Phase 2a: publish the fields.
+                {
+                    let mut disk_inode = self.disk_inode.write();
+                    disk_inode.blocks = blocks;
+                    if let Some(id) = allocs.indirect {
+                        disk_inode.indirect = id;
+                    }
+                    if let Some(id) = allocs.db_indirect {
+                        disk_inode.db_indirect = id as u32;
                     }
                 }
-                drop(disk_inode);
-                // allocate extra blocks
-                for i in old_blocks..blocks {
-                    let disk_block_id = self.fs.alloc_block().expect("no space");
-                    self.set_disk_block_id(i as usize, disk_block_id)?;
+                // Phase 2b: write the references (device I/O).
+                if let Err(e) = self.publish_growth_refs(old_blocks, blocks, &allocs) {
+                    // Restore the pre-growth block count: references
+                    // beyond it are hidden by get/set_disk_block_id's
+                    // bounds validation, so a retry recomputes Greater
+                    // and re-allocates. The fresh blocks that were
+                    // already wired leak (logged) — safe.
+                    self.disk_inode.write().blocks = old_blocks;
+                    error!(
+                        "[sfs] resize growth failed mid-publish; {} blocks leaked",
+                        fresh.len()
+                    );
+                    return Err(e);
                 }
-                // clean up
+                // Publish the size, then zero the tail region. The new
+                // blocks were zeroed at allocation, so a _clean_at
+                // failure here cannot expose stale contents.
                 let mut disk_inode = self.disk_inode.write();
                 let old_size = disk_inode.size as usize;
                 disk_inode.size = len as u32;
@@ -272,45 +409,75 @@ impl INodeImpl {
                 self._clean_at(old_size, len)?;
             }
             Ordering::Less => {
-                // free extra blocks
-                for i in blocks..old_blocks {
-                    let disk_block_id = self.get_disk_block_id(i as usize)?;
-                    self.fs.free_block(disk_block_id);
-                }
-                let mut disk_inode = self.disk_inode.write();
-                // free indirect block if needed
-                if blocks < MAX_NBLOCK_DIRECT as u32
-                    && disk_inode.blocks >= MAX_NBLOCK_DIRECT as u32
-                {
-                    self.fs.free_block(disk_inode.indirect as usize);
-                    disk_inode.indirect = 0;
-                }
-                // free double indirect block if needed
-                if disk_inode.blocks >= MAX_NBLOCK_INDIRECT as u32 {
-                    let indirect_begin = {
-                        if (blocks as usize) < MAX_NBLOCK_INDIRECT {
+                // #538 + review (2 rounds): resolve EVERY block
+                // reference — data blocks AND the double-indirect
+                // metadata entries — before freeing anything. Any
+                // read failure leaves the inode fully intact: no
+                // freed-but-referenced blocks, no double-free on
+                // retry.
+                let data_ids = (blocks..old_blocks)
+                    .map(|i| self.get_disk_block_id(i as usize))
+                    .collect::<vfs::Result<Vec<_>>>()?;
+
+                // Metadata to free, all resolved before the first
+                // free_block: the indirect map when dropping below
+                // direct-only, the double-indirect entry blocks when
+                // dropping ranges, and the double-indirect map itself
+                // when dropping below the indirect range. A zero entry
+                // where a block id is expected is corrupt metadata —
+                // WrongFs, not a panic in free_block.
+                let (free_indirect, db_entry_ids, free_db_indirect) = {
+                    let disk_inode = self.disk_inode.read();
+                    let free_indirect = blocks < MAX_NBLOCK_DIRECT as u32
+                        && disk_inode.blocks >= MAX_NBLOCK_DIRECT as u32;
+                    if free_indirect && disk_inode.indirect == 0 {
+                        return Err(FsError::WrongFs);
+                    }
+                    let mut db_entry_ids = Vec::new();
+                    let mut free_db_indirect = false;
+                    if disk_inode.blocks >= MAX_NBLOCK_INDIRECT as u32 {
+                        if disk_inode.db_indirect == 0 {
+                            return Err(FsError::WrongFs);
+                        }
+                        let indirect_begin = if (blocks as usize) < MAX_NBLOCK_INDIRECT {
                             0
                         } else {
                             (blocks as usize - MAX_NBLOCK_INDIRECT) / BLK_NENTRY + 1
+                        };
+                        let indirect_end =
+                            (disk_inode.blocks as usize - MAX_NBLOCK_INDIRECT) / BLK_NENTRY + 1;
+                        for i in indirect_begin..indirect_end {
+                            let mut indirect: u32 = 0;
+                            self.fs.device.read_block(
+                                disk_inode.db_indirect as usize,
+                                ENTRY_SIZE * i,
+                                indirect.as_buf_mut(),
+                            )?;
+                            if indirect == 0 {
+                                return Err(FsError::WrongFs);
+                            }
+                            db_entry_ids.push(indirect as usize);
                         }
-                    };
-                    let indirect_end =
-                        (disk_inode.blocks as usize - MAX_NBLOCK_INDIRECT) / BLK_NENTRY + 1;
-                    for i in indirect_begin..indirect_end {
-                        let mut indirect: u32 = 0;
-                        self.fs.device.read_block(
-                            disk_inode.db_indirect as usize,
-                            ENTRY_SIZE * i,
-                            indirect.as_buf_mut(),
-                        )?;
-                        assert!(indirect > 0);
-                        self.fs.free_block(indirect as usize);
+                        free_db_indirect = blocks < MAX_NBLOCK_INDIRECT as u32;
                     }
-                    if blocks < MAX_NBLOCK_INDIRECT as u32 {
-                        assert!(disk_inode.db_indirect > 0);
-                        self.fs.free_block(disk_inode.db_indirect as usize);
-                        disk_inode.db_indirect = 0;
-                    }
+                    (free_indirect, db_entry_ids, free_db_indirect)
+                };
+
+                // Commit: free everything, then update the inode.
+                for disk_block_id in data_ids {
+                    self.fs.free_block(disk_block_id);
+                }
+                let mut disk_inode = self.disk_inode.write();
+                if free_indirect {
+                    self.fs.free_block(disk_inode.indirect as usize);
+                    disk_inode.indirect = 0;
+                }
+                for id in db_entry_ids {
+                    self.fs.free_block(id);
+                }
+                if free_db_indirect {
+                    self.fs.free_block(disk_inode.db_indirect as usize);
+                    disk_inode.db_indirect = 0;
                 }
                 disk_inode.blocks = blocks;
                 disk_inode.size = len as u32;
@@ -450,18 +617,26 @@ impl vfs::INode for INodeImpl {
     /// the size returned here is logical size(entry num for directory), not the disk space used.
     fn metadata(&self) -> vfs::Result<vfs::Metadata> {
         let disk_inode = self.disk_inode.read();
+        // #538: an invalid on-disk type is corruption
+        // (FsError::WrongFs = "content on disk is wrong"), not a
+        // crash. The vfs type is computed in the same match so the
+        // conversion never sees an unvalidated value.
+        let (size, type_) = match disk_inode.type_ {
+            FileType::File | FileType::SymLink => (
+                disk_inode.size as usize,
+                vfs::FileType::from(disk_inode.type_),
+            ),
+            FileType::Dir => (disk_inode.size as usize, vfs::FileType::Dir),
+            FileType::CharDevice => (0, vfs::FileType::CharDevice),
+            FileType::BlockDevice => (0, vfs::FileType::BlockDevice),
+            FileType::Invalid => return Err(FsError::WrongFs),
+        };
         Ok(vfs::Metadata {
             dev: 0,
             inode: self.id,
-            size: match disk_inode.type_ {
-                FileType::File | FileType::SymLink => disk_inode.size as usize,
-                FileType::Dir => disk_inode.size as usize,
-                FileType::CharDevice => 0,
-                FileType::BlockDevice => 0,
-                _ => panic!("Unknown file type"),
-            },
+            size,
             mode: 0o777,
-            type_: vfs::FileType::from(disk_inode.type_),
+            type_,
             blocks: disk_inode.blocks as usize,
             atime: disk_inode.atime,
             mtime: disk_inode.mtime,
@@ -852,10 +1027,10 @@ impl SimpleFileSystem {
             }
             super_block.unused_blocks -= 1; // will not underflow
             trace!("alloc block {:#x}", block_id);
-        } else {
-            let super_block = self.super_block.read();
-            panic!("{:?}", super_block)
         }
+        // #538: no free block in the map = the filesystem is full.
+        // The function already returns Option<usize> — None is the
+        // contract, not a crash.
         id
     }
     /// Free a block
@@ -1037,7 +1212,10 @@ impl From<FileType> for vfs::FileType {
             FileType::Dir => vfs::FileType::Dir,
             FileType::CharDevice => vfs::FileType::CharDevice,
             FileType::BlockDevice => vfs::FileType::BlockDevice,
-            _ => panic!("unknown file type"),
+            // #538: never a valid on-disk state — metadata()
+            // rejects it with WrongFs before this conversion runs;
+            // map defensively rather than crash.
+            FileType::Invalid => vfs::FileType::File,
         }
     }
 }

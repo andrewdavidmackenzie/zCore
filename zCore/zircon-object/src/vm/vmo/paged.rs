@@ -186,7 +186,15 @@ impl PageStateTag {
         match self {
             PageStateTag::LeftSplit => PageStateTag::RightSplit,
             PageStateTag::RightSplit => PageStateTag::LeftSplit,
-            PageStateTag::Owned => unreachable!(),
+            // #538: negate() is only called on split tags by the COW
+            // merge logic. If an Owned tag ever reaches here, the
+            // conservative fallback (identity) keeps the merge logic
+            // treating the page as "not the surviving side" — the
+            // page is kept, never dropped — instead of freezing.
+            PageStateTag::Owned => {
+                debug_assert!(false, "negate() on Owned page tag");
+                PageStateTag::Owned
+            }
         }
     }
     fn is_split(self) -> bool {
@@ -1134,7 +1142,12 @@ impl VMObjectPagedInner {
     fn commit_page(&mut self, page_idx: usize, flags: MMUFlags) -> ZxResult<PhysAddr> {
         let ret = match self.commit_page_internal(page_idx, flags, &Weak::new())? {
             CommitResult::Ref(paddr) => Ok(paddr),
-            _ => unreachable!(),
+            // #538: NewPage/CopyOnWrite are only produced for hidden
+            // COW intermediates — a direct commit on such a node is a
+            // tree-structure violation. Return an error (the fault
+            // propagates to the accessing process) instead of
+            // freezing. The transient frames must NOT be mapped.
+            _ => Err(ZxError::BAD_STATE),
         };
         // force check conntiguous on each leaf node
         assert!(self.check_contig());
@@ -1848,6 +1861,24 @@ impl VMObjectPagedInner {
                 return Err(ZxError::INVALID_ARGS);
             }
         }
+        // #538 + review: validate parent membership BEFORE constructing
+        // the child/hidden VMOs and before moving frames/zero_markers
+        // out of self. Returning an error after construction would drop
+        // the temporaries, whose Drop re-acquires this tree's
+        // already-held, non-reentrant lock — a self-deadlock instead of
+        // BAD_STATE — and self's page state would already be moved out.
+        if let Some(parent) = self.parent.as_ref() {
+            let parent_inner = parent.borrow_inner_mut();
+            if let VMOType::Hidden { left, right, .. } = &parent_inner.type_ {
+                if !left.ptr_eq(&self.self_ref) && !right.ptr_eq(&self.self_ref) {
+                    // The parent does not list this VMO as a child —
+                    // the COW tree is already inconsistent.
+                    return Err(ZxError::BAD_STATE);
+                }
+            }
+            // Non-hidden parents (e.g. pager roots with unidirectional
+            // children) don't track children via left/right — allowed.
+        }
         // Track whether this clone tree is pager-backed.
         let is_pager_tree = self.pager_backed || self.in_pager_tree;
         // create child VMO
@@ -1908,7 +1939,13 @@ impl VMObjectPagedInner {
                 } else if right.ptr_eq(&self.self_ref) {
                     *right = Arc::downgrade(&hidden);
                 } else {
-                    panic!();
+                    // Unreachable after the upfront membership
+                    // validation above — kept as a logged skip rather
+                    // than an error return: returning here would drop
+                    // the hidden/child temporaries while the tree lock
+                    // is held (self-deadlock). The stale Weak fails to
+                    // upgrade later, degrading instead of freezing.
+                    error!("[vmo] create_child: parent does not list the child after validation");
                 }
             }
             // Non-hidden parents (e.g., pager root for unidirectional
@@ -2229,17 +2266,20 @@ impl VMObjectPagedInner {
         }
 
         self.owner = other_child.owner;
-        match &mut self.type_ {
-            VMOType::Hidden { left, right, .. } => {
-                if left.ptr_eq(old) {
-                    *left = new;
-                } else if right.ptr_eq(old) {
-                    *right = new;
-                } else {
-                    panic!();
-                }
+        // #538: non-hidden parents don't track children via left/right
+        // (the caller already guards is_hidden) — skipping them is
+        // semantically correct, not just safe.
+        if let VMOType::Hidden { left, right, .. } = &mut self.type_ {
+            if left.ptr_eq(old) {
+                *left = new;
+            } else if right.ptr_eq(old) {
+                *right = new;
+            } else {
+                // #538: child reference mismatch — the tree is already
+                // inconsistent. Log and skip (the stale Weak will fail
+                // to upgrade later) rather than freeze the kernel.
+                error!("[vmo] replace_child: parent does not list the dying child");
             }
-            _ => panic!(),
         }
     }
 

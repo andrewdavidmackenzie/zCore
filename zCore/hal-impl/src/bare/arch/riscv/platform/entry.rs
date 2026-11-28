@@ -207,7 +207,9 @@ fn hart_start(boot_hartid: usize, hartid: usize, start_addr: usize) {
         log::info!("hart{hartid} is booting...");
         let ret = sbi_rt::hart_start(hartid, start_addr, 0);
         if ret.is_err() {
-            panic!("start hart{hartid} failed. error: {ret:?}");
+            // #538: a failed hart start skips that hart — the system
+            // boots with fewer cores rather than crashing.
+            error!("start hart{hartid} failed. error: {ret:?} — skipping");
         }
     } else {
         log::info!("hart{hartid} is the primary hart.");

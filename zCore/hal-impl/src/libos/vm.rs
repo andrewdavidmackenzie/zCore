@@ -102,12 +102,21 @@ impl GenericPageTable for PageTable {
                 entry.paddr = pa;
             }
             if let Some(f) = flags {
+                // #538 (a): commit the new flags only after the host
+                // accepted the protection change — the failure detail
+                // is logged in mock_mem; NoMemory is this enum's only
+                // generic failure variant (the existing convention for
+                // mmap failures here).
+                if !MOCK_PHYS_MEM.mprotect(vaddr as _, PAGE_SIZE, f) {
+                    return Err(PagingError::NoMemory);
+                }
                 entry.flags = f;
-                MOCK_PHYS_MEM.mprotect(vaddr as _, PAGE_SIZE, f);
             }
         } else if let Some(flags) = flags {
             // Entry not tracked (e.g., PMEM range) — just mprotect.
-            MOCK_PHYS_MEM.mprotect(vaddr as _, PAGE_SIZE, flags);
+            if !MOCK_PHYS_MEM.mprotect(vaddr as _, PAGE_SIZE, flags) {
+                return Err(PagingError::NoMemory);
+            }
         }
         Ok(PageSize::default_page())
     }
