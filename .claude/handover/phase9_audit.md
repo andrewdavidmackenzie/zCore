@@ -66,7 +66,7 @@ Each stub must be replaced with test logic that:
 Tests that genuinely cannot work in libos (e.g., ARM64-only TBI tests
 on x86, demand-paging with blocking page faults) should still have
 **complete implementations** — they will hang or fail, and can be
-triaged in Phase 10 (skip-list or kernel fix).
+triaged in Phase 10 (kernel fix).
 
 ### Priority order for remaining work
 

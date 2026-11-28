@@ -9,7 +9,7 @@
 //! 3. No two Rust tests point to the same C++ test (no duplicates).
 //! 4. The total counts match.
 //!
-//! It also reports counts for `#[ignore]` tests and C++ skip-list entries.
+//! It also reports counts for `#[ignore]` tests.
 
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
@@ -59,6 +59,10 @@ fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
 
         // Look backward for `/// C++: TEST(Suite, Name)` or `/// C++: TEST_F(Suite, Name)`
         let mut cpp_ref = None;
+        // Parse the fn's attribute lines for `#[ignore]` — hardcoding
+        // `false` here would let an ignored test slip past the audit's
+        // no-ignored-tests policy unnoticed.
+        let mut is_ignored = false;
         {
             let mut j = fn_line;
             while j > 0 {
@@ -68,8 +72,13 @@ fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
                     if let Some(ref_str) = extract_cpp_ref(prev) {
                         cpp_ref = Some(ref_str);
                     }
-                } else if prev.starts_with("#[") || prev.starts_with("//") || prev.is_empty() {
-                    // attributes, comments, blank lines between doc and fn are ok
+                } else if prev.starts_with("#[") {
+                    // attributes between doc and fn are ok
+                    if is_ignore_attr(prev) {
+                        is_ignored = true;
+                    }
+                } else if prev.starts_with("//") || prev.is_empty() {
+                    // comments, blank lines between doc and fn are ok
                     continue;
                 } else {
                     break;
@@ -82,8 +91,6 @@ fn parse_rust_tests(path: &Path) -> Vec<RustTest> {
             i += 1;
             continue;
         }
-
-        let is_ignored = false;
 
         // Check if body contains `unimplemented!()`
         let is_stub = lines[fn_line..std::cmp::min(lines.len(), fn_line + 6)]
@@ -136,6 +143,13 @@ fn extract_cpp_ref(line: &str) -> Option<String> {
     None
 }
 
+/// True for `#[ignore]` and `#[ignore = "..."]` attribute lines.
+/// Deliberately does not match lookalikes such as `#[ignored]`.
+fn is_ignore_attr(line: &str) -> bool {
+    let line = line.trim();
+    line == "#[ignore]" || line.starts_with("#[ignore ") || line.starts_with("#[ignore=")
+}
+
 /// Extract function name from a line like `fn foo_bar()` or `async fn foo_bar()`.
 fn extract_fn_name(line: &str) -> Option<String> {
     let trimmed = line.trim();
@@ -167,19 +181,6 @@ fn load_cpp_tests(path: &Path) -> BTreeSet<String> {
         .collect()
 }
 
-/// Load the skip list (lines starting with `#` are comments, blank lines ignored).
-fn load_skip_list(path: &Path) -> BTreeSet<String> {
-    let content = match fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(_) => return BTreeSet::new(),
-    };
-    content
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .collect()
-}
-
 /// Result of the audit.
 pub struct AuditResult {
     pub cpp_count: usize,
@@ -191,10 +192,9 @@ pub struct AuditResult {
     pub undocumented: Vec<(String, String)>,    // (file, fn_name) — no C++ doc comment
     pub rust_ignored: usize,
     pub rust_stubs: usize,
-    pub cpp_skipped: usize,
     // Skip/ignore correspondence
     pub stubs: Vec<(String, String, String)>, // (file, fn_name, cpp_ref) — unimplemented!() tests
-    pub ignored_not_skipped: Vec<(String, String, String)>, // #[ignore] but NOT in skip list
+    pub ignored_tests: Vec<(String, String, String)>, // #[ignore] tests
     pub petal_ported: usize,                  // Tests ported to petal user-mode binary
     pub unported: Vec<String>, // C++ tests intentionally not ported (see tests/core-tests-unported.txt)
     pub unported_with_rust: Vec<String>, // unported-list entries that DO have a Rust counterpart (inconsistent)
@@ -204,7 +204,6 @@ pub struct AuditResult {
 /// is fundamentally wrong (files not found, etc.).
 pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
     let cpp_path = project_dir.join("tests/fuchsia-core-tests-from-binary.txt");
-    let skip_path = project_dir.join("tests/core-tests-skip.txt");
     let core_tests_dir = project_dir.join("zCore/zircon-tests/src/core_tests");
 
     if !cpp_path.exists() {
@@ -218,7 +217,6 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
     }
 
     let cpp_tests = load_cpp_tests(&cpp_path);
-    let skip_list = load_skip_list(&skip_path);
 
     // Parse all Rust test files
     let mut all_rust_tests: Vec<RustTest> = Vec::new();
@@ -336,12 +334,10 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
         })
         .collect();
 
-    // #[ignore] but NOT in skip list
-    let ignored_not_skipped: Vec<(String, String, String)> = all_rust_tests
+    // #[ignore] tests
+    let ignored_tests: Vec<(String, String, String)> = all_rust_tests
         .iter()
-        .filter(|t| {
-            t.is_ignored && !t.is_stub && t.cpp_ref.as_ref().is_some_and(|r| !skip_list.contains(r))
-        })
+        .filter(|t| t.is_ignored && !t.is_stub)
         .map(|t| {
             (
                 t.file.clone(),
@@ -361,9 +357,8 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
         undocumented,
         rust_ignored,
         rust_stubs,
-        cpp_skipped: skip_list.len(),
         stubs,
-        ignored_not_skipped,
+        ignored_tests,
         petal_ported: petal_ported.len(),
         unported,
         unported_with_rust,
@@ -380,7 +375,6 @@ pub fn print_and_check(result: &AuditResult) -> bool {
     println!("  Matched 1:1:             {}", result.matched);
     println!("  Rust #[ignore]:          {}", result.rust_ignored);
     println!("  Rust stubs:              {}", result.rust_stubs);
-    println!("  C++ skip-list entries:   {}", result.cpp_skipped);
 
     let petal_count = result.petal_ported;
     let unported_count = result.unported.len();
@@ -480,16 +474,16 @@ pub fn print_and_check(result: &AuditResult) -> bool {
         ok = false;
     }
 
-    // #[ignore] must correspond to skip list
-    if !result.ignored_not_skipped.is_empty() {
+    // #[ignore] audit
+    if !result.ignored_tests.is_empty() {
         println!(
-            "  FAIL: {} Rust tests are #[ignore] but NOT in the C++ skip list:",
-            result.ignored_not_skipped.len()
+            "  FAIL: {} Rust tests are #[ignore]:",
+            result.ignored_tests.len()
         );
-        for (file, fn_name, cpp_ref) in &result.ignored_not_skipped {
+        for (file, fn_name, cpp_ref) in &result.ignored_tests {
             println!("    {file} fn {fn_name} -> {cpp_ref}");
         }
-        println!("    (either un-ignore the Rust test or add to tests/core-tests-skip.txt)");
+        println!("    (un-ignore the Rust test or remove it)");
         ok = false;
     }
 
@@ -550,6 +544,38 @@ mod tests {
     fn test_extract_cpp_ref_not_a_ref() {
         assert_eq!(extract_cpp_ref("/// Some regular doc comment"), None);
         assert_eq!(extract_cpp_ref("/// C++: see foo.cc"), None);
+    }
+
+    #[test]
+    fn test_parse_rust_tests_detects_ignore() {
+        // End-to-end: the backward scan must record `#[ignore]` on a
+        // C++-referenced test fn (attributes sit between the doc
+        // comment and the fn — the case the hardcoded `false` missed).
+        let dir = std::env::temp_dir().join("xtask_audit_ignore_test");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sample_tests.rs");
+        fs::write(
+            &path,
+            "// sample\n\n/// C++: TEST(Foo, Bar)\n#[test]\n#[ignore = \"flaky\"]\nfn foo_bar() {\n    assert!(true);\n}\n\n/// C++: TEST(Foo, Baz)\n#[test]\nfn foo_baz() {\n    assert!(true);\n}\n",
+        )
+        .unwrap();
+        let tests = parse_rust_tests(&path);
+        assert_eq!(tests.len(), 2);
+        let bar = tests.iter().find(|t| t.fn_name == "foo_bar").unwrap();
+        assert!(bar.is_ignored);
+        assert!(!bar.is_stub);
+        let baz = tests.iter().find(|t| t.fn_name == "foo_baz").unwrap();
+        assert!(!baz.is_ignored);
+    }
+
+    #[test]
+    fn test_is_ignore_attr() {
+        assert!(is_ignore_attr("#[ignore]"));
+        assert!(is_ignore_attr("#[ignore = \"flaky on CI\"]"));
+        assert!(is_ignore_attr("  #[ignore]"));
+        assert!(!is_ignore_attr("#[ignored]"));
+        assert!(!is_ignore_attr("#[test]"));
+        assert!(!is_ignore_attr("// #[ignore]"));
     }
 
     #[test]

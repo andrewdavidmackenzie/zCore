@@ -301,7 +301,8 @@ tail -5 /tmp/qemu-core-tests.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
 ### Current status (phase 20)
-- 524/1776 tests pass in full sequential run (with skip list)
+- Full sequential run: the number of passing tests is the live
+  signal — no skips, no exclusions
 - Phase 20: x86_64 Zircon boot fixed (#509), Resource downcast
   LTO fix (#510), pager infrastructure (#515/#516), 8 test fixes
   (#512/#513)
@@ -335,42 +336,6 @@ tail -5 /tmp/qemu-core-tests.log | sed 's/\x1b\[[0-9;]*m//g'
 - All single-record info topics write actual=1, avail=1 on success
 - gtest_filter working: use `?--gtest_filter=-Suite.*:Test.Name` in
   ROOTPROC to skip tests. Both argv and ZBI CMDLINE delivery work.
-- Known hangs/crashes requiring gtest_filter skip:
-  - PortStressTest.* (multi-threaded stress, investigation needed)
-  - ChannelTest.NoSpuriousReadableSignalWhenRacing (10K iterations)
-  - VmoClone2TestCase.* (populated_bytes fractional attribution)
-  - VmoCloneResizeTests.* (populated_bytes after resize/decommit)
-  - PortTest.QueuePacketLimitExceededGeneratesPolicyException
-    (std::latch + std::thread synchronization)
-  - PortTest.TooManyObservers (OOM crash — kernel panics on alloc
-    failure instead of returning ZX_ERR_NO_MEMORY)
-  - ChannelCallMutexTest.* (std::thread synchronization)
-  - ChannelTest.ChannelFullException (policy exception infrastructure)
-  - VmoTransferDataTestCase.InvalidInputs (hangs on
-    boot_options->test_ram_reserve — uninitialized struct)
-  - VmoZeroTestCase.WriteCowParent (populated_bytes polling hang)
-  - VmoZeroTestCase.AllocateAfterMergeMultipleChildren (populated_bytes)
-  - VmoZeroTestCase.AllocateAfterMerge (populated_bytes)
-  - VmoZeroTestCase.DecommitMiddle (populated_bytes)
-  - VmoZeroTestCase.Contiguous (populated_bytes)
-  - VmoZeroTestCase.Nested (populated_bytes)
-  - VmoZeroTestCase.ChildZeroThenWrite (populated_bytes)
-  - VmoZeroTestCase.MergeZeroChildren (populated_bytes)
-  - VmoZeroTestCase.EmptyCowChildren (populated_bytes)
-  - VmoTestCase.* (multiple hangs: boot_options uninitialized, VMAR
-    map failures causing infinite waits; only 1/58 passes)
-  - PagerProcess.* (pager tests, investigation needed)
-  - StreamTestCase.AppendSuppliesZeroes (TRAP_DIRTY + pager, needs async stream writes)
-  - StreamTestCase.ContentSizeUpdatedOnPartialWrite (same)
-  - StreamTestCase.PartialVmoDirty (same)
-  - StreamTestCase.WriteShrinkRace (pager CreateUnboundedVmo, was RefCell SMP race — fixed)
-  - ProcessTest.ProcessWaitAsyncCancelSelf (race condition stress
-    test — mini-process WAIT_ASYNC_CANCEL loop hangs)
-  - ProcessTest.ProcessHwTraceContextIdProperty (hw trace not
-    implemented — hangs on thread wait)
-  - ProcessTest.GetInfoRuntime (hangs in sequential run only —
-     scheduler doesn't yield to child process)
-   - ProcessTest.GetInfoRuntimeV1 (same as GetInfoRuntime)
 - All 1776 tests have been extracted to /tmp/all_tests.txt via
   `--gtest_list_tests`. Individual suites can be tested with
   `--gtest_filter=SuiteName.*` for fast iteration.
@@ -404,9 +369,6 @@ tail -5 /tmp/qemu-core-tests.log | sed 's/\x1b\[[0-9;]*m//g'
 - Issue #471 tracks the user-buffer copy architecture gap.
 - Issue #21 has a master list of all 1776 tests with pass/fail/hang
   status and a categorized root cause analysis of all failures.
-- VmoClone2/VmoCloneResize tests hang on `populated_bytes` polling
-  because COW page attribution doesn't implement fractional scaling.
-  Use gtest_filter to skip these suites when running the full suite.
 - All 1776 tests have been extracted to /tmp/all_tests.txt via
   `--gtest_list_tests`. Individual suites can be tested with
   `--gtest_filter=SuiteName.*` for fast iteration.
