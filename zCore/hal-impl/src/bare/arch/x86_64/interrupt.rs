@@ -11,6 +11,29 @@ use x86_64::instructions::interrupts;
 hal_fn_impl! {
     impl mod crate::hal_fn::interrupt {
         fn wait_for_interrupt() {
+            // #523: EOI an abandoned in-service local APIC interrupt
+            // before sleeping — see the pre-hlt hook in the executor's
+            // arch::wait_for_interrupt for the full rationale (QEMU
+            // TCG halted-vCPU delivery race leaves the timer IRQ
+            // in-service with no EOI, blocking all pending interrupts
+            // behind PPR). This is the OUTER hlt site (the runtime's
+            // run_executor loop); the executor's idle path has the
+            // same check.
+            {
+                let lapic = ::drivers::irq::x86::Apic::local_apic();
+                let mut stuck = 0u32;
+                for reg in 0..8 {
+                    stuck |= lapic.isr_word(reg);
+                }
+                if stuck != 0 {
+                    error!(
+                        "[isr-stuck] CPU{}: in-service {:#x} without a handler at hlt — EOIing",
+                        super::cpu::cpu_id(),
+                        stuck
+                    );
+                    lapic.eoi();
+                }
+            }
             let enable = interrupts::are_enabled();
             interrupts::enable_and_hlt();
             if !enable {

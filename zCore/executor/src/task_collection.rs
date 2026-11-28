@@ -610,7 +610,6 @@ impl TaskCollection {
         *self.pending_yield.lock() = Some(key);
     }
 
-
     /// Force-set the notified bit for `key`'s waker slot and IPI this
     /// collection's CPU, after verifying the slot still holds
     /// `task_id`. Returns `false` if the slot holds a different task

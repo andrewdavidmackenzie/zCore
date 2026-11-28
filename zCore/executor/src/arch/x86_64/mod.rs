@@ -90,6 +90,21 @@ pub(crate) fn pg_base_register() -> usize {
 #[cfg(not(feature = "libos"))]
 pub(crate) fn wait_for_interrupt() {
     use x86_64::instructions::interrupts;
+    // #523 pre-hlt hook: clear an abandoned in-service local APIC
+    // interrupt before sleeping. Observed wedge (QEMU TCG halted-vCPU
+    // delivery race): the timer IRQ (241) was delivered (ISR set) but
+    // the vCPU went back to hlt without vectoring it — no EOI ever
+    // ran. The stuck ISR raised PPR to class 15, blocking ALL
+    // pending interrupts including the wake IPI (0x80): the CPU
+    // slept forever with a runnable task's notified bit set
+    // (ProcessTest.GetInfoRuntimeV1/SuspendWithDyingThread hangs,
+    // caught live via the QEMU monitor: HLT=1, ISR=241, IRR=128).
+    // EOIing the abandoned bit drops PPR, the pending wake IPI
+    // delivers, and the hlt below breaks immediately. Task context
+    // cannot hold a legitimate in-service IRQ (every handler EOIs
+    // before iretq), so any bit found here is abandoned by
+    // definition.
+    crate::run_pre_hlt_hook();
     let enable = interrupts::are_enabled();
     interrupts::enable_and_hlt();
     if !enable {

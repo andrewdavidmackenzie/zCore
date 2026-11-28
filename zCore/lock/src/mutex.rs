@@ -154,7 +154,8 @@ impl<T: ?Sized> KernelMutex<T> {
     #[inline]
     fn record_holder(&self, loc: &'static core::panic::Location<'static>) {
         self.holder_cpu.store(current_cpu(), Ordering::Relaxed);
-        self.holder_loc.store(loc as *const _ as usize, Ordering::Relaxed);
+        self.holder_loc
+            .store(loc as *const _ as usize, Ordering::Relaxed);
     }
 
     /// Format the holder's acquisition site for the stuck-lock report.

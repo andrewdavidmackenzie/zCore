@@ -96,12 +96,10 @@ pub static DISPATCH_FAST_10US: core::sync::atomic::AtomicU64 =
     core::sync::atomic::AtomicU64::new(0);
 pub static DISPATCH_FAST_100US: core::sync::atomic::AtomicU64 =
     core::sync::atomic::AtomicU64::new(0);
-pub static DISPATCH_SLOW_1MS: core::sync::atomic::AtomicU64 =
-    core::sync::atomic::AtomicU64::new(0);
+pub static DISPATCH_SLOW_1MS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 pub static DISPATCH_SLOW_10MS: core::sync::atomic::AtomicU64 =
     core::sync::atomic::AtomicU64::new(0);
-pub static DISPATCH_SLOW_INF: core::sync::atomic::AtomicU64 =
-    core::sync::atomic::AtomicU64::new(0);
+pub static DISPATCH_SLOW_INF: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 static YIELD_PENDING: [core::sync::atomic::AtomicBool; 64] = {
     const FALSE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
     [FALSE; 64]
@@ -211,19 +209,41 @@ pub fn set_ipi_wakeup(f: WakeupFn) {
     WAKEUP_FN.call_once(|| f);
 }
 
+/// #523: pre-hlt hook (see arch::wait_for_interrupt): clears an
+/// abandoned in-service local APIC interrupt before the CPU sleeps.
+/// Registered by the HAL; 0 = none.
+static PRE_HLT_FN: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Register the pre-hlt hook. Call once during HAL init.
+pub fn set_pre_hlt_hook(f: fn()) {
+    PRE_HLT_FN.store(f as usize, Ordering::Release);
+}
+
+/// Run the pre-hlt hook if registered (called from wait_for_interrupt).
+#[inline]
+pub(crate) fn run_pre_hlt_hook() {
+    let hook = PRE_HLT_FN.load(Ordering::Acquire);
+    if hook != 0 {
+        let f: fn() = unsafe { core::mem::transmute(hook) };
+        f();
+    }
+}
+
 /// Send a cross-CPU wakeup if the target CPU differs from the current
 /// CPU. Called from `WakerRef::wake_by_ref()`.
 pub(crate) fn ipi_wakeup(target_cpu: u8) {
     let current = arch::cpu_id();
     if current != target_cpu {
         if let Some(f) = WAKEUP_FN.get() {
-            // #523: only IPI a halted CPU. A running CPU finds the
-            // notified bit at its next scan; the IPI would only add
-            // an interrupt injection (~50-100µs under TCG) to a CPU
-            // that cannot act on it any sooner.
-            if is_cpu_halted(target_cpu) {
-                f(target_cpu);
-            }
+            // #523: ALWAYS send the IPI. A conditional variant (only
+            // when the target is halted) has an uncloseable lost-wake
+            // window: the wake lands while the target's executor is
+            // mid-loop (flag clear, no IPI), the loop's scans have
+            // already passed the notified bit, and the CPU parks —
+            // with a dead timer (frozen-idle) nothing breaks it out.
+            // The IPI costs ~50-100µs under TCG; losing it costs the
+            // test suite. Correctness wins.
+            f(target_cpu);
         }
     }
 }

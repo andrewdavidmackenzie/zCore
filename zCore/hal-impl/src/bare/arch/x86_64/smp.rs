@@ -64,6 +64,26 @@ pub fn init_executor_runtimes(bsp_id: u8, ap_ids: &[u32]) {
     executor::set_ipi_wakeup(|target_cpu| {
         let _ = crate::interrupt::send_ipi(target_cpu as usize, 0);
     });
+    // #523 pre-hlt hook: EOI an abandoned in-service local APIC
+    // interrupt before sleeping (see wait_for_interrupt). The
+    // observed QEMU TCG halted-vCPU delivery race left the timer IRQ
+    // in-service with no EOI, blocking all pending interrupts
+    // (including wake IPIs) behind PPR and sleeping the CPU forever.
+    executor::set_pre_hlt_hook(|| {
+        let lapic = ::drivers::irq::x86::Apic::local_apic();
+        let mut stuck = 0u32;
+        for reg in 0..8 {
+            stuck |= lapic.isr_word(reg);
+        }
+        if stuck != 0 {
+            error!(
+                "[isr-stuck] CPU{}: in-service {:#x} without a handler at hlt — EOIing",
+                super::cpu::cpu_id(),
+                stuck
+            );
+            lapic.eoi();
+        }
+    });
 }
 
 /// Look up the logical core index for the current CPU's APIC ID.

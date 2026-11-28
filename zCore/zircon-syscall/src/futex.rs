@@ -11,9 +11,11 @@ impl Syscall<'_> {
         // + the mapping lock on EVERY futex_wait/wake/requeue, which
         // dominated the lock contention under futex churn
         // (SchedulerProfileTest.DeadlinePiUtilizationPanicRepro).
+        // An unmapped address returns NOT_FOUND (Fuchsia semantics;
+        // FutexTest.UnmappedAddress).
         UserInPtr::<i32>::from(addr)
             .read()
-            .map_err(|_| ZxError::INVALID_ARGS)?;
+            .map_err(|_| ZxError::NOT_FOUND)?;
         Ok(())
     }
 
