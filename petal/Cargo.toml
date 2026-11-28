@@ -248,6 +248,10 @@ name = "syscall-channel-test"
 path = "src/bin/syscall_channel_test.rs"
 
 [[bin]]
+name = "syscall-fuzz-test"
+path = "src/bin/syscall_fuzz_test.rs"
+
+[[bin]]
 name = "thread-test"
 path = "src/bin/thread_test.rs"
 

@@ -72,6 +72,7 @@ const TESTS: &[&str] = &[
     "sync-completion-test",
     "syscall-channel-extra-test",
     "syscall-channel-test",
+    "syscall-fuzz-test",
     "syscall-fifo-extra-test",
     "syscall-fifo-test",
     "syscall-generation-test",
