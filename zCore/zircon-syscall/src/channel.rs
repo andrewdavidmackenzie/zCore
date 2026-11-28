@@ -345,13 +345,45 @@ impl Syscall<'_> {
                     }
                 }
                 let new_rights = if disposition.rights != Rights::SAME_RIGHTS.bits() {
-                    Rights::from_bits(disposition.rights).unwrap()
+                    match Rights::from_bits(disposition.rights) {
+                        // #913: rights come straight from userspace via
+                        // zx_channel_write — an invalid bit pattern
+                        // (e.g. 0x8000_0000_0000_0000) is a
+                        // per-disposition INVALID_ARGS, not a kernel
+                        // panic. handle_check's subset test records an
+                        // error but does not skip the loop body, so
+                        // this conversion must not unwrap.
+                        Some(rights) => rights,
+                        None => {
+                            disposition.result = ZxError::INVALID_ARGS as _;
+                            if ret.is_ok() {
+                                ret = Err(ZxError::INVALID_ARGS);
+                            }
+                            // MOVE semantics: the source handle is
+                            // consumed even when the disposition fails.
+                            if disposition.op != ZX_HANDLE_OP_DUP {
+                                let _ = proc.remove_handle(disposition.handle);
+                            }
+                            continue;
+                        }
+                    }
                 } else {
                     src_rights
                 };
                 let new_handle = Handle::new(object, new_rights);
                 if disposition.op != ZX_HANDLE_OP_DUP {
-                    proc.remove_handle(disposition.handle).unwrap();
+                    // #913: guarded by the get_dyn_object_and_rights
+                    // above (the handle exists, and a duplicate entry
+                    // in the same array fails the get after the first
+                    // MOVE consumed it) — degrade defensively instead
+                    // of unwrapping.
+                    if proc.remove_handle(disposition.handle).is_err() {
+                        disposition.result = ZxError::BAD_HANDLE as _;
+                        if ret.is_ok() {
+                            ret = Err(ZxError::BAD_HANDLE);
+                        }
+                        continue;
+                    }
                 }
                 handles.push(new_handle);
             } else {

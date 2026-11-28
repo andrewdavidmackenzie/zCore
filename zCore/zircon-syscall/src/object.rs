@@ -91,17 +91,20 @@ impl Syscall<'_> {
         if buffer == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let property = Property::try_from(property).map_err(|_| ZxError::INVALID_ARGS)?;
         info!(
             "object.get_property: handle={:#x?}, property={:?}, buffer=({:#x}; {:#x?})",
             handle_value, property, buffer, buffer_size
         );
         let proc = self.thread.proc();
+        // #913 compat: the GET_PROPERTY right is checked on the
+        // untyped handle BEFORE the property number is validated
+        // (Fuchsia: get_dispatcher_with_rights::<Dispatcher> first,
+        // then the property match whose default arm is NOT_SUPPORTED).
         // ProcessVdsoBaseAddress: try the handle as a Process first (Fuchsia
         // requires a Process handle). If the handle is not a Process, fall
         // back to the calling process's own VMAR. This allows petal programs
         // (which don't have a Process self-handle) to query their own vDSO base.
-        if matches!(property, Property::ProcessVdsoBaseAddress) {
+        if property == Property::ProcessVdsoBaseAddress as u32 {
             let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
             let vdso_base = if let Ok(target) =
                 proc.get_object_with_rights::<Process>(handle_value, Rights::INSPECT)
@@ -114,6 +117,9 @@ impl Syscall<'_> {
             return Ok(());
         }
         let object = self.get_object_with_pseudo(handle_value, Rights::GET_PROPERTY)?;
+        // #913 compat: unknown property numbers are NOT_SUPPORTED
+        // (Fuchsia's match default), checked after the rights lookup.
+        let property = Property::try_from(property).map_err(|_| ZxError::NOT_SUPPORTED)?;
         match property {
             Property::Name => {
                 if !object.supports_name() {
@@ -260,13 +266,17 @@ impl Syscall<'_> {
         if buffer == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let property = Property::try_from(property).map_err(|_| ZxError::INVALID_ARGS)?;
         info!(
             "object.set_property: handle={:#x?}, property={:?}, buffer=({:#x}; {:#x?})",
             handle_value, property, buffer, buffer_size
         );
         let proc = self.thread.proc();
+        // #913 compat: the SET_PROPERTY right is checked on the
+        // untyped handle BEFORE the property number is validated
+        // (Fuchsia's order). Unknown property numbers remain
+        // INVALID_ARGS — Fuchsia's set match default.
         let object = self.get_object_with_pseudo(handle_value, Rights::SET_PROPERTY)?;
+        let property = Property::try_from(property).map_err(|_| ZxError::INVALID_ARGS)?;
         match property {
             Property::Name => {
                 if !object.supports_name() {
@@ -457,7 +467,10 @@ impl Syscall<'_> {
                 "object.get_info: unknown topic {:#x} (masked {:#x})",
                 topic, masked_topic
             );
-            ZxError::INVALID_ARGS
+            // #913 compat: Fuchsia's topic dispatch default arm
+            // (zircon/kernel/lib/syscalls/object_info.rs) returns
+            // NOT_SUPPORTED for unknown topics — match it.
+            ZxError::NOT_SUPPORTED
         })?;
         info!(
             "object.get_info: handle={:#x?}, topic={:?}, buffer=({:#x}; {:#x})",
