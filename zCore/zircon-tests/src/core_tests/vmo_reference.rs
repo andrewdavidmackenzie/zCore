@@ -341,7 +341,7 @@ fn mapping_update_nested_root_destroy() {
     let _ctx = TestContext::new();
 
     // Create a process with its own VMAR (matching C++ zx::vmar::root_self()).
-    let job = zircon_object::task::Job::root();
+    let job = zircon_object::task::Job::new_parentless_job();
     let proc = zircon_object::task::Process::create(&job, "vmo-ref-test").unwrap();
     let vmar = proc.vmar();
 

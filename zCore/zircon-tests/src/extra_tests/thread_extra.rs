@@ -27,7 +27,7 @@ fn as_kobject(thread: &alloc::sync::Arc<Thread>) -> alloc::sync::Arc<dyn KernelO
 /// completes. The kill should preempt the suspend — thread goes Dead.
 async fn kill_suspended_immediately() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "kill-susp-imm").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -49,7 +49,7 @@ async fn kill_suspended_immediately() {
 /// Thread should transition cleanly to Dead.
 async fn kill_suspended_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "kill-susp").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -75,7 +75,7 @@ async fn kill_suspended_thread() {
 /// The blocking wait should be interrupted and the thread exits.
 async fn kill_waiting_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "kill-wait").unwrap();
 
     let sleeper = helpers::SleepingTestThread::start(&proc);
@@ -101,7 +101,7 @@ async fn kill_waiting_thread() {
 /// should transition to Dead and signal THREAD_TERMINATED.
 async fn exit_busy() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "exit-busy").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -132,7 +132,7 @@ async fn exit_busy() {
 /// not have stale messages after the thread dies.
 async fn channel_call_doesnt_leak_message() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "call-leak").unwrap();
 
     let cct = helpers::ChannelCallTestThread::start(&proc);
@@ -161,7 +161,7 @@ async fn channel_call_doesnt_leak_message() {
 /// THREAD_RUNNING is cleared, and state is Suspended.
 async fn suspend_running_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "susp-running").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -229,7 +229,7 @@ async fn suspend_multiple_wait_async() {
     use zircon_object::signal::{Port, PortPacketRepr};
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "susp-multi-async").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -278,7 +278,7 @@ async fn suspend_multiple_wait_async() {
 /// resumes when all outstanding suspends are released.
 async fn suspend_resume_from_multiple_threads() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "susp-multi-thread").unwrap();
     let thread = Thread::create(&proc, "target").unwrap();
 
@@ -318,7 +318,7 @@ async fn suspend_resume_from_multiple_threads() {
 /// killed (Dead state) — the kernel should handle it gracefully.
 async fn suspend_stopped_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "susp-stopped").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -342,7 +342,7 @@ async fn suspend_stopped_thread() {
 /// transitions work correctly.
 async fn suspend_stopped_and_blocked_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "susp-stop-block").unwrap();
 
     let sleeper = helpers::SleepingTestThread::start(&proc);
@@ -374,7 +374,7 @@ async fn suspend_stopped_and_blocked_thread() {
 /// The thread should be Dead and the suspend should be a no-op.
 async fn suspend_stopped_and_blocked_thread2() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "susp-stop-block2").unwrap();
 
     let sleeper = helpers::SleepingTestThread::start(&proc);
@@ -403,7 +403,7 @@ async fn suspend_stopped_and_blocked_thread2() {
 /// don't interfere with each other.
 fn thread_local() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "tls-test").unwrap();
     let t1 = Thread::create(&proc, "tls1").unwrap();
     let t2 = Thread::create(&proc, "tls2").unwrap();
@@ -459,7 +459,7 @@ fn thread_local() {
 /// should contain the initial values (entry, stack, args).
 fn thread_read_state_when_starting() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "read-starting").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
@@ -497,7 +497,7 @@ fn thread_read_state_when_starting() {
 #[cfg(target_arch = "aarch64")]
 fn writing_arm_flags_register() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "arm-flags").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 

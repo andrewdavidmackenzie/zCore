@@ -17,7 +17,7 @@ extern crate alloc;
 /// and immediately destroy it.
 fn create_and_destroy() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "mini-proc").unwrap();
     let thread = Thread::create(&proc, "mini-thread").unwrap();
     let (cmd_ch, _server_ch) = Channel::create();
@@ -54,7 +54,7 @@ fn send_command() {
 /// Get the KOID of a mini-process.
 fn get_koid() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "mini-proc").unwrap();
 
     let koid = proc.id();
@@ -111,7 +111,7 @@ fn duplicate_handle() {
 /// Create a new thread within a process.
 fn create_thread() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "mini-proc").unwrap();
 
     let t1 = Thread::create(&proc, "thread-1").unwrap();
@@ -171,7 +171,7 @@ fn channel_communication() {
 /// Kill a mini-process and verify it terminates.
 fn kill_process() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "mini-proc").unwrap();
     let _thread = Thread::create(&proc, "thread").unwrap();
 
@@ -184,7 +184,7 @@ fn kill_process() {
 /// Get the return code of a terminated mini-process.
 fn process_return_code() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "mini-proc").unwrap();
     let _thread = Thread::create(&proc, "thread").unwrap();
 

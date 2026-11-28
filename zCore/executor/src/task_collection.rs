@@ -316,15 +316,14 @@ impl TaskCollection {
                 let full_key = slab_key | (priority << PRIORITY_SHIFT);
                 let page_idx = slab_key >> PAGE_INDEX_SHIFT;
                 let subpage = slab_key & 63;
-                let (n, d, b, owner, wc) = match inner.pages.get(page_idx) {
+                let (n, d, b, wc) = match inner.pages.get(page_idx) {
                     Some(p) => (
                         (p.peek_notified() >> subpage) & 1,
                         (p.peek_dropped() >> subpage) & 1,
                         (p.peek_borrowed() >> subpage) & 1,
-                        p.owner_cpu(),
                         p.wake_count(subpage),
                     ),
-                    None => (0, 0, 0, 0xff, 0),
+                    None => (0, 0, 0, 0),
                 };
                 let ti = task.inner.lock();
                 let wt = task.waker_target.lock();
@@ -383,6 +382,17 @@ impl TaskCollection {
                     "scan: cpu={} scan#{} found={} tasks={} pages={} notified_bits={:#x} borrowed_bits={:#x}",
                     self.cpu_id, scan_num, found, task_num, total_pages, notified_bits, borrowed_bits
                 );
+                // #523/#862 hang-hunt: the quiescent/storm detectors
+                // only fire on a CPU whose local view looks stuck; a
+                // slow wake storm anywhere keeps the GLOBAL found
+                // counter moving, so the CPUs holding the actually-hung
+                // tasks never dump. Dump every collection periodically
+                // instead — 1M scans is rare enough to keep the log
+                // readable while tests run, and a minutes-long hang
+                // always captures full per-CPU state.
+                if scan_num.is_multiple_of(1_000_000) && self.task_num() > 0 {
+                    self.dump_stuck_state();
+                }
                 // #862 quiescent mode: zero system-wide wake progress
                 // while tasks are parked. During normal operation
                 // FOUND_COUNT always increases (wakes are found and

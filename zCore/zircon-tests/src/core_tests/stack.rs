@@ -84,7 +84,7 @@ fn thread_stack() {
 
     // Verify a Zircon thread can be created (stack allocation is
     // handled internally by the thread start mechanism).
-    let job = zircon_object::task::Job::root();
+    let job = zircon_object::task::Job::new_parentless_job();
     let proc = zircon_object::task::Process::create(&job, "stack-test").unwrap();
     let thread = zircon_object::task::Thread::create(&proc, "stack-thread").unwrap();
     assert_ne!(thread.id(), 0);

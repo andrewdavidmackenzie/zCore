@@ -48,7 +48,7 @@ use zircon_object::task::{Job, Process, Thread, ThreadState};
 /// exception channels if they executed faulting instructions.
 fn test_int_crashes() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "int-crash").unwrap();
 
     // On x86_64, all 256 interrupt vectors are tested.

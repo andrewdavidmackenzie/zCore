@@ -107,6 +107,29 @@ impl Executor {
 
     pub fn run(&mut self) {
         loop {
+            // Shutdown handoff: once a runner future has completed and
+            // requested shutdown, return control to the runtime so
+            // run_until_idle can observe it. Without this, an executor
+            // whose collection still holds parked tasks that never
+            // finish parks in WFI and shutdown hangs with the suite
+            // fully completed (the aarch64 rust-tests "freeze": every
+            // module ran, the exit code was never taken).
+            if crate::runtime::shutdown_requested() {
+                return;
+            }
+            // Deferred-wake drain (#523/#829): timer callbacks defer
+            // their wakes (they must never wake inline — the IRQ-context
+            // waker/IPI ABBA behind the core-tests system freeze). The
+            // HAL registers a drain function at init; running it here,
+            // once per loop iteration, drains in task context on every
+            // CPU — hot while tasks run, and at timer-tick rate (~100Hz)
+            // while idle in WFI (the tick wakes the loop). This replaces
+            // the old dedicated yield-poll drain task, whose 190k
+            // wakes/sec storm changed scheduler timing enough to expose
+            // latent lost-wake races (the ChannelTest.CallPending*
+            // hangs), and which kept task_num > 0 forever, hanging
+            // shutdown.
+            crate::runtime::run_deferred_drain();
             let task_info = self.task_collection.take_task();
             // Work stealing: idle CPUs steal tasks from busy CPUs.
             // Stolen tasks are re-inserted into the local task collection
@@ -142,12 +165,19 @@ impl Executor {
                     return;
                 }
             } else {
+                // #523 lost-wake-safe halt dance: mark this CPU
+                // halted BEFORE the final pre-halt scan. A wake
+                // racing this window either sees halted=true and
+                // sends the IPI (breaking the hlt below), or its
+                // notified bit is found by the scan itself.
+                crate::set_cpu_halted(self.task_collection_cpu(), true);
                 // Before going idle, do one more take_task() to catch
                 // notifications that arrived during the previous task's
                 // poll (the generator's page scan may have passed the
                 // notified page before the notification arrived).
                 let retry = self.task_collection.take_task();
                 if retry.is_some() {
+                    crate::set_cpu_halted(self.task_collection_cpu(), false);
                     let (retry_key, task, waker_ref, droper) = retry.unwrap();
                     let waker_ref = Arc::new(waker_ref);
                     let waker = woke::waker_ref(&waker_ref);
@@ -197,9 +227,18 @@ impl Executor {
                         }
                     }
                     crate::arch::wait_for_interrupt();
+                    // Woke from hlt (interrupt or spurious): no
+                    // longer halted — wakes may IPI us again.
+                    crate::set_cpu_halted(self.task_collection_cpu(), false);
                 }
             }
         }
+    }
+
+    /// #523: the CPU id owning this executor's task collection (for
+    /// the halted-flag dance around WFI).
+    fn task_collection_cpu(&self) -> u8 {
+        crate::arch::cpu_id()
     }
 
     // Whether a future is currently running.

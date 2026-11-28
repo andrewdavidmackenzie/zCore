@@ -88,7 +88,7 @@ fn vmo_name() {
 fn process_name() {
     use zircon_object::task::Job;
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = zircon_object::task::Process::create(&job, "test-process").unwrap();
     assert_eq!(proc.name(), "test-process");
@@ -101,7 +101,7 @@ fn process_name() {
 fn thread_name() {
     use zircon_object::task::{Job, Process, Thread};
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job = root.create_child().unwrap();
     let proc = Process::create(&job, "prop-proc").unwrap();
     let thread = Thread::create(&proc, "test-thread").unwrap();
@@ -115,7 +115,7 @@ fn thread_name() {
 fn job_name() {
     use zircon_object::task::Job;
     let _ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let child = root.create_child().unwrap();
     child.set_name("test-job");
     assert_eq!(child.name(), "test-job");

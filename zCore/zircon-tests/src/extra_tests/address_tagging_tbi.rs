@@ -134,7 +134,7 @@ fn vmar_tagged_address() {
     // in zCore, execution returns above. When TBI is implemented, the
     // following logic will run:
 
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmar-tag").unwrap();
     let root_vmar = proc.vmar();
 
@@ -283,7 +283,7 @@ fn tagged_far_segfault() {
     // 6. Assert report.context.arch.u.arm_64.far == tagged_ptr
     //
     // This path is only reached when TBI is supported.
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "tag-segfault").unwrap();
     let thread = Thread::create(&proc, "crash-thread").unwrap();
 
@@ -347,7 +347,7 @@ fn tagged_far_watchpoint() {
     // 3. Resume thread running DerefTaggedPtrCrash(tagged_ptr)
     // 4. Catch ZX_EXCP_HW_BREAKPOINT exception
     // 5. Assert FAR == tagged_ptr
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "tag-watchpoint").unwrap();
     let _thread = Thread::create(&proc, "wp-thread").unwrap();
 
@@ -436,7 +436,7 @@ fn vmm_page_fault_handler_data_abort() {
         return;
     }
 
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "decommit-tag").unwrap();
     let root_vmar = proc.vmar();
 
@@ -529,7 +529,7 @@ fn instruction_abort_no_tag() {
     // 2. Catch ZX_EXCP_FATAL_PAGE_FAULT
     // 3. Verify ESR.EC == InstructionAbortLowerEl
     // 4. Assert FAR == RemoveTag(pc)
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "insn-abort").unwrap();
     let _thread = Thread::create(&proc, "br-thread").unwrap();
 }
@@ -560,7 +560,7 @@ fn thread_start_tagged_address() {
     // DoNothing in C++ is: void DoNothing() { zx_thread_exit(); }
     // The test starts a thread at DoNothing with tagged PC/SP.
 
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "thread-start-tag").unwrap();
 
     // Simulate the two run_thread calls.
@@ -613,7 +613,7 @@ fn process_start_tagged_address() {
     }
 
     let run_process = |pc_tag: u8, sp_tag: u8| {
-        let job = Job::root();
+        let job = Job::new_parentless_job();
         let proc = Process::create(&job, "tbi-process").unwrap();
         let _thread = Thread::create(&proc, "tbi-proc-thread").unwrap();
 

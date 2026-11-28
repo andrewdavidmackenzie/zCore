@@ -18,6 +18,8 @@
 //! acquired from timer callbacks.
 
 use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::time::Duration;
 
 use lock::IrqLock;
@@ -31,6 +33,67 @@ const MAX_TIMER_INTERVAL: Duration = Duration::from_millis(10);
 
 static NAIVE_TIMER: spin::Lazy<IrqLock<Timer>> = spin::Lazy::new(|| IrqLock::new(Timer::default()));
 
+/// Deferred timer callbacks (#523/#829 fix).
+///
+/// `Timer::expire` runs callbacks INLINE while the `NAIVE_TIMER`
+/// IrqLock is held with interrupts disabled. The Zircon timer object's
+/// callback (`TimerSignal::touch`) fires a signal and wakes waiters —
+/// kernel-object work that acquires `KernelMutex`es (ports, thread
+/// state, signal handlers) — a genuine spinlock→KernelMutex nesting
+/// violation that escalates to the mutex.rs nested-spin panic whenever
+/// the wakeup contends with another CPU (constant during
+/// process-crash teardown: every CPU's timer fires into the cascade).
+///
+/// Fix, matching Fuchsia's timer-DPC design: timer callbacks may only
+/// do interrupt-safe, lock-free work — deferring the heavy part here.
+/// The callback (running under the timer lock) enqueues an `Arc`'d
+/// closure into this queue (a nested but briefly-held IrqLock, no
+/// allocation); the queue is drained AFTER the timer lock is released,
+/// where kernel-object locks may be taken and yielding is possible.
+/// The type of deferred timer callbacks: heavy work moved out of the
+/// timer interrupt context (see below).
+pub type DeferredCallback = Arc<dyn Fn(Duration) + Send + Sync>;
+
+static DEFERRED_CALLBACKS: IrqLock<Vec<(DeferredCallback, Duration)>> = IrqLock::new(Vec::new());
+
+/// Persistent drain buffer (#523 review): keeps the batch's
+/// allocation across drains. `mem::take` on the queue alone handed it
+/// a zero-capacity Vec every drain, so the first enqueue after EVERY
+/// drain reallocated while the queue lock was held with interrupts
+/// disabled. The buffer ping-pongs between this slot and the queue
+/// and is never freed. Taking it out releases the lock before the
+/// callbacks run (they may yield — an IrqLock must never be held
+/// across that).
+static DRAIN_BATCH: IrqLock<Option<Vec<(DeferredCallback, Duration)>>> = IrqLock::new(None);
+
+/// Enqueue heavy work from a timer callback. Interrupt-safe,
+/// allocation-free; must be called while `NAIVE_TIMER` is held (or any
+/// interrupt context).
+pub fn enqueue_deferred_timer_callback(f: Arc<dyn Fn(Duration) + Send + Sync>, now: Duration) {
+    DEFERRED_CALLBACKS.lock().push((f, now));
+}
+
+/// Drain deferred timer callbacks. MUST run in task context: the
+/// callbacks perform kernel-object work (signals, waiters) that may
+/// contend KernelMutexes and yield. Returns the number of callbacks
+/// executed (callers use it to choose between yield and sleep).
+fn drain_deferred_callbacks() -> usize {
+    // Take the persistent batch buffer out (the drain task is the
+    // only taker; a concurrent taker just gets a fresh Vec).
+    let mut batch = DRAIN_BATCH.lock().take().unwrap_or_default();
+    // Swap: the queue receives the batch's empty (capacity-retaining)
+    // buffer; the batch receives the pending items.
+    core::mem::swap(&mut batch, &mut *DEFERRED_CALLBACKS.lock());
+    let n = batch.len();
+    // Run the callbacks with no locks held.
+    for (f, now) in batch.drain(..) {
+        f(now);
+    }
+    // Stash the buffer — still holding its capacity — for the next drain.
+    *DRAIN_BATCH.lock() = Some(batch);
+    n
+}
+
 /// #862 diagnostics: timer activity counters.
 static TICK_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 static EXPIRE_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
@@ -41,6 +104,7 @@ static EXPIRE_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU
 /// MUST be called with NAIVE_TIMER lock held and interrupts disabled.
 /// This matches Fuchsia's `UpdatePlatformTimerLocked` which asserts
 /// `arch_ints_disabled()` and runs under `timer_lock`.
+#[allow(dead_code)]
 fn update_platform_timer_locked(timer: &Timer) {
     let now = super::arch::timer::timer_now();
     let backstop = now + MAX_TIMER_INTERVAL;
@@ -68,6 +132,14 @@ hal_fn_impl! {
             super::arch::timer::timer_now()
         }
 
+        fn defer_timer_callback(f: DeferredCallback, now: Duration) {
+            enqueue_deferred_timer_callback(f, now)
+        }
+
+        fn drain_deferred_timer_callbacks() -> usize {
+            drain_deferred_callbacks()
+        }
+
         fn timer_set(deadline: Duration, callback: Box<dyn FnOnce(Duration) + Send + Sync>) {
             debug!("Set timer at: {:?}", deadline);
 
@@ -90,8 +162,9 @@ hal_fn_impl! {
                 if deadline <= now {
                     timer.expire(now);
                 }
-                // Reprogram hardware under the lock with interrupts off.
-                update_platform_timer_locked(&timer);
+                // NOTE: no hardware arming here — the periodic tick
+                // (see timer_tick) fires deadlines within one period;
+                // cross-CPU one-shot arming was the frozen-idle bug.
             }
             if irq_was_on {
                 crate::interrupt::intr_on();
@@ -105,9 +178,25 @@ hal_fn_impl! {
             {
                 let mut timer = NAIVE_TIMER.lock();
                 timer.expire(now);
-                // Re-arm to the next deadline under the lock.
-                update_platform_timer_locked(&timer);
+                // #862/#523: PERIODIC re-arm of THIS CPU's timer only.
+                // The queue is global but the hardware is per-CPU:
+                // arming for the queue head from any CPU's handler
+                // lets one CPU consume another's deadline (the shared
+                // event expires under the first tick) leaving the
+                // other's CVAL stale and its WFI asleep forever — the
+                // frozen-idle hangs. With the periodic model each
+                // CPU's handler re-arms only itself at a fixed
+                // interval; timer_set never touches hardware;
+                // deadlines fire with ≤10ms latency at the next tick
+                // of whichever CPU ticks first. The interval matches
+                // the scheduler's quantum design.
+                super::arch::timer::set_oneshot_timer(now + MAX_TIMER_INTERVAL);
             }
+            // NOTE: deferred callbacks are NOT drained here — running
+            // kernel-object work from IRQ context re-introduces the
+            // #862 hazard and nests IRQs (found the hard way: early
+            // boot hung). A dedicated task-context drain task owns
+            // them; see drain_deferred_timer_callbacks.
             // #862 diagnostics: report OUTSIDE the NAIVE_TIMER lock —
             // the logger allocates and may contend the heap lock, and
             // logging under the timer lock can deadlock against

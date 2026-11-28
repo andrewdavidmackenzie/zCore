@@ -139,7 +139,7 @@ fn unbind_state() {
 /// that would underlie restricted mode entry/exit.
 fn basic() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-test").unwrap();
     let thread = Thread::create(&proc, "rm-basic").unwrap();
 
@@ -165,7 +165,7 @@ fn basic() {
 /// Without restricted mode, we verify concurrent thread creation.
 fn floating_point_state() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-fp").unwrap();
 
     // Create 32 threads (matching kRestrictedThreadCount = 32).
@@ -192,7 +192,7 @@ fn floating_point_state() {
 /// Without restricted mode, we measure thread creation time as proxy.
 fn bench() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-bench").unwrap();
 
     // Run 5 iterations to filter noise (matching C++ test).
@@ -212,7 +212,7 @@ fn bench() {
 /// fields (ESR on arm64 has IL bit set, FAR = 0).
 fn in_thread_exception_user_ptr() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-exc").unwrap();
     let thread = Thread::create(&proc, "exc-userptr").unwrap();
 
@@ -234,7 +234,7 @@ fn in_thread_exception_user_ptr() {
 /// Same as UserPtr but exception report is read from the mode state VMO.
 fn in_thread_exception_mode_state() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-exc").unwrap();
     let thread = Thread::create(&proc, "exc-vmo").unwrap();
     assert_eq!(thread.state(), ThreadState::New);
@@ -245,7 +245,7 @@ fn in_thread_exception_mode_state() {
 /// hits exception, but copy-out fails → ZX_RESTRICTED_REASON_EXCEPTION_LOST.
 fn exception_report_pointer_read_only() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "ro-exc").unwrap();
     let vmar = proc.vmar();
 
@@ -313,7 +313,7 @@ fn enter_bad_state_struct() {
 /// After the kick is consumed, a subsequent enter should succeed normally.
 fn kick_before_enter() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-kick").unwrap();
     let thread = Thread::create(&proc, "kick-before").unwrap();
 
@@ -332,7 +332,7 @@ fn kick_before_enter() {
 /// that kicking a dying thread returns BAD_STATE.
 fn kick_while_starting_and_exiting() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-kick").unwrap();
     let thread = Thread::create(&proc, "kick-start-exit").unwrap();
 
@@ -353,7 +353,7 @@ fn kick_while_starting_and_exiting() {
 /// the mutation from store_one (register incremented to 43).
 fn kick_while_running() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-kick").unwrap();
     let thread = Thread::create(&proc, "kick-running").unwrap();
     assert_ne!(thread.id(), 0);
@@ -365,7 +365,7 @@ fn kick_while_running() {
 /// Thread should see REASON_KICK (not REASON_SYSCALL).
 fn kick_just_before_syscall() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-kick").unwrap();
     let thread = Thread::create(&proc, "kick-syscall").unwrap();
     assert_ne!(thread.id(), 0);
@@ -376,7 +376,7 @@ fn kick_just_before_syscall() {
 /// Returns REASON_EXCEPTION.
 fn bad_instruction_abort() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-abort").unwrap();
     let thread = Thread::create(&proc, "abort").unwrap();
 
@@ -397,7 +397,7 @@ fn bad_instruction_abort() {
 fn bad_increment() {
     // This test is arm64-only in the C++ source (#ifdef __aarch64__).
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-bad-inc").unwrap();
     let thread = Thread::create(&proc, "bad-inc").unwrap();
     assert_ne!(thread.id(), 0);
@@ -409,7 +409,7 @@ fn bad_increment() {
 fn prefetch_instruction_abort() {
     // This test is arm64/kArm only in the C++ source.
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-prefetch").unwrap();
     let thread = Thread::create(&proc, "prefetch").unwrap();
 
@@ -426,7 +426,7 @@ fn prefetch_instruction_abort() {
 fn exception_redirect_restores_tpidrro_el0() {
     // This test is arm64/kArm only.
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-tpidr").unwrap();
     let thread = Thread::create(&proc, "tpidr").unwrap();
 
@@ -442,7 +442,7 @@ fn exception_redirect_restores_tpidrro_el0() {
 fn thumb_mode_syscall() {
     // This test is arm64/kArm only.
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "rm-thumb").unwrap();
     let thread = Thread::create(&proc, "thumb").unwrap();
 

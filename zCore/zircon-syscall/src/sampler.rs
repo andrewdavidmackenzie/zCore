@@ -100,6 +100,7 @@ impl Syscall<'_> {
         if options != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.enforce_basic_policy(PolicyCondition::NewSampler)?;
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {

@@ -231,11 +231,22 @@ impl Syscall<'_> {
                         let future = vmo.wait_for_page(offset);
                         pin_mut!(future);
                         self.thread.set_blocking_state(ThreadState::BlockedPager);
-                        // Mark as non-suspendable (kernel usercopy wait).
+                        // Mark as non-suspendable (kernel usercopy wait):
+                        // state() keeps reporting BlockedPager while a
+                        // suspend is pending, matching Fuchsia — "since
+                        // the thread is blocked in the kernel, it won't
+                        // be suspended"
+                        // (PagerProcess.KillAfterSuspendUsercopy). The
+                        // wait itself must survive suspension too: use
+                        // the uninterruptible variant so suspend()
+                        // cannot abort it (the page supply continues;
+                        // the pending suspend applies when the syscall
+                        // eventually returns). Kill still escapes via
+                        // the killer channel.
                         self.thread.set_nonsuspendable_block(true);
                         let result = self
                             .thread
-                            .blocking_run::<_, (), _>(
+                            .blocking_run_uninterruptible::<_, (), _>(
                                 future,
                                 ThreadState::BlockedPager,
                                 core::time::Duration::from_nanos(u64::MAX),
@@ -1489,8 +1500,9 @@ impl Syscall<'_> {
                 a2 as _,
                 a3 as _,
                 a4 as _,
-                a5 as _,
-                a6.into(),
+                a5 as u64,
+                a6 as _,
+                a7.into(),
             ),
             Sys::PAGER_QUERY_DIRTY_RANGES => self.sys_pager_query_dirty_ranges(
                 a0 as _,

@@ -32,7 +32,7 @@ use zircon_object::task::{
 };
 
 use zircon_object::util::elf_loader::ElfExt;
-use zircon_object::vm::{pages, VmObject};
+use zircon_object::vm::{pages, VmObject, VmarFlags};
 use zircon_object::{ZxError, ZxResult};
 
 /// Register the VMAR permission checker for libos user copies.
@@ -398,6 +398,325 @@ pub fn run_userboot(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     run_userstart(zbi, cmdline)
 }
 
+/// ZBI-fallback boot dispatch: Fuchsia's real userboot when
+/// `kernel.fuchsia-userboot=true`, zCore's userstart otherwise.
+///
+/// The flag requires that `USERSTART_ELF` (the embedded first-process
+/// ELF) is Fuchsia's userboot — the product config wiring sets both
+/// together (see `configs/products/fuchsia-bringup.toml`).
+pub fn run_userboot_or_fuchsia(
+    zbi: impl AsRef<[u8]>,
+    cmdline: &str,
+    fuchsia_userboot: bool,
+) -> Arc<Process> {
+    if fuchsia_userboot {
+        run_fuchsia_userboot(zbi, cmdline)
+    } else {
+        run_userstart(zbi, cmdline)
+    }
+}
+
+/// Run Fuchsia's real userboot as the first process (issue #523,
+/// Phase C1).
+///
+/// Implements the modern kernel→userboot bootstrap from Fuchsia's
+/// `zircon/kernel/lib/userabi/userboot.cc`:
+///
+/// - loads the static-PIE userboot ELF (embedded via `USERSTART_ELF`;
+///   for `fuchsia-bringup` this is Fuchsia's `userboot.elf`) into a
+///   child "image" VMAR of the process root VMAR,
+/// - maps the vDSO below it — the kernel does NOT apply userboot's
+///   relocations: the static PIE self-relocates (rcrt1-style) in its
+///   own startup, resolving its `NEEDED libzircon.so` symbols
+///   against the vDSO using the base passed as arg2. (Applying RELR
+///   here as well double-relocated — pointers landed at
+///   `2*load_base + vaddr`.)
+/// - sends the two-message, handles-only bootstrap protocol: message
+///   1 (process capability: log, proc, root vmar, thread, image
+///   vmar) and message 2 (system capability: those + root job,
+///   resources by name, and named VMOs — `zbi`, `vdso/*`, counters).
+///   The receiver identifies handles by object type and name queries
+///   (`zx_channel_read_etc`, `ZX_PROP_NAME`, `ZX_INFO_VMAR`), not by
+///   processargs tags,
+/// - starts the thread with `(bootstrap channel handle, vDSO base)`.
+///
+/// The ZBI VMO carries the boot payload; userboot unpacks its bootfs
+/// and loads `bin/component_manager` (or whatever `userboot.next`
+/// says) itself.
+pub fn run_fuchsia_userboot(zbi: impl AsRef<[u8]>, _cmdline: &str) -> Arc<Process> {
+    let userboot_bytes: &[u8] = include_bytes!(env!("USERSTART_ELF"));
+    assert!(
+        !userboot_bytes.is_empty(),
+        "USERSTART_ELF not set at compile time"
+    );
+    let elf = ElfFile::new(userboot_bytes).expect("failed to parse userboot ELF");
+
+    let job = Job::root();
+    let proc = Process::create(&job, "userboot").expect("failed to create userboot process");
+    let thread = Thread::create(&proc, "userboot").expect("failed to create userboot thread");
+    let vmar = proc.vmar();
+
+    // Map the vDSO first, so the userboot image lands above it and
+    // the loader's low-address heuristic holds.
+    let vdso_vmo = create_vdso_vmo();
+    let vdso_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
+    let vdso_base = vmar
+        .map(None, vdso_vmo.clone(), 0, vdso_vmo.len(), vdso_flags)
+        .expect("failed to map vDSO for userboot");
+    info!("userboot: vDSO mapped at {:#x}", vdso_base);
+
+    // Load the userboot ELF into a child "image" VMAR — the handle is
+    // passed as the executable-image VMAR in bootstrap message 1
+    // (the receiver tells it from the root VMAR by containment via
+    // ZX_INFO_VMAR).
+    let size = elf.load_segment_size();
+    let code_pages = pages(size);
+    let code_vmo = VmObject::new_paged(code_pages);
+    for ph in elf.program_iter() {
+        if ph.get_type().unwrap() != xmas_elf::program::Type::Load {
+            continue;
+        }
+        let offset = ph.virtual_addr() as usize;
+        let file_offset = ph.offset() as usize;
+        let file_size = ph.file_size() as usize;
+        if file_size > 0 {
+            code_vmo
+                .write(
+                    offset,
+                    &userboot_bytes[file_offset..file_offset + file_size],
+                )
+                .unwrap();
+        }
+    }
+    let image_vmar = vmar
+        .allocate(
+            None,
+            code_pages * PAGE_SIZE,
+            VmarFlags::CAN_MAP_RXW | VmarFlags::CAN_MAP_SPECIFIC,
+            PAGE_SIZE,
+        )
+        .expect("failed to allocate userboot image VMAR");
+    // Map each PT_LOAD with its DECLARED permissions (PF_R/W/X)
+    // instead of one RWX blob (#523 review): an RX text page must
+    // not be writable and an RW data page must not be executable.
+    // Segments that share a page (no -z separate-code) get the union
+    // of their flags, like Fuchsia's ELF loader. Self-relocation
+    // (rcrt1) only writes the writable segments, so RX text stays
+    // valid. The image base is the VMAR start (userboot is a
+    // static-PIE linked from vaddr 0).
+    let load_base = image_vmar.addr();
+    {
+        // Collect page-aligned (start, end, flags) runs, merging
+        // overlapping segments.
+        let mut runs: alloc::vec::Vec<(usize, usize, MMUFlags)> = alloc::vec::Vec::new();
+        for ph in elf.program_iter() {
+            if ph.get_type().unwrap_or(xmas_elf::program::Type::Null)
+                != xmas_elf::program::Type::Load
+            {
+                continue;
+            }
+            let mut flags = MMUFlags::USER;
+            let pf = ph.flags();
+            if pf.is_read() {
+                flags |= MMUFlags::READ;
+            }
+            if pf.is_write() {
+                flags |= MMUFlags::WRITE;
+            }
+            if pf.is_execute() {
+                flags |= MMUFlags::EXECUTE;
+            }
+            let start = (ph.virtual_addr() as usize) & !(PAGE_SIZE - 1);
+            let end = ((ph.virtual_addr() as usize) + ph.mem_size() as usize + PAGE_SIZE - 1)
+                & !(PAGE_SIZE - 1);
+            if end <= start {
+                continue;
+            }
+            match runs.iter_mut().find(|(s, e, _)| start < *e && end > *s) {
+                Some((s, e, f)) => {
+                    // Overlapping run: extend and union the flags.
+                    *s = (*s).min(start);
+                    *e = (*e).max(end);
+                    *f |= flags;
+                }
+                None => runs.push((start, end, flags)),
+            }
+        }
+        for (start, end, flags) in runs {
+            image_vmar
+                .map(
+                    Some(load_base + start),
+                    code_vmo.clone(),
+                    start,
+                    end - start,
+                    flags,
+                )
+                .expect("failed to map userboot segment");
+        }
+    }
+    let entry = load_base + elf.header.pt2.entry_point() as usize;
+    info!(
+        "userboot: loaded ELF ({} bytes, base={:#x}, entry={:#x})",
+        userboot_bytes.len(),
+        load_base,
+        entry
+    );
+
+    // NOTE: no relocation is applied here — Fuchsia's static-PIE
+    // userboot self-relocates (rcrt1-style) in its own startup: the
+    // kernel's loader (lib/userabi/elf.cc) only maps segments, maps
+    // the vDSO anywhere, and passes the vDSO base as the entry's
+    // arg2. Applying relocations here as well would double-apply
+    // them (observed: RELR applied twice → function pointers at
+    // 2*load_base + vaddr → #PF executing the heap).
+
+    // Flush I-cache after loading executable code.
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        core::arch::asm!("dsb ish", "ic iallu", "dsb ish", "isb",);
+    }
+
+    // Stack: Fuchsia's ZIRCON_DEFAULT_STACK_SIZE (256 KiB), mapped in
+    // its own region.
+    const STACK_PAGES: usize = 256 * 1024 / PAGE_SIZE;
+    let stack_vmo = VmObject::new_paged(STACK_PAGES);
+    stack_vmo.set_name("userboot-initial-stack");
+    let stack_flags = MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER;
+    let stack_base = vmar
+        .map(
+            None,
+            stack_vmo.clone(),
+            0,
+            STACK_PAGES * PAGE_SIZE,
+            stack_flags,
+        )
+        .expect("failed to map userboot stack");
+    let sp = if cfg!(target_arch = "x86_64") {
+        // Align to 16B, then emulate a 'call' (push rip).
+        stack_base + STACK_PAGES * PAGE_SIZE - 8
+    } else {
+        stack_base + STACK_PAGES * PAGE_SIZE
+    };
+
+    // Objects for the bootstrap messages.
+    let log = zircon_object::debuglog::DebugLog::create(0);
+    let log_rights =
+        Rights::READ | Rights::WRITE | Rights::DUPLICATE | Rights::TRANSFER | Rights::WAIT;
+
+    let zbi_vmo = {
+        let vmo = VmObject::new_paged(zbi.as_ref().len() / PAGE_SIZE + 1);
+        vmo.write(0, zbi.as_ref()).unwrap();
+        vmo.set_name("zbi");
+        vmo
+    };
+
+    let vdso_test1 = vdso_vmo.create_child(false, 0, vdso_vmo.len()).unwrap();
+    // vDSO variants, per Fuchsia's kernel (lib/userabi/vdso.cc):
+    // "vdso/next" is the full unmutated vDSO (the primary);
+    // stable/test1/test2 are snapshot children. Fuchsia's variants
+    // block certain syscall categories in the child copies — zCore
+    // forwards unmutated clones for now (a fidelity gap, not a
+    // functional one for boot).
+    let vdso_stable = vdso_vmo.create_child(false, 0, vdso_vmo.len()).unwrap();
+    vdso_stable.set_name("vdso/stable");
+    vdso_test1.set_name("vdso/test1");
+    let vdso_test2 = vdso_vmo.create_child(false, 0, vdso_vmo.len()).unwrap();
+    vdso_test2.set_name("vdso/test2");
+
+    let crash_log_vmo = VmObject::new_paged(1);
+    crash_log_vmo.set_name("crashlog");
+    let (desc_vmo, arena_vmo) = kcounter_vmos();
+
+    let root_resource = Resource::create(
+        "root",
+        ResourceKind::ROOT,
+        0,
+        0x1_0000_0000,
+        ResourceFlags::empty(),
+    );
+    // Named system resources, per the handle set Fuchsia's userboot
+    // expects (identified by ZX_PROP_NAME): sub-resources it can
+    // forward, plus dedicated vmex/power handles so it does not need
+    // to derive them via zx_resource_create.
+    let mkres = |name: &str, kind: ResourceKind, base: usize, size: usize| {
+        Resource::create(name, kind, base, size, ResourceFlags::empty())
+    };
+    let mmio_resource = mkres("mmio", ResourceKind::MMIO, 0, 0);
+    let irq_resource = mkres("irq", ResourceKind::IRQ, 0, 0);
+    let ioport_resource = mkres("io_port", ResourceKind::IOPORT, 0, 0x10000);
+    let system_resource = mkres("system", ResourceKind::SYSTEM, 0, 16);
+    let vmex_resource = mkres("vmex", ResourceKind::SYSTEM, 1, 1); // ZX_RSRC_SYSTEM_VMEX_BASE
+    let power_resource = mkres("power", ResourceKind::SYSTEM, 5, 1); // ZX_RSRC_SYSTEM_POWER_BASE
+
+    // Bootstrap channel: two handles-only messages (no processargs
+    // data — the receiver asserts the payload is empty).
+    let (user_channel, kernel_channel) = Channel::create();
+    let handle = Handle::new(user_channel, Rights::DEFAULT_CHANNEL);
+
+    let proc_handle = || Handle::new(proc.clone(), Rights::DEFAULT_PROCESS);
+    let vmar_handle = || Handle::new(proc.vmar(), Rights::DEFAULT_VMAR | Rights::IO);
+    let thread_handle = || Handle::new(thread.clone(), Rights::DEFAULT_THREAD);
+    let image_vmar_handle = || Handle::new(image_vmar.clone(), Rights::DEFAULT_VMAR | Rights::IO);
+    let log_handle = || Handle::new(log.clone(), log_rights);
+
+    // Message 1 — process capability:
+    // [log, proc_self, vmar_root_self, thread_self, vmar_loaded]
+    let msg1_handles = Vec::from([
+        log_handle(),
+        proc_handle(),
+        vmar_handle(),
+        thread_handle(),
+        image_vmar_handle(),
+    ]);
+    kernel_channel
+        .write(MessagePacket {
+            data: Vec::new(),
+            handles: msg1_handles,
+            cancel_senders: Vec::new(),
+        })
+        .unwrap();
+
+    // Message 2 — system capability:
+    // [log, proc, vmar, thread, vmar_loaded, root job, resources by
+    //  name, named VMOs (zbi, vdso/*, kernel files)]
+    let msg2_handles = Vec::from([
+        log_handle(),
+        proc_handle(),
+        vmar_handle(),
+        thread_handle(),
+        image_vmar_handle(),
+        Handle::new(job.clone(), Rights::DEFAULT_JOB),
+        Handle::new(mmio_resource, Rights::DEFAULT_RESOURCE),
+        Handle::new(irq_resource, Rights::DEFAULT_RESOURCE),
+        Handle::new(ioport_resource, Rights::DEFAULT_RESOURCE),
+        Handle::new(system_resource, Rights::DEFAULT_RESOURCE),
+        Handle::new(vmex_resource, Rights::DEFAULT_RESOURCE),
+        Handle::new(power_resource, Rights::DEFAULT_RESOURCE),
+        Handle::new(zbi_vmo, Rights::DEFAULT_VMO),
+        Handle::new(vdso_vmo.clone(), Rights::DEFAULT_VMO | Rights::EXECUTE), // vdso/next
+        Handle::new(vdso_stable, Rights::DEFAULT_VMO | Rights::EXECUTE),
+        Handle::new(vdso_test1, Rights::DEFAULT_VMO | Rights::EXECUTE),
+        Handle::new(vdso_test2, Rights::DEFAULT_VMO | Rights::EXECUTE),
+        Handle::new(crash_log_vmo, Rights::DEFAULT_VMO),
+        Handle::new(desc_vmo, Rights::DEFAULT_VMO),
+        Handle::new(arena_vmo, Rights::DEFAULT_VMO),
+        Handle::new(root_resource, Rights::DEFAULT_RESOURCE),
+    ]);
+    kernel_channel
+        .write(MessagePacket {
+            data: Vec::new(),
+            handles: msg2_handles,
+            cancel_senders: Vec::new(),
+        })
+        .unwrap();
+
+    // Start: _start(bootstrap_handle, vdso_base) — Fuchsia's
+    // userboot.cc passes the vDSO base as arg2.
+    proc.start(&thread, entry, sp, Some(handle), vdso_base, thread_fn)
+        .expect("failed to start userboot thread");
+    proc
+}
+
 kcounter!(EXCEPTIONS_USER, "exceptions.user");
 kcounter!(EXCEPTIONS_IRQ, "exceptions.irq");
 kcounter!(EXCEPTIONS_PGFAULT, "exceptions.pgfault");
@@ -509,6 +828,21 @@ async fn run_syscall(
     // as invalid syscall numbers instead of being truncated to
     // a valid 32-bit syscall number.
     let ret = syscall.syscall(num, args).await as usize;
+    // A thread that died during the syscall (zx_thread_exit, or a
+    // kill that landed mid-syscall) must never execute another user
+    // instruction: Fuchsia kills at the kernel entry, and the vDSO's
+    // exit wrappers trap with ud2 after a returned zx_thread_exit
+    // (observed as the ThreadSampler.HighFrequency process kill —
+    // tid hit the vDSO pad after syscall 165 returned). Route the
+    // exit through the run loop's ThreadExiting path, which completes
+    // the normal teardown (exiting exception, CurrentThread::drop,
+    // remove_thread) instead of returning to user mode.
+    if matches!(thread.state(), ThreadState::Dying | ThreadState::Dead) {
+        return Err(ExceptionInfo {
+            type_: ExceptionType::ThreadExiting,
+            synth_code: 0,
+        });
+    }
     // When a blocked syscall is interrupted by suspend + debugger
     // write_state, the debugger may have modified rax (the return
     // value register). Check if the return value register in the
@@ -552,6 +886,32 @@ async fn handler_user_trap(
     mut ctx: Box<UserContext>,
 ) -> Result<(), ExceptionInfo> {
     let reason = ctx.trap_reason();
+
+    // #862 fix: IDT entries are interrupt gates (IF cleared on trap
+    // entry), and the `__from_user` path resumes this coroutine
+    // WITHOUT restoring IF — everything from here until the first
+    // await runs with interrupts disabled. The synchronous work below
+    // (page-fault handling, the deferred kill) contends KernelMutexes;
+    // with IF=0 a contended lock cannot yield and escalates to the
+    // mutex.rs nested-spin panic (the historical crash-cascade
+    // multi-CPU panics). Re-enable interrupts for everything except
+    // IRQ dispatch, which must stay non-nesting.
+    if !matches!(reason, TrapReason::Interrupt(_)) {
+        hal_impl::interrupt::intr_on();
+    }
+
+    // A thread killed while executing in user mode exits here instead
+    // of processing the trap: Zircon threads die at their next kernel
+    // entry after zx_task_kill, and a killed thread must not execute
+    // further syscalls. This is task context, so the terminal-state
+    // machinery (exception dispatch, teardown) runs with full lock and
+    // yield freedom.
+    if thread.state() == ThreadState::Dying || thread.state() == ThreadState::Dead {
+        return Err(ExceptionInfo {
+            type_: ExceptionType::ThreadExiting,
+            synth_code: 0,
+        });
+    }
 
     if let TrapReason::Syscall = reason {
         let num = syscall_num(&ctx);
@@ -605,6 +965,24 @@ async fn handler_user_trap(
         // (baremetal-test) calls the Syscall interface directly,
         // bypassing this trap handler, and passes kernel addresses.
         hal_impl::thread::user_syscall_enter();
+        // #903: park at the syscall boundary while suspended. Syscall
+        // returns go straight back to user mode through the trap
+        // frame — they do not pass through run_user's wait_for_run —
+        // so without this, a thread whose blocking syscall was
+        // interrupted with ZX_ERR_INTERNAL_INTR_RETRY would spin in
+        // userspace retrying (each retry hits blocking_run's
+        // already-suspended early return, another -6, back to
+        // userspace...) without ever parking: THREAD_SUSPENDED never
+        // asserted and the process-suspend handshake hung
+        // (ProcessTest.SuspendWithDyingThread). Fuchsia stops a
+        // suspended thread at the syscall boundary; on resume the
+        // syscall executes once, with its trap-frame arguments.
+        thread.put_context(ctx);
+        let ctx = thread.wait_for_run().await;
+        if matches!(thread.state(), ThreadState::Dying | ThreadState::Dead) {
+            hal_impl::thread::user_syscall_leave();
+            return Ok(());
+        }
         let result = run_syscall(thread, thread_fn, ctx, num, args).await;
         hal_impl::thread::user_syscall_leave();
         return result;
@@ -1194,7 +1572,7 @@ fn create_vdso_vmo() -> Arc<VmObject> {
     // +1 page for vDSO data (constants) appended after ELF content.
     let total_pages = vdso_memsize.div_ceil(PAGE_SIZE) + 1;
     let vdso_vmo = VmObject::new_paged(total_pages);
-    vdso_vmo.set_name("vdso/full");
+    vdso_vmo.set_name("vdso/next");
 
     if !VDSO_ELF.is_empty() {
         // Write only the loadable portion (up to vdso_memsize or file size,

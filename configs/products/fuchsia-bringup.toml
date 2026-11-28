@@ -9,15 +9,23 @@
 #   PETAL_ZBI     -> fuchsia.zbi    (userboot unpacks its bootfs)
 #   VDSO_BIN      -> vdso.elf       (the matching vDSO)
 #
-# NOTE: booting requires the kernel-side userboot launcher (issue #523
-# Phase C: handles-only two-message bootstrap protocol + RODSO-style
-# vDSO relocation resolution). Until that lands, the boot stops at the
-# first process.
+# NOTE: boots via the kernel-side userboot launcher (issue #523
+# Phase C): the kernel loads Fuchsia's real userboot with the
+# handles-only two-message bootstrap protocol and lets it
+# self-relocate (the kernel does not apply userboot's relocations).
+# Verified progress: userboot → component_manager (full dynamic
+# library set via userboot's loader service) → root-component
+# resolution. The `kernel.fuchsia-userboot=true` cmdline selects this
+# path; it requires that USERSTART_ELF is Fuchsia's userboot (the
+# xtask's `rootfs-contents = "fuchsia"` wiring guarantees the
+# pairing — a zCore userstart ELF with this flag set would fail at
+# the first bootstrap read).
 
 flavour = ""
 root-proc = "userboot"
 log = "warn"
 rootfs-contents = "fuchsia"
+extra-cmdline = ["kernel.fuchsia-userboot=true"]
 
 # The imported artifacts are x86_64 (built from bringup.x64-balanced).
 supported-boards = ["qemu-x86_64"]

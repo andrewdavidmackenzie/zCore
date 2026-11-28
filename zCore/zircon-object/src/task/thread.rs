@@ -11,7 +11,7 @@ use bitflags::bitflags;
 use cfg_if::cfg_if;
 use futures::{channel::oneshot::*, future::FutureExt, pin_mut, select_biased};
 use hal_impl::context::UserContext;
-use lock::{IrqLock, KernelMutex};
+use lock::KernelMutex;
 
 use self::thread_state::ContextAccessState;
 use super::{exception::*, Process, Task};
@@ -102,6 +102,20 @@ impl_kobject!(Thread
 );
 define_count_helper!(Thread);
 
+/// The kind of wait registered in `ThreadInner::suspend_interrupt`.
+enum SuspendWait {
+    /// A blocking syscall (channel read/write, port, object wait,
+    /// futex, nanosleep). Suspension aborts it: the saved context's
+    /// return register is set to ZX_ERR_INTERNAL_INTR_RETRY (-6) and
+    /// the wait returns the same error, so userspace retries after
+    /// resume (Fuchsia's interruptible-wait semantics).
+    Syscall(Sender<()>),
+    /// A pager/usercopy fault wait. Suspension aborts it (the fault
+    /// re-executes after resume) but the saved context is NOT
+    /// touched — its registers hold live user data.
+    Pager(Sender<()>),
+}
+
 #[derive(Default)]
 pub struct ThreadInner {
     /// Thread context
@@ -127,11 +141,18 @@ pub struct ThreadInner {
     waker: Option<Waker>,
     /// A token used to kill blocking thread
     killer: Option<Sender<()>>,
-    /// A token used to interrupt suspendable blocking waits (e.g., pager waits).
-    /// When a thread is suspended during a suspendable blocking_run, this
-    /// channel fires to interrupt the wait so the run loop can process the
-    /// suspend and go Pending in wait_for_run.
-    suspend_interrupt: Option<Sender<()>>,
+    /// A token used to interrupt suspendable blocking waits. When a
+    /// thread is suspended during an escapable blocking_run, this
+    /// channel fires to abort the wait so the run loop can process
+    /// the suspend and go Pending in wait_for_run.
+    ///
+    /// The KIND decides the suspension policy — it is a property of
+    /// the wait, not the thread state (both channel reads and
+    /// channel_call waits are BlockedChannel, but only the former may
+    /// be escaped). Waits that must SURVIVE suspension (exception
+    /// handling, zx_channel_call's reply wait) register nothing: only
+    /// kill() escapes those, via the killer channel.
+    suspend_interrupt: Option<SuspendWait>,
     /// Thread state
     ///
     /// NOTE: This variable will never be `Suspended`. On suspended, the
@@ -1125,8 +1146,12 @@ impl Thread {
             }
             // Also fire the suspend interrupt and killer to unblock any
             // blocking_run_suspendable or blocking_run that may be
-            // holding the run_user future.
-            if let Some(sender) = inner.suspend_interrupt.take() {
+            // holding the run_user future. Kill escapes EVERY wait
+            // kind (including ones suspension cannot touch).
+            if let Some(wait) = inner.suspend_interrupt.take() {
+                let sender = match wait {
+                    SuspendWait::Syscall(s) | SuspendWait::Pager(s) => s,
+                };
                 let _ = sender.send(());
             }
             if let Some(killer) = inner.killer.take() {
@@ -1163,27 +1188,42 @@ impl Task for Thread {
         let mut inner = self.inner.lock();
         inner.suspend_count += 1;
         let state = inner.state;
-        // When suspending a thread that is in a blocking syscall,
-        // set the return register to ZX_ERR_INTERNAL_INTR_RETRY (-6).
-        // This tells the debugger "the syscall was interrupted; if you
-        // resume without modifying rax, the kernel will retry it."
-        // Do NOT set this for BlockedPager — the thread is in a page
-        // fault handler, not a syscall. The return register holds
-        // user data, and overwriting it with -6 corrupts user state,
-        // causing a crash when the thread resumes and re-executes the
-        // faulting instruction with rax = 0xfffffffffffffffa.
-        if inner.context.is_some() && state.is_blocked() && state != ThreadState::BlockedPager {
-            if let Some(ref mut ctx) = inner.context {
-                use hal_impl::context::UserContextField;
-                ctx.set_field(UserContextField::ReturnValue, (-6i64) as usize);
+        // Abort escapable waits. The registered wait KIND decides the
+        // context policy (see SuspendWait):
+        // - Syscall waits: set the return register to
+        //   ZX_ERR_INTERNAL_INTR_RETRY (-6) — it tells the debugger
+        //   "the syscall was interrupted; if you resume without
+        //   modifying rax, the kernel will retry it" — and abort the
+        //   wait with the same error.
+        // - Pager waits: abort only. The thread is in a page fault
+        //   handler, not a syscall; the return register holds live
+        //   user data, and overwriting it with -6 corrupts user
+        //   state, crashing the re-executed faulting instruction.
+        // - Waits that must survive suspension register nothing:
+        //   Fuchsia suspensions do not escape exception handling
+        //   (Threads.SuspendMultiple: "suspends don't escape out of
+        //   exception handling, unlike blocking syscalls where
+        //   suspend will escape out of them"), and a suspended
+        //   zx_channel_call stays pending and completes after resume
+        //   (ChannelTest.CallSuspendedThreadResumesAndSucceeds). Only
+        //   kill() escapes those, via the killer channel.
+        match inner.suspend_interrupt.take() {
+            Some(SuspendWait::Syscall(sender)) => {
+                if inner.context.is_some() {
+                    if let Some(ref mut ctx) = inner.context {
+                        use hal_impl::context::UserContextField;
+                        ctx.set_field(UserContextField::ReturnValue, (-6i64) as usize);
+                    }
+                    inner.suspended_from_blocked = true;
+                }
+                let _ = sender.send(());
             }
-            inner.suspended_from_blocked = true;
+            Some(SuspendWait::Pager(sender)) => {
+                let _ = sender.send(());
+            }
+            None => {}
         }
         inner.change_state(state, &self.base);
-        // Interrupt any suspendable blocking wait (e.g., pager wait).
-        if let Some(sender) = inner.suspend_interrupt.take() {
-            let _ = sender.send(());
-        }
     }
 
     fn resume(self: &Arc<Self>) {
@@ -1356,6 +1396,110 @@ impl CurrentThread {
         F: Future<Output = FT> + Unpin,
         FT: IntoResult<T>,
     {
+        let (old_state, killed, suspended) = {
+            let mut inner = self.inner.lock();
+            if inner.state() == ThreadState::Dying {
+                return Err(ZxError::STOP);
+            }
+            // #903: if the thread is ALREADY suspended (suspend()
+            // fired before this wait registered), don't park —
+            // return immediately so the run loop observes the
+            // suspension and the syscall retries on resume
+            // (Fuchsia's interruptible-wait semantics). Waits that
+            // must survive suspension use blocking_run_uninterruptible.
+            if inner.suspend_count > 0 && inner.context.is_some() {
+                return Err(ZxError::INTERNAL_INTR_RETRY);
+            }
+            let (sender, receiver) = channel();
+            inner.killer = Some(sender);
+            // #903: register the suspend interrupt so suspend()
+            // aborts this wait. Without it, a thread suspended
+            // mid-syscall stays parked inside the select below until
+            // the wait completes naturally — the handshake stall
+            // behind DebugRegistersWatchpointSyscallPanicRepro (both
+            // test threads parked, no state transitions). Fuchsia
+            // aborts interruptible waits on suspension and returns
+            // ZX_ERR_INTERNAL_INTR_RETRY to userspace.
+            let (suspend_tx, suspend_rx) = channel();
+            inner.suspend_interrupt = Some(SuspendWait::Syscall(suspend_tx));
+            // State may already be set by set_blocking_state().
+            // Record old state for restoration on completion.
+            let old_state = if inner.state == state {
+                ThreadState::Running
+            } else {
+                let old = inner.state;
+                inner.change_state(state, &self.base);
+                old
+            };
+            (old_state, receiver, suspend_rx)
+        };
+        let ret = if let Some(cancel_token) = cancel_token {
+            select_biased! {
+                ret = future.fuse() => ret.into_result(),
+                _ = killed.fuse() => Err(ZxError::STOP),
+                _ = cancel_token.fuse() => Err(ZxError::CANCELED),
+                _ = suspended.fuse() => Err(ZxError::INTERNAL_INTR_RETRY),
+                _ = hal_impl::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
+            }
+        } else {
+            select_biased! {
+                ret = future.fuse() => ret.into_result(),
+                _ = killed.fuse() => Err(ZxError::STOP),
+                _ = suspended.fuse() => Err(ZxError::INTERNAL_INTR_RETRY),
+                _ = hal_impl::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
+            }
+        };
+        let mut inner = self.inner.lock();
+        inner.killer = None;
+        inner.suspend_interrupt = None;
+        // Clear suspended_from_blocked: the syscall that set it has
+        // now completed. Without this, a later write_state could
+        // incorrectly set debugger_return_override for a finished
+        // syscall.
+        inner.suspended_from_blocked = false;
+        if inner.state() == ThreadState::Dying {
+            return ret;
+        }
+        assert_eq!(inner.state, state);
+        inner.change_state(old_state, &self.base);
+        ret
+    }
+
+    /// Run a future while blocking — interruptible by kill, deadline
+    /// and cancel, but NOT by suspension.
+    ///
+    /// For waits that must survive a suspend (Fuchsia semantics):
+    ///
+    /// - Exception handling: "suspends don't escape out of exception
+    ///   handling, unlike blocking syscalls where suspend will escape
+    ///   out of them" (Threads.SuspendMultiple). The wait runs to
+    ///   resolution; the suspension takes effect when the run loop
+    ///   parks afterward. The saved context is restored verbatim on
+    ///   exception resume, so no return-register marking either.
+    /// - `zx_channel_call`'s reply wait: the call transaction stays
+    ///   pending and the call completes after resume
+    ///   (ChannelTest.CallSuspendedThreadResumesAndSucceeds).
+    /// - `zx_interrupt_wait`: the wait stays armed across suspend and
+    ///   resume — the thread reports SUSPENDED while parked, then
+    ///   BLOCKED_INTERRUPT after resume, and only the interrupt
+    ///   trigger resolves the wait
+    ///   (InterruptTest.WaitThreadFunctionsAfterSuspendResume).
+    ///
+    /// No `suspend_interrupt` is registered — `suspend()` cannot
+    /// abort this wait. `kill()` still escapes it via the killer
+    /// channel, and the deadline/cancel paths behave as in
+    /// [`blocking_run`].
+    pub async fn blocking_run_uninterruptible<F, T, FT>(
+        &self,
+        future: F,
+        state: ThreadState,
+        deadline: Duration,
+        cancel_token: Option<Receiver<()>>,
+    ) -> ZxResult<T>
+    where
+        F: Future<Output = FT> + Unpin,
+        FT: IntoResult<T>,
+    {
         let (old_state, killed) = {
             let mut inner = self.inner.lock();
             if inner.state() == ThreadState::Dying {
@@ -1363,8 +1507,6 @@ impl CurrentThread {
             }
             let (sender, receiver) = channel();
             inner.killer = Some(sender);
-            // State may already be set by set_blocking_state().
-            // Record old state for restoration on completion.
             let old_state = if inner.state == state {
                 ThreadState::Running
             } else {
@@ -1390,11 +1532,6 @@ impl CurrentThread {
         };
         let mut inner = self.inner.lock();
         inner.killer = None;
-        // Clear suspended_from_blocked: the syscall that set it has
-        // now completed. Without this, a later write_state could
-        // incorrectly set debugger_return_override for a finished
-        // syscall.
-        inner.suspended_from_blocked = false;
         if inner.state() == ThreadState::Dying {
             return ret;
         }
@@ -1439,7 +1576,7 @@ impl CurrentThread {
             let (kill_tx, kill_rx) = channel();
             inner.killer = Some(kill_tx);
             let (suspend_tx, suspend_rx) = channel();
-            inner.suspend_interrupt = Some(suspend_tx);
+            inner.suspend_interrupt = Some(SuspendWait::Pager(suspend_tx));
             let old_state = if inner.state == state {
                 ThreadState::Running
             } else {
@@ -1567,7 +1704,11 @@ impl CurrentThread {
         } else {
             let future = exception.handle();
             pin_mut!(future);
-            self.blocking_run(
+            // Uninterruptible by suspension: Fuchsia suspends do not
+            // escape exception handling — the wait runs to resolution
+            // and the suspension applies when the run loop parks
+            // afterward (Threads.SuspendMultiple).
+            self.blocking_run_uninterruptible(
                 future,
                 ThreadState::BlockedException,
                 Duration::from_nanos(u64::MAX),
@@ -1703,13 +1844,42 @@ pub struct ThreadInfo {
 
 struct ThreadSwitchFuture {
     thread: Arc<Thread>,
-    future: IrqLock<ThreadFuturePinned>,
+    // #523/#829: this was an `IrqLock` (on all arches), whose guard
+    // `poll` held across the ENTIRE poll — every syscall, page fault,
+    // exception dispatch and teardown executed inside an
+    // interrupt-disabling critical section (per-CPU IrqLock depth +1
+    // for the whole thread execution). Any KernelMutex contended in
+    // that state escalated to the mutex.rs nested-spin panic — the
+    // fuchsia crash-teardown cascade, root-caused live via the
+    // lock_anomaly_detected breakpoint (push site thread.rs:1732 on
+    // every anomalous CPU). The lock had exactly one accessor (this
+    // poll), so it provided no mutual exclusion at all — only IF=0.
+    //
+    // Removed on x86_64: the coroutine switch now saves/restores
+    // rflags, so a task resumed from a park runs with its own
+    // interrupt state (verified: fuchsia bringup, busybox and
+    // boot-test all pass).
+    //
+    // KEPT on aarch64/riscv64 for now: their executor switches do
+    // not yet save/restore the interrupt state correctly (the
+    // aarch64 DAIF attempt regressed busybox boot — GIC EOI ordering
+    // and per-CPU state still need auditing against Zircon's
+    // "context switch only with interrupts disabled" invariant).
+    // Until that lands, polls there run under the lock as they
+    // always have — the previously-green behavior.
+    #[cfg(target_arch = "x86_64")]
+    future: ThreadFuturePinned,
+    #[cfg(not(target_arch = "x86_64"))]
+    future: lock::IrqLock<ThreadFuturePinned>,
 }
 
 impl ThreadSwitchFuture {
     pub fn new(thread: Arc<Thread>, future: ThreadFuturePinned) -> Self {
         Self {
-            future: IrqLock::new(future),
+            #[cfg(target_arch = "x86_64")]
+            future,
+            #[cfg(not(target_arch = "x86_64"))]
+            future: lock::IrqLock::new(future),
             thread,
         }
     }
@@ -1717,7 +1887,9 @@ impl ThreadSwitchFuture {
 
 impl Future for ThreadSwitchFuture {
     type Output = ();
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    // `mut` is only needed by the x86_64 as_mut() path.
+    #[cfg_attr(not(target_arch = "x86_64"), allow(unused_mut))]
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let proc = self.thread.proc.clone();
 
         let table_phys = proc.vmar().table_phys();
@@ -1738,6 +1910,9 @@ impl Future for ThreadSwitchFuture {
             }
         }
         hal_impl::thread::set_current_thread(Some(self.thread.clone()));
+        #[cfg(target_arch = "x86_64")]
+        let ret = self.future.as_mut().poll(cx);
+        #[cfg(not(target_arch = "x86_64"))]
         let ret = self.future.lock().as_mut().poll(cx);
         hal_impl::thread::set_current_thread(None);
         // Switch back to the kernel page table and clear tracking.
@@ -1758,7 +1933,7 @@ mod tests {
 
     #[test]
     fn create() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
         assert_eq!(thread.flags(), ThreadFlag::empty());
@@ -1771,7 +1946,7 @@ mod tests {
 
     #[test]
     fn info() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1786,7 +1961,7 @@ mod tests {
 
     #[test]
     fn read_write_state() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1823,7 +1998,7 @@ mod tests {
 
     #[test]
     fn ext() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1834,7 +2009,7 @@ mod tests {
 
     #[test]
     fn time() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1846,7 +2021,7 @@ mod tests {
 
     #[test]
     fn exit() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1869,7 +2044,7 @@ mod tests {
 
     #[test]
     fn priority_default() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
@@ -1881,7 +2056,7 @@ mod tests {
 
     #[test]
     fn priority_set_get() {
-        let root_job = Job::root();
+        let root_job = Job::new_parentless_job();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 

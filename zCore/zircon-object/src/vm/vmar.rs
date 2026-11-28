@@ -316,11 +316,15 @@ impl VmAddressRegion {
         } else {
             self.determine_offset(inner, offset, len, align)?
         };
-        // Clear any stale page table entries in the allocated range.
-        // Previous mappings may have left page table entries that would
-        // cause lazy mappings to read stale physical page content.
+        // NOTE: no page-table walk over the allocated range here.
+        // test_map (via determine_offset) proved the range overlaps
+        // no live child VMAR or mapping, and every mapping-removal
+        // path (unmap_inner, VmMapping unmap/decommit) already clears
+        // its page-table entries — so there is nothing stale to
+        // clear. Walking 0x3fffffeff000 bytes (fuchsia_runtime's
+        // per-process address space) took minutes and made
+        // zx_vmar_allocate appear to hang.
         let alloc_addr = self.addr + offset;
-        self.page_table.lock().unmap_cont(alloc_addr, len).ok(); // ignore errors for already-unmapped pages
         let child = Arc::new(VmAddressRegion {
             flags,
             base: KObjectBase::new(),
@@ -978,6 +982,14 @@ impl VmAddressRegion {
             vmar.destroy_internal()?;
         }
         for mapping in inner.mappings.drain(..) {
+            // Invalidate page-table entries at removal time, not only
+            // at Drop: a caller may hold an Arc from find_mapping(),
+            // delaying Drop past this VMAR's destruction. The range
+            // becomes allocatable the moment it leaves `inner`, and a
+            // later stale Drop would otherwise unmap whatever new
+            // mapping took the range. unmap() is idempotent — the
+            // eventual Drop's unmap is a no-op.
+            mapping.unmap();
             drop(mapping);
         }
         *guard = None;
@@ -997,7 +1009,13 @@ impl VmAddressRegion {
         for vmar in inner.children.drain(..) {
             vmar.destroy_internal()?;
         }
-        inner.mappings.clear();
+        // Same removal-time PT invalidation as destroy_internal: the
+        // mappings leave `inner` here, making their ranges
+        // allocatable, but external Arc holders can delay Drop (and
+        // its unmap) past a new allocation into the same range.
+        for mapping in inner.mappings.drain(..) {
+            mapping.unmap();
+        }
         Ok(())
     }
 
@@ -1915,6 +1933,15 @@ pub struct VmMapping {
     pub vmo: Arc<VmObject>,
     pub(super) page_table: Arc<KernelMutex<dyn GenericPageTable>>,
     pub(super) inner: KernelMutex<VmMappingInner>,
+    /// True while THIS mapping's eager-map commit callback is running
+    /// (it holds `inner` across VMO commits). range_change called
+    /// from within that callback self-deadlocks on `inner` — this
+    /// flag lets it detect the self-case instantly and skip: the
+    /// callback maps the page under the permissions it just computed.
+    /// Foreign callback contention is impossible while the caller
+    /// holds the VMO lock (the callback also runs under it — they
+    /// serialize).
+    callback_active: core::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Clone)]
@@ -2035,6 +2062,7 @@ impl VmMapping {
             vec![flags; page_count]
         };
         let mapping = Arc::new(VmMapping {
+            callback_active: core::sync::atomic::AtomicBool::new(false),
             inner: KernelMutex::new(VmMappingInner {
                 flags: per_page_flags,
                 default_flags: flags,
@@ -2092,7 +2120,9 @@ impl VmMapping {
             }
         }
         let is_cow = self.vmo.has_cow_parent();
-        self.vmo.commit_pages_with(&mut |commit| {
+        self.callback_active
+            .store(true, core::sync::atomic::Ordering::Release);
+        let map_result = self.vmo.commit_pages_with(&mut |commit| {
             // 5E-2: the callback runs under the VMO lock (held by
             // commit_pages_with — 5E-3 converts that side). The
             // mapping and page-table acquisitions here go through the
@@ -2131,7 +2161,10 @@ impl VmMapping {
                     .map_err(|_| ZxError::NO_MEMORY)?;
             }
             Ok(())
-        })
+        });
+        self.callback_active
+            .store(false, core::sync::atomic::Ordering::Release);
+        map_result
     }
 
     fn unmap(&self) {
@@ -2139,11 +2172,23 @@ impl VmMapping {
         // for its levels (5E-1); the page table is taken downstream of
         // the mapping lock (Mapping → PageTable — the declared edge).
         let mut locked = lock::lockgraph::Locked::new(self);
-        let inner = locked.lock_and::<super::lock_order::VmMappingInnerLock>().0;
-        // TODO inner.vmo_offset unused?
+        let mut inner = locked.lock_and::<super::lock_order::VmMappingInnerLock>().0;
+        // Retire the mapping BEFORE the range becomes reusable: a
+        // caller may hold an Arc from find_mapping(), delaying Drop
+        // past the VMAR's destruction — and past a new mapping
+        // allocating the same range. Zeroing addr/size makes the
+        // eventual Drop's unmap a true no-op instead of clearing the
+        // NEW mapping's page table entries (#523 review).
+        let addr = inner.addr;
+        let size = inner.size;
+        inner.addr = 0;
+        inner.size = 0;
+        if size == 0 {
+            return;
+        }
         self.page_table
             .lock()
-            .unmap_cont(inner.addr, inner.size)
+            .unmap_cont(addr, size)
             .expect("failed to unmap")
     }
 
@@ -2247,6 +2292,7 @@ impl VmMapping {
             };
             let new_mapping = Arc::new(VmMapping {
                 permissions: self.permissions,
+                callback_active: core::sync::atomic::AtomicBool::new(false),
                 vmo: self.vmo.clone(),
                 page_table: self.page_table.clone(),
                 inner: KernelMutex::new(VmMappingInner {
@@ -2444,9 +2490,75 @@ impl VmMapping {
     /// writes to bypass dirty tracking (RemoveWrite case). Fixing
     /// this requires either changing the lock ordering or implementing
     /// a deferred retry mechanism. See #711.
-    pub(super) fn range_change(&self, offset: usize, len: usize, op: RangeChangeOp) {
-        let inner = self.inner.try_lock();
-        if let Some(inner) = inner {
+    pub(super) fn range_change(self: &Arc<Self>, offset: usize, len: usize, op: RangeChangeOp) {
+        // The mapping inner lock cannot always be acquired blocking:
+        // RemoveWrite is called from commit_page_internal DURING
+        // VmMapping::map's commit callback, which itself holds the
+        // mapping inner lock — a blocking acquisition self-deadlocks
+        // (the aarch64 rust-tests freeze: cpu 0 spun in a retry loop
+        // waiting for its own caller). Skipping is correct in that
+        // case: the callback maps the page under the very permissions
+        // it just computed.
+        //
+        // Unmap is different — it comes from the resize/decommit
+        // paths, which hold the VMO lock but NEVER the mapping lock.
+        // Every mapping.inner holder that could contend either never
+        // takes the VMO lock (fault paths drop it first; unmap/cut
+        // never take it) or is an eager-map callback serialized
+        // behind us on the VMO lock we already hold. Skipping Unmap
+        // leaves stale PTEs after a truncate: racing writes then
+        // corrupt memory through mappings of freed pages — the
+        // StreamTestCase.ReadWriteShrinkRace glibc abort (ud2 in
+        // pthread_create threads), the FaultBeyondStreamSizeResize-
+        // DownRace failure, and the PthreadTls CI crash class. Block
+        // until acquired.
+        // Drain previously-deferred invalidations before taking a new
+        // one: keeps the queue bounded and lands deferred work at the
+        // earliest task-context point.
+        drain_deferred_range_changes();
+        let inner = if self
+            .callback_active
+            .load(core::sync::atomic::Ordering::Acquire)
+        {
+            // Our own eager-map commit callback holds `inner` up-stack
+            // (range_change ← commit_page_internal ← the callback) —
+            // waiting would self-deadlock. Skipping is CORRECT here:
+            // the callback maps the page under the permissions it
+            // just computed, so the invalidation it would perform is
+            // superseded. (A foreign mapping's callback cannot be the
+            // holder: range_change callers and the callback both run
+            // under the VMO lock, which serializes them.)
+            return;
+        } else {
+            match self.inner.try_lock() {
+                Some(guard) => guard,
+                None => {
+                    // Foreign contention (a fault path or unmap/cut on
+                    // another CPU — short critical sections that never
+                    // take the VMO lock). Skipping outright would lose
+                    // the invalidation: stale PTEs after a truncate let
+                    // racing writes corrupt memory through freed pages
+                    // (the ReadWriteShrinkRace glibc abort). Bounded
+                    // spin, then DEFER — the deferred queue drains
+                    // before any task dispatch (the executor loop's
+                    // drain hook), so userspace never observes a stale
+                    // mapping after the deferring operation returns.
+                    let mut spins = 0u32;
+                    loop {
+                        if let Some(guard) = self.inner.try_lock() {
+                            break guard;
+                        }
+                        spins += 1;
+                        if spins >= DEFERRED_RANGE_CHANGE_SPINS {
+                            defer_range_change(self, offset, len, op);
+                            return;
+                        }
+                        core::hint::spin_loop();
+                    }
+                }
+            }
+        };
+        {
             // offset and len are in page units; convert vmo_offset (bytes) to pages
             let vmo_offset_pages = inner.vmo_offset / PAGE_SIZE;
             let start = offset.max(vmo_offset_pages);
@@ -2699,6 +2811,7 @@ impl VmMapping {
         let mapping = Arc::new(VmMapping {
             inner: KernelMutex::new(self.inner.lock().clone()),
             permissions: self.permissions,
+            callback_active: core::sync::atomic::AtomicBool::new(false),
             page_table,
             vmo: new_vmo.clone(),
         });
@@ -3269,4 +3382,51 @@ mod tests {
             .op_range(VmarOpType::MapRange, mapped_addr, PAGE_SIZE)
             .is_ok());
     }
+}
+
+/// Bounded spin before deferring a contended range_change. Covers
+/// foreign fault/unmap critical sections (microseconds); the residual
+/// contended case is our own commit callback, which never releases
+/// until we return — deferring is the only correct move there.
+const DEFERRED_RANGE_CHANGE_SPINS: u32 = 10_000;
+
+/// A deferred range-change invalidation: the mapping (weak, so a
+/// dropped mapping does not keep the queue alive), the byte range,
+/// and the operation to apply.
+type DeferredRangeChange = (alloc::sync::Weak<VmMapping>, usize, usize, RangeChangeOp);
+
+/// Deferred range-change invalidations that could not acquire the
+/// mapping lock (contended by our own eager-map commit callback).
+/// Drained before any task dispatch (executor loop drain hook) —
+/// see `drain_deferred_range_changes`.
+static DEFERRED_RANGE_CHANGES: lock::IrqLock<Vec<DeferredRangeChange>> =
+    lock::IrqLock::new(Vec::new());
+
+fn defer_range_change(mapping: &Arc<VmMapping>, offset: usize, len: usize, op: RangeChangeOp) {
+    DEFERRED_RANGE_CHANGES
+        .lock()
+        .push((Arc::downgrade(mapping), offset, len, op));
+}
+
+/// Drain deferred range-change invalidations. Called from the
+/// executor loop's drain hook (before task dispatch) and at the top
+/// of range_change: guarantees a contended invalidation lands before
+/// any subsequent task-context execution observes the mapping.
+pub fn drain_deferred_range_changes() {
+    // Re-entrancy guard: the drain itself calls range_change, whose
+    // top-of-call drain would recurse forever on re-deferring entries.
+    static DRAINING: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+    if DRAINING.swap(true, core::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let pending: Vec<_> = core::mem::take(&mut *DEFERRED_RANGE_CHANGES.lock());
+
+    for (weak, offset, len, op) in pending {
+        if let Some(mapping) = weak.upgrade() {
+            // Retry with a fresh bounded spin; a still-contended entry
+            // re-defers (a later drain picks it up).
+            mapping.range_change(offset, len, op);
+        }
+    }
+    DRAINING.store(false, core::sync::atomic::Ordering::SeqCst);
 }

@@ -574,6 +574,38 @@ impl Exception {
                     proc.id(),
                     proc.name()
                 ));
+                // Dump the userspace stack frame chain for #523 C3
+                // debugging: walk the frame-pointer chain from the
+                // saved context to reconstruct the call stack at the
+                // fault. x86_64 only (uses rbp/rip); aarch64/riscv64
+                // frames use different registers.
+                #[cfg(target_arch = "x86_64")]
+                if let Ok(cx) = self.thread.context_cloned() {
+                    let regs = cx.general();
+                    let mut rbp = regs.rbp;
+                    let vmar = proc.vmar();
+                    hal_impl::console::console_write_fmt(format_args!(
+                        "[excp] userspace backtrace (rip={:#x}, rbp={:#x}):\n",
+                        regs.rip, rbp
+                    ));
+                    for depth in 0..12 {
+                        if rbp == 0 || rbp > 0x7fff_ffff_ffff {
+                            break;
+                        }
+                        let mut frame = [0u8; 16];
+                        if vmar.read_memory(rbp, &mut frame) == Ok(16) {
+                            let next_rbp = usize::from_le_bytes(frame[0..8].try_into().unwrap());
+                            let ret_addr = usize::from_le_bytes(frame[8..16].try_into().unwrap());
+                            hal_impl::console::console_write_fmt(format_args!(
+                                "[excp]   frame[{}]: rbp={:#x} ret={:#x}\n",
+                                depth, next_rbp, ret_addr
+                            ));
+                            rbp = next_rbp;
+                        } else {
+                            break;
+                        }
+                    }
+                }
                 Process::exit(&proc, super::TASK_RETCODE_EXCEPTION_KILL);
             }
         }
@@ -731,7 +763,7 @@ mod tests {
 
     #[test]
     fn exceptionate_iterator() {
-        let parent_job = Job::root();
+        let parent_job = Job::new_parentless_job();
         let job = parent_job.create_child().unwrap();
         let proc = Process::create(&job, "proc").unwrap();
         let thread = Thread::create(&proc, "thread").unwrap();
@@ -756,7 +788,7 @@ mod tests {
 
     #[test]
     fn exceptionate_iterator_second_chance() {
-        let parent_job = Job::root();
+        let parent_job = Job::new_parentless_job();
         let job = parent_job.create_child().unwrap();
         let proc = Process::create(&job, "proc").unwrap();
         let thread = Thread::create(&proc, "thread").unwrap();
@@ -783,7 +815,7 @@ mod tests {
 
     #[test]
     fn job_debugger_iterator() {
-        let parent_job = Job::root();
+        let parent_job = Job::new_parentless_job();
         let job = parent_job.create_child().unwrap();
         let child_job = job.create_child().unwrap();
         let _grandson_job = child_job.create_child().unwrap();

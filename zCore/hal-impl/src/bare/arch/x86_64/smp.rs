@@ -55,11 +55,34 @@ pub fn init_executor_runtimes(bsp_id: u8, ap_ids: &[u32]) {
     // function so contending tasks yield to the lock holder instead of
     // spinning (see #829). Must run after the runtimes exist.
     lock::set_yield_fn(executor::sched_yield);
+    // KernelMutex holder diagnostics (#862/#523 deadlock hunt): name
+    // the CPU that holds a stuck lock.
+    lock::set_cpu_id_fn(|| super::cpu::cpu_id() as usize);
     // Register cross-CPU wakeup via IPI so that waking a task on a
     // halted CPU immediately breaks it out of HLT instead of waiting
     // for the next timer tick (up to 10ms at 100 Hz).
     executor::set_ipi_wakeup(|target_cpu| {
         let _ = crate::interrupt::send_ipi(target_cpu as usize, 0);
+    });
+    // #523 pre-hlt hook: EOI an abandoned in-service local APIC
+    // interrupt before sleeping (see wait_for_interrupt). The
+    // observed QEMU TCG halted-vCPU delivery race left the timer IRQ
+    // in-service with no EOI, blocking all pending interrupts
+    // (including wake IPIs) behind PPR and sleeping the CPU forever.
+    executor::set_pre_hlt_hook(|| {
+        let lapic = ::drivers::irq::x86::Apic::local_apic();
+        let mut stuck = 0u32;
+        for reg in 0..8 {
+            stuck |= lapic.isr_word(reg);
+        }
+        if stuck != 0 {
+            error!(
+                "[isr-stuck] CPU{}: in-service {:#x} without a handler at hlt — EOIing",
+                super::cpu::cpu_id(),
+                stuck
+            );
+            lapic.eoi();
+        }
     });
 }
 
@@ -341,8 +364,46 @@ extern "C" fn ap_entry() -> ! {
 
         // Clear CR0.EM for SSE
         use x86_64::registers::control::{Cr0, Cr0Flags};
-        Cr0::update(|f| f.remove(Cr0Flags::EMULATE_COPROCESSOR));
+        // Normalize CR0 to the BSP's post-firmware state. The AP
+        // trampoline only ORs PG into the firmware's SIPI-state CR0,
+        // which on OVMF/QEMU is 0x6000_0010: NO write protect, NO
+        // numeric-error, caches marked disabled (CD|NW). Two of those
+        // are correctness bugs on every AP:
+        //
+        // - WP=0 lets supervisor-mode writes bypass read-only PTEs —
+        //   kernel usercopy permission checks silently pass (the
+        //   ChannelTest.*ReadOnly*Disposition failures: write_etc's
+        //   result write-back into a read-only mapping succeeded on
+        //   APs while passing on the WP-inheriting BSP).
+        // - NE=0 routes x87 errors to the legacy IRQ13 path instead
+        //   of exception 16.
+        // - CD|NW: QEMU ignores the performance effect, but real
+        //   hardware would crawl and risk coherency surprises.
+        Cr0::update(|f| {
+            f.remove(Cr0Flags::EMULATE_COPROCESSOR);
+            f.insert(Cr0Flags::WRITE_PROTECT);
+            f.insert(Cr0Flags::NUMERIC_ERROR);
+            f.remove(Cr0Flags::CACHE_DISABLE);
+            f.remove(Cr0Flags::NOT_WRITE_THROUGH);
+        });
     }
+    // Enable the local APIC on this AP *before* any APIC access.
+    //
+    // The x2apic crate upgrades the APIC to x2APIC (MSR) mode when
+    // CPUID advertises it — under KVM's `-cpu host` the BSP did so,
+    // and the shared LOCAL_APIC static records that mode. x2APIC is
+    // PER-CPU: this AP still runs in xAPIC (MMIO) mode until it
+    // enables x2APIC on itself, and touching x2APIC MSRs (0x800-0x8FF)
+    // before that raises #GP on real hardware/KVM. (QEMU's TCG with
+    // the qemu64 model never advertises x2APIC, so this only
+    // manifests under KVM/pass-through — found via the panic frame:
+    // "Unhandled kernel trap" at ap_entry's rdmsr.)
+    //
+    // try_recover_kernel_gp in trap.rs also covers this class of
+    // fault defensively (skip + zero), so a missed ordering cannot
+    // take down the CPU.
+    ::drivers::irq::x86::Apic::init_local_apic_ap();
+
     // Disable the APIC timer immediately to prevent stale UEFI
     // timer configs from firing before timer_init() runs. With
     // one-shot timers, a stale timer could fire during AP startup
@@ -380,6 +441,7 @@ pub fn boot_application_processors() {
         warn!("No ACPI RSDP -- cannot enumerate APs, skipping SMP boot");
         super::cpu::set_num_cpus(1);
         init_executor_runtimes(bsp_id, &[]);
+        gs_slot_online();
         return;
     }
 
@@ -389,6 +451,7 @@ pub fn boot_application_processors() {
         info!("No application processors found");
         super::cpu::set_num_cpus(1);
         init_executor_runtimes(bsp_id, &[]);
+        gs_slot_online();
         return;
     }
     // Set the canonical CPU count: BSP + APs.
@@ -532,6 +595,13 @@ pub fn boot_application_processors() {
             );
         }
     }
+
+    // The BSP's per-CPU IrqLock-depth slot has been valid since
+    // replace_bsp_tss_with_iopb; mark it now (not earlier — num_cpus()
+    // must be final). If every launched AP has finished
+    // init_ap_gdt_idt this call completes the count and enables the
+    // gs fast path; otherwise the last AP to finish does.
+    gs_slot_online();
 }
 
 /// Offset of the GDT within the trampoline page (after TrampolineData).
@@ -850,6 +920,30 @@ pub fn replace_bsp_tss_with_iopb() {
         use x86_64::registers::model_specific::GsBase;
         #[allow(const_item_mutation)]
         GsBase::MSR.write(&ext.tss as *const _ as u64);
+        // NOTE: do not enable the per-CPU IrqLock-depth slot
+        // (lock::set_gs_depth_ready) here — num_cpus() is still 1 at
+        // this point and the flag is global. The BSP marks itself via
+        // gs_slot_online() at the end of
+        // boot_application_processors; see there for the protocol.
+    }
+}
+
+/// Number of CPUs whose per-CPU IrqLock-depth slot (TSS.rsp2, set as
+/// the kernel GS base) is valid. The LAST CPU to come online enables
+/// the lock crate's gs-based fast path globally — a single global flag
+/// is safe only when every online CPU's GS base points at its TSS,
+/// because push_off/pop_off on any CPU would otherwise write through a
+/// garbage GS base (the AP-entry path takes the shared-APIC lock
+/// before init_ap_gdt_idt — found the hard way: every AP page-faulted
+/// in `lock inc qword ptr gs:[0x14]`).
+static GS_READY_CPUS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Mark this CPU's per-CPU IrqLock-depth slot as valid; the CPU that
+/// brings the count to num_cpus() enables the global fast path.
+fn gs_slot_online() {
+    let n = GS_READY_CPUS.fetch_add(1, core::sync::atomic::Ordering::SeqCst) + 1;
+    if n >= crate::cpu::num_cpus() {
+        lock::set_gs_depth_ready();
     }
 }
 
@@ -913,6 +1007,9 @@ pub fn init_ap_gdt_idt() {
         // Set GS_BASE to this AP's TSS (per-CPU).
         #[allow(const_item_mutation)]
         GsBase::MSR.write(&ext.tss as *const _ as u64);
+        // Per-CPU IrqLock-depth slot (TSS.rsp2, gs:0x14) is valid on
+        // this CPU from here on. See gs_slot_online for the protocol.
+        gs_slot_online();
 
         // Write STAR MSR (same selectors as BSP).
         let eax = star_val as u32;

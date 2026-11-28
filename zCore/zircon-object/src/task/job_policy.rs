@@ -9,10 +9,12 @@ pub const POL_OVERRIDE_DENY: u32 = 1;
 #[derive(Default, Copy, Clone)]
 pub struct JobPolicy {
     // TODO: use bitset
-    action: [Option<PolicyAction>; 15],
+    // Sized for ZX_POL_MAX (18) — must cover every PolicyCondition
+    // discriminant or indexed access panics.
+    action: [Option<PolicyAction>; 18],
     /// Per-condition override flag. `true` means override is allowed (V2).
     /// For V1 policies (no flags field), defaults to `false` (deny override).
-    override_allow: [bool; 15],
+    override_allow: [bool; 18],
 }
 
 impl JobPolicy {
@@ -60,6 +62,9 @@ impl JobPolicy {
                 PolicyCondition::NewTimer as usize,
                 PolicyCondition::NewProcess as usize,
                 PolicyCondition::NewProfile as usize,
+                PolicyCondition::NewPager as usize,
+                PolicyCondition::NewIOB as usize,
+                PolicyCondition::NewSampler as usize,
             ]
         } else {
             alloc::vec![condition as usize]
@@ -185,9 +190,20 @@ pub enum PolicyCondition {
     NewProcess = 12,
     /// A process under this job is attempting to create a new profile.
     NewProfile = 13,
-    /// A process under this job is attempting to use zx_vmo_replace_as_executable()
-    /// with a ZX_HANDLE_INVALID as the second argument rather than a valid ZX_RSRC_KIND_VMEX.
-    AmbientMarkVMOExec = 14,
+    /// ZX_POL_NEW_PAGER (14): a process under this job is attempting
+    /// to create a new pager.
+    NewPager = 14,
+    /// ZX_POL_AMBIENT_MARK_VMO_EXEC (15): a process under this job is
+    /// attempting to use zx_vmo_replace_as_executable() with a
+    /// ZX_HANDLE_INVALID as the second argument rather than a valid
+    /// ZX_RSRC_KIND_VMEX resource.
+    AmbientMarkVMOExec = 15,
+    /// ZX_POL_NEW_IOB (16): a process under this job is attempting
+    /// to create a new IOB.
+    NewIOB = 16,
+    /// ZX_POL_NEW_SAMPLER (17): a process under this job is attempting
+    /// to create a new sampler.
+    NewSampler = 17,
 }
 
 /// The action taken when the condition happens specified by a policy.
@@ -225,7 +241,10 @@ impl core::convert::TryFrom<u32> for PolicyCondition {
             11 => Ok(Self::NewTimer),
             12 => Ok(Self::NewProcess),
             13 => Ok(Self::NewProfile),
-            14 => Ok(Self::AmbientMarkVMOExec),
+            14 => Ok(Self::NewPager),
+            15 => Ok(Self::AmbientMarkVMOExec),
+            16 => Ok(Self::NewIOB),
+            17 => Ok(Self::NewSampler),
             _ => Err(ZxError::INVALID_ARGS),
         }
     }

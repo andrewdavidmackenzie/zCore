@@ -1,3 +1,4 @@
+use hal::PAGE_SIZE;
 use {super::*, bitflags::bitflags, core::time::Duration, zircon_object::vm::*};
 
 fn amount_of_alignments(options: u32) -> ZxResult<usize> {
@@ -620,6 +621,7 @@ impl Syscall<'_> {
         vmar_offset: usize,
         iob_handle: HandleValue,
         region_index: u32,
+        region_offset: u64,
         region_len: usize,
         mut addr_out: UserOutPtr<usize>,
     ) -> ZxResult {
@@ -668,6 +670,19 @@ impl Syscall<'_> {
         if len == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        // The mapping starts at region_offset within the region's VMO
+        // (the ring-buffer library maps the first page again at the
+        // end for wraparound handling). Page-aligned, in bounds.
+        let vmo_offset = region_offset as usize;
+        if !vmo_offset.is_multiple_of(hal::PAGE_SIZE) {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if vmo_offset
+            .checked_add(len)
+            .is_none_or(|end| end > region_size)
+        {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
 
         // Build MMU flags from the requested options.
         let mut mapping_flags = MMUFlags::USER;
@@ -688,7 +703,7 @@ impl Syscall<'_> {
         let vaddr = vmar.map_ext(
             vmar_offset,
             vmo,
-            0, // vmo_offset: always map from the start of the region VMO
+            vmo_offset,
             len,
             permissions,
             mapping_flags,

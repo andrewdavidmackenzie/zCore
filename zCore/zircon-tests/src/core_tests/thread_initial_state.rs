@@ -11,7 +11,7 @@ use zircon_object::task::{Job, Process, Thread, ThreadStateKind};
 /// In zCore, the initial state is set via setup_uspace.
 fn register_values() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "reg-test").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 

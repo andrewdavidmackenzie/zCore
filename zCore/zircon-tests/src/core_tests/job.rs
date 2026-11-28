@@ -69,7 +69,7 @@ struct JobInfo {
 
 /// Add a fresh root job to the process handle table with DEFAULT_JOB rights.
 fn add_root_job(ctx: &TestContext) -> HandleValue {
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB))
 }
 
@@ -242,7 +242,7 @@ fn job_close_removes_from_tree() {
     let sc = ctx.syscall();
 
     // We need object references to check children_ids
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx
         .proc
         .add_handle(Handle::new(root.clone(), Rights::DEFAULT_JOB));
@@ -263,7 +263,7 @@ fn job_close_removes_from_tree() {
 fn job_signals() {
     let ctx = TestContext::new();
 
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx
         .proc
         .add_handle(Handle::new(root.clone(), Rights::DEFAULT_JOB));
@@ -439,7 +439,7 @@ fn kill_job_no_child() {
 /// Kill a chain of nested jobs — all should terminate.
 fn kill_job_chain() {
     let ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
 
     // Build a chain of 5 jobs, each with a process
@@ -467,7 +467,7 @@ fn kill_job_chain() {
 fn one_critical_process_kills_one_job() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
     let job_h = create_job(&ctx, root_h);
     let (proc_h, _vmar_h) = create_process(&ctx, job_h, b"critical");
@@ -488,7 +488,7 @@ fn one_critical_process_kills_one_job() {
 fn many_critical_processes_kill_one_job() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
     let job_h = create_job(&ctx, root_h);
     let (proc1_h, _) = create_process(&ctx, job_h, b"crit1");
@@ -511,7 +511,7 @@ fn many_critical_processes_kill_one_job() {
 fn one_critical_process_kills_job_tree() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
     let job1_h = create_job(&ctx, root_h);
     let job2_h = create_job(&ctx, job1_h);
@@ -542,7 +542,7 @@ fn one_critical_process_kills_job_tree() {
 fn critical_process_not_in_ancestor() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
     let job1_h = create_job(&ctx, root_h);
     let job2_h = create_job(&ctx, root_h);
@@ -560,7 +560,7 @@ fn critical_process_not_in_ancestor() {
 fn critical_process_already_set() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
     let job_h = create_job(&ctx, root_h);
     let (proc_h, _) = create_process(&ctx, job_h, b"already");
@@ -606,7 +606,7 @@ fn info_task_stats_fails() {
 /// Killing a child job removes it from parent's children list.
 fn kill_job_removes_from_tree() {
     let ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx
         .proc
         .add_handle(Handle::new(root.clone(), Rights::DEFAULT_JOB));
@@ -631,7 +631,7 @@ fn kill_job_removes_from_tree() {
 fn max_height_smoke() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let mut parent_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
 
     let mut handles = Vec::new();
@@ -660,7 +660,7 @@ fn max_height_smoke() {
 fn set_job_oom_kill_bit() {
     let ctx = TestContext::new();
 
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let job_h = ctx.proc.add_handle(Handle::new(
         root,
         Rights::DEFAULT_JOB | Rights::SET_PROPERTY | Rights::GET_PROPERTY,
@@ -696,7 +696,7 @@ fn set_job_oom_kill_bit() {
 /// the job is killed.
 fn get_info_runtime() {
     let ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
     let job_h = create_job(&ctx, root_h);
     let (proc_h, _) = create_process(&ctx, job_h, b"info-rt");
@@ -719,7 +719,7 @@ fn get_info_runtime() {
 /// Verifies that the kill_on_oom property is gettable/settable.
 fn get_info_runtime_v1() {
     let ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx.proc.add_handle(Handle::new(
         root,
         Rights::DEFAULT_JOB | Rights::SET_PROPERTY | Rights::GET_PROPERTY,
@@ -771,7 +771,7 @@ fn get_info_runtime_v1() {
 fn kill_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
     let job_h = create_job(&ctx, root_h);
     let (_proc1_h, _) = create_process(&ctx, job_h, b"kill1");
@@ -803,7 +803,7 @@ fn kill_test() {
 fn one_critical_process_kills_one_job_if_retcode_nonzero() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
 
     // Case 1: exit with 0, retcode_nonzero=true (options=1) → job should NOT be killed
@@ -1037,7 +1037,7 @@ fn policy_timer_slack_valid() {
 /// A killed job asserts JOB_TERMINATED.
 fn wait_test() {
     let ctx = TestContext::new();
-    let root = Job::root();
+    let root = Job::new_parentless_job();
     let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
     let job_h = create_job(&ctx, root_h);
     let (_proc_h, _) = create_process(&ctx, job_h, b"wait-test");
@@ -1061,7 +1061,7 @@ fn wait_test() {
 fn create_missing_rights_test() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
-    let root_job = Job::root();
+    let root_job = Job::new_parentless_job();
 
     // C++: rights = ZX_DEFAULT_JOB_RIGHTS & ~ZX_RIGHT_WRITE & ~ZX_RIGHT_MANAGE_JOB
     let reduced_rights = Rights::DEFAULT_JOB & !Rights::WRITE & !Rights::MANAGE_JOB;

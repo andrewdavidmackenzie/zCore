@@ -941,7 +941,7 @@ async fn queue_packet_limit_exceeded_generates_policy_exception() {
     extern crate alloc;
 
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "port-exc").unwrap();
 
     // Create process exception channel before starting the thread.

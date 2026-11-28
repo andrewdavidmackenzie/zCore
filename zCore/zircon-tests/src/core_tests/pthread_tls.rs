@@ -19,7 +19,7 @@ use zircon_object::task::{Job, Process, Thread};
 /// prerequisite: each thread has a unique KOID.
 fn pthread_tls() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "tls-test").unwrap();
 
     // Create multiple threads — each must have a unique KOID

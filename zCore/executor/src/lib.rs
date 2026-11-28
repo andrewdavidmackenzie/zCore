@@ -47,7 +47,7 @@ mod waker_page;
 
 // ── Per-CPU scheduler statistics ────────────────────────────────────
 
-use core::sync::atomic::AtomicU64;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Per-CPU scheduler statistics, updated atomically.
 pub struct CpuSchedStats {
@@ -91,6 +91,15 @@ pub fn cpu_stats(cpu_id: usize) -> &'static CpuSchedStats {
 /// consume the flag.
 ///
 /// Index by CPU ID (max 64 CPUs). On single-CPU systems, only [0] is used.
+/// #523 hang-hunt: wake→dispatch latency buckets (TSC-derived ns).
+pub static DISPATCH_FAST_10US: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
+pub static DISPATCH_FAST_100US: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
+pub static DISPATCH_SLOW_1MS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+pub static DISPATCH_SLOW_10MS: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
+pub static DISPATCH_SLOW_INF: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 static YIELD_PENDING: [core::sync::atomic::AtomicBool; 64] = {
     const FALSE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
     [FALSE; 64]
@@ -145,8 +154,9 @@ pub fn take_preempt_pending() -> bool {
 }
 
 pub use runtime::{
-    change_task_priority, force_wake_task, handle_timeout, init_runtimes, request_shutdown,
-    run_until_idle, sched_yield, shutdown_requested, spawn, spawn_with_priority,
+    abandon_current_poll, change_task_priority, force_wake_task, handle_timeout, init_runtimes,
+    request_shutdown, run_until_idle, sched_yield, set_deferred_drain_fn, shutdown_requested,
+    spawn, spawn_with_priority,
 };
 
 /// Save the kernel page table address for executor context creation.
@@ -167,10 +177,56 @@ type WakeupFn = fn(cpu_id: u8);
 /// Registered cross-CPU wakeup function. None until set by HAL init.
 static WAKEUP_FN: spin::Once<WakeupFn> = spin::Once::new();
 
+/// #523: per-CPU "in WFI/hlt" flags. Wakes skip the IPI when the
+/// target CPU is running — the executor loop picks the notified bit
+/// up at its next scan, and an IPI into a busy CPU saves nothing
+/// (dispatch happens at the next loop iteration either way). Under
+/// TCG each IPI costs a vCPU-thread kick + interrupt injection
+/// (~50-100µs); channel ping-pong workloads issue thousands per
+/// second.
+static CPU_HALTED: [core::sync::atomic::AtomicBool; 64] = {
+    const FALSE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+    [FALSE; 64]
+};
+
+/// Mark this CPU as entering WFI (called just BEFORE the final
+/// pre-halt task scan, so a wake racing the flag still sends the IPI
+/// or is found by that scan).
+pub fn set_cpu_halted(cpu: u8, halted: bool) {
+    if (cpu as usize) < 64 {
+        CPU_HALTED[cpu as usize].store(halted, Ordering::Release);
+    }
+}
+
+/// Whether the given CPU is currently halted in WFI.
+pub fn is_cpu_halted(cpu: u8) -> bool {
+    ((cpu as usize) < 64) && CPU_HALTED[cpu as usize].load(Ordering::Acquire)
+}
+
 /// Register the cross-CPU wakeup function. Called once during HAL
 /// initialization after the IPI infrastructure is ready.
 pub fn set_ipi_wakeup(f: WakeupFn) {
     WAKEUP_FN.call_once(|| f);
+}
+
+/// #523: pre-hlt hook (see arch::wait_for_interrupt): clears an
+/// abandoned in-service local APIC interrupt before the CPU sleeps.
+/// Registered by the HAL; 0 = none.
+static PRE_HLT_FN: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Register the pre-hlt hook. Call once during HAL init.
+pub fn set_pre_hlt_hook(f: fn()) {
+    PRE_HLT_FN.store(f as usize, Ordering::Release);
+}
+
+/// Run the pre-hlt hook if registered (called from wait_for_interrupt).
+#[inline]
+pub(crate) fn run_pre_hlt_hook() {
+    let hook = PRE_HLT_FN.load(Ordering::Acquire);
+    if hook != 0 {
+        let f: fn() = unsafe { core::mem::transmute(hook) };
+        f();
+    }
 }
 
 /// Send a cross-CPU wakeup if the target CPU differs from the current
@@ -179,6 +235,14 @@ pub(crate) fn ipi_wakeup(target_cpu: u8) {
     let current = arch::cpu_id();
     if current != target_cpu {
         if let Some(f) = WAKEUP_FN.get() {
+            // #523: ALWAYS send the IPI. A conditional variant (only
+            // when the target is halted) has an uncloseable lost-wake
+            // window: the wake lands while the target's executor is
+            // mid-loop (flag clear, no IPI), the loop's scans have
+            // already passed the notified bit, and the CPU parks —
+            // with a dead timer (frozen-idle) nothing breaks it out.
+            // The IPI costs ~50-100µs under TCG; losing it costs the
+            // test suite. Correctness wins.
             f(target_cpu);
         }
     }

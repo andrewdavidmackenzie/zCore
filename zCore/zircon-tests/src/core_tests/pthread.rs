@@ -146,7 +146,7 @@ async fn basic() {
 /// knows its own KOID (equivalent of the non-null pthread_self check).
 fn self_main_thread() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "pthread-test").unwrap();
     let thread = Thread::create(&proc, "main").unwrap();
 
@@ -174,7 +174,7 @@ fn self_main_thread() {
 /// terminated (simulating the join).
 async fn big_stack_size() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "pthread-test").unwrap();
     let thread = Thread::create(&proc, "big-stack").unwrap();
 
@@ -211,7 +211,7 @@ async fn big_stack_size() {
 /// that backs stack allocation).
 fn getstack_main_thread() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "pthread-test").unwrap();
     let _thread = Thread::create(&proc, "main").unwrap();
 
@@ -232,7 +232,7 @@ fn getstack_main_thread() {
 /// then join (wait for termination).
 async fn getstack_other_thread() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "pthread-test").unwrap();
     let thread = Thread::create(&proc, "getstack").unwrap();
 
@@ -256,7 +256,7 @@ async fn getstack_other_thread() {
 /// thread_start (VMAR allocation), not thread_create.
 async fn getstack_other_thread_explicit_size() {
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "pthread-test").unwrap();
     let thread = Thread::create(&proc, "getstack-explicit").unwrap();
 

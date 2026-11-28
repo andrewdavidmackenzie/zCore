@@ -49,6 +49,8 @@ pub use imp::{
     *,
 };
 pub use kernel_handler::KernelHandler;
+pub use kernel_handler::KernelTrapInfo;
+pub use kernel_handler::KernelTrapOutcome;
 pub use utils::{lazy_init::LazyInit, mpsc_queue::MpscQueue};
 
 /// LibOS-specific frame allocation functions (mock physical memory).

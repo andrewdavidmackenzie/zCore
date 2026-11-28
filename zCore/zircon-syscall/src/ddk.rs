@@ -505,9 +505,19 @@ impl Syscall<'_> {
         pin_mut!(future);
         self.thread
             .set_blocking_state(ThreadState::BlockedInterrupt);
+        // #903/Fuchsia semantics: suspensions do NOT escape
+        // zx_interrupt_wait. The test thread in
+        // InterruptTest.WaitThreadFunctionsAfterSuspendResume blocks,
+        // is suspended (state: SUSPENDED while the wait stays armed),
+        // resumes (state: BLOCKED_INTERRUPT again), and only the
+        // interrupt trigger resolves the wait. With the interruptible
+        // blocking_run, suspend aborted the wait with
+        // ZX_ERR_INTERNAL_INTR_RETRY and the thread's hand-rolled
+        // entry crashed on the unexpected error (ud2) — killing the
+        // whole test process.
         let timestamp = self
             .thread
-            .blocking_run(
+            .blocking_run_uninterruptible(
                 future,
                 ThreadState::BlockedInterrupt,
                 Deadline::forever().into(),

@@ -1086,63 +1086,72 @@ impl LinuxProcess {
     ) {
         use hal_impl::timer;
 
-        let callback: Box<dyn FnOnce(Duration) + Send + Sync> = Box::new(move |_now| {
-            let proc = match proc.upgrade() {
-                Some(p) => p,
-                None => return, // process already exited
-            };
-            let linux = proc.linux();
+        // #523/#829: timer callbacks run in IRQ context under the
+        // NAIVE_TIMER spinlock — the body below delivers signals and
+        // wakes waiters (KernelMutex + WakerTarget::inner work that
+        // deadlocks there). Defer the entire body to the drain task.
+        let deferred: alloc::sync::Arc<dyn Fn(Duration) + Send + Sync> =
+            alloc::sync::Arc::new(move |_now| {
+                let proc = match proc.upgrade() {
+                    Some(p) => p,
+                    None => return, // process already exited
+                };
+                let linux = proc.linux();
 
-            // Check generation — if mismatched, this callback is stale
-            {
-                let inner = linux.inner.lock();
-                if inner.itimer_real_generation != generation {
-                    return;
+                // Check generation — if mismatched, this callback is stale
+                {
+                    let inner = linux.inner.lock();
+                    if inner.itimer_real_generation != generation {
+                        return;
+                    }
                 }
-            }
 
-            // Deliver SIGALRM to first eligible thread
-            info!(
-                "ITIMER_REAL fired: delivering SIGALRM to process {}",
-                proc.id()
-            );
-            let tids = proc.thread_ids();
-            for tid in tids {
-                if let Ok(thread_obj) = proc.get_child(tid) {
-                    if let Ok(thread) = thread_obj.downcast_arc::<zircon_object::task::Thread>() {
-                        let mut thread_linux = thread.lock_linux();
-                        if !thread_linux.signal_mask.contains(LinuxSignal::SIGALRM) {
-                            thread_linux.insert_signal(LinuxSignal::SIGALRM);
-                            break;
+                // Deliver SIGALRM to first eligible thread
+                info!(
+                    "ITIMER_REAL fired: delivering SIGALRM to process {}",
+                    proc.id()
+                );
+                let tids = proc.thread_ids();
+                for tid in tids {
+                    if let Ok(thread_obj) = proc.get_child(tid) {
+                        if let Ok(thread) = thread_obj.downcast_arc::<zircon_object::task::Thread>()
+                        {
+                            let mut thread_linux = thread.lock_linux();
+                            if !thread_linux.signal_mask.contains(LinuxSignal::SIGALRM) {
+                                thread_linux.insert_signal(LinuxSignal::SIGALRM);
+                                break;
+                            }
                         }
                     }
                 }
-            }
 
-            // Wake any wait_signal futures on this process (e.g. wait4
-            // blocked on SIGCHLD). Setting SIGCHLD will cause the
-            // wait_signal future to wake up and re-check, enabling
-            // EINTR return from blocking waits.
-            proc.signal_set(Signal::SIGCHLD);
+                // Wake any wait_signal futures on this process (e.g. wait4
+                // blocked on SIGCHLD). Setting SIGCHLD will cause the
+                // wait_signal future to wake up and re-check, enabling
+                // EINTR return from blocking waits.
+                proc.signal_set(Signal::SIGCHLD);
 
-            // Re-arm if interval is non-zero
-            if !interval.is_zero() {
-                let mut inner = linux.inner.lock();
-                if inner.itimer_real_generation == generation {
-                    let new_deadline = timer::deadline_after(interval);
-                    inner.itimer_real_deadline = Some(new_deadline);
-                    let weak = Arc::downgrade(&proc);
-                    drop(inner);
-                    Self::schedule_itimer_real(weak, new_deadline, interval, generation);
+                // Re-arm if interval is non-zero
+                if !interval.is_zero() {
+                    let mut inner = linux.inner.lock();
+                    if inner.itimer_real_generation == generation {
+                        let new_deadline = timer::deadline_after(interval);
+                        inner.itimer_real_deadline = Some(new_deadline);
+                        let weak = Arc::downgrade(&proc);
+                        drop(inner);
+                        Self::schedule_itimer_real(weak, new_deadline, interval, generation);
+                    }
+                } else {
+                    let mut inner = linux.inner.lock();
+                    if inner.itimer_real_generation == generation {
+                        inner.itimer_real_deadline = None;
+                    }
                 }
-            } else {
-                let mut inner = linux.inner.lock();
-                if inner.itimer_real_generation == generation {
-                    inner.itimer_real_deadline = None;
-                }
-            }
-        });
-        timer::timer_set(deadline, callback);
+            });
+        timer::timer_set(
+            deadline,
+            Box::new(move |now| hal_impl::timer::defer_timer_callback(deferred, now)),
+        );
     }
 
     /// Create a POSIX timer. Returns the timer ID.
@@ -1265,73 +1274,81 @@ impl LinuxProcess {
     ) {
         use hal_impl::timer;
 
-        let callback: Box<dyn FnOnce(Duration) + Send + Sync> = Box::new(move |_now| {
-            let proc = match proc.upgrade() {
-                Some(p) => p,
-                None => return,
-            };
-            let linux = proc.linux();
+        // #523/#829: same deferral as schedule_itimer_real — the body
+        // delivers signals and wakes waiters; must not run in IRQ
+        // context under the timer spinlock.
+        let deferred: alloc::sync::Arc<dyn Fn(Duration) + Send + Sync> =
+            alloc::sync::Arc::new(move |_now| {
+                let proc = match proc.upgrade() {
+                    Some(p) => p,
+                    None => return,
+                };
+                let linux = proc.linux();
 
-            // Check generation
-            {
-                let inner = linux.inner.lock();
-                match inner.posix_timers.get(&timer_id) {
-                    Some(t) if t.generation == generation => {}
-                    _ => return, // stale or deleted
+                // Check generation
+                {
+                    let inner = linux.inner.lock();
+                    match inner.posix_timers.get(&timer_id) {
+                        Some(t) if t.generation == generation => {}
+                        _ => return, // stale or deleted
+                    }
                 }
-            }
 
-            // Deliver signal if SIGEV_SIGNAL
-            if notify == crate::time::SIGEV_SIGNAL {
-                let tids = proc.thread_ids();
-                for tid in tids {
-                    if let Ok(thread_obj) = proc.get_child(tid) {
-                        if let Ok(thread) = thread_obj.downcast_arc::<zircon_object::task::Thread>()
-                        {
-                            let mut thread_linux = thread.lock_linux();
-                            if !thread_linux.signal_mask.contains(signal) {
-                                thread_linux.insert_signal(signal);
-                                break;
+                // Deliver signal if SIGEV_SIGNAL
+                if notify == crate::time::SIGEV_SIGNAL {
+                    let tids = proc.thread_ids();
+                    for tid in tids {
+                        if let Ok(thread_obj) = proc.get_child(tid) {
+                            if let Ok(thread) =
+                                thread_obj.downcast_arc::<zircon_object::task::Thread>()
+                            {
+                                let mut thread_linux = thread.lock_linux();
+                                if !thread_linux.signal_mask.contains(signal) {
+                                    thread_linux.insert_signal(signal);
+                                    break;
+                                }
                             }
                         }
                     }
+                    // Wake any wait_signal futures
+                    proc.signal_set(Signal::SIGCHLD);
                 }
-                // Wake any wait_signal futures
-                proc.signal_set(Signal::SIGCHLD);
-            }
 
-            // Re-arm if interval is non-zero
-            if !interval.is_zero() {
-                // Clamp interval to at least 1ms to prevent tight loops
-                let interval = interval.max(Duration::from_millis(1));
-                let mut inner = linux.inner.lock();
-                if let Some(t) = inner.posix_timers.get_mut(&timer_id) {
-                    if t.generation == generation {
-                        let new_deadline = timer::deadline_after(interval);
-                        t.deadline = Some(new_deadline);
-                        let weak = Arc::downgrade(&proc);
-                        drop(inner);
-                        Self::schedule_posix_timer(
-                            weak,
-                            timer_id,
-                            new_deadline,
-                            interval,
-                            signal,
-                            notify,
-                            generation,
-                        );
+                // Re-arm if interval is non-zero
+                if !interval.is_zero() {
+                    // Clamp interval to at least 1ms to prevent tight loops
+                    let interval = interval.max(Duration::from_millis(1));
+                    let mut inner = linux.inner.lock();
+                    if let Some(t) = inner.posix_timers.get_mut(&timer_id) {
+                        if t.generation == generation {
+                            let new_deadline = timer::deadline_after(interval);
+                            t.deadline = Some(new_deadline);
+                            let weak = Arc::downgrade(&proc);
+                            drop(inner);
+                            Self::schedule_posix_timer(
+                                weak,
+                                timer_id,
+                                new_deadline,
+                                interval,
+                                signal,
+                                notify,
+                                generation,
+                            );
+                        }
+                    }
+                } else {
+                    let mut inner = linux.inner.lock();
+                    if let Some(t) = inner.posix_timers.get_mut(&timer_id) {
+                        if t.generation == generation {
+                            t.deadline = None;
+                        }
                     }
                 }
-            } else {
-                let mut inner = linux.inner.lock();
-                if let Some(t) = inner.posix_timers.get_mut(&timer_id) {
-                    if t.generation == generation {
-                        t.deadline = None;
-                    }
-                }
-            }
-        });
-        timer::timer_set(deadline, callback);
+            });
+        timer::timer_set(
+            deadline,
+            Box::new(move |now| hal_impl::timer::defer_timer_callback(deferred, now)),
+        );
     }
 
     /// Get accumulated CPU time of waited-for children.

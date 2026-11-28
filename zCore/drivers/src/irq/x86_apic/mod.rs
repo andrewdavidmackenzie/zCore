@@ -72,6 +72,30 @@ impl Apic {
         }
     }
 
+    /// Register a handler for a fixed IDT vector in the dispatch range
+    /// (`X86_INT_BASE..X86_INT_LOCAL_APIC_BASE`) that is not backed by
+    /// an IOAPIC GSI — e.g. the executor's cross-CPU wake IPI.
+    ///
+    /// Registering through the IRQ manager reserves the vector in its
+    /// allocator, so dynamically allocated device and MSI vectors can
+    /// never collide with it. Dispatch in [`Scheme::handle_irq`] routes
+    /// vectors below `X86_INT_LOCAL_APIC_BASE` to the same table.
+    pub fn register_fixed_vector_handler(
+        &self,
+        vector: usize,
+        handler: IrqHandler,
+    ) -> DeviceResult {
+        if IOAPIC_IRQ_RANGE.contains(&vector) {
+            self.manager_ioapic
+                .lock()
+                .register_handler(vector, handler)?;
+            Ok(())
+        } else {
+            error!("invalid fixed interrupt vector {}", vector);
+            Err(DeviceError::InvalidParam)
+        }
+    }
+
     /// Enable the local APIC timer.
     ///
     /// This is x86-specific and not part of the generic [`IrqScheme`] trait.

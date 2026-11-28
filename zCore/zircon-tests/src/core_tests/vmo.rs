@@ -491,7 +491,7 @@ fn vmo_content_size_extended() {
 /// until unmap, even after child handle is closed.
 fn child_signal_map() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "vmo-signal-test").unwrap();
     let vmar = proc.vmar();
 
@@ -960,7 +960,7 @@ fn metadata_bytes() {
 /// Mapping with no permissions (empty MMUFlags) may fail or succeed.
 fn no_perm_map() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "no-perm").unwrap();
     let vmar = proc.vmar();
 
@@ -992,7 +992,7 @@ fn no_perm_map() {
 /// Protect a mapping to zero permissions.
 fn no_perm_protect() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "no-perm-protect").unwrap();
     let vmar = proc.vmar();
 
@@ -1166,7 +1166,7 @@ fn physical_vmo_invalid_initial_size() {
 /// available on bare metal with test_ram_reserve.
 fn physical_vmo_oob_mapping() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "phys-oob").unwrap();
     let vmar = proc.vmar();
 
@@ -1299,7 +1299,7 @@ fn read_write_invalid_null_buffer() {
 /// - Successful read/write within bounds after mapping.
 fn read_write_invalid_user_buffer() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "invalid-user-buf").unwrap();
     let vmar = proc.vmar();
 

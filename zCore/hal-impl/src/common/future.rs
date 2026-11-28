@@ -73,7 +73,29 @@ impl Future for SleepFuture {
         }
         if self.deadline.as_nanos() < i64::MAX as u128 {
             let waker = cx.waker().clone();
-            timer::timer_set(self.deadline, Box::new(move |_| waker.wake_by_ref()));
+            // #523/#829: `Timer::expire` runs this callback in IRQ
+            // context (timer_tick, under NAIVE_TIMER and the APIC
+            // driver's manager_lapic IrqLocks). `wake_by_ref` takes
+            // the WakerTarget's inner `spin::Mutex` and sends an IPI —
+            // and a task-context holder of that mutex (notify →
+            // ipi_wakeup → send_ipi) can be interrupted by the timer
+            // IRQ and then spin on manager_lapic: the ABBA deadlock
+            // behind the core-tests system freeze (all 8 CPUs in
+            // Apic::handle_irq, caught live via gdb). Timer callbacks
+            // must NEVER wake directly — defer the entire wake to the
+            // drain task (task context, where blocking on the waker
+            // mutex is safe). This mirrors Zircon's timer/DPC split.
+            timer::timer_set(
+                self.deadline,
+                Box::new(move |now| {
+                    crate::timer::defer_timer_callback(
+                        Arc::new(move |_| {
+                            waker.wake_by_ref();
+                        }),
+                        now,
+                    );
+                }),
+            );
             // Re-check after registering the timer. For very short
             // deadlines (e.g., 1 usec), the deadline may have passed
             // during the timer_set call. Without this check, we'd
@@ -142,8 +164,20 @@ impl Future for DisplayFlushFuture {
             self.display.flush().ok();
             let frame_time = self.frame_time;
             self.next_flush_time += frame_time;
+            // Same #523/#829 pattern as SleepFuture: defer the
+            // entire wake out of the timer/IRQ context (see there).
             let waker = cx.waker().clone();
-            timer::timer_set(self.next_flush_time, Box::new(move |_| waker.wake_by_ref()));
+            timer::timer_set(
+                self.next_flush_time,
+                Box::new(move |now| {
+                    crate::timer::defer_timer_callback(
+                        Arc::new(move |_| {
+                            waker.wake_by_ref();
+                        }),
+                        now,
+                    );
+                }),
+            );
         }
         Poll::Pending
     }

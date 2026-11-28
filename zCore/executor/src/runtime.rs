@@ -258,6 +258,7 @@ pub(crate) fn local_task_collection() -> Option<&'static Arc<TaskCollection>> {
     let tc_map = CPU_TASK_COLLECTIONS.get()?;
     tc_map.get(&crate::arch::cpu_id())
 }
+
 // per-cpu scheduler.
 pub fn run_until_idle() -> bool {
     debug!("run_until_idle");
@@ -465,18 +466,57 @@ pub fn change_task_priority(cpu_id: u8, key: Key, new_priority: usize) {
     }
 }
 
-/// check whether the running coroutine of current cpu time out, if yes, we will
-/// switch to currrent cpu runtime that would create a new executor to run other
-/// coroutines.
+/// Deferred-wake drain hook (#523/#829): a function registered by the
+/// HAL (hal-impl's timer module) that drains deferred timer-callback
+/// wakes in task context. Called once per executor-loop iteration —
+/// see `Executor::run`. 0 = not registered (e.g. libos).
+static DEFERRED_DRAIN_FN: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Register the HAL's deferred-wake drain function. Call once during
+/// kernel init, before the executor runtimes start.
+pub fn set_deferred_drain_fn(f: fn()) {
+    DEFERRED_DRAIN_FN.store(f as usize, core::sync::atomic::Ordering::Release);
+}
+
+#[inline]
+pub(crate) fn run_deferred_drain() {
+    let f = DEFERRED_DRAIN_FN.load(core::sync::atomic::Ordering::Acquire);
+    if f != 0 {
+        // SAFETY: the pointer was stored from a valid `fn()` that the
+        // HAL guarantees remains valid for the kernel's lifetime.
+        unsafe { core::mem::transmute::<usize, fn()>(f)() };
+    }
+}
+
+/// Timer tick bookkeeping.
+///
+/// #523: this must NOT context-switch away from the interrupted
+/// coroutine. Since the ThreadSwitchFuture IrqLock removal made
+/// polls run with interrupts enabled, the timer IRQ can land
+/// mid-poll — and a mid-poll `sched_yield` suspends the task at an
+/// ARBITRARY point, possibly while it holds a non-IRQ-safe lock
+/// (e.g. `WakerTarget::inner`, a `spin::Mutex` taken by the wake
+/// path). The IRQ-side wake then spins on that lock forever — with
+/// `manager_lapic` held — and every other CPU piles up behind it:
+/// the core-tests system freeze (all 8 CPUs in `Apic::handle_irq`,
+/// observed live via gdb).
+///
+/// Preemption still happens at the documented safe points, where no
+/// task-context lock can be held:
+///  - syscall return: trap.rs already calls `set_preempt_pending()`
+///    before this, and the loader's run loop checks it via
+///    `take_preempt_pending()` → `preempt_yield()`;
+///  - await parks: the poll returns, dropping all guards first.
+///
+/// This matches Zircon's invariant that context switches only happen
+/// at defined points under the scheduler lock, never by suspending
+/// arbitrary kernel-side execution.
 pub fn handle_timeout() {
     debug!("handle kernel timeout");
     let cpu = crate::arch::cpu_id() as usize;
     crate::cpu_stats(cpu)
         .reschedules
         .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-    super::run_with_intr_saved_off! {
-        sched_yield()
-    }
 }
 
 /// Run executor.run()
@@ -509,9 +549,86 @@ pub fn sched_yield() {
     }
 }
 
+/// Abandon the current poll and switch to the runtime idle context
+/// WITHOUT saving the faulted context. Never returns on success.
+///
+/// For the kernel-trap fatal path (#523): a kernel-mode fault inside a
+/// task's poll can neither be resumed (the faulting instruction would
+/// re-execute forever) nor unwound (locks may be held). Halting the
+/// CPU loses it entirely; `sched_yield` would save the faulted context
+/// and the demoted-weak-executor machinery would resume it later,
+/// re-faulting in an infinite loop. Instead: discard the context. The
+/// faulted task is orphaned — its future is never re-polled, so the
+/// `Arc<Thread>` it holds leaks (an accepted graceful-degradation
+/// tradeoff, bounded by the number of kernel faults) — and the
+/// executor's stack is reused by subsequent polls, clobbering the
+/// abandoned frames.
+///
+/// The abandoned executor is left mid-poll (`task_id != 0`), so when
+/// the runtime next returns from `switch` it takes the existing
+/// preemption path: demotes it to a weak executor and later resumes it
+/// at its last legitimate suspension point (saved by a prior
+/// `sched_yield`), after which the normal weak-executor completion
+/// path (WEAK → KILLED → dropped → stack freed) reclaims it.
+///
+/// # Safety
+///
+/// Must be called from interrupt context with interrupts disabled
+/// (the runtime-lock discipline — see `run_until_idle`). Returns
+/// `false` without switching when the runtime lock is held by the
+/// interrupted (faulted) code, when no executor is running a poll, or
+/// on architectures without the no-save switch; the caller must halt
+/// the CPU in that case.
+pub fn abandon_current_poll() -> bool {
+    // Lock discipline: the runtime lock is only ever held with
+    // interrupts disabled. We are in interrupt context, so any
+    // contention means the lock is held either by another CPU (about
+    // to release — but we cannot yield to wait) or, worse, by the
+    // interrupted task on this CPU (which can never release it — its
+    // poll is about to be abandoned). try_lock, never spin.
+    if crate::arch::intr_get() {
+        return false; // must run with interrupts disabled
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        let Some(runtime) = get_runtime(crate::arch::cpu_id()).try_lock() else {
+            return false;
+        };
+        // Borrow through the guard instead of cloning: a clone would
+        // leak (this function never returns past the switch) and keep
+        // the executor's Arc refcount elevated, breaking
+        // `Arc::get_mut_unchecked`'s uniqueness assumption in
+        // `downgrade_strong_executor` and leaking the 512 KiB stack.
+        let running = runtime
+            .current_executor
+            .as_ref()
+            .is_some_and(|executor| executor.is_running_future());
+        if !running {
+            return false; // not mid-poll — nothing to abandon
+        }
+        let runtime_cx = runtime.get_context();
+        drop(runtime);
+        switch_no_save(runtime_cx as _);
+        unreachable!()
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        false
+    }
+}
+
 pub(crate) fn switch(from_ctx: usize, to_ctx: usize) {
     unsafe {
         crate::arch::switch(from_ctx as _, to_ctx as _);
+    }
+}
+
+/// Load the context at `to_ctx` and resume it, discarding the current
+/// context. x86_64 only (declared in arch/x86_64/mod.rs).
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn switch_no_save(to_ctx: usize) {
+    unsafe {
+        crate::arch::switch_no_save(to_ctx as _);
     }
 }
 

@@ -31,7 +31,7 @@ extern crate alloc;
 async fn thread_local_errno() {
     log::warn!("c11_thread: ENTER thread_local_errno");
     helpers::ensure_hal_init();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "c11-test").unwrap();
 
     // Simplified: create 1 thread, start, kill, wait for termination
@@ -76,7 +76,7 @@ async fn thread_local_errno() {
 /// At kernel level: Thread::create with empty name should succeed.
 fn null_name_thread_should_succeed() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "c11-test").unwrap();
 
     // C++: thrd_create_with_name(&thread, helper, NULL, NULL)
@@ -101,7 +101,7 @@ fn null_name_thread_should_succeed() {
 /// Kernel primitives: zx_handle_duplicate, zx_handle_close
 fn create_and_verify_thread_handle() {
     let ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "c11-test").unwrap();
     let thread = Thread::create(&proc, "handle-verify").unwrap();
 
@@ -143,7 +143,7 @@ fn create_and_verify_thread_handle() {
 /// does not kill it if the process still holds it.
 fn detached_thread_keeps_running() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "c11-test").unwrap();
     let thread = Thread::create(&proc, "detached-running").unwrap();
     let thread_koid = thread.id();
@@ -163,7 +163,7 @@ fn detached_thread_keeps_running() {
 /// Thread creation should succeed (name is truncated).
 fn long_name_succeeds() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "c11-test").unwrap();
 
     // C++ uses a name with 80 characters, > ZX_MAX_NAME_LEN - 1
@@ -195,7 +195,7 @@ fn long_name_succeeds() {
 /// primitive: creating many threads in the same process.
 fn self_detach_and_free() {
     let _ctx = TestContext::new();
-    let job = Job::root();
+    let job = Job::new_parentless_job();
     let proc = Process::create(&job, "c11-test").unwrap();
 
     // C++ creates 1000 threads that each self-detach

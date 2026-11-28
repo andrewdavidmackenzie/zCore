@@ -88,12 +88,15 @@ pub(super) fn init() -> DeviceResult {
     warn!("UART IRQs done, configuring APIC timer...");
 
     irq.register_local_apic_handler(trap::X86_INT_APIC_TIMER, Box::new(super::trap::super_timer))?;
-    // Register a no-op handler for the IPI wakeup vector (0xFE).
-    // The IPI itself breaks the target CPU out of HLT; no further
-    // action is needed — the executor will see pending notifications
-    // on its next iteration. Without this, the APIC driver logs
-    // "no registered handler for interrupt vector 254" on every IPI.
-    irq.register_local_apic_handler(0xFE, Box::new(|| {}))?;
+    // Register a no-op handler for the wake-IPI vector. The IPI itself
+    // breaks the target CPU out of HLT; no further action is needed —
+    // the executor will see pending notifications on its next
+    // iteration. Registered as a FIXED vector in the dispatch range so
+    // the IRQ allocator reserves it: it is not backed by any IOAPIC
+    // GSI, but dynamic device/MSI vectors must never collide with it.
+    // (It was 0xFE before — see X86_INT_IPI_WAKEUP in trap.rs for why
+    // it must stay below the timer's priority class.)
+    irq.register_fixed_vector_handler(trap::X86_INT_IPI_WAKEUP, Box::new(|| {}))?;
 
     warn!("Measuring CPU frequency...");
     use x2apic::lapic::{TimerDivide, TimerMode};
